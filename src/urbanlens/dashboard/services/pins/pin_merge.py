@@ -1,39 +1,57 @@
-"""Merges two of a profile's own pins into one, consolidating every relation.
-Distinct from ``controllers.pin_bulk.PinBulkMergeView`` (the map multi-select "Merge" button), which only re-parents pins as children - both rows survive, untouched, just nested."""
+"""Merges two of a profile's own pins into one, consolidating every relation without losing what either held.
+Distinct from ``controllers.pin_bulk.PinBulkMergeView`` (the map multi-select "Merge" button), which only re-parents pins as children - both rows survive, untouched, just nested.
+
+Only the loser row is deleted. Everything it held either moves onto the survivor, folds into the survivor's equivalent row, or - where the survivor has exactly one slot and keeps its own value - is written down:
+
+- Article: the kept article stays live and the other's whole revision history moves onto it (``services.wiki.article_merge``).
+- Boundary: the outline not kept becomes a polygon on the survivor's own Markup layer.
+- Custom field values, and every pin column the survivor keeps its own value for: listed in one private ``PinNote`` on the survivor.
+- Duplicate rows (an owner, a pending share, the day's automatic visit): folded into the survivor's twin, with every row that referenced the duplicate repointed first.
+"""
 
 from __future__ import annotations
 
 import collections
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import UTC
+import json
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.db import IntegrityError, transaction
+from django.db.models.fields.files import FieldFile
+from django.utils import timezone
+from django.utils.text import capfirst
 
 from urbanlens.dashboard.models.album.model import Album
 from urbanlens.dashboard.models.auto_removals.model import PinAutoRemoval
 from urbanlens.dashboard.models.boundary.model import Boundary
 from urbanlens.dashboard.models.comments.model import Comment
 from urbanlens.dashboard.models.custom_fields.model import CustomFieldValue
+from urbanlens.dashboard.models.floorplans.model import Floorplan
 from urbanlens.dashboard.models.images.attachment import ImageAttachment
+from urbanlens.dashboard.models.images.issues import PhotoUploadFailure
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.link_extraction.model import LinkExtraction
 from urbanlens.dashboard.models.links.model import PinLink
 from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
+from urbanlens.dashboard.models.markup.meta import MarkupType
 from urbanlens.dashboard.models.markup.model import CustomLayer, MarkupMap, PinMarkup
 from urbanlens.dashboard.models.pin.note import PinNote
+from urbanlens.dashboard.models.pin_import_failures.model import PinImportFailure
 from urbanlens.dashboard.models.pin_list.model import PinListItem
 from urbanlens.dashboard.models.pin_merge_suggestions.model import PinMergeSuggestion
 from urbanlens.dashboard.models.pin_share.meta import PinShareOrigin, PinShareStatus
 from urbanlens.dashboard.models.pin_share.model import PinShare
 from urbanlens.dashboard.models.pin_suggestions.model import PinSuggestion
-from urbanlens.dashboard.models.property_owner.model import PinPropertySale
+from urbanlens.dashboard.models.property_owner.model import PinOwner, PinPropertySale
 from urbanlens.dashboard.models.reviews.model import Review
 from urbanlens.dashboard.models.trips.model import TripActivity
-from urbanlens.dashboard.models.visits.model import PinVisit
+from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
+from urbanlens.dashboard.services.core.text_limits import MAX_PIN_NOTE_LENGTH
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
 
     from django.db.models import Model
 
@@ -234,6 +252,80 @@ def _save_within_savepoint(instance: Model, update_fields: list[str]) -> bool:
     return True
 
 
+@dataclass(slots=True)
+class _MergeRecord:
+    """What the survivor kept its own value for, written to it as one private note once the merge is done.
+
+    Attributes:
+        lines: ``(label, value)`` pairs, in the order they were found.
+    """
+
+    lines: list[tuple[str, str]] = field(default_factory=list)
+
+    def add(self, label: str, value: str) -> None:
+        """Record one value the survivor did not keep.
+
+        Args:
+            label: What the value was, e.g. ``"Priority"``.
+            value: The value as the user would read it.
+        """
+        self.lines.append((label, value))
+
+
+def _pin_label(pin: Pin) -> str:
+    """A name for a pin that is safe to compute while the merge is rewriting it."""
+    return pin.effective_name or f"Pin {pin.pk}"
+
+
+def _repoint_references(duplicate: Model, kept: Model) -> None:
+    """Point every row that references *duplicate* at *kept*, so deleting *duplicate* takes nothing with it.
+    Generic over the duplicate's reverse relations - a pending share is referenced by reshares, bundled shares, direct-message links and exposure rows, an owner by the sales that list it - so a relation added later is carried without this module having to learn about it.
+    A row that would collide with one *kept* already has is left alone; it then goes wherever its ``on_delete`` would have sent it, which is no worse than before.
+
+    Args:
+        duplicate: The row about to be deleted.
+        kept: Its twin, which stays.
+    """
+    for relation in duplicate._meta.related_objects:  # noqa: SLF001
+        remote = relation.field
+        if relation.many_to_many:
+            through = remote.remote_field.through
+            column = remote.m2m_reverse_field_name()
+            rows = through._base_manager.filter(**{column: duplicate.pk})  # noqa: SLF001
+        else:
+            column = remote.name
+            rows = relation.related_model._base_manager.filter(**{column: duplicate.pk})  # noqa: SLF001
+            if relation.related_model is type(kept):
+                # A self-reference from the kept row itself would become a loop.
+                rows = rows.exclude(pk=kept.pk)
+        try:
+            with transaction.atomic():
+                rows.update(**{column: kept.pk})
+        except IntegrityError:
+            for pk in list(rows.values_list("pk", flat=True)):
+                try:
+                    with transaction.atomic():
+                        rows.model._base_manager.filter(pk=pk).update(**{column: kept.pk})  # noqa: SLF001
+                except IntegrityError:
+                    continue
+
+
+def _join_text(kept: str | None, extra: str | None) -> str | None:
+    """Append *extra* to *kept* as its own paragraph, unless it adds nothing.
+
+    Args:
+        kept: The text that stays first.
+        extra: Text from the row being folded in.
+
+    Returns:
+        The combined text.
+    """
+    kept_text, extra_text = (kept or "").strip(), (extra or "").strip()
+    if not extra_text or extra_text == kept_text or extra_text in kept_text:
+        return kept
+    return f"{kept_text}\n\n{extra_text}" if kept_text else extra
+
+
 def _reparent_children(survivor: Pin, loser: Pin) -> None:
     """Re-parent loser's child pins onto survivor, skipping any that would create a cycle."""
     for child in list(loser.detail_pins.all()):
@@ -274,18 +366,49 @@ def _merge_aliases(survivor: Pin, loser: Pin) -> None:
             alias.delete()
 
 
+#: Owner columns gap-filled from a folded duplicate; ``notes`` is joined instead, and a value that
+#: differs from the kept owner's is written into those notes.
+_OWNER_DETAIL_FIELDS = ("company_name", "address", "care_of", "phone", "email")
+
+
+def _fold_owner(duplicate: PinOwner, kept: PinOwner) -> None:
+    """Fold *duplicate* - the same owner name, differently cased - into *kept*, then delete it.
+    The name is the only thing the two are known to share: the duplicate's contact details fill the kept row's blanks, any that differ are written into its notes, and every sale that listed the duplicate lists the kept row instead.
+
+    Args:
+        duplicate: The loser's owner row.
+        kept: The survivor's owner with the same name.
+    """
+    differing: list[str] = []
+    for name in _OWNER_DETAIL_FIELDS:
+        theirs, ours = getattr(duplicate, name), getattr(kept, name)
+        if not theirs or theirs == ours:
+            continue
+        if ours:
+            differing.append(f"{capfirst(PinOwner._meta.get_field(name).verbose_name)}: {theirs}")  # noqa: SLF001
+        else:
+            setattr(kept, name, theirs)
+    kept.notes = _join_text(_join_text(kept.notes, duplicate.notes), "\n".join(differing)) or ""
+    kept.save()
+    _repoint_references(duplicate, kept)
+    duplicate.delete()
+
+
 def _merge_owners(survivor: Pin, loser: Pin) -> None:
-    """Reassign loser's owners onto survivor, dropping case-insensitive duplicates."""
-    survivor_names = {owner.name.casefold() for owner in survivor.owners.all()}
+    """Reassign loser's owners onto survivor, folding a case-insensitive duplicate into the survivor's owner of that name."""
+    survivor_owners = {owner.name.casefold(): owner for owner in survivor.owners.all()}
     for owner in list(loser.owners.all()):
-        if owner.name.casefold() in survivor_names:
-            owner.delete()
+        kept = survivor_owners.get(owner.name.casefold())
+        if kept is not None:
+            _fold_owner(owner, kept)
             continue
         owner.pin = survivor
         if _save_within_savepoint(owner, ["pin", "updated"]):
-            survivor_names.add(owner.name.casefold())
+            survivor_owners[owner.name.casefold()] = owner
         else:
-            owner.delete()
+            kept = PinOwner.objects.filter(pin=survivor, name__iexact=owner.name).first()
+            if kept is not None:
+                _fold_owner(owner, kept)
 
 
 def _merge_reviews(survivor: Pin, loser: Pin) -> None:
@@ -332,61 +455,159 @@ def _merge_auto_removals(survivor: Pin, loser: Pin) -> None:
             removal.delete()
 
 
+def _fold_share(duplicate: PinShare, kept: PinShare) -> None:
+    """Fold a duplicate share of the loser into the survivor's share to the same recipient, then delete it.
+    Only one pending (or one map-detected) share per pin and recipient may exist, but the duplicate can carry its own message, photos and map, and other rows hang off it - reshares, bundled shares (which CASCADE), direct-message links, exposure rows - so all of that moves to the kept share rather than going with the delete.
+
+    Args:
+        duplicate: The loser's share.
+        kept: The survivor's share to the same recipient.
+    """
+    kept.message = _join_text(kept.message, duplicate.message)
+    if not kept.shared_name and duplicate.shared_name:
+        kept.shared_name = duplicate.shared_name
+    for column in ("markup_map_id", "detected_via_map_id", "detected_via_message_id"):
+        if getattr(kept, column) is None and getattr(duplicate, column) is not None:
+            setattr(kept, column, getattr(duplicate, column))
+    kept.save()
+    kept.images.add(*duplicate.images.all())
+    _repoint_references(duplicate, kept)
+    duplicate.delete()
+
+
 def _merge_shares(survivor: Pin, loser: Pin) -> None:
-    """Reassign loser's shares onto survivor, dropping duplicate pending/detected shares to the same recipient."""
-    survivor_pending = set(PinShare.objects.filter(pin=survivor, status=PinShareStatus.PENDING).values_list("to_profile_id", flat=True))
-    survivor_detected = set(PinShare.objects.filter(pin=survivor, origin=PinShareOrigin.MAP_DETECTED).values_list("to_profile_id", flat=True))
+    """Reassign loser's shares onto survivor, folding a duplicate pending/detected share to the same recipient into the survivor's."""
+    survivor_pending = {share.to_profile_id: share for share in PinShare.objects.filter(pin=survivor, status=PinShareStatus.PENDING)}
+    survivor_detected = {share.to_profile_id: share for share in PinShare.objects.filter(pin=survivor, origin=PinShareOrigin.MAP_DETECTED)}
     for share in list(PinShare.objects.filter(pin=loser)):
-        is_duplicate = (share.status == PinShareStatus.PENDING and share.to_profile_id in survivor_pending) or (share.origin == PinShareOrigin.MAP_DETECTED and share.to_profile_id in survivor_detected)
-        if is_duplicate:
-            share.delete()
+        twin = None
+        if share.status == PinShareStatus.PENDING:
+            twin = survivor_pending.get(share.to_profile_id)
+        if twin is None and share.origin == PinShareOrigin.MAP_DETECTED:
+            twin = survivor_detected.get(share.to_profile_id)
+        if twin is not None:
+            _fold_share(share, twin)
             continue
         share.pin = survivor
         if not _save_within_savepoint(share, ["pin", "updated"]):
-            share.delete()
+            # Collided with a share the maps above did not hold (written concurrently); leave it to
+            # the loser's delete, exactly as before rather than guessing at a twin.
+            logger.warning("Pin merge: share %s could not move to pin %s and goes with the loser.", share.pk, survivor.pk)
             continue
         if share.status == PinShareStatus.PENDING:
-            survivor_pending.add(share.to_profile_id)
+            survivor_pending[share.to_profile_id] = share
         if share.origin == PinShareOrigin.MAP_DETECTED:
-            survivor_detected.add(share.to_profile_id)
+            survivor_detected[share.to_profile_id] = share
 
 
-def _merge_custom_field_values(survivor: Pin, loser: Pin, resolutions: dict[str, int]) -> None:
-    """Reassign loser's custom field values onto survivor, applying the user's choice for any conflicting field."""
-    survivor_field_ids = set(CustomFieldValue.objects.filter(pin=survivor).values_list("field_id", flat=True))
-    for value in list(CustomFieldValue.objects.filter(pin=loser)):
-        if value.field_id in survivor_field_ids:
-            if resolutions.get(f"custom_field:{value.field_id}") == loser.pk:
-                CustomFieldValue.objects.filter(pin=survivor, field_id=value.field_id).delete()
-                value.pin = survivor
-                value.save(update_fields=["pin", "updated"])
-            else:
-                value.delete()
+def _merge_custom_field_values(survivor: Pin, loser: Pin, resolutions: dict[str, int], record: _MergeRecord, labels: dict[int, str]) -> None:
+    """Reassign loser's custom field values onto survivor, applying the user's choice for any conflicting field.
+    A pin holds one value per field, so the value not chosen is written into the merge note.
+
+    Args:
+        survivor: The pin that stays.
+        loser: The pin being merged away.
+        resolutions: The user's per-conflict choices.
+        record: Collects the values not kept.
+        labels: Each pin's display name, by pk, as it was before the merge.
+    """
+    survivor_values = {value.field_id: value for value in CustomFieldValue.objects.filter(pin=survivor).select_related("field")}
+    for value in list(CustomFieldValue.objects.filter(pin=loser).select_related("field")):
+        existing = survivor_values.get(value.field_id)
+        if existing is None:
+            value.pin = survivor
+            value.save(update_fields=["pin", "updated"])
+            survivor_values[value.field_id] = value
             continue
-        value.pin = survivor
-        value.save(update_fields=["pin", "updated"])
-        survivor_field_ids.add(value.field_id)
+        if resolutions.get(f"custom_field:{value.field_id}") == loser.pk:
+            kept, dropped, dropped_from = value, existing, survivor
+        else:
+            kept, dropped, dropped_from = existing, value, loser
+        if dropped.display_value != kept.display_value:
+            record.add(f"{value.field.name} ({labels[dropped_from.pk]})", dropped.display_value or "(empty)")
+        dropped.delete()
+        if kept is value:
+            value.pin = survivor
+            value.save(update_fields=["pin", "updated"])
 
 
-def _merge_boundaries(survivor: Pin, loser: Pin, resolutions: dict[str, int]) -> None:
-    """Reassign loser's boundaries onto survivor, applying the user's choice for any conflicting boundary type."""
+def _keep_outline(survivor: Pin, boundary: Boundary, profile: Profile, source_label: str) -> int:
+    """Copy a boundary the survivor cannot hold onto its Markup layer, one polygon per part.
+    A pin holds one boundary per type, and pin boundaries have no revision history (``BoundaryRevision`` is wiki-only), so the outline not kept would otherwise be deleted. The Markup layer is the pin's own private geometry store: the outline stays visible on the pin's map and the user can redraw the boundary from it.
+    Only a drawn outline is kept - a pin's generated outline is fitted from its child pins, which all move to the survivor, so it is regenerated rather than lost.
+
+    Args:
+        survivor: The pin that stays.
+        boundary: The boundary being dropped.
+        profile: The pin owner.
+        source_label: The name of the pin the boundary belonged to.
+
+    Returns:
+        How many markup polygons were written.
+    """
+    outline = boundary.polygon or (None if boundary.generated_from_children else boundary.generated_polygon)
+    if outline is None:
+        return 0
+    label = f"{boundary.get_boundary_type_display()} boundary from {source_label}"
+    for part in outline:
+        PinMarkup.objects.create(
+            parent_pin=survivor,
+            profile=profile,
+            markup_type=MarkupType.POLYGON,
+            geometry=json.loads(part.json),
+            label=label[:500],
+            fill_opacity=15,
+        )
+    return len(outline)
+
+
+def _merge_boundaries(survivor: Pin, loser: Pin, resolutions: dict[str, int], profile: Profile, record: _MergeRecord, labels: dict[int, str]) -> None:
+    """Reassign loser's boundaries onto survivor, applying the user's choice for any conflicting boundary type.
+    The outline not chosen is kept as markup on the survivor - see :func:`_keep_outline`.
+
+    Args:
+        survivor: The pin that stays.
+        loser: The pin being merged away.
+        resolutions: The user's per-conflict choices.
+        profile: The pin owner.
+        record: Collects what was not kept.
+        labels: Each pin's display name, by pk, as it was before the merge.
+    """
     survivor_types = {boundary.boundary_type: boundary for boundary in Boundary.objects.filter(pin=survivor)}
     for boundary in list(Boundary.objects.filter(pin=loser)):
-        if boundary.boundary_type in survivor_types:
-            if resolutions.get(f"boundary:{boundary.boundary_type}") == loser.pk:
-                survivor_types[boundary.boundary_type].delete()
-                boundary.pin = survivor
-                boundary.save(update_fields=["pin", "updated"])
-            else:
-                boundary.delete()
+        existing = survivor_types.get(boundary.boundary_type)
+        if existing is None:
+            boundary.pin = survivor
+            boundary.save(update_fields=["pin", "updated"])
+            survivor_types[boundary.boundary_type] = boundary
             continue
-        boundary.pin = survivor
-        boundary.save(update_fields=["pin", "updated"])
-        survivor_types[boundary.boundary_type] = boundary
+        if resolutions.get(f"boundary:{boundary.boundary_type}") == loser.pk:
+            kept, dropped, dropped_from = boundary, existing, survivor
+        else:
+            kept, dropped, dropped_from = existing, boundary, loser
+        if _keep_outline(survivor, dropped, profile, labels[dropped_from.pk]):
+            record.add(f"{dropped.get_boundary_type_display()} boundary ({labels[dropped_from.pk]})", "kept as an outline on this pin's Markup layer")
+        dropped.delete()
+        if kept is boundary:
+            boundary.pin = survivor
+            boundary.save(update_fields=["pin", "updated"])
+            survivor_types[boundary.boundary_type] = boundary
 
 
-def _merge_article(survivor: Pin, loser: Pin, resolutions: dict[str, int]) -> None:
-    """Keep one pin's Article when both have one (per resolutions["article"]), else reassign the loser's."""
+def _merge_article(survivor: Pin, loser: Pin, resolutions: dict[str, int], profile: Profile, record: _MergeRecord, labels: dict[int, str]) -> None:
+    """Keep one pin's Article live when both have one (per resolutions["article"]), and the other's whole history behind it.
+    The article not chosen stops being live text but none of it is deleted: every one of its revisions moves onto the kept article, where the history page can show, diff and restore it.
+
+    Args:
+        survivor: The pin that stays.
+        loser: The pin being merged away.
+        resolutions: The user's per-conflict choices.
+        profile: The pin owner, credited with the merge revision.
+        record: Collects what was not kept.
+        labels: Each pin's display name, by pk, as it was before the merge.
+    """
+    from urbanlens.dashboard.services.wiki import article_merge
+
     loser_article = _get_article(loser)
     if loser_article is None:
         return
@@ -396,11 +617,23 @@ def _merge_article(survivor: Pin, loser: Pin, resolutions: dict[str, int]) -> No
         loser_article.save(update_fields=["pin", "updated"])
         return
     if resolutions.get("article") == loser.pk:
-        survivor_article.delete()
-        loser_article.pin = survivor
-        loser_article.save(update_fields=["pin", "updated"])
+        kept, absorbed, absorbed_from = loser_article, survivor_article, survivor
     else:
-        loser_article.delete()
+        kept, absorbed, absorbed_from = survivor_article, loser_article, loser
+    article_merge.record_live_text(kept)
+    article_merge.adopt_history(kept, absorbed)
+    # The OneToOne frees the survivor only once the absorbed row is gone.
+    absorbed.delete()
+    if kept.pin_id != survivor.pk:
+        kept.pin = survivor
+        kept.save(update_fields=["pin", "updated"])
+    article_merge.write_merge_revision(
+        kept,
+        content=kept.content,
+        editor=profile,
+        edit_summary=f"Merged pins: kept this text; {labels[absorbed_from.pk]}'s article is in the history below",
+    )
+    record.add(f"Article ({labels[absorbed_from.pk]})", "kept in this pin's article history")
 
 
 def _merge_lineage(survivor: Pin, loser: Pin) -> None:
@@ -471,21 +704,286 @@ def _merge_albums(survivor: Pin, loser: Pin) -> None:
         taken.add(album.slug)
 
 
-def merge_pins(survivor: Pin, loser: Pin, profile: Profile, resolutions: dict[str, int] | None = None) -> Pin:
-    """Merge loser into survivor: reassign every relation, resolve every conflict, delete loser.
+# How :func:`_merge_scalars` treats each of the loser's own columns.
+#: The survivor's identity or position; the loser's goes with it (its slug and uuid are tombstoned).
+_IDENTITY = "identity"
+#: Recomputed from the merged relations afterwards.
+_DERIVED = "derived"
+#: Share lineage and cover photo, gap-filled by :func:`_merge_lineage`.
+_LINEAGE = "lineage"
+#: The survivor's value when it has one, else the loser's; a different loser value goes into the merge note.
+_GAP_FILL = "gap_fill"
+#: The larger of the two, the other going into the note: a higher danger is the cautious reading, and a
+#: higher priority or vulnerability is what the user last thought of one copy of this place.
+_HIGHER = "higher"
+#: True when either pin says so - a declined restructure offer is a permanent "no".
+_EITHER = "either"
+#: True only when both say so - the visits that queue asks about now include the loser's.
+_BOTH = "both"
+#: The later of two timestamps.
+_LATER = "later"
+#: The union of two lists.
+_UNION = "union"
+#: Travels with the column it qualifies (see ``_COMPANIONS``).
+_COMPANION = "companion"
+
+#: Every concrete Pin column, and what a merge does with the loser's value.
+#: Test-enforced complete, so a column added later fails until somebody decides rather than being
+#: silently deleted with the loser.
+PIN_FIELD_POLICY: dict[str, str] = {
+    "id": _IDENTITY,
+    "created": _IDENTITY,
+    "updated": _IDENTITY,
+    "uuid": _IDENTITY,
+    "slug": _IDENTITY,
+    "profile": _IDENTITY,
+    "location": _IDENTITY,
+    "parent_pin": _IDENTITY,
+    "last_visited": _DERIVED,
+    "source_share": _LINEAGE,
+    "inferred_source_share": _LINEAGE,
+    "cover_photo": _LINEAGE,
+    "fences": _GAP_FILL,
+    "alarms": _GAP_FILL,
+    "cameras": _GAP_FILL,
+    "security": _GAP_FILL,
+    "signs": _GAP_FILL,
+    "vps": _GAP_FILL,
+    "plywood": _GAP_FILL,
+    "locked": _GAP_FILL,
+    "name": _GAP_FILL,
+    "name_is_user_provided": _COMPANION,
+    "icon": _GAP_FILL,
+    "description": _GAP_FILL,
+    "custom_icon": _GAP_FILL,
+    "custom_icon_upload": _COMPANION,
+    "pin_type": _GAP_FILL,
+    "pin_type_is_user_provided": _COMPANION,
+    "indoor_outdoor": _GAP_FILL,
+    "color": _GAP_FILL,
+    "detail_bg_color": _GAP_FILL,
+    "detail_bg_opacity": _COMPANION,
+    "detail_border_color": _GAP_FILL,
+    "detail_border_opacity": _COMPANION,
+    "date_built": _GAP_FILL,
+    "date_abandoned": _GAP_FILL,
+    "date_last_active": _GAP_FILL,
+    "wiki": _GAP_FILL,
+    "priority": _HIGHER,
+    "vulnerability": _HIGHER,
+    "danger": _HIGHER,
+    "restructure_offer_dismissed": _EITHER,
+    "unlogged_visit_dismissed": _BOTH,
+    "last_viewed_at": _LATER,
+    "buildings_auto_nested_at": _LATER,
+    "auto_nested_buildings": _UNION,
+}
+
+#: For the policies that pick one side outright: whether the loser's value replaces the survivor's.
+_LOSER_REPLACES: dict[str, Callable[[Any, Any], bool]] = {
+    _EITHER: lambda ours, theirs: bool(theirs) and not ours,
+    _BOTH: lambda ours, theirs: bool(ours) and not theirs,
+    _LATER: lambda ours, theirs: theirs is not None and (ours is None or theirs > ours),
+}
+
+#: Columns that only mean something next to another one, so they move when it moves.
+_COMPANIONS: dict[str, tuple[str, ...]] = {
+    "name": ("name_is_user_provided",),
+    "pin_type": ("pin_type_is_user_provided",),
+    "custom_icon": ("custom_icon_upload",),
+    "detail_bg_color": ("detail_bg_opacity",),
+    "detail_border_color": ("detail_border_opacity",),
+}
+
+#: The flag marking a column's value as the user's own choice rather than an import's or a
+#: classifier's. A chosen value beats an automatic one, whichever pin holds it.
+_USER_CHOSEN: dict[str, str] = {"name": "name_is_user_provided", "pin_type": "pin_type_is_user_provided"}
+
+#: Gap-filled columns that are not worth a line in the note when the survivor keeps its own: the
+#: loser's name is kept as an alias instead.
+_NOT_NOTED = frozenset({"name"})
+
+
+def _has_value(pin: Pin, name: str) -> bool:
+    """Whether *pin* holds a real value for column *name*, as opposed to an empty or default one.
 
     Args:
-        survivor: The pin that will remain, absorbing loser's data.
-        loser: The pin that will be deleted once its data has moved.
-        profile: The profile both pins must belong to.
-        resolutions: Maps each :class:`MergeFieldConflict` key (from :func:`plan_merge_conflicts`) to the pin id whose value should be kept.
+        pin: Either pin.
+        name: A ``_GAP_FILL`` column.
 
     Returns:
-        The survivor pin (refreshed by the merge).
+        True when the value is something a person or a pipeline set.
+    """
+    model_field = pin._meta.get_field(name)  # noqa: SLF001
+    value = getattr(pin, model_field.attname)
+    if name == "custom_icon":
+        return bool(pin.custom_icon) or bool(pin.custom_icon_upload)
+    if name in _USER_CHOSEN and getattr(pin, _USER_CHOSEN[name]):
+        return True
+    if value is None or value == "":
+        return False
+    return not (model_field.has_default() and not callable(model_field.default) and value == model_field.default)
 
-    Raises:
-        ValueError: survivor and loser are the same pin, or either doesn't belong to profile.
-        UnresolvedMergeConflictError: a real conflict has no resolution supplied."""
+
+def _display(pin: Pin, name: str) -> str:
+    """One column's value as the merge note shows it.
+
+    Args:
+        pin: The pin holding the value.
+        name: The column.
+
+    Returns:
+        Readable text.
+    """
+    model_field = pin._meta.get_field(name)  # noqa: SLF001
+    value = getattr(pin, model_field.name)
+    if model_field.choices:
+        return str(dict(model_field.flatchoices).get(value, value))
+    if isinstance(value, FieldFile):
+        return value.name or pin.custom_icon_upload
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value)
+
+
+def _merge_scalars(survivor: Pin, loser: Pin, record: _MergeRecord, labels: dict[int, str]) -> None:
+    """Merge the loser's own columns into the survivor's per ``PIN_FIELD_POLICY``, noting every value not kept.
+
+    Args:
+        survivor: The pin that stays.
+        loser: The pin being merged away.
+        record: Collects the values not kept.
+        labels: Each pin's display name, by pk, as it was before the merge.
+    """
+    from urbanlens.dashboard.models.aliases.model import PinAlias
+    from urbanlens.dashboard.services.locations.naming import is_meaningful_name
+
+    changed: list[str] = []
+
+    def take(name: str) -> None:
+        for column in (name, *_COMPANIONS.get(name, ())):
+            attname = survivor._meta.get_field(column).attname  # noqa: SLF001
+            value = getattr(loser, attname)
+            # A file is taken by its stored name; the loser's FieldFile is bound to the loser.
+            setattr(survivor, attname, value.name if isinstance(value, FieldFile) else value)
+            changed.append(column)
+
+    for name, policy in PIN_FIELD_POLICY.items():
+        if policy == _GAP_FILL:
+            ours, theirs = _has_value(survivor, name), _has_value(loser, name)
+            if not theirs:
+                continue
+            chosen_flag = _USER_CHOSEN.get(name)
+            loser_wins = not ours or (chosen_flag is not None and getattr(loser, chosen_flag) and not getattr(survivor, chosen_flag))
+            dropped_from = survivor if loser_wins else loser
+            if ours and _display(survivor, name) != _display(loser, name) and name not in _NOT_NOTED:
+                record.add(f"{capfirst(survivor._meta.get_field(name).verbose_name)} ({labels[dropped_from.pk]})", _display(dropped_from, name))  # noqa: SLF001
+            if loser_wins:
+                take(name)
+        elif policy == _HIGHER:
+            ours, theirs = getattr(survivor, name), getattr(loser, name)
+            if ours != theirs:
+                lower_from = survivor if theirs > ours else loser
+                record.add(f"{capfirst(survivor._meta.get_field(name).verbose_name)} ({labels[lower_from.pk]})", str(getattr(lower_from, name)))  # noqa: SLF001
+                if theirs > ours:
+                    take(name)
+        elif policy in _LOSER_REPLACES:
+            if _LOSER_REPLACES[policy](getattr(survivor, name), getattr(loser, name)):
+                take(name)
+        elif policy == _UNION and getattr(loser, name):
+            merged = list(getattr(survivor, name) or [])
+            seen = {json.dumps(item, sort_keys=True, default=str) for item in merged}
+            for item in getattr(loser, name):
+                if json.dumps(item, sort_keys=True, default=str) not in seen:
+                    merged.append(item)
+            if len(merged) != len(getattr(survivor, name) or []):
+                setattr(survivor, name, merged)
+                changed.append(name)
+
+    if changed:
+        survivor.save(update_fields=[*dict.fromkeys(changed), "updated"])
+    # The name the survivor did not take stays findable: aliases are every name a pin has had.
+    if loser.name and is_meaningful_name(loser.name) and (loser.name or "").casefold() != (survivor.name or "").casefold():
+        PinAlias.objects.resolve_or_create(survivor, loser.name.strip())
+
+
+def _fold_visit(duplicate: PinVisit, kept: PinVisit) -> None:
+    """Fold the loser's automatic visit into the survivor's one for the same UTC day, then delete it.
+    ``db_pv_one_geo_per_pin_day`` allows one geolocation visit per pin per day, so moving the loser's alongside the survivor's crashed the whole merge. They describe the same day at the same place, so they become one visit: the earlier arrival, both sets of notes and participants, whichever map and route exist, and every row that pointed at the duplicate (its photos, suggestions, external participants).
+    A second map the kept visit has no room for stays the owner's, associated with the survivor pin.
+
+    Args:
+        duplicate: The loser's visit.
+        kept: The survivor's visit on the same day.
+    """
+    kept.visited_at = min(kept.visited_at, duplicate.visited_at)
+    kept.notes = _join_text(kept.notes, duplicate.notes)
+    kept.tentative = kept.tentative and duplicate.tentative
+    if kept.route_id is None:
+        kept.route_id = duplicate.route_id
+    if kept.markup_map_id is None:
+        kept.markup_map_id = duplicate.markup_map_id
+    elif duplicate.markup_map_id is not None:
+        MarkupMap.objects.filter(pk=duplicate.markup_map_id, pin__isnull=True).update(pin=kept.pin_id)
+    kept.save()
+    kept.participants.add(*duplicate.participants.all())
+    _repoint_references(duplicate, kept)
+    duplicate.delete()
+
+
+def _merge_visits(survivor: Pin, loser: Pin) -> None:
+    """Move loser's visits onto survivor, folding an automatic visit that would collide with the survivor's for that day."""
+    kept_by_day = {visit.visited_at.astimezone(UTC).date(): visit for visit in PinVisit.objects.filter(pin=survivor, source=VisitSource.GEOLOCATION)}
+    for visit in PinVisit.objects.filter(pin=loser, source=VisitSource.GEOLOCATION).order_by("visited_at"):
+        day = visit.visited_at.astimezone(UTC).date()
+        kept = kept_by_day.get(day)
+        if kept is None:
+            visit.pin = survivor
+            visit.save(update_fields=["pin", "updated"])
+            kept_by_day[day] = visit
+        else:
+            _fold_visit(visit, kept)
+    PinVisit.objects.filter(pin=loser).update(pin=survivor)
+
+
+def _write_merge_note(survivor: Pin, record: _MergeRecord, labels: dict[int, str], loser_pk: int) -> None:
+    """Write what the survivor did not keep as one private note on it (split only if it exceeds a note's length).
+
+    Args:
+        survivor: The pin that stays.
+        record: The values collected during the merge.
+        labels: Each pin's display name, by pk, as it was before the merge.
+        loser_pk: The merged-away pin's pk, for its name.
+    """
+    if not record.lines:
+        return
+    header = f"Merged {labels[loser_pk]} into {labels[survivor.pk]} on {timezone.localdate().isoformat()}. Where both pins held something different, this pin kept one; the other is below."
+    entries = [f"{label}:\n{value}" if "\n" in value else f"{label}: {value}" for label, value in record.lines]
+    chunk = header
+    for entry in entries:
+        if len(chunk) + 2 + len(entry) > MAX_PIN_NOTE_LENGTH:
+            PinNote.objects.create(pin=survivor, text=chunk)
+            chunk = f"{header} (continued)"
+        chunk = f"{chunk}\n\n{entry}"[:MAX_PIN_NOTE_LENGTH]
+    PinNote.objects.create(pin=survivor, text=chunk)
+
+
+def merge_pins(survivor: Pin, loser: Pin, profile: Profile, resolutions: dict[str, int] | None = None) -> Pin:
+    """Merge loser into survivor: reassign every relation, resolve every conflict, delete loser.
+    Nothing the loser held is lost with it: see the module docstring for where each kind of data goes when the survivor already has its own.
+
+        Args:
+            survivor: The pin that will remain, absorbing loser's data.
+            loser: The pin that will be deleted once its data has moved.
+            profile: The profile both pins must belong to.
+            resolutions: Maps each :class:`MergeFieldConflict` key (from :func:`plan_merge_conflicts`) to the pin id whose value should be kept.
+
+        Returns:
+            The survivor pin (refreshed by the merge).
+
+        Raises:
+            ValueError: survivor and loser are the same pin, or either doesn't belong to profile.
+            UnresolvedMergeConflictError: a real conflict has no resolution supplied."""
     if survivor.pk == loser.pk:
         raise ValueError("Cannot merge a pin into itself")
     if survivor.profile_id != profile.pk or loser.profile_id != profile.pk:
@@ -499,17 +997,23 @@ def merge_pins(survivor: Pin, loser: Pin, profile: Profile, resolutions: dict[st
 
     from urbanlens.dashboard.services.geo.child_pin_boundaries import deferring_child_boundary_refits
 
+    # Captured before anything is rewritten, so the note and summaries name the pins as the user knew them.
+    labels = {survivor.pk: _pin_label(survivor), loser.pk: _pin_label(loser)}
+    loser_pk = loser.pk
+    record = _MergeRecord()
+
     with transaction.atomic(), deferring_child_boundary_refits():
         _reparent_children(survivor, loser)
         _merge_aliases(survivor, loser)
+        _merge_scalars(survivor, loser, record, labels)
         _merge_owners(survivor, loser)
         _merge_reviews(survivor, loser)
         _merge_list_items(survivor, loser)
         _merge_auto_removals(survivor, loser)
         _merge_shares(survivor, loser)
-        _merge_custom_field_values(survivor, loser, resolutions)
-        _merge_boundaries(survivor, loser, resolutions)
-        _merge_article(survivor, loser, resolutions)
+        _merge_custom_field_values(survivor, loser, resolutions, record, labels)
+        _merge_boundaries(survivor, loser, resolutions, profile, record, labels)
+        _merge_article(survivor, loser, resolutions, profile, record, labels)
         _merge_lineage(survivor, loser)
         survivor.labels.add(*loser.labels.all())
 
@@ -526,7 +1030,7 @@ def merge_pins(survivor: Pin, loser: Pin, profile: Profile, resolutions: dict[st
         _merge_image_attachments(survivor, loser)
         _merge_floorplan_marker(survivor, loser)
 
-        PinVisit.objects.filter(pin=loser).update(pin=survivor)
+        _merge_visits(survivor, loser)
         Image.objects.filter(pin=loser).update(pin=survivor)
         PinLink.objects.filter(pin=loser).update(pin=survivor)
         PinPropertySale.objects.filter(pin=loser).update(pin=survivor)
@@ -538,6 +1042,10 @@ def merge_pins(survivor: Pin, loser: Pin, profile: Profile, resolutions: dict[st
         TripActivity.objects.filter(pin=loser).update(pin=survivor)
         CustomFieldValue.objects.filter(ref_pin=loser).update(ref_pin=survivor)
         PinSuggestion.objects.filter(pin=loser).update(pin=survivor)
+        # SET_NULL relations: the delete would keep these rows but cut them loose from any pin.
+        Floorplan.objects.filter(pin=loser).update(pin=survivor)
+        PhotoUploadFailure.objects.filter(pin=loser).update(pin=survivor)
+        PinImportFailure.objects.filter(pin=loser).update(pin=survivor)
         _repoint_other_merge_suggestions(survivor, loser)
 
         for markup_map in MarkupMap.objects.filter(inferred_pins=loser):
@@ -545,6 +1053,7 @@ def merge_pins(survivor: Pin, loser: Pin, profile: Profile, resolutions: dict[st
             markup_map.inferred_pins.add(survivor)
 
         loser.delete()
+        _write_merge_note(survivor, record, labels, loser_pk)
 
         # last_visited is a denormalized copy of the newest PinVisit, and the visits above moved
         # across via update(), which fires no signal.
