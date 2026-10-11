@@ -2,7 +2,7 @@
 #
 # Run pytest inside the test container, with the sync this repo requires.
 #
-# Syncs all of src/ (init.py is real imported code, not just the package).
+# Syncs all of src/ and bin/ (tests import bin/container_init.py, not just the package).
 #
 # /app/src is baked into the image, so copy in and verify parity rather than assuming it.
 #

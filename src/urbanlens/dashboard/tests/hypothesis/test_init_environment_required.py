@@ -1,6 +1,6 @@
-"""``bin/init.py`` starts every container, and refuses to guess which environment it is (Jess, 2026-10-07).
+"""``bin/container_init.py`` starts every container, and refuses to guess which environment it is (Jess, 2026-10-07).
 
-It used to fall back to production when ``UL_ENVIRONMENT`` was unset, and ``--environment`` reached init.py alone: the
+It used to fall back to production when ``UL_ENVIRONMENT`` was unset, and ``--environment`` reached container_init.py alone: the
 ``manage.py`` children it runs read the variable themselves, so they could disagree with it.
 """
 
@@ -20,11 +20,11 @@ from urbanlens.UrbanLens.environments.meta import EnvironmentTypes
 if TYPE_CHECKING:
     from types import ModuleType
 
-_INIT_PATH = pathlib.Path(__file__).resolve().parents[5] / "src" / "bin" / "init.py"
+_INIT_PATH = pathlib.Path(__file__).resolve().parents[5] / "bin" / "container_init.py"
 
 
 def _load_init_module() -> ModuleType:
-    """Import ``src/bin/init.py``, which is a script rather than a package member.
+    """Import ``bin/container_init.py``, which is a script rather than a package member.
 
     Returns:
         The imported module.
@@ -74,7 +74,7 @@ class ResolveEnvironmentTests(SimpleTestCase):
         self.assertEqual(self._resolve("development", UL_ENVIRONMENT="production"), "development")
 
     def test_a_checkout_s_env_file_is_read_as_django_reads_it(self) -> None:
-        """``settings.base`` loads ``.env`` without overriding the process, so init.py agrees with its children."""
+        """``settings.base`` loads ``.env`` without overriding the process, so container_init.py agrees with its children."""
         self.env_file.write_text("UL_ENVIRONMENT=development\n", encoding="utf-8")
         self.assertEqual(self._resolve(), "development")
         self.assertEqual(self._resolve(UL_ENVIRONMENT="staging"), "staging")

@@ -77,7 +77,7 @@ class TheImageBuildSatisfiesTheSettingsTests(SimpleTestCase):
     def _build_step_environment(self) -> dict[str, str]:
         text = DOCKERFILE.read_text(encoding="utf-8")
         step = re.search(
-            r"^RUN ((?:[A-Z_]+=\S+ \\\n\s*)+)gosu appuser python /app/src/bin/init.py --frontend-only",
+            r"^RUN ((?:[A-Z_]+=\S+ \\\n\s*)+)gosu appuser python /app/bin/container_init.py --frontend-only",
             text,
             re.MULTILINE,
         )

@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 from __future__ import annotations
 
 import argparse
@@ -81,8 +82,8 @@ def resolve_executable(name: str) -> str:
     return resolved
 
 
-# Resolve from this file's location: src/bin/init.py → src/ → project root
-ROOT_DIR = Path(__file__).resolve().parent.parent.parent
+# Resolve from this file's location: bin/container_init.py → project root
+ROOT_DIR = Path(__file__).resolve().parent.parent
 SRC_DIR = ROOT_DIR / "src"
 APP_DIR = SRC_DIR / "urbanlens"
 

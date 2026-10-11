@@ -10,7 +10,7 @@ queries:
 # why `src` is not the source root (Postgres data and tool caches live under it).
 paths:
   - src/urbanlens
-  - src/bin
+  - src/urbanlens_ai
   - bin
   - .github
   - tests
