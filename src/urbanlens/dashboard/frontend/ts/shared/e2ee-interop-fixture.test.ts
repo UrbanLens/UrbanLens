@@ -10,7 +10,7 @@ import sodium from "libsodium-wrappers-sumo";
 
 import { KDF_MEMLIMIT, KDF_OPSLIMIT, cryptoReady, deriveKey, unwrapSecretKey } from "./e2ee-crypto";
 
-const FIXTURE = join(import.meta.dir, "../../../../../../docs/e2ee-interop-fixture.json");
+const FIXTURE = join(import.meta.dir, "e2ee-interop-fixture.json");
 const fixture = JSON.parse(readFileSync(FIXTURE, "utf8"));
 
 await cryptoReady();
