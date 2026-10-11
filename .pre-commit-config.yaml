@@ -74,6 +74,11 @@ repos:
         language: system
         files: '\.(html|txt)$'
         pass_filenames: false
+      - id: comment-hygiene
+        name: comments and docstrings gain no long blocks, history or restated signatures
+        entry: python3 bin/check_comment_hygiene.py
+        language: system
+        files: '\.(py|ts|tsx|js|jsx|mjs|sh|ya?ml|toml)$'
       - id: nginx-config
         # always_run, not files: - the top-level `files` filter above admits no
         # .conf extension, so a path-scoped hook on these would never fire. That
