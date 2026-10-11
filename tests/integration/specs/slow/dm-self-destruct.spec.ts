@@ -109,7 +109,7 @@ test.describe.serial("self-destructing direct messages", () => {
         test.fail();
         test.info().annotations.push({
             type: "goals-conflict",
-            description: `${GOALS_GONE} vs models/direct_messages/model.py:118 hides it on read; queryset.py:87-98 hard-deletes only at the hourly :47 sweep`,
+            description: `${GOALS_GONE} vs models/direct_messages/model.py:120 hides it on read; queryset.py:87-98 hard-deletes only at the hourly :47 sweep`,
         });
         await awayFromSweep();
         const { a: sharer, b: sharee } = await ensureFriends(sharerApi, shareeApi);

@@ -144,7 +144,7 @@ test.describe("editing a pin does not change what other people see on its wiki",
         test.info().annotations.push({
             type: "goals-conflict",
             description:
-                "GOALS: 'Pin → wiki: sender opts in per field; the wiki gets a copy' and 'if editing a pin's fields ever causes a different user's view ... to change, that's a bug' vs models/profile/model.py:586-589 (sync_*_to_wiki default True) and models/pin/signals.py:244,276 (every pin edit live-mirrored into WikiStatVote, read back exactly by external_api/views_wiki.py:300)",
+                "GOALS: 'Pin → wiki: sender opts in per field; the wiki gets a copy' and 'if editing a pin's fields ever causes a different user's view ... to change, that's a bug' vs models/profile/model.py:588-591 (sync_*_to_wiki default True) and models/pin/signals.py:253,276 (every pin edit live-mirrored into WikiStatVote, read back exactly by external_api/views_wiki.py:306)",
         });
         test.fail();
         test.slow();

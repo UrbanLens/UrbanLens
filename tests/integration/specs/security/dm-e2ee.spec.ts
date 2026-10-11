@@ -85,7 +85,7 @@ test.describe("direct messages are end-to-end encrypted, unconditionally", () =>
             type: "goals-conflict",
             description:
                 '"Direct messages: end-to-end encrypted by default, as close to unconditionally enforced as possible - there should be no way to turn it off" vs ' +
-                "controllers/direct_messages.py:324-350 + services/messaging/direct_messages.py:671-680 (a plain `body` with no ciphertext is accepted and stored; only plaintext+ciphertext together is refused) and models/direct_messages/model.py (plaintext body column)",
+                "controllers/direct_messages.py:336-363 + services/messaging/direct_messages.py:697-706 (a plain `body` with no ciphertext is accepted and stored; only plaintext+ciphertext together is refused) and models/direct_messages/model.py (plaintext body column)",
         });
         const { a: sharer, b: sharee } = await ensureFriends(sharerApi, shareeApi);
         const marker = freshMarker("dmplain");
