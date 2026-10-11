@@ -131,6 +131,8 @@ jobs:
         run: python3 bin/check_template_comments.py
       - name: Tracked text files are stored with LF
         run: python3 bin/check_line_endings.py
+      - name: Comments and docstrings gain no long blocks, history or restated signatures
+        run: python3 bin/check_comment_hygiene.py
 
       - name: A private pin's fields never reach a community wiki
         run: python3 bin/check_pin_not_published_to_wiki.py
