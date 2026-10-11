@@ -11,7 +11,8 @@
 Status: live · Written 2026-10-10 against `release/v_0_9_0` at `f21fba0c5`, and rewritten the same day
 for Jess's rulings (below). Nothing here is built in UrbanLens. REData's design is its PL14
 (`docs/temporal-parcels-and-buildings.md` in REData); its Phase 0, which only keeps evidence, is in
-REData PRs #189-#193 and not deployed. This file describes only the REData API contract UrbanLens will
+REData PRs #189-#193, merged 2026-10-11, and
+reaches production with REData's next release. This file describes only the REData API contract UrbanLens will
 consume, and what UrbanLens does with it.
 
 ## Why
@@ -58,7 +59,7 @@ are unaffected. UrbanLens uses each item only when REData's `GET /capabilities/`
 | `GET /buildings/resolve/?ref=` | Any `ref` REData ever served → its `building_uuid`. |
 | `GET /changes/?since=<cursor>` | Parcels and buildings whose answer changed, in order. REData keeps the whole feed indefinitely, so every cursor UrbanLens was given stays valid, however long it was away. |
 
-Already served once REData's Phase 0 deploys, and safe to ignore: each `sources[]` entry of a building
+Served once REData's Phase 0 is released, and safe to ignore: each `sources[]` entry of a building
 gains `source_as_of` (`{not_before, not_after, basis}` or `null`: the source's own date for that record),
 and an Overture source's `attributes` gain `gers_id`. No existing field changes value. An Overture `ref`
 stays a content hash that can change between Overture releases (REData `P98`); it becomes stable only
