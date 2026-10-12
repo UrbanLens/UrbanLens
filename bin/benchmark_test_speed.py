@@ -109,7 +109,7 @@ def main() -> int:
         print(f"error: no test files found under {SAMPLE_DIR}", file=sys.stderr)
         return 1
 
-    db_name = f"bench_{_slug(args.label)}_{uuid.uuid4().hex[:8]}"
+    db_name = f"test_bench_{_slug(args.label)}_{uuid.uuid4().hex[:8]}"
     common_args = ["-q", "-p", "no:randomly", "--no-header"]
 
     print(f"==> sampled {len(files)} of {len(all_files)} files, db={db_name}", file=sys.stderr)

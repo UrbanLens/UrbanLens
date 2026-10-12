@@ -44,7 +44,7 @@ if [ "$REUSE" -eq 0 ]; then
     # it finds, so a previous run's leftovers would be counted too.
     python -m coverage erase
     # A unique database for the same reason bin/run_tests.sh uses one.
-    UL_TEST_DB_NAME="${UL_TEST_DB_NAME:-dc_$(date +%s)_$$}" \
+    UL_TEST_DB_NAME="${UL_TEST_DB_NAME:-test_dc_$(date +%s)_$$}" \
         python -m coverage run -m pytest "${pytest_args[@]}"
     python -m coverage combine
     python -m coverage xml -o coverage.xml
