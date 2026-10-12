@@ -6,6 +6,7 @@ import json
 import os
 
 from asgiref.sync import async_to_sync
+from channels.db import database_sync_to_async
 from channels.testing import WebsocketCommunicator
 from django.contrib.auth.models import User
 from django.core.cache import cache
@@ -18,6 +19,7 @@ from urbanlens.dashboard.consumers import DirectMessageConsumer
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.tests.hypothesis.websocket_helpers import rows_at_least, settle
 
 
 def _run(coro):
@@ -82,15 +84,8 @@ class DirectMessageHttpBudgetTests(TransactionTestCase):
         assert connected
         for index in range(2):
             await comm.send_to(text_data=json.dumps({"recipient": self.recipient.slug, "body": f"socket {index}"}))
-        # The socket answers nothing on the sending connection, so wait for the
-        # rows rather than for a frame - see test_websocket_volume_dm_and_games.
-        from channels.db import database_sync_to_async
-
-        acount = database_sync_to_async(self._saved)
-        for _ in range(25):
-            if await acount() >= 2:
-                break
-            await comm.receive_nothing(timeout=0.2)
+        # The socket answers nothing on the sending connection, so wait for the rows rather than for a frame.
+        await settle(comm, until=rows_at_least(database_sync_to_async(self._saved), 2))
         await comm.disconnect()
 
     @override_settings(UL_MESSAGES_PER_MINUTE=3)
