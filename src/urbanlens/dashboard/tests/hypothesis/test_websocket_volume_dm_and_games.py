@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from itertools import count
 import json
 import time
@@ -184,7 +185,11 @@ class DirectMessageVolumeTests(TransactionTestCase):
 
         for _ in range(6):
             await comm.send_to(text_data=json.dumps({"type": "typing", "recipient": self.recipient.slug}))
-        frames = await _drain(comm)
+        # The refusal arrives once the consumer reaches the third frame; _drain's 0.3 s quiet window ends first on a loaded runner.
+        frames = []
+        with contextlib.suppress(TimeoutError):
+            frames.append(json.loads(await comm.receive_from(timeout=10)))
+        frames += await _drain(comm)
 
         self.assertTrue(
             any(frame.get("type") == "error" for frame in frames),
