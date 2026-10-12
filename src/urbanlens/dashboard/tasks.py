@@ -104,7 +104,7 @@ def ensure_wiki_for_location(location_id: int) -> int | None:
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def ensure_wikis_for_locations(location_ids: list[int]) -> list[int]:
     """
-    Chunk-shaped sibling of :func:`ensure_wiki_for_location`, for a bulk import's fan-out (P109).
+    Chunk-shaped sibling of :func:`ensure_wiki_for_location`, for a bulk import's fan-out.
 
     Runs its own :func:`batching_follow_on_work` so the enrichment work a new wiki queues coalesces
     into :func:`enrich_wiki_locations` chunks too, whether this task was itself reached from inside an
@@ -143,7 +143,7 @@ def ensure_building_wikis(location_id: int) -> list[int]:
     """
     Give each pinned location on a campus's buildings its building's wiki, once the campus's building list is cached.
 
-    A location pinned before the list landed was answered with the campus's wiki, which is not its own (P265).
+    A location pinned before the list landed was answered with the campus's wiki, which is not its own.
 
     Args:
         location_id: PK of the Location whose building list was just cached.
@@ -225,7 +225,7 @@ def enrich_wiki_location(self, wiki_id: int) -> bool:
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def enrich_wiki_locations(self, wiki_ids: list[int]) -> dict[int, bool]:
     """
-    Chunk-shaped sibling of :func:`enrich_wiki_location`, for a bulk import's fan-out (P109).
+    Chunk-shaped sibling of :func:`enrich_wiki_location`, for a bulk import's fan-out.
 
     Each wiki keeps its own place-linking/name/boundary failures isolated - autoretry on this task
     retries the whole chunk, so a wiki that keeps failing must not stop its chunk-mates from ever
@@ -720,7 +720,7 @@ def suggest_wiki_category(self, wiki_id: int) -> list[str]:
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def suggest_wiki_categories(wiki_ids: list[int]) -> dict[int, list[str]]:
     """
-    Chunk-shaped sibling of :func:`suggest_wiki_category`, for a bulk import's fan-out (P109).
+    Chunk-shaped sibling of :func:`suggest_wiki_category`, for a bulk import's fan-out.
 
     Args:
         wiki_ids: PKs of the Wikis to suggest and attach labels for.
@@ -764,7 +764,7 @@ def suggest_pin_category(self, pin_id: int) -> list[str]:
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def suggest_pin_categories(pin_ids: list[int]) -> dict[int, list[str]]:
     """
-    Chunk-shaped sibling of :func:`suggest_pin_category`, for a bulk import's fan-out (P109).
+    Chunk-shaped sibling of :func:`suggest_pin_category`, for a bulk import's fan-out.
 
     Args:
         pin_ids: PKs of the Pins to suggest and attach labels for.
@@ -878,7 +878,7 @@ def archive_pin_link_to_wayback(link_id: int) -> bool:
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def archive_pin_links_to_wayback(link_ids: list[int]) -> dict[int, bool]:
     """
-    Chunk-shaped sibling of :func:`archive_pin_link_to_wayback`, for a bulk import's fan-out (P109).
+    Chunk-shaped sibling of :func:`archive_pin_link_to_wayback`, for a bulk import's fan-out.
 
     A confirmed import that extracts embedded links from each pin's raw description
     (``maps.py::_attach_description_extras``) creates one ``PinLink`` per link, each of which
@@ -905,7 +905,7 @@ def archive_wiki_link_to_wayback(link_id: int) -> bool:
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def archive_wiki_links_to_wayback(link_ids: list[int]) -> dict[int, bool]:
     """
-    Chunk-shaped sibling of :func:`archive_wiki_link_to_wayback`, for a bulk import's fan-out (P109).
+    Chunk-shaped sibling of :func:`archive_wiki_link_to_wayback`, for a bulk import's fan-out.
 
     Args:
         link_ids: PKs of the WikiLinks to archive.
@@ -926,7 +926,7 @@ _WAYBACK_SWEEP_LOCK_SECONDS = 660
 @external_background_task("wayback-archive-sweep")
 def sweep_unarchived_links(limit: int | None = None) -> dict[str, int]:
     """
-    Ask the Wayback Machine again about links it has not archived yet (P308).
+    Ask the Wayback Machine again about links it has not archived yet.
 
     Takes up a URL whose wait after a failure has passed, and a link whose own task never ran.
 
@@ -1573,13 +1573,8 @@ def process_image_upload(self, image_id: int, max_dimension: int | None = None) 
         image.pending_scan = False
         update_fields["pending_scan"] = False
 
-    # Unconditional, unlike the exif_data write in _process_photo_upload, which
-    # only fills a row that has none. A re-enqueued or retried run therefore
-    # replaces a manually placed position with the EXIF one.
-    # TODO: guard this once Image records which provenance its coordinates have
-    # (see the latitude/longitude comment in models/images/model.py). Left as-is
-    # deliberately: changing it without that column would trade one silent
-    # overwrite for another.
+    # Unconditional: a re-enqueued or retried run replaces a manually placed
+    # position with the EXIF one. TODO: guard once Image records coordinate provenance.
     if coords:
         lat, lng = coords
         image.latitude = Decimal(str(lat))
@@ -2397,7 +2392,7 @@ _KEYWORD_RETRY_SWEEP_LOCK_KEY = "urbanlens:keyword-retry:sweep-lock"
 @external_background_task("keyword-retry-sweep")
 def sweep_keyword_retries(limit: int | None = None) -> dict[str, int]:
     """
-    Ask keyword sources again about the photos they did not answer for (P323).
+    Ask keyword sources again about the photos they did not answer for.
 
     Only the source that did not answer is asked, a capped batch per run, never a source this environment does not
     call or one that is backing off; see ``services.photos.keyword_retry``.
@@ -2530,7 +2525,7 @@ def sync_redata_pin_assignment(pin_id: int) -> bool:
 @shared_task(queue=Queue.BULK)
 def sync_redata_pin_assignments(pin_ids: list[int]) -> int:
     """
-    Chunk-shaped sibling of :func:`sync_redata_pin_assignment`, for a bulk import's fan-out (P109).
+    Chunk-shaped sibling of :func:`sync_redata_pin_assignment`, for a bulk import's fan-out.
 
     A label added to every pin in an import (a list category, a shared tag) fires the
     ``Pin.labels`` ``m2m_changed`` signal once per pin - queued here instead of one broker task each.
@@ -3160,7 +3155,7 @@ def _with_confirmed_cids(deferred_lists: list[dict], profile_id: int) -> list[di
     *deferred_lists* with every pin's cid checked against its own Google Maps URL.
 
     The confirm step already does this; a retry queued before it did can still carry a cid that lost
-    its low digits in the browser (REData P120), which no answer would ever be keyed by. A pin whose
+    its low digits in the browser, which no answer would ever be keyed by. A pin whose
     cid is refused outright is dropped, never looked up.
     """
     from urbanlens.dashboard.services.apis.locations.cid_validation import InvalidCidError
@@ -3606,12 +3601,8 @@ def run_scheduled_database_backup(self) -> bool:
     return _run_database_backup(self)
 
 
-# No autoretry, deliberately: the beat scheduler re-fires this every hour
-# anyway, and a retry racing the next scheduled run would double-spend the
-# API budget the cycle just computed. The time limits keep a slow cycle (many
-# sources with long stagger pauses) from ever overlapping the next hourly
-# firing; a soft time limit propagates out of run_enrichment_cycle so the
-# task winds down cleanly mid-batch.
+# No autoretry: the beat scheduler re-fires hourly, and a retry would
+# double-spend the API budget. Time limits prevent overlap with the next run.
 @shared_task(bind=True, soft_time_limit=2900, time_limit=3100, queue=Queue.MAINTENANCE)
 @external_background_task("scheduled-location-enrichment")
 def run_scheduled_enrichment(self) -> dict:
@@ -4026,11 +4017,8 @@ def hard_delete_expired_accounts() -> int:
         release_lock(_HARD_DELETE_LOCK_CACHE_KEY, _lock_token)
 
 
-# No autoretry here, deliberately: run_panel_fetch owns the failure policy
-# (suppression markers with their own TTLs), and Celery-level retries would
-# race the poll-driven re-scheduling in schedule_panel_fetch. The time limits
-# sit under external_data.FLIGHT_TTL_SECONDS so a hard-killed task's
-# single-flight marker expires right after the task does.
+# No autoretry: run_panel_fetch owns the failure policy, and Celery retries
+# would race the poll-driven re-scheduling. Time limits align with FLIGHT_TTL_SECONDS.
 @shared_task(soft_time_limit=110, time_limit=130, queue=Queue.INTERACTIVE)
 def fetch_panel_source(source_key: str, pin_id: int, flight_token: str | None = None) -> None:
     """
@@ -5134,7 +5122,7 @@ def score_reputation_event(event_id: int) -> str:
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def score_reputation_events(event_ids: list[int]) -> int:
     """
-    Chunk-shaped sibling of :func:`score_reputation_event`, for a bulk import's fan-out (P109).
+    Chunk-shaped sibling of :func:`score_reputation_event`, for a bulk import's fan-out.
 
     ``_decay_multiplier`` is explicitly order-independent (see
     ``services.reputation.scoring``), so scoring a chunk's events in any order is safe. Each

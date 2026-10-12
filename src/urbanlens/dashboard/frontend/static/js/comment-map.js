@@ -75,12 +75,7 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
                 .catch(function () { return ''; });
         }
 
-        // Prefill the (standalone-only) title field with a best-effort suggestion
-        // so users aren't left staring at a blank input: the host trip's name when
-        // launched from a trip map, otherwise a reverse-geocoded place name sized
-        // to the current zoom. This is only ever a suggestion - the user can edit
-        // or clear it, and the backend still defaults an empty title on its own,
-        // so a slow/failed lookup just leaves the field blank as before.
+        // Prefill the standalone title field with the trip name or a reverse-geocoded place name.
         function _suggestTitle() {
             if (!_standaloneMode) return;
             var token = ++_titleSuggestToken;
@@ -165,15 +160,8 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
             });
         }
 
-        // -- Open composer -----------------------------------------------------
-        // Accepts either a host form element (existing comment/visit/trip-comment
-        // usage - back-compat) or an options object
-        // { form, context, onSaved, existingMapPicker, startTab } with no form,
-        // which switches on standalone mode. existingMapPicker (currently only
-        // passed by the DM composer) reveals the tab strip and a second
-        // "Choose Existing" tab backed by { fetchUrl, onPick(uuid) }; every
-        // other caller never sets it, so the dialog looks exactly as it always
-        // has for them.
+        // Open composer dialog. Accepts a form element or options { form, context, onSaved, existingMapPicker, startTab }.
+        // existingMapPicker enables the "Choose Existing" tab (used by DM composer).
         window._openCommentMapComposer = function (formOrOptions) {
             if (typeof L === 'undefined') {
                 // Leaflet is a CDN script too, so the load failure this reports is
@@ -321,12 +309,7 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
             _suggestTitle();
         }
 
-        // -- Shared top-right map toolbar -----------------------------------------
-        // Every map on the site (main map, pin detail, wiki, safety check-ins,
-        // trip activity map, memories overview) renders the same toolbar markup
-        // (see map_components.py's map_toolbar()/_map_toolbar.html) so the
-        // screenshot tool behaves identically everywhere: it opens this same
-        // composer dialog, seeded with the calling map's current view.
+        // Opens the composer with the current map view for screenshots.
         window._openMapToolbarScreenshot = function (map, context) {
             var opts = { context: context || null };
             if (map && typeof map.getCenter === 'function') {
@@ -404,14 +387,8 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
                         });
                     })
                     .then(function (shouldDownload) {
-                        // Awaited, not fired-and-forgotten: this was closing the
-                        // composer (tearing down _composer, which draws on
-                        // _composerMap) immediately after *starting* the download,
-                        // not after it finished - the tile-fetch-and-draw below
-                        // could still be reading from a map that had just been
-                        // destroyed. Caught locally so a download failure (the
-                        // save already succeeded) doesn't report as "Failed to
-                        // save map" via the outer catch.
+                        // Await download to avoid closing the composer before the map tiles are captured.
+                        // Errors here are caught locally so a download failure doesn't report as "Failed to save map".
                         if (!shouldDownload) return;
                         return window.MapExport.download(_composerMap, {
                             layers: _composerLayers,
@@ -479,11 +456,7 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
                 });
         });
 
-        // Wire the read-only viewer's Edit button: seeds the shared composer
-        // with this map's own snapshot (already embedded on the page via
-        // json_script - no extra request needed) and saves the result as a
-        // brand-new MarkupMap. The map being viewed is never mutated, so a
-        // shared/received map stays exactly as its owner left it.
+        // Edit button: opens the composer with this map's snapshot, saving as a new MarkupMap.
         document.addEventListener('click', function (e) {
             var editBtn = e.target.closest('.comment-map-edit-btn');
             if (!editBtn || !window._openCommentMapComposer) return;
@@ -511,16 +484,10 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
 
         // Draw tools, Pin my location, Undo, Redo and Clear are wired by markup-composer.ts.
 
-        // -- Jump-to search (shared window.LocationSearchEngine) ----------------
-        // Same multi-source search as the main map and the safety destination
-        // picker: local pins, addresses (Nominatim), Google Places, raw
-        // coordinates, and Plus Codes. Created lazily on first open so pages
-        // without Leaflet never touch it.
+        // Lazy-initializes the shared LocationSearchEngine for the composer.
         function _ensureComposerSearch() {
             if (_composerSearch || typeof window.LocationSearchEngine === 'undefined') return;
-            // One-time cleanup: this key used to be unscoped, leaking one
-            // user's typed search queries to the next user on a shared
-            // browser (UL-239). See map/index.html's identical cleanup.
+            // Clean up legacy unscoped search history key that leaked queries across users.
             try { localStorage.removeItem('ul_composer_search_history_v1'); } catch (e) {}
             _composerSearch = window.LocationSearchEngine.attach('cmcc', {
                 historyKey: 'ul_composer_search_history_v1_' + COMMENT_MAP_CFG.profileUuid + '',
@@ -636,11 +603,7 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
             return [west, south, east, north];
         }
 
-        // MapLibre counterpart to _fitMapToMarkup above. Simpler than the
-        // Leaflet version: always fits to markup bounds when markup exists,
-        // rather than first checking whether the saved view already covers it
-        // - a deliberate simplification (worst case, zooms out slightly more
-        // than strictly necessary), not an attempt at pixel parity.
+        // MapLibre version: always fits to markup bounds (simpler than Leaflet's check).
         function _fitMaplibreToMarkup(mmap, data) {
             var lat = data.center_lat, lng = data.center_lng, zoom = data.zoom || 13;
             var markup = data.markup || [];
@@ -651,11 +614,7 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
             mmap.fitBounds(bounds, { padding: 20, animate: false, bearing: +data.bearing || 0 });
         }
 
-        // Renders a thumbnail via MapLibre - PL8 item 2's WebGL2 path.
-        // _renderMapThumb below picks this over the Leaflet path when the
-        // browser supports WebGL2 and MapLibre is loaded on this page;
-        // the Leaflet path stays exactly as it was for the ~4.27% that don't,
-        // per D12's "genuine second rendering engine, not a migration crutch."
+        // Renders a thumbnail via MapLibre (WebGL2 path). Leaflet remains as a permanent fallback.
         function _renderMapThumbMaplibre(el, data, refLatLng) {
             var baseKey = data.layer_mode || 'street';
             var style = window.MaplibreRasterStyle.buildRasterStyle(baseKey, window.MapLayers.rasterSourceFor(baseKey));
@@ -707,17 +666,8 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
             return mmap;
         }
 
-        // Disposes whichever map engine is tagged onto `el` (see _renderMapThumb
-        // and _expandCommentMap below), clearing the tag first. Leaflet's own
-        // Map.remove() is not safe to call twice - the second call throws,
-        // because it unconditionally dereferences internal state (_mapPane)
-        // the first call already deleted - so every disposal in this file goes
-        // through here rather than calling `.remove()` directly, making a
-        // second attempt on the same element (the htmx cleanup listener below
-        // racing an explicit removal elsewhere) a safe no-op. A given element
-        // only ever gets one tag or the other (PL8 item 2's WebGL2 branch
-        // picks one engine per render), but both are checked independently so
-        // this stays correct if that ever changes.
+        // Disposes the map engine tagged on `el`. Leaflet's remove() throws on double-call,
+        // so all disposals go through this safe no-op path.
         function _disposeMapOn(el) {
             if (!el) return;
             if (window.ThumbMapBudget) window.ThumbMapBudget.forget(el);
@@ -745,12 +695,8 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
                 cached.map.invalidateSize();
                 return;
             }
-            // The stale instance's own container is gone. Usually the
-            // htmx:beforeCleanupElement listener below already disposed it the
-            // moment HTMX detached it, but that event never fires for the raw
-            // innerHTML swaps a couple of call sites still use (see
-            // _initThumbs's own comment) - _disposeMapOn is the tag-guarded,
-            // safe-to-call-twice path for exactly that gap.
+            // The stale container is gone. The htmx:beforeCleanupElement listener usually handles this,
+            // but raw innerHTML swaps skip that event, so we dispose defensively.
             if (cached) _disposeMapOn(cached.map.getContainer());
             delete _viewerMaps[commentId];
 
@@ -784,11 +730,7 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
             var mapOptions = { attributionControl: false };
             if (bearing) Object.assign(mapOptions, window.MarkupComposer.rotateOptions(bearing));
             var viewMap = L.map(el, mapOptions);
-            // Tagged immediately - same reasoning as _renderMapThumb's own early
-            // tag: MarkupEngine.renderShape below can throw on malformed markup,
-            // and unlike _renderMapThumb this function has no try/catch around
-            // it at all, so tagging late would leave an already
-            // resize-listener-bound map instance neither cleaned up nor findable.
+            // Tag immediately: MarkupEngine.renderShape can throw, and an untagged map would leak.
             el._ulLeafletMap = viewMap;
             var viewAttributionEl = document.getElementById('comment-map-attribution-' + commentId);
             // The layer strip is server-rendered inside the dialog by the
@@ -839,11 +781,7 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
             };
         }
 
-        // -- Render a small non-interactive Leaflet map into `el` -------------
-        // Shared by the .comment-map-thumb renderer below and the DM
-        // composer's attach-preview chip (which fetches the same snapshot
-        // shape via markup_map.snapshot instead of reading a json_script tag).
-        // Caller is responsible for sizing `el` (height/width) before calling.
+        // Renders a non-interactive Leaflet/MapLibre map into `el`. Caller must size `el` first.
         window._renderMapThumb = function (el, data, refLatLng) {
             // PL8 item 2's dual-engine branch: MapLibre when this browser
             // supports WebGL2 and MapLibre is loaded on this page,
@@ -862,14 +800,7 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
                 Object.assign(thumbOptions, window.MarkupComposer.rotateOptions(thumbBearing), { touchRotate: false, shiftKeyRotate: false });
             }
             var tmap = L.map(el, thumbOptions);
-            // Tagged immediately, not after the calls below that can throw on
-            // malformed data (_initThumbs's own caller already expects
-            // MarkupEngine.renderShape to do exactly that on a bad shape, per its
-            // comment above) - L.map() has already bound the window resize
-            // listener that leaks this instance by this point, so tagging late
-            // would leave a map that fails to fully construct both un-cleaned-up
-            // (nothing below would have tagged it) and un-retried (_initThumbs's
-            // caller already marked this element dataset.initialized regardless).
+            // Tag immediately: L.map() binds a resize listener; if renderShape throws, an untagged map would leak.
             el._ulLeafletMap = tmap;
             window.MapLayers.tileLayer(data.layer_mode || 'street').addTo(tmap);
             if (data.show_borders) window.MapLayers.bordersOverlay().addTo(tmap);
@@ -882,18 +813,11 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
         };
 
         // -- Render thumbnail map inside .comment-map-thumb --------------------
-        // Runs on DOMContentLoaded and after HTMX swaps. Also exposed on
-        // window: a couple of call sites replace a pane's innerHTML directly
-        // (fetch-based fallbacks that predate htmx.ajax) and need to re-run
-        // this manually since a raw innerHTML assignment fires no htmx events.
+        // Runs on DOMContentLoaded and after HTMX swaps. Exposed on window for raw innerHTML swaps.
         // -- Thumbnail budget -------------------------------------------------
-        // A thread renders one map per comment that has one, and a browser will
-        // not hold that many WebGL contexts: Chrome allows 16 per page and
-        // silently loses the oldest past that, so the earliest thumbnails go
-        // blank with nothing in the console. Two halves: build a thumbnail only
-        // once it is near the viewport, and keep at most ThumbMapBudget's limit
-        // alive, releasing the least recently seen. An evicted thumbnail is
-        // rebuilt if the reader scrolls back to it. See thumb-map-budget.ts.
+        // Chrome limits WebGL contexts to 16; older thumbnails go blank silently.
+        // Build thumbnails only when near viewport, keep at most ThumbMapBudget's limit alive.
+        // Evicted thumbnails rebuild on scroll back. See thumb-map-budget.ts.
         var _observer = null;
         function _thumbObserver() {
             if (_observer) return _observer;
@@ -935,12 +859,8 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
         window._initThumbs = _initThumbs;
         function _initThumbs() {
             if (typeof L === 'undefined') return;  // Leaflet not loaded on this page
-            // Click-binding is a separate pass from thumbnail rendering below -
-            // Array.forEach aborts entirely on an uncaught exception, and one
-            // malformed map's Leaflet render throwing must never be able to
-            // leave every *later* preview on the page permanently unclickable.
-            // A [data-comment-map-expand] control opens its map through the core
-            // bundle's delegate, so it is skipped here rather than opened twice.
+            // Click-binding is separate from rendering: a malformed map's error must not break later previews.
+            // [data-comment-map-expand] uses the core delegate, so we skip it here.
             document.querySelectorAll('.comment-map-preview').forEach(function (preview) {
                 var id = preview.dataset.commentId;
                 if (preview.dataset.expandBound) return;
@@ -982,19 +902,9 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
         document.addEventListener('DOMContentLoaded', _initThumbs);
         document.addEventListener('htmx:afterSettle', _initThumbs);
 
-        // Releases a Leaflet map the moment HTMX detaches the element it was
-        // rendered into (a thumbnail preview swapped out, or a dialog's own view
-        // container going with it) - without this, every such map (and the
-        // window resize listener Leaflet attaches under the hood, which keeps
-        // the whole instance reachable) leaks for the rest of the page's life.
-        // htmx fires this event recursively for every element in a removed
-        // subtree, not only the top-level swap target, so a delegated listener
-        // here reaches thumbnails nested arbitrarily deep in whatever HTML
-        // actually got swapped. Does not cover the couple of call sites that
-        // replace a pane's innerHTML directly instead of an HTMX swap (see
-        // _initThumbs's own comment) - no htmx event fires for those either, so
-        // there is nothing here to hook; _expandCommentMap's own stale-cache
-        // check covers that gap for the dialog viewer map specifically.
+        // Disposes maps when HTMX removes their elements. Without this, Leaflet's resize listener leaks the instance.
+        // The event fires recursively for all removed elements, catching nested thumbnails.
+        // Raw innerHTML swaps (no htmx event) are handled by _expandCommentMap's stale-cache check.
         document.addEventListener('htmx:beforeCleanupElement', function (e) {
             _disposeMapOn(e.target);
         });
@@ -1034,12 +944,7 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
             if (window.toastr) toastr.warning('Please add some text, a photo, or a map.');
         });
 
-        // -- Attach-a-photo button for comments/Notes - "Upload New" (plain
-        // file picker) or "Choose Existing" (one of the poster's own already-
-        // uploaded photos, via CommentImagePickerView). Single shared dialog
-        // reused across every "Attach photo" button on the page, same as
-        // #comment-map-composer above; state is closed over the form passed
-        // to whichever call opened it most recently.
+        // Opens the shared image attach dialog (upload new or choose existing).
         window._openCommentAttachImageDialog = function (form) {
             var dialog = document.getElementById('comment-image-composer');
             if (!dialog) return;
@@ -1148,15 +1053,8 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
             dialog.showModal();
         };
 
-        // -- Attach-a-map button for comments/Notes (pin, wiki, and trip
-        // comments all share _comment_compose.html) - opens the same composer
-        // dialog as everywhere else, but also offers "Choose Existing" so the
-        // user isn't forced to redraw a map they've already made. Picking one
-        // fetches its snapshot (the same shape the "Draw New" Save button
-        // already writes into this field) and drops it straight into the
-        // form's hidden field - materialize_markup_map (services/map_snapshot.py)
-        // then clones it into a comment-owned MarkupMap on submit, exactly like
-        // a freshly-drawn map, so no backend changes were needed for this.
+        // Opens the map composer with "Choose Existing" tab for reusing a saved map.
+        // The picked map's snapshot is written to the form's hidden field.
         var _commentMapSnapshotUrlTemplate = COMMENT_MAP_CFG.urls["markupMapSnapshot"];
         window._openCommentAttachMapDialog = function (form) {
             if (!window._openCommentMapComposer) return;

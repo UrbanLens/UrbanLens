@@ -25,11 +25,9 @@ class UrbanlensAiIsolationTests(SimpleTestCase):
     """urbanlens_ai is importable with no Django, no urbanlens, in the process running it."""
 
     def test_package_imports_without_django_or_urbanlens(self) -> None:
-        # A subprocess, not an in-process import check: this test itself runs
-        # inside a fully-configured Django process, where django/urbanlens are
-        # already in sys.modules for unrelated reasons - the only way to prove
-        # urbanlens_ai doesn't *cause* that import is to check from a process
-        # that starts clean.
+        # A subprocess, not an in-process import check: this test runs
+        # inside a Django process where django/urbanlens are already loaded.
+        # Only a clean process proves urbanlens_ai doesn't cause that import.
         script = (
             "import sys\n"
             "import urbanlens_ai, urbanlens_ai.schema, urbanlens_ai.policy, urbanlens_ai.config, urbanlens_ai.providers\n"
@@ -276,11 +274,8 @@ class ComposeTopologyTests(SimpleTestCase):
     values Compose would only fill in at runtime."""
 
     def test_ai_inference_never_loads_the_host_env_file(self) -> None:
-        # It does take an env_file now - .env.ai, holding the provider keys
-        # (see test_ai_inference_reads_provider_keys_from_its_own_env_file).
-        # The rule that has not changed is which file: the host .env carries
-        # database, OAuth and REData credentials, and this container must
-        # never see any of them.
+        # The host .env carries database, OAuth and REData credentials;
+        # ai-inference must never see them. It reads .env.ai instead.
         compose = _compose()
         env_files = compose["services"]["ai-inference"].get("env_file") or []
         paths = {entry["path"] if isinstance(entry, dict) else entry for entry in env_files}
@@ -331,11 +326,9 @@ class ComposeTopologyTests(SimpleTestCase):
         self.assertEqual(set(compose["services"]["egress-proxy"]["networks"]), {"proxy_network", "ai_egress_network"})
 
     def test_proxy_network_holds_only_the_proxy_and_its_two_clients(self) -> None:
-        # The proxy is the one process in this tier that parses bytes from the
-        # public internet. It gets a network with exactly the containers that
-        # must call it - not ai_network (db, dragonfly, rabbitmq) or
-        # inference_network (app, celery-worker), which would make a proxy bug
-        # a foothold with somewhere to go.
+        # The proxy parses public internet bytes; its network contains only
+        # its callers. Including datastores or app tier would turn a proxy bug
+        # into a foothold.
         compose = _compose()
         members = {
             name for name, service in compose["services"].items() if "proxy_network" in (service.get("networks") or {})
@@ -377,10 +370,8 @@ class ComposeTopologyTests(SimpleTestCase):
         self.assertNotIn("internal", compose["networks"]["ai_egress_network"])
 
     def test_no_provider_key_reaches_the_app_tier(self) -> None:
-        # The property the whole ai-inference split exists for: a provider
-        # credential must never sit in the same process environment as
-        # UL_DB_PASS and UL_FIELD_ENCRYPTION_KEY. Since the vision migration,
-        # nothing on app or celery-worker reads one.
+        # Provider credentials must never share a process environment with
+        # DB passwords or encryption keys.
         compose = _compose()
         for env_name in ("x-app-env", "x-sandbox-env", "x-ai-env", "x-beat-env"):
             keys = set(compose[env_name])
@@ -392,11 +383,8 @@ class ComposeTopologyTests(SimpleTestCase):
             self.assertEqual(leaked, set(), f"{env_name} carries provider credential(s): {sorted(leaked)}")
 
     def test_provider_keys_are_not_interpolated_from_the_host_env(self) -> None:
-        # The subtle half. `${UL_OPENAI_API_KEY}` anywhere in this file means
-        # the key has to live in the root .env for compose to resolve it - and
-        # app/celery-worker load that whole file via env_file, so it would
-        # land on them regardless of which service the ${...} appeared under.
-        # ai-inference reads .env.ai directly for exactly this reason.
+        # ${VAR} interpolation would require the key in the host .env, which
+        # app/celery-worker load entirely. ai-inference reads .env.ai instead.
         raw = _COMPOSE_PATH.read_text(encoding="utf-8")
         for key in (
             "UL_ANTHROPIC_API_KEY",
@@ -567,24 +555,17 @@ class EgressFilterTests(SimpleTestCase):
         self.assertFalse([line for line in lines if "redata" in line.lower()])
 
     def test_every_provider_and_tool_gateway_host_is_allowed(self) -> None:
-        # One entry per host a shipped provider adapter or tool gateway
-        # actually calls - see urbanlens_ai/providers/ and
-        # services/ai/tools/{routing,weather}.py's default base_urls.
+        # One entry per host a shipped provider adapter or tool gateway calls.
         expected_hosts = {
             "api.anthropic.com",
             "api.openai.com",
-            # Both Cloudflare Workers AI hosts.
             "api.cloudflare.com",
             "gateway.ai.cloudflare.com",
             "router.project-osrm.org",
             "api.open-meteo.com",
             "api.openweathermap.org",
         }
-        # Each line is itself an anchored regex (FilterExtended's format) -
-        # compile and match the plain hostname against it, rather than
-        # string-comparing two different (both valid) escaped renderings of
-        # the same host, which is what re.escape(host) vs. a hand-written
-        # line would otherwise force this into.
+        # Each filter line is an anchored regex; match hostname against it.
         patterns = [re.compile(line) for line in _egress_filter_lines()]
         for host in expected_hosts:
             with self.subTest(host=host):

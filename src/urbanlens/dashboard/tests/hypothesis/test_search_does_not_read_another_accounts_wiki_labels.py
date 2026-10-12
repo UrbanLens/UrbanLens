@@ -77,20 +77,18 @@ class _WikiLabelOperatorCase(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        baker.make(User)  # the first user is auto-promoted to site admin, which grants every feature
+        baker.make(User)  # first user is auto-promoted to site admin
         self.viewer = baker.make(User).profile
         self.stranger = baker.make(User).profile
         self.labelled = 0
 
-        # The viewer earns access the only way wiki access is earned: their own
-        # pin at the wiki's exact location.
+        # Viewer earns wiki access via their own pin at the wiki's exact location
         self.my_location = baker.make(Location, latitude=44.100001, longitude=-70.100001)
         baker.make(Pin, profile=self.viewer, location=self.my_location, name="My Spot", description="")
         self.mine = baker.make(Wiki, location=self.my_location, name="My Wiki", description="")
         self.mine.labels.add(baker.make(Label, profile=self.viewer, kind=KIND_TAG, name=MINE))
 
-        # The stranger's wiki sits at a place the viewer has never pinned - inaccessible by the
-        # domain rule, so it must never appear as a search candidate for the viewer.
+        # Stranger's wiki at a place viewer never pinned - inaccessible by domain rule
         self.their_location = baker.make(Location, latitude=44.200002, longitude=-70.200002)
         self.their_wiki = baker.make(Wiki, location=self.their_location, name="Their Wiki", description="")
         self.seed_strangers_labels(FIRST_BATCH)
@@ -173,16 +171,15 @@ class SearchDoesNotReadAnotherAccountsWikiLabelsTests(_WikiLabelOperatorCase):
         A `label:` search that DOES match the viewer's own wiki must not also scan the stranger's.
 
         Unlike Photo's matching variant, the trigram index never touched this one: it targets
-        icontains, and `label:` matches with iexact, a different compiled query. Fixed 2026-09-17 by
-        the bounded semi-join instead - see the module docstring.
+        icontains, and `label:` matches with iexact, a different compiled query. The bounded
+        semi-join fixes this - see the module docstring.
         """
         self.assertDoesNotGrow(MINE)
 
     def test_it_does_not_read_a_strangers_labels_when_the_term_matches_nothing(self) -> None:
         """
         A `label:` search that matches nothing anywhere is the true negative: nothing to short-circuit on.
-
-        Fixed 2026-09-17 by the bounded semi-join - see the module docstring.
+        The bounded semi-join fixes this - see the module docstring.
         """
         self.assertDoesNotGrow(NOWHERE)
 

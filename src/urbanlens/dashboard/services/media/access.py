@@ -98,16 +98,7 @@ def authorize_media(profile: Profile, rel_path: str) -> bool:
 
 @media_authorizer("pin_images")
 def authorize_image(profile: Profile, rel_path: str) -> bool:
-    """
-    Authorize a ``pin_images/`` file via its ``Image`` row.
-    Direct-message-only attachments are restricted to the DM's sender and recipient.
-
-    Args:
-        profile: The authenticated requester's profile.
-        rel_path: Path relative to ``MEDIA_ROOT``.
-
-    Returns:
-        True when the requester may see the image."""
+    """Authorize a ``pin_images/`` file via its ``Image`` row. DM-only attachments are restricted to sender and recipient."""
     from django.db.models import Case, IntegerField, Q, When
 
     from urbanlens.dashboard.models.images.model import Image
@@ -124,18 +115,12 @@ def authorize_image(profile: Profile, rel_path: str) -> bool:
     if image.profile_id == profile.pk:
         return True
     if image.pending_scan:
-        # Not yet cleared by the malware scan - the stored file is still the
-        # uploader's raw bytes (EXIF/GPS intact), so nobody but the uploader may
-        # read it. Mirrors authorize_comment_image's identical gate.
         return False
     if image.direct_message_id:
         dm = image.direct_message
         if dm is not None and profile.pk in (dm.sender_id, dm.recipient_id):
             return True
         if not image.pin_id and not image.wiki_id:
-            # A pure DM attachment is private to the two participants; an
-            # image that *also* lives in a pin/wiki gallery falls through
-            # to the normal photo-visibility check below.
             return False
     # pk filter first: `visible_to` eagerly resolves the uploader set of whatever queryset it is
     # handed, so calling it on the unfiltered manager would walk every uploader on the site to
@@ -145,15 +130,7 @@ def authorize_image(profile: Profile, rel_path: str) -> bool:
 
 @media_authorizer("comment_images")
 def authorize_comment_image(profile: Profile, rel_path: str) -> bool:
-    """
-    Authorize a ``comment_images/`` file via its Comment/TripComment row.
-
-    Args:
-        profile: The authenticated requester's profile.
-        rel_path: Path relative to ``MEDIA_ROOT``.
-
-    Returns:
-        True when the requester may see the comment image."""
+    """Authorize a ``comment_images/`` file via its Comment/TripComment row."""
     from urbanlens.dashboard.models.comments.model import Comment
     from urbanlens.dashboard.models.trips.model import TripComment, TripMembership
     from urbanlens.dashboard.services.comments.comments import comment_is_visible
@@ -165,26 +142,15 @@ def authorize_comment_image(profile: Profile, rel_path: str) -> bool:
         if comment.profile_id == profile.pk:
             return True
         if comment.pending_scan:
-            # Not yet cleared by the malware scan - author-only until then,
-            # mirroring controllers.comments._build_context.
             return False
         if not profile.can_view_comments_from(comment.profile):
-            # The author's comment_visibility setting hides the comment itself
-            # from this viewer, so the attachment goes with it.
             return False
         if comment.pin is not None:
-            # Pin comment threads are visible only on the owner's own pin page
-            # (see PinCommentsView.get), so owner + comment authors are the
-            # whole audience.
             host_visible = comment.pin.profile_id == profile.pk
         elif comment.wiki is not None:
             host_visible = location_visible_to(comment.wiki.location, profile)
         else:
             return False
-        # Host-level (pin/wiki) visibility is necessary but not sufficient - an @loc mention naming
-        # a place this viewer hasn't pinned still drops the whole comment
-        # (services.comments.comments's gate 3), same as visible_comment_tree applies to its text.
-        # Without this, the image was servable even though the comment thread that carries it hid
         return host_visible and comment_is_visible(comment, profile)
 
     trip_comment = TripComment.objects.filter(image=rel_path).select_related("author", "trip").first()
@@ -197,9 +163,6 @@ def authorize_comment_image(profile: Profile, rel_path: str) -> bool:
             return False
         if not TripMembership.objects.filter(trip_id=trip_comment.trip_id, profile=profile).exists():
             return False
-        # Same reasoning as the wiki-comment case above: an @activity or @loc
-        # mention this viewer can't resolve drops the whole comment from
-        # build_comment_tree, and the image must follow it.
         return trip_comment_is_visible(trip_comment, profile)
 
     return False
@@ -271,59 +234,23 @@ def authorize_label_icon(profile: Profile, rel_path: str) -> bool:
 
 @media_authorizer("achievement_icons")
 def authorize_icon(profile: Profile, rel_path: str) -> bool:
-    """
-    Allow any authenticated user to fetch an achievement icon, since awards render on other members' profiles.
-
-    Args:
-        profile: The authenticated requester's profile (unused).
-        rel_path: Path relative to ``MEDIA_ROOT`` (unused).
-
-    Returns:
-        True.
-    """
+    """Allow any authenticated user to fetch an achievement icon, since awards render on other members' profiles."""
     return True
 
 
 @media_authorizer("remote_tiles")
 def authorize_remote_tile(profile: Profile, rel_path: str) -> bool:
-    """
-    Allow any authenticated user to fetch a kept tile of a map another host publishes openly.
-
-    Args:
-        profile: The authenticated requester's profile (unused).
-        rel_path: Path relative to ``MEDIA_ROOT`` (unused).
-
-    Returns:
-        True.
-    """
+    """Allow any authenticated user to fetch a kept tile of a map another host publishes openly."""
     return True
 
 
 @media_authorizer("proxied_renders")
 def authorize_proxied_render(profile: Profile, rel_path: str) -> bool:
-    """
-    Allow any authenticated user to fetch a kept rendering of a file the REData proxies serve to anyone.
-
-    Args:
-        profile: The authenticated requester's profile (unused).
-        rel_path: Path relative to ``MEDIA_ROOT`` (unused).
-
-    Returns:
-        True.
-    """
+    """Allow any authenticated user to fetch a kept rendering of a file the REData proxies serve to anyone."""
     return True
 
 
 @media_authorizer("remote_copies")
 def authorize_remote_copy(profile: Profile, rel_path: str) -> bool:
-    """
-    Allow any authenticated user to fetch a stored copy of a third-party image, which its provider publishes openly.
-
-    Args:
-        profile: The authenticated requester's profile (unused).
-        rel_path: Path relative to ``MEDIA_ROOT`` (unused).
-
-    Returns:
-        True.
-    """
+    """Allow any authenticated user to fetch a stored copy of a third-party image, which its provider publishes openly."""
     return True

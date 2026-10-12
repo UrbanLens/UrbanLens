@@ -1,24 +1,11 @@
 """
 Searching your own articles must not read alias rows belonging to pins/wikis you cannot see.
 
-P123's mechanism (``test_search_does_not_read_another_accounts_labels.py``) is not specific to
-labels: ``ArticleSearchProvider.search`` feeds ``pin__aliases__name`` and ``wiki__aliases__name`` to
-``apply_text``, and both cross a to-many relation (``PinAlias``/``WikiAlias`` are reverse foreign
-keys, ``related_name="aliases"``), so both go through the same ``_semijoin`` as labels do - an
-``Exists(Article._base_manager.filter(...))`` subquery built from the *unfiltered* manager. Article
-has no ``labels`` relation at all (``apply_label_clause`` is never called for it), so this file
-checks the mechanism through the one to-many relation this provider actually has, not a stand-in for
-labels.
+The mechanism from ``test_search_does_not_read_another_accounts_labels.py`` is not specific to labels: ``ArticleSearchProvider.search`` feeds ``pin__aliases__name`` and ``wiki__aliases__name`` to ``apply_text``, and both cross a to-many relation (``PinAlias``/``WikiAlias`` are reverse foreign keys, ``related_name="aliases"``), so both go through the same ``_semijoin`` as labels do - an ``Exists(Article._base_manager.filter(...))`` subquery built from the *unfiltered* manager. Article has no ``labels`` relation at all (``apply_label_clause`` is never called for it), so this file checks the mechanism through the one to-many relation this provider actually has, not a stand-in for labels.
 
-Two independent variants, because ``pin`` and ``wiki`` are separate ``OneToOneField``s and Article's
-``CheckConstraint`` enforces exactly one is set per row - a pin-hosted article's search never reaches
-``wiki__aliases__name`` and vice versa, so the two paths need two separate reproductions.
+Two independent variants, because ``pin`` and ``wiki`` are separate ``OneToOneField``s and Article's ``CheckConstraint`` enforces exactly one is set per row - a pin-hosted article's search never reaches ``wiki__aliases__name`` and vice versa, so the two paths need two separate reproductions.
 
-**Fixed 2026-09-17.** Both paths cross two segments in (``pin``/``wiki`` themselves are single-valued;
-``aliases`` is the to-many hop), so this also confirms the bounded, materialised semi-join fixes the
-non-matching variant too, not just the matching one - see
-``test_search_does_not_read_another_accounts_labels.py``'s module docstring for the measured mechanism.
-"""
+Both paths cross two segments (``pin``/``wiki`` themselves are single-valued; ``aliases`` is the to-many hop), so this also confirms the bounded, materialised semi-join fixes the non-matching variant too, not just the matching one - see ``test_search_does_not_read_another_accounts_labels.py``'s module docstring for the measured mechanism."""
 
 from __future__ import annotations
 
@@ -142,11 +129,11 @@ class SearchDoesNotReadAnotherAccountsPinArticleAliasesTests(_ArticlePinAliasCas
     """One account's pin aliases must not be read to answer another account's article search."""
 
     def test_it_does_not_read_a_strangers_matching_pin_aliases(self) -> None:
-        """Fixed 2026-09-17 by the bounded semi-join - see the module docstring."""
+        """Fixed by the bounded semi-join - see the module docstring."""
         self.assertDoesNotGrow(SECOND_BATCH, matching=True)
 
     def test_it_does_not_read_a_strangers_unrelated_pin_aliases(self) -> None:
-        """Fixed 2026-09-17 by the bounded semi-join - see the module docstring."""
+        """Fixed by the bounded semi-join - see the module docstring."""
         self.assertDoesNotGrow(SECOND_BATCH, matching=False)
 
 
@@ -280,11 +267,11 @@ class SearchDoesNotReadAnotherAccountsWikiArticleAliasesTests(_ArticleWikiAliasC
     """One account's wiki aliases must not be read to answer another account's article search."""
 
     def test_it_does_not_read_a_strangers_matching_wiki_aliases(self) -> None:
-        """Fixed 2026-09-17 by the bounded semi-join - see the module docstring."""
+        """Fixed by the bounded semi-join - see the module docstring."""
         self.assertDoesNotGrow(SECOND_BATCH, matching=True)
 
     def test_it_does_not_read_a_strangers_unrelated_wiki_aliases(self) -> None:
-        """Fixed 2026-09-17 by the bounded semi-join - see the module docstring."""
+        """Fixed by the bounded semi-join - see the module docstring."""
         self.assertDoesNotGrow(SECOND_BATCH, matching=False)
 
 

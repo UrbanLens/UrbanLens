@@ -1,17 +1,10 @@
 """
-Each import parser that now reads a file a piece at a time reads what its whole-file predecessor read (P95).
+Each import parser that reads a file piece by piece must produce the same results as its whole-file predecessor.
 
 The predecessors are kept here as the reference the streaming parsers must agree with, over generated documents.
 ``READ_CHUNK_BYTES`` is lowered so a few bytes make a chunk and every boundary a document has gets crossed.
 
-Known, deliberate departures, which the generators steer clear of: ijson refuses JSON's non-standard ``NaN``
-and ``Infinity`` and a number past a double's range, which ``json.loads`` accepted; a duplicated key no longer
-keeps only its last value; a GeoJSON file with a byte-order mark now parses where it used to fail; a file's first
-line is judged on its first 64 KiB; a file holding an integer outside the signed 64-bit range is re-read by
-ijson's pure-Python parser, which takes any Unicode whitespace between tokens; a tagged OSM node whose id repeats
-keeps its own coordinates rather than the last same-id node's; and a null Shapefile attribute is left out rather
-than read as ``nan``.
-"""
+Known, deliberate departures: ijson refuses JSON's non-standard ``NaN`` and ``Infinity`` and numbers past a double's range, which ``json.loads`` accepted; a duplicated key no longer keeps only its last value; a GeoJSON file with a byte-order mark now parses where it used to fail; a file's first line is judged on its first 64 KiB; a file holding an integer outside the signed 64-bit range is re-read by ijson's pure-Python parser, which takes any Unicode whitespace between tokens; a tagged OSM node whose id repeats keeps its own coordinates rather than the last same-id node's; and a null Shapefile attribute is left out rather than read as ``nan``."""
 
 from __future__ import annotations
 
@@ -344,7 +337,7 @@ def _comparable(value: Any) -> Any:
 
 
 class GeoJsonGeometriesReadCompactlyTests(SimpleTestCase):
-    """P95: a geometry's positions arrive as one float array, and every pin is what the lists made."""
+    """A geometry's positions arrive as one float array, and every pin is what the lists made."""
 
     @_hyp
     @given(document=_JSON_DOCUMENT)
@@ -458,7 +451,7 @@ class LocationHistoryAgreesWithJsonLoadsTests(SimpleTestCase):
                 ImportedHistory().add_location_history(content, Profile(), "x.json")
 
     def test_a_file_that_fails_partway_adds_nothing_to_the_preview(self) -> None:
-        """It used to keep the visits read before the entry it failed on, while reporting the file as failed."""
+        """Previously kept the visits read before the failed entry, while reporting the file as failed."""
         good = {
             "placeVisit": {
                 "location": {"latitudeE7": 1, "longitudeE7": 2},
@@ -474,9 +467,7 @@ class LocationHistoryAgreesWithJsonLoadsTests(SimpleTestCase):
 
 
 class ACsvCellPastTheStdlibLimitIsReadTests(SimpleTestCase):
-    """
-    ``csv`` refuses a cell over 128 KiB by default - a per-element cap of its own, which Jess's P95 ruling (no
-    element is capped) rules out. The limit is lifted at startup; a ``csv.Error`` still fails only its own file."""
+    """``csv`` refuses a cell over 128 KiB by default - a per-element cap that the no-element-cap rule rejects. The limit is lifted at startup; a ``csv.Error`` still fails only its own file."""
 
     _KML = (
         b'<?xml version="1.0"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document>'
@@ -511,11 +502,9 @@ class ACsvCellPastTheStdlibLimitIsReadTests(SimpleTestCase):
 
 class ALargeCsvRecordIsReadTests(SimpleTestCase):
     """
-    P95, Jess's ruling of 2026-10-02: no element is capped, so one huge CSV record previews like a small one.
+    No element is capped, so one huge CSV record previews like a small one.
 
-    Each shape is over 1 MiB, the bound an earlier change put on a record and then removed. ``csv`` builds a record
-    whole, so what holds a record is the worker's memory, the upload's budget and the 1 GB entry cap, not a limit here.
-    """
+    Each shape is over 1 MiB, the bound an earlier change put on a record and then removed. ``csv`` builds a record whole, so what holds a record is the worker's memory, the upload's budget and the 1 GB entry cap, not a limit here."""
 
     _KML = (
         b'<?xml version="1.0"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document>'

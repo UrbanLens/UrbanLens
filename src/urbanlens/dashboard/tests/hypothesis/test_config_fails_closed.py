@@ -82,9 +82,7 @@ class _ReloadsSettings(SimpleTestCase):
 
 
 class AnUnsetEnvironmentRefusesTests(SimpleTestCase):
-    """
-    Jess, 2026-10-07: a process that does not say which environment it is refuses to start. Unset used to mean
-    production (aa4b83003), so a deployment that lost the variable spent production's budgets and sent real mail."""
+    """A process that does not specify its environment refuses to start. An unset variable previously defaulted to production, causing a deployment that lost the variable to spend production budgets and send real mail."""
 
     def _refusal(self, environ: dict[str, str]) -> str:
         with self.assertRaises(ImproperlyConfigured) as caught:
@@ -157,7 +155,7 @@ class RequiredDeploymentSettingsTests(_ReloadsSettings):
         self.assertEqual(reloaded.CELERY_BROKER_URL, "amqp://rabbit.example:5672/")
 
     def test_an_unset_environment_refuses_even_when_everything_else_is_configured(self) -> None:
-        """G6-16 held an image run without UL_ENVIRONMENT to production's rules; since 2026-10-07 it does not start."""
+        """An image run without UL_ENVIRONMENT previously defaulted to production's rules; now it refuses to start."""
         for environment in ("", "  "):
             with self.subTest(environment=environment):
                 message = self._refuses(environment, **_CONFIGURED)
@@ -183,7 +181,7 @@ class RequiredDeploymentSettingsTests(_ReloadsSettings):
                     self.assertIn(named, self._refuses(environment, **{**_CONFIGURED, missing: ""}))
 
     def test_a_localhost_site_url_is_refused(self) -> None:
-        """G3-6/G6-18: compose used to default it to http://localhost:<port>, so the old warning never fired."""
+        """Compose previously defaulted to http://localhost:<port>, so the warning never triggered."""
         for url in ("http://localhost:21800", "http://127.0.0.1", "https://app.localhost"):
             with self.subTest(url=url):
                 self.assertIn("UL_SITE_URL", self._refuses("production", **{**_CONFIGURED, "UL_SITE_URL": url}))
@@ -260,7 +258,7 @@ class DeploymentDefaultsTests(_ReloadsSettings):
         self.assertEqual(reloaded.EMAIL_DELIVERY_BACKEND, "django.core.mail.backends.locmem.EmailBackend")
 
     def test_a_deployment_trusts_only_origins_it_serves(self) -> None:
-        """It used to trust https://urbanlens.org and https://localhost:<port> on every install."""
+        """Previously trusted https://urbanlens.org and https://localhost:<port> on every install."""
         reloaded = self._reload("production", **_CONFIGURED)
         exact, wildcard = reloaded._derive_trusted_origins(
             reloaded.ALLOWED_HOSTS, "https://urbanlens.example", allow_http=False
@@ -275,7 +273,7 @@ class DeploymentDefaultsTests(_ReloadsSettings):
 
 
 class TheChannelLayerHasItsOwnStoreTests(_ReloadsSettings):
-    """G4-21: the shared store refuses writes once full, and a refused group_send is a lost live message."""
+    """The shared store refuses writes once full, and a refused group_send is a lost live message."""
 
     def _channel_host(self, module: ModuleType) -> str:
         return module.CHANNEL_LAYERS["default"]["CONFIG"]["hosts"][0]["address"]
@@ -336,9 +334,7 @@ class ATestRunWithoutAnEnvironmentIsTheSuiteTests(_ReloadsSettings):
 
 
 class AMistypedBooleanRefusesToStartTests(_ReloadsSettings):
-    """
-    Spark P404: ``_env_bool`` in base.py mapped every unrecognised string to False, so ``SESSION_COOKIE_SECURE=ture``
-    shipped a deployment with insecure cookies and nothing said so."""
+    """``_env_bool`` in base.py mapped every unrecognized string to False, so ``SESSION_COOKIE_SECURE=ture`` shipped a deployment with insecure cookies and nothing said so."""
 
     _FLAGS = (
         "SESSION_COOKIE_SECURE",

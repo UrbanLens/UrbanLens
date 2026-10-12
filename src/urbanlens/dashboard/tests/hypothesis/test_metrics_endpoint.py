@@ -220,10 +220,8 @@ class MetricsRegistryTests(SimpleTestCase):
     """Scrapes cover every worker process, not whichever one answered."""
 
     def test_multiproc_dir_produces_an_aggregating_registry(self) -> None:
-        # The claim that matters: with the env var set, the exporter builds a
-        # registry backed by MultiProcessCollector rather than serving this
-        # process's own metrics. Serving the default registry under gunicorn
-        # would answer every scrape with roughly 1/WEB_CONCURRENCY of the truth.
+        # With the env var set, the exporter builds a MultiProcessCollector
+        # registry, not the default per-process one.
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         with mock.patch.dict(os.environ, {MULTIPROC_DIR_ENV: directory.name}):
@@ -233,10 +231,8 @@ class MetricsRegistryTests(SimpleTestCase):
         self.assertIn("MultiProcessCollector", collectors)
 
     def test_multiprocess_samples_written_by_another_process_are_collected(self) -> None:
-        # The end-to-end version of the claim above, and the only form of it
-        # that would have caught a broken aggregation path: write a sample the
-        # way a *different* worker pid would, then confirm this process's
-        # exporter reports it. A per-process registry cannot see this file.
+        # Write a sample as a different worker pid would; confirm this
+        # process's exporter reports it. A per-process registry cannot.
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         with mock.patch.dict(os.environ, {MULTIPROC_DIR_ENV: directory.name}):
@@ -437,11 +433,8 @@ class MetricsDeploymentWiringTests(SimpleTestCase):
     """The parts of this that live outside Python and cannot be unit-tested."""
 
     def test_multiproc_dir_is_not_a_shared_volume(self) -> None:
-        # The failure this prevents: prometheus_client sums every .db file in
-        # the directory into one scrape, so a directory shared between services
-        # reports app, app-ws and the celery workers as whichever one was
-        # scraped. Every path in the entrypoint's chown loop IS a shared named
-        # volume, which is why this one is handled separately.
+        # prometheus_client sums every .db file in the directory into one
+        # scrape. A shared volume would blend metrics from different services.
         compose = yaml.safe_load((REPO_ROOT / "docker-compose.yml").read_text())
         multiproc = compose["services"]["app"]["environment"]["PROMETHEUS_MULTIPROC_DIR"]
         mounted = {
@@ -512,10 +505,9 @@ class MetricsDeploymentWiringTests(SimpleTestCase):
         self.assertEqual(set(declared), {"app", "app-ws", "celery-metrics"})
 
     def test_every_service_sharing_the_env_file_decides_explicitly(self) -> None:
-        # The trap this guards: `environment:` outranks `env_file:`, so a service
-        # that reads .env and says nothing inherits whatever the operator set for
-        # a different service. Only services that serve HTTP can expose the
-        # endpoint, so only those have to decide.
+        # `environment:` outranks `env_file:`; a service reading .env that
+        # declares nothing inherits another service's setting. Only HTTP
+        # services must decide explicitly.
         compose = yaml.safe_load((REPO_ROOT / "docker-compose.yml").read_text())
         http_serving = {"app", "app-ws"}
         for name in http_serving:
@@ -558,10 +550,8 @@ class MetricsDeploymentWiringTests(SimpleTestCase):
         self.assertLessEqual(len(buckets), 16)
 
     def test_a_bucket_matches_the_proxy_timeout(self) -> None:
-        # Requests nginx gave up on should land in their own bucket rather than
-        # being lumped into +Inf with everything else slow. The two numbers live
-        # in different files, so the comment saying "keep these in step" is only
-        # worth as much as this assertion.
+        # Requests nginx times out on should have their own bucket, not be
+        # lumped into +Inf. The timeout and bucket live in different files.
         conf = (REPO_ROOT / "src/urbanlens/config/nginx/django.conf.template").read_text()
         match = re.search(r"location\s*/\s*\{[^}]*?proxy_read_timeout\s+(\d+)s", conf, re.DOTALL)
         self.assertIsNotNone(match, "Could not find proxy_read_timeout for the main location block.")
@@ -667,11 +657,9 @@ class CeleryEventMetricsTests(SimpleTestCase):
     """Translating Celery's event stream into metrics."""
 
     def _metrics(self, max_task_labels=200):
-        # A per-test registry only isolates because settings/test.py pops
-        # PROMETHEUS_MULTIPROC_DIR: in multiprocess mode prometheus_client backs
-        # every sample with an mmap keyed on metric name and labels, shared by
-        # every registry in the process, and two tests touching task="other"
-        # would see each other's increments.
+        # A per-test registry isolates only because settings/test.py pops
+        # PROMETHEUS_MULTIPROC_DIR; in multiprocess mode, prometheus_client
+        # shares mmap-backed samples across registries by metric name and labels.
         from prometheus_client import CollectorRegistry
 
         from urbanlens.dashboard.services.core.celery_events import CeleryEventMetrics
@@ -856,11 +844,9 @@ class MetricsScrapeTargetHostTests(SimpleTestCase):
     """The scrape target has to be a name Django will accept as a Host."""
 
     def test_app_has_a_hostname_legal_network_alias(self) -> None:
-        # Found the hard way on a real deploy: Prometheus/Alloy derive the Host
-        # header from __address__, and Django validates Host against a regex
-        # that has no underscore in it *before* consulting ALLOWED_HOSTS. So
-        # scraping the `urbanlens_app` alias returns 400 for every request -
-        # correct token, correct labels, correct network, no clue why.
+        # Prometheus/Alloy derive Host from __address__; Django validates Host
+        # against a regex excluding underscores before ALLOWED_HOSTS. Scraping
+        # `urbanlens_app` returns 400 despite correct token and network.
         compose = yaml.safe_load((REPO_ROOT / "docker-compose.yml").read_text())
         aliases = compose["services"]["app"]["networks"]["app_network"]["aliases"]
         legal = [a for a in aliases if "_" not in a]

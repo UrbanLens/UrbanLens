@@ -120,12 +120,9 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_minute=20,
         calls_per_day=500,
         calls_per_30_days=9999,
-        # Geocoding is 10,000 a month free, and REData bills it too. The legacy Place Details `cid:` lookup
-        # (GoogleGeocodingGateway.get_coordinates_by_cid) is counted here as well, but Google bills it as
-        # "Places Details", a Pro SKU with 5,000 free a month, even for `fields=geometry`. This ceiling still
-        # keeps that SKU free: with the deployments' shares summing to at most 1, 0.4 x 10,000 here plus
-        # google_places' 0.4 x 1,000 is at most 4,400 of its 5,000, and REData sends no legacy Place Details
-        # request. That holds by arithmetic, not by design.
+        # Geocoding is 10,000/month free, shared with REData. Legacy Place Details `cid:` lookup is counted here
+        # but Google bills it as Places Details (Pro, 5,000 free). This ceiling keeps that SKU free:
+        # 0.4 x 10,000 here + google_places' 0.4 x 1,000 = 4,400 of 5,000. Holds by arithmetic, not design.
         free_tier_per_calendar_month=10_000,
         free_tier_allotment=0.4,
         notes="Free tier: 10,000 calls/month for Geocoding, shared with REData on the same billing account. The legacy Place Details cid: lookup is counted here too, though Google bills it as Places Details (Pro, 5,000 free a month).",
@@ -149,9 +146,8 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         # Deliberately conservative since this rate limiter has no cross-service shared-budget
         # concept and redata_api already draws from the same pool.
         calls_per_minute=20,
-        # REData's whole Google Places budget is 160 uncached calls a UTC day, shared by every key and its own CID
-        # resolution; it asks each client for about 40 (../REData/docs/infrastructure-2026-10-02-replies.md, item 3).
-        # Migration 0064 gives this to a row still holding 0.8.0's uncapped default.
+        # REData's whole Google Places budget is 160 uncached calls/day, shared by every key and its own CID
+        # resolution; it asks each client for about 40.
         calls_per_day=40,
         notes="Places API (New) via REData - permanently cached on REData's end. See services.apis.locations.places_resolution.",
     ),
@@ -305,11 +301,8 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
     "overture_maps": ServiceDefaults(
         display_name="Overture Maps",
         category=EgressCategory.QUOTA,
-        # Unlike its open-building-footprint siblings above, Overture's own STAC index has been
-        # observed to answer with `HTTP Error 429: Too Many Requests` under enough concurrent
-        # lookups - the values here are a real budget, not just bandwidth hygiene. Still the
-        # generic fallback's numbers, not independently tuned against a documented Overture quota
-        # (it does not publish one).
+        # Unlike its open-building-footprint siblings, Overture's STAC index returns 429 under load.
+        # Values are a real budget, not bandwidth hygiene; still generic fallback numbers (no published quota).
         calls_per_minute=20,
         calls_per_day=500,
         notes="Overture's public GeoParquet release via services.apis.locations.boundaries.overture_maps, read only where REData's mirror holds nothing (outside its synced US shards); REData answers the rest. Free public dataset, but its STAC index rate-limits us under load - see P110.",
@@ -677,9 +670,8 @@ def service_is_enabled(service: str, config: Any = None) -> bool:
 
     Returns:
         ``True`` if the service is enabled, ``False`` otherwise."""
-    # Checked before the config, and before the cached-config fast path, so it cannot be skipped by
-    # a caller that already holds a row. ``_reserve_call`` raises the environment's refusal before it
-    # gets here; this answers the callers that ask ahead of time (D26).
+    # Checked before config/cached-config so callers asking ahead of time get the refusal.
+    # _reserve_call raises the environment's refusal first; this answers pre-check callers.
     from urbanlens.dashboard.services.core.egress import egress_permitted
 
     if not egress_permitted(service):
@@ -1101,8 +1093,6 @@ def annotate_calls(*, model: str | None = None, usage: Callable[[Any], tuple[int
         model: The AI model the requests ask.
         usage: Reads ``(input_tokens, output_tokens)`` from a response; a reader that fails records none.
 
-    Yields:
-        None.
     """
     token = _CALL_NOTES.set(CallNotes(model=model, usage=usage))
     try:
@@ -1162,12 +1152,9 @@ class _RateLimitedSession:
         import requests
 
         self._service_key = service_key
-        # A session the gateway already holds is used rather than a fresh one, so a gateway can keep its
-        # connections across instances (``Gateway.reuses_connections``).
+        # Reuse gateway's session to keep connections across instances (Gateway.reuses_connections).
         self._session = session if session is not None else requests.Session()
-        # How this service's URLs are described in ApiCallLog.
-        # The default is the URL itself, which is right for the point lookups every other service
-        # makes.
+        # How this service's URLs are described in ApiCallLog; default is the URL itself.
         self._endpoint_for_log = endpoint_for_log or str
 
     def __getattr__(self, name: str):
@@ -1237,11 +1224,8 @@ class _RateLimitedSession:
                 record_unanswered(self._service_key)
             raise
 
-        # requests has no default timeout at all: a gateway call that forgets timeout= would
-        # otherwise block its caller (and, when running under a call_with_deadline guard, pin an
-        # executor slot) indefinitely.
-        # The (connect, read) tuple bounds each phase separately. A caller's own timeout is kept, cut to what a
-        # running task has left.
+        # requests has no default timeout; a forgotten timeout= would block indefinitely.
+        # The (connect, read) tuple bounds each phase. Caller's timeout is kept, cut to remaining task deadline.
         kwargs["timeout"] = within_task_deadline(kwargs.get("timeout", (5, 30)))
 
         t0 = time.monotonic()
@@ -1277,15 +1261,11 @@ class RequestCancelledError(DashboardError, GatewayRequestError):
     """
     Raised when a request is cancelled.
 
-    Also a :class:`GatewayRequestError` (P122): every gateway call passes through
+    Also a :class:`GatewayRequestError`: every gateway call passes through
     ``_reserve_call`` via ``_RateLimitedSession``, and a refusal is routine (development and the
-    demo refuse most services outright; ``RateLimiterUnavailableError`` fires whenever ``ul_web``
-    is at its connection limit). Before this, a caller that degraded gracefully on
-    ``except GatewayRequestError`` - the contract every other gateway failure raises - let a
-    refusal escape as an unhandled 500 instead. Multiple inheritance rather than a translation at
-    the session boundary, so every existing ``except RequestCancelledError``/``RateLimitExceededError``
-    (``external_data.py``, ``nominatim.py``, ``cid_resolution.py``, and others) keeps seeing the
-    exact type it already expects - only what it is also an instance of changes.
+    demo refuse most services; ``RateLimiterUnavailableError`` fires when ``ul_web`` hits its limit).
+    Before this, a caller catching ``GatewayRequestError`` let a refusal escape as 500.
+    Multiple inheritance preserves the exact type existing handlers expect.
 
     Args:
         service: The rate-limiter service key the cancelled request targeted.
