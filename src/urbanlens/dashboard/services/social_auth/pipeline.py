@@ -37,8 +37,8 @@ def refuse_unverified_address_link(
     """
     Refuse a sign-in whose link is keyed by an address the provider did not verify. Runs before ``social_user``.
 
-    Google links are keyed by address, so without this an unverified copy of an address would sign in to the
-    account holding it.
+    Since social-auth-core 6, Google links are keyed by ``sub`` and its backend refuses any address Google has not
+    verified, so this only matters for a backend configured to key links by address.
 
     Args:
         strategy: The social-auth strategy, for its request.

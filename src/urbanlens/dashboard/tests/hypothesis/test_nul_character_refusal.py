@@ -228,7 +228,7 @@ class DecodedJsonTests(SimpleTestCase):
 
         Derandomized and without the example store, so the answer is the strategy's and not an earlier run's.
         """
-        fresh = settings(database=None, derandomize=True)
+        fresh = settings(database=None, derandomize=True, max_examples=1000)
         in_a_key = find(
             _JSON_VALUES, lambda value: isinstance(value, dict) and any("\x00" in key for key in value), settings=fresh
         )

@@ -132,9 +132,9 @@ VENDOR_ASSETS: dict[str, VendorAsset] = {
     # is package.json's, which test_vendor_assets.py holds this entry to.
     "maplibregl_css": VendorAsset(
         "style",
-        "maplibre-gl/6.12.0/maplibre-gl.css",
-        "https://unpkg.com/maplibre-gl@6.12.0/dist/maplibre-gl.css",
-        "sha384-pGcTesCDxgCFx0yvZdwOw9yHx4Gw6kQK19wigRk1RcuDoLTLdbPMEnK7w8e9MgjS",
+        "maplibre-gl/6.14.0/maplibre-gl.css",
+        "https://unpkg.com/maplibre-gl@6.14.0/dist/maplibre-gl.css",
+        "sha384-1TZtfVz7qtwR5vD7cMwjGT+9uiK4lqE3pbUOPwYO6OCpb+TYP0S9vLIhG02JCU04",
     ),
     # Draws a MapLibre style as one Leaflet layer, so a vector basemap reaches the 27 map sites
     # still built on `L.map()` without porting them. Loaded as a vendor script rather than
