@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import asyncio
-import contextlib
 from itertools import count
 import json
-import time
 
 from asgiref.sync import async_to_sync
 from channels.db import database_sync_to_async
@@ -25,9 +22,10 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trivia.model import TriviaSessionChatMessage
 from urbanlens.dashboard.services.trivia.session import TriviaConfig, start_multiplayer_session
+from urbanlens.dashboard.tests.hypothesis.websocket_helpers import all_of, got_frame, rows_at_least, settle
 
-# `_settle` takes a row count as final once it holds for 0.4 s, and the frame budgets refill on the clock, so a
-# consumer starved by a loaded pytest-xdist neighbour read as 14 of 30 messages arriving.
+# The frame budgets refill on the clock, so a consumer starved by a loaded pytest-xdist neighbour used to read as
+# 14 of 30 messages arriving.
 pytestmark = pytest.mark.serial
 
 _coordinate_counter = count()
@@ -53,37 +51,6 @@ def _befriend(a: Profile, b: Profile) -> None:
     friendship = Friendship.request(a, b)
     assert friendship is not None
     friendship.accept()
-
-
-async def _drain(comm: WebsocketCommunicator) -> list[dict]:
-    """Everything the socket has to say, so a count can be taken of it."""
-    frames = []
-    while not await comm.receive_nothing(timeout=0.3):
-        frames.append(json.loads(await comm.receive_from()))
-    return frames
-
-
-async def _settle(count_rows) -> int:
-    """
-    Wait for the consumer to finish the frames already sent to it.
-
-    ``send_to`` only enqueues, and neither of these sockets answers an accepted frame on the connection that
-    sent it - the direct-message broadcast goes out through Celery, and the game broadcast reaches the *group*.
-
-    Args:
-        count_rows: Async callable returning the row count to watch.
-
-    Returns:
-        The settled count."""
-    deadline = time.monotonic() + 10.0
-    previous = -1
-    while time.monotonic() < deadline:
-        current = await count_rows()
-        if current == previous:
-            return current
-        previous = current
-        await asyncio.sleep(0.4)
-    return await count_rows()
 
 
 class DirectMessageVolumeTests(TransactionTestCase):
@@ -122,13 +89,13 @@ class DirectMessageVolumeTests(TransactionTestCase):
         await comm.send_to(text_data=json.dumps([]))
         await comm.send_to(text_data=json.dumps("5"))
         await comm.send_to(text_data=json.dumps(7))
-        await _drain(comm)
 
-        # Still alive: a real frame after the bad ones still gets through.
+        # Still alive: a real frame after the bad ones still gets through. The consumer takes frames in order, so
+        # its row also shows the bad ones have been dealt with.
         await comm.send_to(text_data=json.dumps({"recipient": self.recipient.slug, "body": "still here"}))
-        await _drain(comm)
+        await settle(comm, until=rows_at_least(self._acount_messages, 1))
 
-        self.assertEqual(await _settle(self._acount_messages), 1)
+        self.assertEqual(await self._acount_messages(), 1)
         await comm.disconnect()
 
     @override_settings(UL_MESSAGES_PER_MINUTE=3)
@@ -142,9 +109,10 @@ class DirectMessageVolumeTests(TransactionTestCase):
 
         for index in range(9):
             await comm.send_to(text_data=json.dumps({"recipient": self.recipient.slug, "body": f"message {index}"}))
-        await _drain(comm)
+        # The rows the budget allows and the refusal of the first frame past it, then a quiet window for the rest.
+        await settle(comm, until=all_of(rows_at_least(self._acount_messages, 3), got_frame("error")))
 
-        self.assertEqual(await _settle(self._acount_messages), 3, "the write budget did not stop the flood")
+        self.assertEqual(await self._acount_messages(), 3, "the write budget did not stop the flood")
         await comm.disconnect()
 
     def test_a_quick_burst_of_short_messages_all_arrive_under_the_default_budgets(self) -> None:
@@ -163,9 +131,9 @@ class DirectMessageVolumeTests(TransactionTestCase):
             if index % 10 == 0:
                 await comm.send_to(text_data=json.dumps({"type": "typing", "recipient": self.recipient.slug}))
             await comm.send_to(text_data=json.dumps({"recipient": self.recipient.slug, "body": f"{index}"}))
-        frames = await _drain(comm)
+        frames = await settle(comm, until=rows_at_least(self._acount_messages, 30))
 
-        self.assertEqual(await _settle(self._acount_messages), 30)
+        self.assertEqual(await self._acount_messages(), 30)
         self.assertFalse([frame for frame in frames if frame.get("type") == "error"])
         await comm.disconnect()
 
@@ -185,11 +153,7 @@ class DirectMessageVolumeTests(TransactionTestCase):
 
         for _ in range(6):
             await comm.send_to(text_data=json.dumps({"type": "typing", "recipient": self.recipient.slug}))
-        # The refusal arrives once the consumer reaches the third frame; _drain's 0.3 s quiet window ends first on a loaded runner.
-        frames = []
-        with contextlib.suppress(TimeoutError):
-            frames.append(json.loads(await comm.receive_from(timeout=10)))
-        frames += await _drain(comm)
+        frames = await settle(comm, until=got_frame("error"))
 
         self.assertTrue(
             any(frame.get("type") == "error" for frame in frames),
@@ -214,12 +178,12 @@ class DirectMessageVolumeTests(TransactionTestCase):
 
         for _ in range(5):
             await comm.send_to(text_data=json.dumps({"recipient": self.recipient.slug, "body": "   "}))
-        await _drain(comm)
         for index in range(2):
             await comm.send_to(text_data=json.dumps({"recipient": self.recipient.slug, "body": f"real {index}"}))
-        await _drain(comm)
+        # Both real messages landing is the evidence the blanks cost nothing: a charged blank would leave fewer.
+        await settle(comm, until=rows_at_least(self._acount_messages, 2))
 
-        self.assertEqual(await _settle(self._acount_messages), 2, "blank frames spent the write budget")
+        self.assertEqual(await self._acount_messages(), 2, "blank frames spent the write budget")
         await comm.disconnect()
 
     def test_an_oversized_frame_is_refused_before_it_is_parsed(self) -> None:
@@ -238,9 +202,9 @@ class DirectMessageVolumeTests(TransactionTestCase):
 
         with override_settings(UL_WEBSOCKET_MAX_FRAME_CHARS=200):
             await comm.send_to(text_data=json.dumps({"recipient": self.recipient.slug, "body": "x" * 500}))
-            frames = await _drain(comm)
+            frames = await settle(comm, until=got_frame("error"))
 
-        self.assertEqual(await _settle(self._acount_messages), 0, "an oversized frame was accepted and saved")
+        self.assertEqual(await self._acount_messages(), 0, "an oversized frame was accepted and saved")
         self.assertTrue(any(frame.get("type") == "error" for frame in frames))
         await comm.disconnect()
 
@@ -279,9 +243,9 @@ class TriviaSessionVolumeTests(TransactionTestCase):
 
         for index in range(9):
             await comm.send_to(text_data=json.dumps({"body": f"message {index}"}))
-        await _drain(comm)
+        await settle(comm, until=all_of(rows_at_least(self._acount_chat, 3), got_frame("error")))
 
-        self.assertEqual(await _settle(self._acount_chat), 3, "the write budget did not stop the flood")
+        self.assertEqual(await self._acount_chat(), 3, "the write budget did not stop the flood")
         await comm.disconnect()
 
     @override_settings(UL_MESSAGES_PER_MINUTE=2)
@@ -301,10 +265,7 @@ class TriviaSessionVolumeTests(TransactionTestCase):
             await comm.send_to(text_data=json.dumps({"body": f"message {index}"}))
         # Accepted messages answer this socket with nothing, so silence is no sign the refusal has been reached.
         # receive_from fails on a close, which is the other half of what this test holds.
-        frames = [await comm.receive_json_from(timeout=10)]
-        while frames[-1].get("type") != "error":
-            frames.append(await comm.receive_json_from(timeout=10))
-        frames += await _drain(comm)
+        frames = await settle(comm, until=got_frame("error"))
 
         self.assertTrue(any(frame.get("type") == "error" for frame in frames), "no error frame was sent")
         await comm.disconnect()
@@ -326,7 +287,7 @@ class TriviaSessionVolumeTests(TransactionTestCase):
 
         for _ in range(4):
             await comm.send_to(text_data=json.dumps({"type": "ping"}))
-        frames = await _drain(comm)
+        frames = await settle(comm, until=got_frame("error"))
 
         self.assertTrue(
             any(frame.get("type") == "error" for frame in frames), "pings are not charged to the frame budget"
@@ -350,9 +311,9 @@ class TriviaSessionVolumeTests(TransactionTestCase):
         for _ in range(5):
             await comm.send_to(text_data=json.dumps({"type": "ping"}))
         await comm.send_to(text_data=json.dumps({"body": "after the pings"}))
-        await _drain(comm)
+        await settle(comm, until=rows_at_least(self._acount_chat, 1))
 
-        self.assertEqual(await _settle(self._acount_chat), 1, "pings spent the write budget")
+        self.assertEqual(await self._acount_chat(), 1, "pings spent the write budget")
         await comm.disconnect()
 
     def test_an_oversized_frame_is_refused_before_it_is_parsed(self) -> None:
@@ -365,8 +326,8 @@ class TriviaSessionVolumeTests(TransactionTestCase):
 
         with override_settings(UL_WEBSOCKET_MAX_FRAME_CHARS=200):
             await comm.send_to(text_data=json.dumps({"body": "x" * 5000}))
-            frames = await _drain(comm)
+            frames = await settle(comm, until=got_frame("error"))
 
         self.assertTrue(any(frame.get("type") == "error" for frame in frames))
-        self.assertEqual(await _settle(self._acount_chat), 0)
+        self.assertEqual(await self._acount_chat(), 0)
         await comm.disconnect()

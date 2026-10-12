@@ -60,6 +60,7 @@ from urbanlens.dashboard.services.auth import webauthn as webauthn_service
 from urbanlens.dashboard.services.auth.two_factor import SESSION_WEBAUTHN_PENDING_USER
 from urbanlens.dashboard.services.core import request_body
 from urbanlens.dashboard.tests.hypothesis.external_api_helpers import DEEPLY_NESTED_JSON, ExternalApiRouteCase
+from urbanlens.dashboard.tests.hypothesis.websocket_helpers import rows_at_least, settle
 
 if TYPE_CHECKING:
     from django.test.client import _MonkeyPatchedWSGIResponse as TestResponse
@@ -481,12 +482,11 @@ class ChatSocketFrameTests(TransactionTestCase):
 
         await comm.send_to(text_data=_NESTED_UNDER_32K)
         await comm.send_to(text_data=json.dumps({"body": "still here"}))
-        while not await comm.receive_nothing(timeout=0.3):
-            await comm.receive_from()
-
         count = database_sync_to_async(
             SafetyCheckinMessage.objects.filter(checkin=self.checkin, body="still here").count
         )
+        await settle(comm, until=rows_at_least(count, 1))
+
         self.assertEqual(await count(), 1)
         await comm.disconnect()
 
