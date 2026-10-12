@@ -8,7 +8,7 @@ malformed request is a 4xx rather than a 500 or a silent wrong write.
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import json
 
 from django.conf import settings
@@ -51,8 +51,8 @@ def _checkin(profile, **kwargs) -> SafetyCheckin:
     defaults = {
         "profile": profile,
         "title": "Hike",
-        "checkin_by": timezone.now() + datetime.timedelta(hours=2),
-        "grace_period": datetime.timedelta(hours=1),
+        "checkin_by": timezone.now() + dt.timedelta(hours=2),
+        "grace_period": dt.timedelta(hours=1),
     }
     return baker.make(SafetyCheckin, **{**defaults, **kwargs})
 

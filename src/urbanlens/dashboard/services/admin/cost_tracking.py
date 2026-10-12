@@ -17,7 +17,7 @@ from django.utils import timezone
 from urbanlens.dashboard.models.costs import CostComponent, OperatingCost
 
 if TYPE_CHECKING:
-    import datetime
+    import datetime as dt
 
 _ZERO = Decimal(0)
 _API_COST_WINDOW_DAYS = 30
@@ -38,17 +38,17 @@ class CostBreakdown:
         return self.hardware + self.operating + self.api
 
 
-def _components_active_as_of(as_of: datetime.datetime):
+def _components_active_as_of(as_of: dt.datetime):
     """Return CostComponents that existed and weren't yet retired at *as_of*."""
     return CostComponent.objects.filter(created__lte=as_of).filter(Q(retired_at__isnull=True) | Q(retired_at__gt=as_of))
 
 
-def _operating_costs_active_as_of(as_of: datetime.datetime):
+def _operating_costs_active_as_of(as_of: dt.datetime):
     """Return OperatingCosts that existed and weren't yet retired at *as_of*."""
     return OperatingCost.objects.filter(created__lte=as_of).filter(Q(retired_at__isnull=True) | Q(retired_at__gt=as_of))
 
 
-def _api_cost_in_window(start: datetime.datetime, end: datetime.datetime) -> Decimal:
+def _api_cost_in_window(start: dt.datetime, end: dt.datetime) -> Decimal:
     """Return the sum of ``ApiCallLog.cost_estimate`` recorded in ``[start, end]``."""
     from urbanlens.dashboard.models.api_call_log import ApiCallLog
 
@@ -56,7 +56,7 @@ def _api_cost_in_window(start: datetime.datetime, end: datetime.datetime) -> Dec
     return total or _ZERO
 
 
-def effective_monthly_cost(as_of: datetime.datetime | None = None) -> CostBreakdown:
+def effective_monthly_cost(as_of: dt.datetime | None = None) -> CostBreakdown:
     """
     Return the current effective monthly cost to run the site, broken out by source.
 
@@ -89,7 +89,7 @@ def total_hardware_cost() -> Decimal:
     return CostComponent.objects.aggregate(total=Sum("replacement_cost"))["total"] or _ZERO
 
 
-def total_recorded_expenses(as_of: datetime.datetime | None = None) -> Decimal:
+def total_recorded_expenses(as_of: dt.datetime | None = None) -> Decimal:
     """
     Return total money spent to date across every cost source.
 
@@ -112,7 +112,7 @@ def total_recorded_expenses(as_of: datetime.datetime | None = None) -> Decimal:
     return hardware_total + operating_total + api_total
 
 
-def average_monthly_expense(as_of: datetime.datetime | None = None) -> Decimal | None:
+def average_monthly_expense(as_of: dt.datetime | None = None) -> Decimal | None:
     """
     Return the historical average monthly expense.
 
@@ -139,7 +139,7 @@ def average_monthly_expense(as_of: datetime.datetime | None = None) -> Decimal |
     return total_recorded_expenses(as_of) / months
 
 
-def active_user_count(as_of: datetime.datetime | None = None) -> int:
+def active_user_count(as_of: dt.datetime | None = None) -> int:
     """
     Return the number of "active" users, for cost-per-user calculations.
 
@@ -155,7 +155,7 @@ def active_user_count(as_of: datetime.datetime | None = None) -> int:
     )
 
 
-def cost_per_user(as_of: datetime.datetime | None = None) -> Decimal | None:
+def cost_per_user(as_of: dt.datetime | None = None) -> Decimal | None:
     """
     Return the current effective monthly cost divided by active users.
 
@@ -171,7 +171,7 @@ def cost_per_user(as_of: datetime.datetime | None = None) -> Decimal | None:
     return effective_monthly_cost(as_of).total / users
 
 
-def active_supporter_count(as_of: datetime.datetime | None = None) -> int:
+def active_supporter_count(as_of: dt.datetime | None = None) -> int:
     """
     Return the number of distinct users currently holding a paying subscription.
 
@@ -185,7 +185,7 @@ def active_supporter_count(as_of: datetime.datetime | None = None) -> int:
     return RoleSubscription.objects.currently_granting(as_of).values("user_id").distinct().count()
 
 
-def cost_per_supporter(as_of: datetime.datetime | None = None) -> Decimal | None:
+def cost_per_supporter(as_of: dt.datetime | None = None) -> Decimal | None:
     """
     Return the current effective monthly cost divided by paying supporters.
     Intentionally a much larger figure than ``cost_per_user`` - most users never pay, so this highlights how much of the site's real cost each paying supporter is effectively covering.
@@ -201,14 +201,14 @@ def cost_per_supporter(as_of: datetime.datetime | None = None) -> Decimal | None
     return effective_monthly_cost(as_of).total / supporters
 
 
-def _advance_month(cursor: datetime.datetime) -> datetime.datetime:
+def _advance_month(cursor: dt.datetime) -> dt.datetime:
     """Return the first moment of the calendar month after *cursor*."""
     if cursor.month == 12:
         return cursor.replace(year=cursor.year + 1, month=1)
     return cursor.replace(month=cursor.month + 1)
 
 
-def monthly_cost_series(months: int = 12, as_of: datetime.datetime | None = None) -> dict[str, list]:
+def monthly_cost_series(months: int = 12, as_of: dt.datetime | None = None) -> dict[str, list]:
     """
     Reconstruct the effective monthly cost for each of the last *months* calendar months.
 

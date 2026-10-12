@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import base64
-import datetime
+import datetime as dt
 import itertools
 import json as jsonlib
 from unittest import mock
@@ -69,22 +69,22 @@ class FloorplanVersioningTests(TestCase):
 
     def test_no_date_returns_the_newest_version(self) -> None:
         baker.make(Floorplan, place=self.place, valid_from=None, name="baseline")
-        baker.make(Floorplan, place=self.place, valid_from=datetime.date(1962, 5, 1), name="after fire")
+        baker.make(Floorplan, place=self.place, valid_from=dt.date(1962, 5, 1), name="after fire")
 
         self.assertEqual(Floorplan.objects.at(self.place).name, "after fire")
 
     def test_a_date_before_the_first_dated_version_returns_the_baseline(self) -> None:
         baker.make(Floorplan, place=self.place, valid_from=None, name="baseline")
-        baker.make(Floorplan, place=self.place, valid_from=datetime.date(1962, 5, 1), name="after fire")
+        baker.make(Floorplan, place=self.place, valid_from=dt.date(1962, 5, 1), name="after fire")
 
-        self.assertEqual(Floorplan.objects.at(self.place, datetime.date(1950, 1, 1)).name, "baseline")
+        self.assertEqual(Floorplan.objects.at(self.place, dt.date(1950, 1, 1)).name, "baseline")
 
     def test_a_date_between_versions_returns_the_one_then_in_force(self) -> None:
-        baker.make(Floorplan, place=self.place, valid_from=datetime.date(1900, 1, 1), name="as built")
-        baker.make(Floorplan, place=self.place, valid_from=datetime.date(1962, 5, 1), name="after fire")
-        baker.make(Floorplan, place=self.place, valid_from=datetime.date(1990, 1, 1), name="sealed")
+        baker.make(Floorplan, place=self.place, valid_from=dt.date(1900, 1, 1), name="as built")
+        baker.make(Floorplan, place=self.place, valid_from=dt.date(1962, 5, 1), name="after fire")
+        baker.make(Floorplan, place=self.place, valid_from=dt.date(1990, 1, 1), name="sealed")
 
-        self.assertEqual(Floorplan.objects.at(self.place, datetime.date(1975, 6, 15)).name, "after fire")
+        self.assertEqual(Floorplan.objects.at(self.place, dt.date(1975, 6, 15)).name, "after fire")
 
     def test_a_plan_needs_no_place_at_all(self) -> None:
         """
@@ -236,7 +236,7 @@ class FloorplanDocumentTests(TestCase):
         save_document(self.floorplan, document, profile=self.profile)
 
         self.floorplan.refresh_from_db()
-        self.assertEqual(self.floorplan.valid_from, datetime.date(1962, 5, 1))
+        self.assertEqual(self.floorplan.valid_from, dt.date(1962, 5, 1))
 
     def test_an_unknown_wall_kind_is_refused_rather_than_coerced(self) -> None:
         """
@@ -703,7 +703,7 @@ class FloorplanResolutionTests(TestCase):
         ):
             gateway.return_value.lookup_floorplans.return_value = []
 
-            resolve_document(self.place, profile=self.profile, on_date=datetime.date(1954, 1, 1))
+            resolve_document(self.place, profile=self.profile, on_date=dt.date(1954, 1, 1))
 
         gateway.return_value.lookup_floorplans.assert_called_once_with(
             "parcel-uuid-1", building_ref="cris:res-1", on_date="1954-01-01"
@@ -939,7 +939,7 @@ class FloorplanVersionSafetyTests(TestCase):
         """The reported shape: a baseline must survive a dated save."""
         baseline = Floorplan.objects.create(place=self.place, profile=self.profile, name="as built", valid_from=None)
 
-        created = self._edit(on_date=datetime.date(1962, 5, 1))
+        created = self._edit(on_date=dt.date(1962, 5, 1))
 
         self.assertNotEqual(created.pk, baseline.pk)
         baseline.refresh_from_db()
@@ -991,7 +991,7 @@ class FloorplanVersionListingTests(TestCase):
             place=self.place, profile=self.user.profile, name="as built", valid_from=None
         )
         self.later = Floorplan.objects.create(
-            place=self.place, profile=self.user.profile, name="after fire", valid_from=datetime.date(1962, 5, 1)
+            place=self.place, profile=self.user.profile, name="after fire", valid_from=dt.date(1962, 5, 1)
         )
 
     def _get(self, query: str = ""):

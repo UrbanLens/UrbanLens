@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from unittest import mock
 
 from django.contrib.auth.models import User
@@ -158,7 +158,7 @@ class UnretriedDiscardSweepTests(TestCase):
         baker.make(User)
         self.profile = Profile.objects.get(user=baker.make(User))
 
-    def _aged_failure(self, age: datetime.timedelta) -> PhotoUploadFailure:
+    def _aged_failure(self, age: dt.timedelta) -> PhotoUploadFailure:
         image = baker.make(
             Image, profile=self.profile, pending_scan=True, original_filename="old.jpg", image="pin_images/o.jpg"
         )
@@ -170,7 +170,7 @@ class UnretriedDiscardSweepTests(TestCase):
         from urbanlens.dashboard.services.media.upload_failures import UNRETRIED_DISCARD_AGE
         from urbanlens.dashboard.tasks import discard_unretried_failed_uploads
 
-        failure = self._aged_failure(UNRETRIED_DISCARD_AGE + datetime.timedelta(hours=1))
+        failure = self._aged_failure(UNRETRIED_DISCARD_AGE + dt.timedelta(hours=1))
 
         self.assertEqual(discard_unretried_failed_uploads(), 1)
 
@@ -181,7 +181,7 @@ class UnretriedDiscardSweepTests(TestCase):
         """The window is the user's chance to retry; do not shorten it silently."""
         from urbanlens.dashboard.tasks import discard_unretried_failed_uploads
 
-        failure = self._aged_failure(datetime.timedelta(minutes=5))
+        failure = self._aged_failure(dt.timedelta(minutes=5))
 
         self.assertEqual(discard_unretried_failed_uploads(), 0)
 
@@ -209,9 +209,7 @@ class SweepBoundTests(TestCase):
         image = baker.make(
             Image, profile=self.profile, pending_scan=True, original_filename="doomed.jpg", image="pin_images/d.jpg"
         )
-        Image.objects.filter(pk=image.pk).update(
-            created=timezone.now() - STALLED_UPLOAD_AGE - datetime.timedelta(hours=1)
-        )
+        Image.objects.filter(pk=image.pk).update(created=timezone.now() - STALLED_UPLOAD_AGE - dt.timedelta(hours=1))
 
         with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
             for _ in range(MAX_SWEEP_ATTEMPTS):
@@ -229,9 +227,7 @@ class SweepBoundTests(TestCase):
         from urbanlens.dashboard.tasks import STALLED_UPLOAD_AGE, requeue_stalled_pending_uploads
 
         image = baker.make(Image, profile=self.profile, pending_scan=True, image="pin_images/d.jpg")
-        Image.objects.filter(pk=image.pk).update(
-            created=timezone.now() - STALLED_UPLOAD_AGE - datetime.timedelta(hours=1)
-        )
+        Image.objects.filter(pk=image.pk).update(created=timezone.now() - STALLED_UPLOAD_AGE - dt.timedelta(hours=1))
         record_upload_processing_failure(image.pk, "boom")
 
         with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:

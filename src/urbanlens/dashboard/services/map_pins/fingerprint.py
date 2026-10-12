@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from django.db.models import Count, Max
 
 if TYPE_CHECKING:
-    import datetime
+    import datetime as dt
 
     from urbanlens.dashboard.models.profile.model import Profile
 
@@ -20,7 +20,7 @@ class PinCollectionState:
     """What a profile's root pins look like in aggregate, at one moment."""
 
     #: The most recent `Pin.updated` among them, or None when there are none.
-    last_updated: datetime.datetime | None
+    last_updated: dt.datetime | None
     #: How many there are.
     total: int
 

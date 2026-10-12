@@ -4,7 +4,7 @@ PinAlias/WikiAlias), official-data locking, multi-owner sales, and permission ga
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from typing import TYPE_CHECKING
 
 from django.urls import reverse
@@ -36,14 +36,14 @@ class OwnerModelTests(TestCase):
 
     def test_wiki_property_sale_queryset_orders_newest_first(self) -> None:
         location = baker.make(Location, latitude="41.0", longitude="-73.0")
-        older = baker.make(WikiPropertySale, location=location, sale_date=datetime.date(2020, 1, 1))
-        newer = baker.make(WikiPropertySale, location=location, sale_date=datetime.date(2024, 1, 1))
+        older = baker.make(WikiPropertySale, location=location, sale_date=dt.date(2020, 1, 1))
+        newer = baker.make(WikiPropertySale, location=location, sale_date=dt.date(2024, 1, 1))
         self.assertEqual(list(WikiPropertySale.objects.for_location(location)), [newer, older])
 
     def test_pin_property_sale_queryset_orders_newest_first(self) -> None:
         pin = baker.make(Pin)
-        older = baker.make(PinPropertySale, pin=pin, sale_date=datetime.date(2020, 1, 1))
-        newer = baker.make(PinPropertySale, pin=pin, sale_date=datetime.date(2024, 1, 1))
+        older = baker.make(PinPropertySale, pin=pin, sale_date=dt.date(2020, 1, 1))
+        newer = baker.make(PinPropertySale, pin=pin, sale_date=dt.date(2024, 1, 1))
         self.assertEqual(list(PinPropertySale.objects.for_pin(pin)), [newer, older])
 
     def test_deleting_wiki_owner_referenced_by_a_sale_removes_it_from_that_sale_only(self) -> None:

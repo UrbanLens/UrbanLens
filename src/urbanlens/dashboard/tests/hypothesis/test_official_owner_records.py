@@ -7,7 +7,7 @@ subscriber the name and nothing else: the Ownership card and Sale History tab th
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from unittest import mock
 
 from django.contrib.auth.models import User
@@ -349,7 +349,7 @@ class PinPageOfficialOwnershipTests(TestCase):
         self.location = baker.make(Location, latitude="41.7", longitude="-73.9")
         self.official = _official(self.location, address=_MAILING, care_of="Jane Agent")
         self.sale = WikiPropertySale.objects.create(
-            location=self.location, source=OwnerSource.OFFICIAL, sale_date=datetime.date(2020, 6, 15), sale_price=250000
+            location=self.location, source=OwnerSource.OFFICIAL, sale_date=dt.date(2020, 6, 15), sale_price=250000
         )
         self.seller = WikiOwner.objects.create(name="Previous Holder", source=OwnerSource.OFFICIAL)
         self.sale.previous_owners.add(self.seller)
@@ -415,10 +415,10 @@ class PinPageOfficialOwnershipTests(TestCase):
 
     def test_an_official_sale_offers_no_delete_on_the_pin(self) -> None:
         pin = self._login(_subscriber())
-        own = PinPropertySale.objects.create(pin=pin, sale_date=datetime.date(2021, 1, 1))
+        own = PinPropertySale.objects.create(pin=pin, sale_date=dt.date(2021, 1, 1))
         if own.pk == self.sale.pk:
             own.delete()
-            own = PinPropertySale.objects.create(pin=pin, sale_date=datetime.date(2021, 1, 1))
+            own = PinPropertySale.objects.create(pin=pin, sale_date=dt.date(2021, 1, 1))
 
         response = self.client.get(reverse("pin.sales", args=[pin.slug]))
 

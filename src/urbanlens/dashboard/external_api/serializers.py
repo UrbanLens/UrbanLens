@@ -13,7 +13,7 @@ regardless of caller.
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import math
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -625,7 +625,7 @@ class PinVisitSerializer(serializers.Serializer):
 #: How far ahead of the server's clock a submitted visit time may sit. Not zero, because a client's clock is its
 #: own and a phone a minute fast is not lying about anything. Small, because the point is to reject a *date* in
 #: the future rather than to accommodate one.
-MAX_VISIT_CLOCK_SKEW = datetime.timedelta(minutes=5)
+MAX_VISIT_CLOCK_SKEW = dt.timedelta(minutes=5)
 
 
 class PinVisitCreateSerializer(serializers.Serializer):
@@ -634,7 +634,7 @@ class PinVisitCreateSerializer(serializers.Serializer):
     visited_at = serializers.DateTimeField(required=True)
     notes = serializers.CharField(max_length=MAX_VISIT_NOTES_LENGTH, required=False, allow_blank=True, allow_null=True, default=None)
 
-    def validate_visited_at(self, value: datetime.datetime) -> datetime.datetime:
+    def validate_visited_at(self, value: dt.datetime) -> dt.datetime:
         """
         Refuse a visit that has not happened yet.
 
@@ -1651,7 +1651,7 @@ class SafetyCheckinCreateSerializer(serializers.Serializer):
     contacts = SafetyContactInputSerializer(many=True, required=False, allow_null=True, default=None)
     markup_map = serializers.UUIDField(required=False, allow_null=True, default=None)
 
-    def validate_checkin_by(self, value: datetime.datetime) -> datetime.datetime:
+    def validate_checkin_by(self, value: dt.datetime) -> dt.datetime:
         """Require a timezone-aware deadline strictly in the future."""
         if timezone.is_naive(value):
             raise serializers.ValidationError("checkin_by must include a timezone offset.")

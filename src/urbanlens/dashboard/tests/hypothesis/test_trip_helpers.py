@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
@@ -49,17 +49,17 @@ class ParseScheduledAtTests(SimpleTestCase):
     def test_date_only_returns_midnight(self):
         result = _parse_scheduled_at("2025-06-15", None)
         self.assertIsNotNone(result)
-        self.assertEqual(result.date(), datetime.date(2025, 6, 15))
-        self.assertEqual(result.time(), datetime.time(0, 0))
+        self.assertEqual(result.date(), dt.date(2025, 6, 15))
+        self.assertEqual(result.time(), dt.time(0, 0))
 
     def test_date_and_time_combined(self):
         result = _parse_scheduled_at("2025-06-15", "14:30")
-        self.assertEqual(result.date(), datetime.date(2025, 6, 15))
-        self.assertEqual(result.time(), datetime.time(14, 30))
+        self.assertEqual(result.date(), dt.date(2025, 6, 15))
+        self.assertEqual(result.time(), dt.time(14, 30))
 
     def test_invalid_time_falls_back_to_midnight(self):
         result = _parse_scheduled_at("2025-06-15", "not-a-time")
-        self.assertEqual(result.time(), datetime.time(0, 0))
+        self.assertEqual(result.time(), dt.time(0, 0))
 
     def test_no_date_returns_none(self):
         self.assertIsNone(_parse_scheduled_at(None, "14:30"))
@@ -72,7 +72,7 @@ class ParseScheduledAtTests(SimpleTestCase):
 
     def test_returns_datetime_instance(self):
         result = _parse_scheduled_at("2025-01-01", "00:00")
-        self.assertIsInstance(result, datetime.datetime)
+        self.assertIsInstance(result, dt.datetime)
 
     @given(
         year=st.integers(min_value=2000, max_value=2099),
@@ -172,34 +172,34 @@ class ExpandTripDatesTests(TestCase):
 
     def test_sets_start_date_when_none(self):
         trip = self._make_trip(start=None, end=None)
-        _expand_trip_dates(trip, datetime.date(2025, 7, 4))
+        _expand_trip_dates(trip, dt.date(2025, 7, 4))
         trip.refresh_from_db()
-        self.assertEqual(trip.start_date, datetime.date(2025, 7, 4))
+        self.assertEqual(trip.start_date, dt.date(2025, 7, 4))
 
     def test_sets_end_date_when_none(self):
         trip = self._make_trip(start=None, end=None)
-        _expand_trip_dates(trip, datetime.date(2025, 7, 4))
+        _expand_trip_dates(trip, dt.date(2025, 7, 4))
         trip.refresh_from_db()
-        self.assertEqual(trip.end_date, datetime.date(2025, 7, 4))
+        self.assertEqual(trip.end_date, dt.date(2025, 7, 4))
 
     def test_expands_start_when_activity_earlier(self):
-        trip = self._make_trip(start=datetime.date(2025, 8, 1), end=datetime.date(2025, 8, 10))
-        _expand_trip_dates(trip, datetime.date(2025, 7, 25))
+        trip = self._make_trip(start=dt.date(2025, 8, 1), end=dt.date(2025, 8, 10))
+        _expand_trip_dates(trip, dt.date(2025, 7, 25))
         trip.refresh_from_db()
-        self.assertEqual(trip.start_date, datetime.date(2025, 7, 25))
+        self.assertEqual(trip.start_date, dt.date(2025, 7, 25))
 
     def test_expands_end_when_activity_later(self):
-        trip = self._make_trip(start=datetime.date(2025, 8, 1), end=datetime.date(2025, 8, 10))
-        _expand_trip_dates(trip, datetime.date(2025, 8, 20))
+        trip = self._make_trip(start=dt.date(2025, 8, 1), end=dt.date(2025, 8, 10))
+        _expand_trip_dates(trip, dt.date(2025, 8, 20))
         trip.refresh_from_db()
-        self.assertEqual(trip.end_date, datetime.date(2025, 8, 20))
+        self.assertEqual(trip.end_date, dt.date(2025, 8, 20))
 
     def test_no_change_when_date_within_range(self):
-        trip = self._make_trip(start=datetime.date(2025, 8, 1), end=datetime.date(2025, 8, 10))
-        _expand_trip_dates(trip, datetime.date(2025, 8, 5))
+        trip = self._make_trip(start=dt.date(2025, 8, 1), end=dt.date(2025, 8, 10))
+        _expand_trip_dates(trip, dt.date(2025, 8, 5))
         trip.refresh_from_db()
-        self.assertEqual(trip.start_date, datetime.date(2025, 8, 1))
-        self.assertEqual(trip.end_date, datetime.date(2025, 8, 10))
+        self.assertEqual(trip.start_date, dt.date(2025, 8, 1))
+        self.assertEqual(trip.end_date, dt.date(2025, 8, 10))
 
 
 # ---------------------------------------------------------------------------
@@ -220,12 +220,12 @@ class TripElapsedDayTests(TestCase):
 
     def test_none_when_upcoming(self):
         today = timezone.now().date()
-        trip = self._trip(today + datetime.timedelta(days=3), today + datetime.timedelta(days=5))
+        trip = self._trip(today + dt.timedelta(days=3), today + dt.timedelta(days=5))
         self.assertIsNone(trip.elapsed_day)
 
     def test_none_when_past(self):
         today = timezone.now().date()
-        trip = self._trip(today - datetime.timedelta(days=10), today - datetime.timedelta(days=5))
+        trip = self._trip(today - dt.timedelta(days=10), today - dt.timedelta(days=5))
         self.assertIsNone(trip.elapsed_day)
 
     def test_none_when_undated(self):
@@ -240,12 +240,12 @@ class TripElapsedDayTests(TestCase):
 
     def test_first_day_of_multi_day_trip(self):
         today = timezone.now().date()
-        trip = self._trip(today, today + datetime.timedelta(days=6))
+        trip = self._trip(today, today + dt.timedelta(days=6))
         self.assertEqual(trip.elapsed_day, 1)
 
     def test_last_day_of_multi_day_trip(self):
         today = timezone.now().date()
-        trip = self._trip(today - datetime.timedelta(days=6), today)
+        trip = self._trip(today - dt.timedelta(days=6), today)
         self.assertEqual(trip.elapsed_day, 7)
         self.assertEqual(trip.duration_days, 7)
 
@@ -253,7 +253,7 @@ class TripElapsedDayTests(TestCase):
     @_hyp
     def test_mid_trip_day_matches_offset_from_start(self, elapsed_offset, remaining):
         today = timezone.now().date()
-        trip = self._trip(today - datetime.timedelta(days=elapsed_offset), today + datetime.timedelta(days=remaining))
+        trip = self._trip(today - dt.timedelta(days=elapsed_offset), today + dt.timedelta(days=remaining))
         self.assertEqual(trip.elapsed_day, elapsed_offset + 1)
         self.assertEqual(trip.duration_days, elapsed_offset + remaining + 1)
 
@@ -440,7 +440,7 @@ class BuildActivityForecastsTests(SimpleTestCase):
         self.assertIsNone(results[0]["slot"])
 
     def test_activity_without_coords_marked_no_coords(self):
-        act = self._make_activity(lat=None, lng=None, scheduled_at=datetime.datetime(2025, 7, 4, 12, 0))
+        act = self._make_activity(lat=None, lng=None, scheduled_at=dt.datetime(2025, 7, 4, 12, 0))
         act.lat_override = None
         act.lng_override = None
         act.pin = None
@@ -450,8 +450,8 @@ class BuildActivityForecastsTests(SimpleTestCase):
         self.assertTrue(results[0]["no_coords"])
 
     def test_slot_matched_when_within_36_hours(self):
-        target = datetime.datetime(2025, 7, 4, 12, 0)
-        slot_time = datetime.datetime(2025, 7, 4, 12, 0)
+        target = dt.datetime(2025, 7, 4, 12, 0)
+        slot_time = dt.datetime(2025, 7, 4, 12, 0)
         slot = {"date": slot_time, "temp": 22, "condition": "Sunny"}
         act = self._make_activity(scheduled_at=target)
         with patch(_GET_RAW_FORECAST_SLOTS, return_value=[slot]):
@@ -460,8 +460,8 @@ class BuildActivityForecastsTests(SimpleTestCase):
         self.assertEqual(results[0]["slot"]["temp"], 22)
 
     def test_out_of_range_when_gap_exceeds_36h(self):
-        target = datetime.datetime(2025, 7, 4, 12, 0)
-        slot_time = datetime.datetime(2025, 7, 6, 18, 0)  # ~54h gap
+        target = dt.datetime(2025, 7, 4, 12, 0)
+        slot_time = dt.datetime(2025, 7, 6, 18, 0)  # ~54h gap
         slot = {"date": slot_time, "temp": 15, "condition": "Cloudy"}
         act = self._make_activity(scheduled_at=target)
         with patch(_GET_RAW_FORECAST_SLOTS, return_value=[slot]):
@@ -471,14 +471,14 @@ class BuildActivityForecastsTests(SimpleTestCase):
     def test_gateway_exception_returns_no_slot(self):
         import requests as req_lib
 
-        target = datetime.datetime(2025, 7, 4, 12, 0)
+        target = dt.datetime(2025, 7, 4, 12, 0)
         act = self._make_activity(scheduled_at=target)
         with patch(_GET_RAW_FORECAST_SLOTS, side_effect=req_lib.RequestException("timeout")):
             results = _build_activity_forecasts([act])
         self.assertIsNone(results[0]["slot"])
 
     def test_coords_cached_across_same_location(self):
-        target = datetime.datetime(2025, 7, 4, 12, 0)
+        target = dt.datetime(2025, 7, 4, 12, 0)
         slot = {"date": target, "temp": 20, "condition": "Clear"}
         # Two activities at the same rounded coords
         acts = [
@@ -512,8 +512,8 @@ class TripWeatherViewFiltersEmptyForecastsTests(TestCase):
     def _url(self) -> str:
         return reverse("trips.weather", args=[self.trip.slug])
 
-    def _tomorrow(self) -> datetime.datetime:
-        return timezone.now() + datetime.timedelta(days=1)
+    def _tomorrow(self) -> dt.datetime:
+        return timezone.now() + dt.timedelta(days=1)
 
     def test_activity_with_no_location_is_dropped_and_panel_hides(self) -> None:
         baker.make(
@@ -754,7 +754,7 @@ class TripRecordedWeatherTests(TestCase):
         with tasks_run_inline(fetch_recorded_weather_at):
             return self.client_.get(self._url())
 
-    def _past_activity(self, when: datetime.datetime) -> TripActivity:
+    def _past_activity(self, when: dt.datetime) -> TripActivity:
         return baker.make(
             TripActivity,
             trip=self.trip,
@@ -767,7 +767,7 @@ class TripRecordedWeatherTests(TestCase):
         )
 
     def test_a_past_activity_gets_its_recorded_conditions(self) -> None:
-        when = timezone.make_aware(datetime.datetime(2026, 5, 1, 14, 0))
+        when = timezone.make_aware(dt.datetime(2026, 5, 1, 14, 0))
         self._past_activity(when)
 
         with patch(
@@ -791,7 +791,7 @@ class TripRecordedWeatherTests(TestCase):
 
     def test_the_panel_renders_instead_of_hiding(self) -> None:
         """The whole card used to be `hidden` when there was no forecast to show."""
-        self._past_activity(timezone.make_aware(datetime.datetime(2026, 5, 1, 14, 0)))
+        self._past_activity(timezone.make_aware(dt.datetime(2026, 5, 1, 14, 0)))
 
         with patch(
             "urbanlens.dashboard.services.locations.visit_weather._fetch_days",
@@ -805,7 +805,7 @@ class TripRecordedWeatherTests(TestCase):
     def test_several_activities_at_one_place_cost_one_request(self) -> None:
         """A range is one call however wide, which is what makes this affordable."""
         for day in (1, 2, 3):
-            self._past_activity(timezone.make_aware(datetime.datetime(2026, 5, day, 9, 0)))
+            self._past_activity(timezone.make_aware(dt.datetime(2026, 5, day, 9, 0)))
 
         with patch(
             "urbanlens.dashboard.services.locations.visit_weather._fetch_days",
@@ -815,13 +815,13 @@ class TripRecordedWeatherTests(TestCase):
 
         self.assertEqual(fetch.call_count, 1)
         _lat, _lng, start, end = fetch.call_args.args
-        self.assertEqual((start, end), (datetime.date(2026, 5, 1), datetime.date(2026, 5, 3)))
+        self.assertEqual((start, end), (dt.date(2026, 5, 1), dt.date(2026, 5, 3)))
 
     def test_a_day_outside_era5s_window_is_never_requested(self) -> None:
         """
         Inside the publication lag there is nothing to fetch, and caching the
         blank would make it permanent."""
-        self._past_activity(timezone.now() - datetime.timedelta(days=1))
+        self._past_activity(timezone.now() - dt.timedelta(days=1))
 
         with patch("urbanlens.dashboard.services.locations.visit_weather._fetch_days") as fetch:
             resp = self._get()
@@ -830,7 +830,7 @@ class TripRecordedWeatherTests(TestCase):
         self.assertEqual(resp.context["recorded_days"], [])
 
     def test_an_unavailable_source_leaves_the_section_empty_rather_than_erroring(self) -> None:
-        self._past_activity(timezone.make_aware(datetime.datetime(2026, 5, 1, 14, 0)))
+        self._past_activity(timezone.make_aware(dt.datetime(2026, 5, 1, 14, 0)))
 
         with patch("urbanlens.dashboard.services.locations.visit_weather._fetch_days", return_value={}):
             resp = self._get()

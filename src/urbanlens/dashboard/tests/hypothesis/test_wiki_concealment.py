@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from unittest import mock
 
 from django.contrib.auth.models import User
@@ -552,12 +552,12 @@ class ProjectionTests(TestCase):
 
         ``effective_date_last_active`` derives from two versioned fields."""
         with writing_as(WriteSource.USER, actor=self.stranger.pk):
-            Wiki.objects.filter(pk=self.wiki.pk).update(date_last_active=datetime.date(2019, 6, 1))
+            Wiki.objects.filter(pk=self.wiki.pk).update(date_last_active=dt.date(2019, 6, 1))
         self.wiki.refresh_from_db()
 
         projection = self._concealed()
 
-        self.assertEqual(self.wiki.effective_date_last_active, datetime.date(2019, 6, 1))
+        self.assertEqual(self.wiki.effective_date_last_active, dt.date(2019, 6, 1))
         self.assertIsNone(projection.effective_date_last_active)
 
     def test_an_ungated_viewer_never_inherits_someone_elses_projection(self) -> None:

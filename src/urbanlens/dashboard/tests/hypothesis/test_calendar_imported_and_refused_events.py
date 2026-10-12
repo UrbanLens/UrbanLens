@@ -12,7 +12,7 @@ unscheduled and imported events").
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from io import StringIO
 import json
 from unittest import mock
@@ -275,7 +275,7 @@ class APushGoesOnPastAnEventGoogleRefusesTests(_ImportedCase):
                 trip=self.trip,
                 added_by=self.profile,
                 title=f"Own stop {hour}",
-                scheduled_at=datetime.datetime(2026, 11, 6, hour, 0, tzinfo=datetime.UTC),
+                scheduled_at=dt.datetime(2026, 11, 6, hour, 0, tzinfo=dt.UTC),
             )
             for hour in (6, 7, 8)
         ]

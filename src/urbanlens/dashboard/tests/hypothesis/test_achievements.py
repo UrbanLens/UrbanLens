@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
@@ -111,20 +111,20 @@ class StreakArithmeticTests(TestCase):
         self.user = baker.make("auth.User")
         self.profile = Profile.objects.get(user=self.user)
 
-    def _record_days(self, days: list[datetime.date], kind: str = ActivityKind.PIN) -> ProfileStreak:
+    def _record_days(self, days: list[dt.date], kind: str = ActivityKind.PIN) -> ProfileStreak:
         for day in days:
             record_activity(self.profile, kind, day=day)
         return ProfileStreak.objects.get(profile=self.profile, kind=kind)
 
     def test_consecutive_days_extend_the_streak(self) -> None:
-        start = datetime.date(2026, 3, 1)
-        streak = self._record_days([start + datetime.timedelta(days=offset) for offset in range(5)])
+        start = dt.date(2026, 3, 1)
+        streak = self._record_days([start + dt.timedelta(days=offset) for offset in range(5)])
         self.assertEqual(streak.current_length, 5)
         self.assertEqual(streak.longest_length, 5)
 
     def test_repeat_activity_same_day_does_not_double_count(self) -> None:
         """Fifty photos in one afternoon is one day of the streak, not fifty."""
-        day = datetime.date(2026, 3, 1)
+        day = dt.date(2026, 3, 1)
         self.assertTrue(record_activity(self.profile, ActivityKind.PHOTO, day=day))
         for _ in range(5):
             self.assertFalse(record_activity(self.profile, ActivityKind.PHOTO, day=day))
@@ -133,31 +133,31 @@ class StreakArithmeticTests(TestCase):
         self.assertEqual(ProfileActivityDay.objects.filter(profile=self.profile, kind=ActivityKind.PHOTO).count(), 1)
 
     def test_gap_resets_current_but_keeps_longest(self) -> None:
-        start = datetime.date(2026, 3, 1)
-        days = [start, start + datetime.timedelta(days=1), start + datetime.timedelta(days=2)]
-        days += [start + datetime.timedelta(days=10)]
+        start = dt.date(2026, 3, 1)
+        days = [start, start + dt.timedelta(days=1), start + dt.timedelta(days=2)]
+        days += [start + dt.timedelta(days=10)]
         streak = self._record_days(days)
         self.assertEqual(streak.current_length, 1)
         self.assertEqual(streak.longest_length, 3)
 
     def test_current_length_as_of_expires_a_stale_run(self) -> None:
         """Nothing fires on the day a user stops, so staleness is judged on read."""
-        streak = ProfileStreak(current_length=7, longest_length=7, last_day=datetime.date(2026, 3, 1))
-        self.assertEqual(streak.current_length_as_of(datetime.date(2026, 3, 1)), 7)
-        self.assertEqual(streak.current_length_as_of(datetime.date(2026, 3, 2)), 7)
-        self.assertEqual(streak.current_length_as_of(datetime.date(2026, 3, 3)), 0)
+        streak = ProfileStreak(current_length=7, longest_length=7, last_day=dt.date(2026, 3, 1))
+        self.assertEqual(streak.current_length_as_of(dt.date(2026, 3, 1)), 7)
+        self.assertEqual(streak.current_length_as_of(dt.date(2026, 3, 2)), 7)
+        self.assertEqual(streak.current_length_as_of(dt.date(2026, 3, 3)), 0)
 
     def test_out_of_order_day_triggers_a_rebuild(self) -> None:
         """A backfilled earlier day must not be treated as extending the run."""
-        start = datetime.date(2026, 3, 10)
+        start = dt.date(2026, 3, 10)
         record_activity(self.profile, ActivityKind.PIN, day=start)
-        record_activity(self.profile, ActivityKind.PIN, day=start + datetime.timedelta(days=1))
-        record_activity(self.profile, ActivityKind.PIN, day=start - datetime.timedelta(days=1))
+        record_activity(self.profile, ActivityKind.PIN, day=start + dt.timedelta(days=1))
+        record_activity(self.profile, ActivityKind.PIN, day=start - dt.timedelta(days=1))
 
         streak = ProfileStreak.objects.get(profile=self.profile, kind=ActivityKind.PIN)
         self.assertEqual(streak.longest_length, 3)
         self.assertEqual(streak.current_length, 3)
-        self.assertEqual(streak.last_day, start + datetime.timedelta(days=1))
+        self.assertEqual(streak.last_day, start + dt.timedelta(days=1))
 
     @pytest.mark.slow
     @given(
@@ -167,10 +167,10 @@ class StreakArithmeticTests(TestCase):
     def test_rebuild_matches_incremental_tracking(self, gaps: list[int]) -> None:
         """However the days fall, rebuilding from the log agrees with the cache."""
         profile = Profile.objects.get(user=baker.make("auth.User"))
-        day = datetime.date(2026, 1, 1)
+        day = dt.date(2026, 1, 1)
         for gap in gaps:
             record_activity(profile, ActivityKind.COMMENT, day=day)
-            day += datetime.timedelta(days=gap)
+            day += dt.timedelta(days=gap)
 
         incremental = ProfileStreak.objects.get(profile=profile, kind=ActivityKind.COMMENT)
         cached_current, cached_longest = incremental.current_length, incremental.longest_length
@@ -240,10 +240,10 @@ class MetricComputationTests(AchievementTestsBase):
 
     def test_streak_metric_reads_longest_not_current(self) -> None:
         """A broken streak keeps whatever award it earned."""
-        start = datetime.date(2026, 3, 1)
+        start = dt.date(2026, 3, 1)
         for offset in range(4):
-            record_activity(self.profile, ActivityKind.LOGIN, day=start + datetime.timedelta(days=offset))
-        record_activity(self.profile, ActivityKind.LOGIN, day=start + datetime.timedelta(days=30))
+            record_activity(self.profile, ActivityKind.LOGIN, day=start + dt.timedelta(days=offset))
+        record_activity(self.profile, ActivityKind.LOGIN, day=start + dt.timedelta(days=30))
 
         self.assertEqual(get_metric(streak_metric_key(ActivityKind.LOGIN)).value_for(self.profile), 4)
 

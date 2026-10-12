@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from unittest import mock
 
 from django.contrib.auth.models import User
@@ -124,13 +124,13 @@ class TripActivityBulkCreateQueuesCalendarPushTests(TestCase):
             profile=self.profile,
             access_token="access",  # noqa: S106
             refresh_token="refresh",  # noqa: S106
-            token_expiry=timezone.now() + datetime.timedelta(hours=1),
+            token_expiry=timezone.now() + dt.timedelta(hours=1),
         )
         self.trip = Trip.objects.create(
             name="Bulk trip",
             creator=self.profile,
-            start_date=datetime.date(2026, 11, 1),
-            end_date=datetime.date(2026, 11, 2),
+            start_date=dt.date(2026, 11, 1),
+            end_date=dt.date(2026, 11, 2),
         )
         self.pin_list = PinList.objects.create(profile=self.profile, name="Places")
         for index in range(3):

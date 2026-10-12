@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.models import User
@@ -39,8 +39,8 @@ class TripListSortTests(TestCase):
     def test_default_sorts_by_updated_descending(self) -> None:
         older = _make_trip(self.profile, name="Older")
         newer = _make_trip(self.profile, name="Newer")
-        Trip.objects.filter(pk=older.pk).update(updated=datetime.datetime(2020, 1, 1, tzinfo=datetime.UTC))
-        Trip.objects.filter(pk=newer.pk).update(updated=datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC))
+        Trip.objects.filter(pk=older.pk).update(updated=dt.datetime(2020, 1, 1, tzinfo=dt.UTC))
+        Trip.objects.filter(pk=newer.pk).update(updated=dt.datetime(2024, 1, 1, tzinfo=dt.UTC))
 
         resp = self.client.get(_LIST_URL)
 
@@ -51,8 +51,8 @@ class TripListSortTests(TestCase):
     def test_updated_ascending_reverses_order(self) -> None:
         older = _make_trip(self.profile, name="Older")
         newer = _make_trip(self.profile, name="Newer")
-        Trip.objects.filter(pk=older.pk).update(updated=datetime.datetime(2020, 1, 1, tzinfo=datetime.UTC))
-        Trip.objects.filter(pk=newer.pk).update(updated=datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC))
+        Trip.objects.filter(pk=older.pk).update(updated=dt.datetime(2020, 1, 1, tzinfo=dt.UTC))
+        Trip.objects.filter(pk=newer.pk).update(updated=dt.datetime(2024, 1, 1, tzinfo=dt.UTC))
 
         resp = self.client.get(_LIST_URL, {"sort": "updated", "dir": "asc"})
 
@@ -60,12 +60,12 @@ class TripListSortTests(TestCase):
 
     def test_start_date_ascending_groups_future_then_planning_then_past(self) -> None:
         """ "Soonest first" groups trips instead of sorting purely chronologically: upcoming/active trips soonest first, then undated (planning) trips, then past trips most-recent first - so a months-old trip doesn't outrank tomorrow's just because its date is numerically smaller."""
-        today = datetime.date.today()
+        today = dt.date.today()
         _make_trip(self.profile, name="No Date")
-        _make_trip(self.profile, name="Future Far", start_date=today + datetime.timedelta(days=30))
-        _make_trip(self.profile, name="Future Soon", start_date=today + datetime.timedelta(days=5))
-        _make_trip(self.profile, name="Past Recent", start_date=today - datetime.timedelta(days=5))
-        _make_trip(self.profile, name="Past Old", start_date=today - datetime.timedelta(days=30))
+        _make_trip(self.profile, name="Future Far", start_date=today + dt.timedelta(days=30))
+        _make_trip(self.profile, name="Future Soon", start_date=today + dt.timedelta(days=5))
+        _make_trip(self.profile, name="Past Recent", start_date=today - dt.timedelta(days=5))
+        _make_trip(self.profile, name="Past Old", start_date=today - dt.timedelta(days=30))
 
         resp = self.client.get(_LIST_URL, {"sort": "start_date", "dir": "asc"})
 
@@ -76,8 +76,8 @@ class TripListSortTests(TestCase):
 
     def test_start_date_descending_puts_latest_first_and_undated_last(self) -> None:
         _make_trip(self.profile, name="No Date")
-        _make_trip(self.profile, name="July", start_date=datetime.date(2026, 7, 1))
-        _make_trip(self.profile, name="March", start_date=datetime.date(2026, 3, 1))
+        _make_trip(self.profile, name="July", start_date=dt.date(2026, 7, 1))
+        _make_trip(self.profile, name="March", start_date=dt.date(2026, 3, 1))
 
         resp = self.client.get(_LIST_URL, {"sort": "start_date", "dir": "desc"})
 

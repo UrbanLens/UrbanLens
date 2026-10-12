@@ -10,7 +10,7 @@ calendar - and assert that the continuation writes the rest instead.
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import json
 import re
 from typing import TYPE_CHECKING, Any
@@ -189,7 +189,7 @@ class _CalendarExportCase(TestCase):
             profile=self.profile,
             access_token="access",  # noqa: S106 - fixture value
             refresh_token="refresh",  # noqa: S106 - fixture value
-            token_expiry=timezone.now() + datetime.timedelta(hours=1),
+            token_expiry=timezone.now() + dt.timedelta(hours=1),
         )
         self.google = FakeGoogleCalendar()
         patcher = mock.patch.object(requests.Session, "request", autospec=True, side_effect=self.google)
@@ -216,11 +216,11 @@ class _CalendarExportCase(TestCase):
         trip = Trip.objects.create(
             name="Long weekend",
             creator=self.profile,
-            start_date=datetime.date(2026, 11, 6),
-            end_date=datetime.date(2026, 11, 8),
+            start_date=dt.date(2026, 11, 6),
+            end_date=dt.date(2026, 11, 8),
         )
         TripMembership.objects.create(trip=trip, profile=self.profile, status=TripMembership.STATUS_JOINED, rsvp="yes")
-        first = datetime.datetime(2026, 11, 6, 8, 0, tzinfo=datetime.UTC)
+        first = dt.datetime(2026, 11, 6, 8, 0, tzinfo=dt.UTC)
         TripActivity.objects.bulk_create(
             [
                 TripActivity(
@@ -228,7 +228,7 @@ class _CalendarExportCase(TestCase):
                     added_by=self.profile,
                     title=f"Stop {index}",
                     order=index,
-                    scheduled_at=first + datetime.timedelta(hours=index),
+                    scheduled_at=first + dt.timedelta(hours=index),
                 )
                 for index in range(activities)
             ]
@@ -238,11 +238,11 @@ class _CalendarExportCase(TestCase):
     @staticmethod
     def _let_the_minute_pass() -> None:
         """Age every recorded call out of the per-minute window, as the measurement did between attempts."""
-        ApiCallLog.objects.filter(service=SERVICE).update(created=timezone.now() - datetime.timedelta(minutes=2))
+        ApiCallLog.objects.filter(service=SERVICE).update(created=timezone.now() - dt.timedelta(minutes=2))
 
     def _age_push_request(self, trip: Trip) -> None:
         TripCalendarLink.objects.filter(trip=trip, activity__isnull=True, push_requested_at__isnull=False).update(
-            push_requested_at=timezone.now() - datetime.timedelta(hours=1)
+            push_requested_at=timezone.now() - dt.timedelta(hours=1)
         )
 
     def _trip_link(self, trip: Trip) -> TripCalendarLink:
@@ -450,7 +450,7 @@ class AttemptCapCountsOnlyPushesThatWentNowhereTests(_CalendarExportCase):
             google_event_id="",
             direction=CalendarSyncDirection.IMPORTED,
             auto_sync=True,
-            push_requested_at=timezone.now() - datetime.timedelta(hours=1),
+            push_requested_at=timezone.now() - dt.timedelta(hours=1),
             push_attempts=MAX_CALENDAR_PUSH_ATTEMPTS - 1,
         )
 

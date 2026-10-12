@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import base64
 from dataclasses import dataclass
-import datetime
+import datetime as dt
 import hashlib
 import logging
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -399,7 +399,7 @@ class GoogleCalendarGateway(Gateway):
             raise CalendarUnavailableError("Google refused this site's OAuth client.") from exc
         self.account.access_token = payload["access_token"]
         expires_in = int(payload.get("expires_in") or 3600)
-        self.account.token_expiry = timezone.now() + datetime.timedelta(seconds=expires_in)
+        self.account.token_expiry = timezone.now() + dt.timedelta(seconds=expires_in)
         # Google occasionally rotates the refresh token as well.
         if payload.get("refresh_token"):
             self.account.refresh_token = payload["refresh_token"]
@@ -512,8 +512,8 @@ class GoogleCalendarGateway(Gateway):
     def list_events(
         self,
         *,
-        time_min: datetime.datetime,
-        time_max: datetime.datetime | None = None,
+        time_min: dt.datetime,
+        time_max: dt.datetime | None = None,
         limit: int,
     ) -> EventListing:
         """

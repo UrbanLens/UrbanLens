@@ -8,7 +8,7 @@ contact for the next sweep - without a second email, or a second in-app notice, 
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import shutil
 import smtplib
 import tempfile
@@ -53,8 +53,8 @@ class _RetryTestCase(TestCase):
             SafetyCheckin,
             profile=self.owner,
             title="Tunnel walk",
-            checkin_by=now - datetime.timedelta(hours=2),
-            grace_period=datetime.timedelta(hours=1),
+            checkin_by=now - dt.timedelta(hours=2),
+            grace_period=dt.timedelta(hours=1),
             status=SafetyCheckinStatus.OVERDUE,
             escalated_at=now,
             notify_community_wiki=False,
@@ -70,7 +70,7 @@ class _RetryTestCase(TestCase):
             notified_at=now,
         )
 
-    def _resolved(self, ago: datetime.timedelta) -> None:
+    def _resolved(self, ago: dt.timedelta) -> None:
         SafetyCheckin.objects.filter(pk=self.checkin.pk).update(resolved_at=timezone.now() - ago)
 
     def _sweep(self) -> None:
@@ -107,7 +107,7 @@ class FailedBuildTests(_RetryTestCase):
             {None},
         )
 
-        self._resolved(ago=datetime.timedelta(minutes=10))
+        self._resolved(ago=dt.timedelta(minutes=10))
         self._sweep()
         self._sweep()
 
@@ -143,7 +143,7 @@ class FailedSendTests(_RetryTestCase):
         self.assertEqual(len(refused), 1)
         self.assertEqual(self._emails_to("rescuer@example.com"), 0)
 
-        self._resolved(ago=datetime.timedelta(minutes=10))
+        self._resolved(ago=dt.timedelta(minutes=10))
         self._sweep()
         self._sweep()
 
@@ -161,7 +161,7 @@ class FailedSendTests(_RetryTestCase):
             check_in(self.checkin, self.owner)
         self.assertEqual((len(refused), self._emails_to("friend@example.com"), self._in_app(self.friend)), (1, 0, 1))
 
-        self._resolved(ago=datetime.timedelta(minutes=10))
+        self._resolved(ago=dt.timedelta(minutes=10))
         self._sweep()
         self._sweep()
 
@@ -295,7 +295,7 @@ class SweepBoundsTests(_RetryTestCase):
 
     def test_it_does_not_send_hours_after_the_fact(self) -> None:
         self._resolve_without_notices()
-        self._resolved(ago=datetime.timedelta(hours=3))
+        self._resolved(ago=dt.timedelta(hours=3))
 
         self._sweep()
 
@@ -304,7 +304,7 @@ class SweepBoundsTests(_RetryTestCase):
     def test_it_leaves_alone_a_checkin_this_site_never_resolved(self) -> None:
         """An imported check-in arrives resolved, with its contacts' alert times, but was never scheduled for archival."""
         SafetyCheckin.objects.filter(pk=self.checkin.pk).update(
-            status=SafetyCheckinStatus.CANCELLED, resolved_at=timezone.now() - datetime.timedelta(minutes=10)
+            status=SafetyCheckinStatus.CANCELLED, resolved_at=timezone.now() - dt.timedelta(minutes=10)
         )
 
         self._sweep()
@@ -315,7 +315,7 @@ class SweepBoundsTests(_RetryTestCase):
         self._resolve_without_notices(SafetyCheckinStatus.FOUND_SAFE)
         SafetyCheckin.objects.filter(pk=self.checkin.pk).update(resolved_by_label="rescuer")
         SafetyCheckinContact.objects.filter(pk=self.by_email.pk).update(found_safe_at=timezone.now())
-        self._resolved(ago=datetime.timedelta(minutes=10))
+        self._resolved(ago=dt.timedelta(minutes=10))
 
         self._sweep()
 
@@ -335,7 +335,7 @@ class FailureBeforeTheNoticesTests(_RetryTestCase):
             check_in(self.checkin, self.owner)
         self.assertEqual(self._emails_to("rescuer@example.com"), 0)
 
-        self._resolved(ago=datetime.timedelta(minutes=10))
+        self._resolved(ago=dt.timedelta(minutes=10))
         self._sweep()
 
         self.assertEqual(self._emails_to("rescuer@example.com"), 1)
@@ -365,7 +365,7 @@ class FailureBeforeTheNoticesTests(_RetryTestCase):
             mark_found_safe_by_partner(self.checkin, partner)
         self.assertEqual(self._emails_to("rescuer@example.com"), 0)
 
-        self._resolved(ago=datetime.timedelta(minutes=10))
+        self._resolved(ago=dt.timedelta(minutes=10))
         self._sweep()
 
         self.assertEqual(self._emails_to("rescuer@example.com"), 1)
@@ -383,10 +383,10 @@ class ImportedCheckinTests(TestCase):
         ctx = import_data.ImportContext(
             profile=profile, data_dir=data_dir, result=import_data.ImportResult(), pin_uuid_map={}, label_uuid_map={}
         )
-        ten_minutes_ago = (timezone.now() - datetime.timedelta(minutes=10)).isoformat()
+        ten_minutes_ago = (timezone.now() - dt.timedelta(minutes=10)).isoformat()
         row = {
             "title": "Imported walk",
-            "checkin_by": (timezone.now() - datetime.timedelta(hours=2)).isoformat(),
+            "checkin_by": (timezone.now() - dt.timedelta(hours=2)).isoformat(),
             "status": SafetyCheckinStatus.CHECKED_IN,
             "escalated_at": ten_minutes_ago,
             "resolved_at": ten_minutes_ago,
@@ -406,9 +406,7 @@ class ImportedCheckinTests(TestCase):
 class UndoneDeletionTests(_RetryTestCase):
     def _restore_ten_minutes_after_resolution(self) -> None:
         undo_latest(self.owner)
-        SafetyCheckin.objects.filter(profile=self.owner).update(
-            resolved_at=timezone.now() - datetime.timedelta(minutes=10)
-        )
+        SafetyCheckin.objects.filter(profile=self.owner).update(resolved_at=timezone.now() - dt.timedelta(minutes=10))
 
     def test_a_deleted_then_restored_checkin_does_not_tell_its_contacts_again(self) -> None:
         """Deleting it told them it was removed; the restored contacts must still read as told."""

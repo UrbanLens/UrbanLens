@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from unittest import mock
 
 from cryptography.fernet import InvalidToken
@@ -49,7 +49,7 @@ from urbanlens.dashboard.services.trips.calendar_sync import (
     trip_to_event_body,
 )
 
-_DATES = st.dates(min_value=datetime.date(1990, 1, 1), max_value=datetime.date(2100, 1, 1))
+_DATES = st.dates(min_value=dt.date(1990, 1, 1), max_value=dt.date(2100, 1, 1))
 
 
 def _verified_user(username: str, email: str) -> User:
@@ -65,7 +65,7 @@ class TripToEventBodyTests(TestCase):
     @given(start=_DATES, duration_days=st.integers(min_value=0, max_value=90))
     def test_round_trip_preserves_name_and_dates(self, start, duration_days):
         """Exporting then re-importing an event yields the original trip dates."""
-        end = start + datetime.timedelta(days=duration_days)
+        end = start + dt.timedelta(days=duration_days)
         trip = Trip(name="Round Trip", start_date=start, end_date=end)
 
         body = trip_to_event_body(trip)
@@ -79,31 +79,29 @@ class TripToEventBodyTests(TestCase):
     @given(start=_DATES, duration_days=st.integers(min_value=0, max_value=90))
     def test_all_day_end_is_exclusive(self, start, duration_days):
         """Google all-day end dates are exclusive: trip end + 1 day."""
-        end = start + datetime.timedelta(days=duration_days)
+        end = start + dt.timedelta(days=duration_days)
         trip = Trip(name="X", start_date=start, end_date=end)
 
         body = trip_to_event_body(trip)
 
         self.assertEqual(body["start"]["date"], start.isoformat())
-        self.assertEqual(body["end"]["date"], (end + datetime.timedelta(days=1)).isoformat())
+        self.assertEqual(body["end"]["date"], (end + dt.timedelta(days=1)).isoformat())
 
     def test_end_before_start_is_clamped_to_start(self):
         """Explicit dates with the stored end before the start don't invert the event."""
-        trip = Trip(name="X", start_date=datetime.date(2026, 8, 10), end_date=datetime.date(2026, 8, 5))
+        trip = Trip(name="X", start_date=dt.date(2026, 8, 10), end_date=dt.date(2026, 8, 5))
         body = trip_to_event_body(trip)
         self.assertEqual(body["start"]["date"], "2026-08-10")
         self.assertEqual(body["end"]["date"], "2026-08-11")
 
     def test_marks_event_with_trip_uuid(self):
-        trip = Trip(name="X", start_date=datetime.date(2026, 8, 1), end_date=datetime.date(2026, 8, 1))
+        trip = Trip(name="X", start_date=dt.date(2026, 8, 1), end_date=dt.date(2026, 8, 1))
         body = trip_to_event_body(trip)
         self.assertEqual(body["extendedProperties"]["private"][TRIP_UUID_EVENT_PROPERTY], str(trip.uuid))
         self.assertTrue(event_originated_from_urbanlens(body))
 
     def test_appends_trip_url_to_description(self):
-        trip = Trip(
-            name="X", description="Notes.", start_date=datetime.date(2026, 8, 1), end_date=datetime.date(2026, 8, 1)
-        )
+        trip = Trip(name="X", description="Notes.", start_date=dt.date(2026, 8, 1), end_date=dt.date(2026, 8, 1))
         body = trip_to_event_body(trip, trip_url="https://example.com/trips/abc/")
         self.assertIn("Notes.", body["description"])
         self.assertIn("https://example.com/trips/abc/", body["description"])
@@ -119,8 +117,8 @@ class TripToEventBodyTests(TestCase):
         TripActivity.objects.create(
             trip=trip,
             title="Overnight stay",
-            scheduled_at=datetime.datetime(2026, 9, 4, 18, 0, tzinfo=datetime.UTC),
-            scheduled_end=datetime.datetime(2026, 9, 6, 11, 0, tzinfo=datetime.UTC),
+            scheduled_at=dt.datetime(2026, 9, 4, 18, 0, tzinfo=dt.UTC),
+            scheduled_end=dt.datetime(2026, 9, 6, 11, 0, tzinfo=dt.UTC),
         )
         body = trip_to_event_body(trip)
         self.assertEqual(body["start"]["date"], "2026-09-04")
@@ -129,20 +127,18 @@ class TripToEventBodyTests(TestCase):
 
     def test_trip_event_uses_first_activity_location(self):
         """The all-day trip event carries the first shareable activity location."""
-        trip = Trip.objects.create(
-            name="Located", start_date=datetime.date(2026, 8, 1), end_date=datetime.date(2026, 8, 2)
-        )
+        trip = Trip.objects.create(name="Located", start_date=dt.date(2026, 8, 1), end_date=dt.date(2026, 8, 2))
         TripActivity.objects.create(
             trip=trip,
             title="Second stop",
-            scheduled_at=datetime.datetime(2026, 8, 1, 15, 0, tzinfo=datetime.UTC),
+            scheduled_at=dt.datetime(2026, 8, 1, 15, 0, tzinfo=dt.UTC),
             lat_override=42.1,
             lng_override=-74.2,
         )
         TripActivity.objects.create(
             trip=trip,
             title="First stop",
-            scheduled_at=datetime.datetime(2026, 8, 1, 9, 0, tzinfo=datetime.UTC),
+            scheduled_at=dt.datetime(2026, 8, 1, 9, 0, tzinfo=dt.UTC),
             lat_override=41.5,
             lng_override=-73.9,
         )
@@ -151,13 +147,11 @@ class TripToEventBodyTests(TestCase):
 
     def test_trip_event_skips_hidden_locations(self):
         """Secret activity locations never leak into the trip-level event."""
-        trip = Trip.objects.create(
-            name="Secretive", start_date=datetime.date(2026, 8, 1), end_date=datetime.date(2026, 8, 2)
-        )
+        trip = Trip.objects.create(name="Secretive", start_date=dt.date(2026, 8, 1), end_date=dt.date(2026, 8, 2))
         TripActivity.objects.create(
             trip=trip,
             title="Secret first stop",
-            scheduled_at=datetime.datetime(2026, 8, 1, 9, 0, tzinfo=datetime.UTC),
+            scheduled_at=dt.datetime(2026, 8, 1, 9, 0, tzinfo=dt.UTC),
             location_hidden=True,
             lat_override=41.5,
             lng_override=-73.9,
@@ -176,8 +170,8 @@ class EventToTripKwargsTests(SimpleTestCase):
             "end": {"dateTime": "2026-08-01T18:00:00Z"},
         }
         kwargs = event_to_trip_kwargs(event)
-        self.assertEqual(kwargs["start_date"], datetime.date(2026, 8, 1))
-        self.assertEqual(kwargs["end_date"], datetime.date(2026, 8, 1))
+        self.assertEqual(kwargs["start_date"], dt.date(2026, 8, 1))
+        self.assertEqual(kwargs["end_date"], dt.date(2026, 8, 1))
 
     def test_cancelled_event_rejected(self):
         event = {"status": "cancelled", "start": {"date": "2026-08-01"}, "end": {"date": "2026-08-02"}}
@@ -190,8 +184,8 @@ class EventToTripKwargsTests(SimpleTestCase):
     def test_end_before_start_clamped(self):
         event = {"start": {"date": "2026-08-10"}, "end": {"date": "2026-08-05"}}
         kwargs = event_to_trip_kwargs(event)
-        self.assertEqual(kwargs["start_date"], datetime.date(2026, 8, 10))
-        self.assertEqual(kwargs["end_date"], datetime.date(2026, 8, 10))
+        self.assertEqual(kwargs["start_date"], dt.date(2026, 8, 10))
+        self.assertEqual(kwargs["end_date"], dt.date(2026, 8, 10))
 
     def test_untitled_event_gets_fallback_name(self):
         event = {"start": {"date": "2026-08-01"}, "end": {"date": "2026-08-02"}}
@@ -215,7 +209,7 @@ class _CalendarSyncDBTestCase(TestCase):
             profile=self.profile,
             access_token="access",  # noqa: S106
             refresh_token="refresh",  # noqa: S106
-            token_expiry=timezone.now() + datetime.timedelta(hours=1),
+            token_expiry=timezone.now() + dt.timedelta(hours=1),
         )
 
     def _patch_gateway(self):
@@ -249,8 +243,8 @@ class ImportEventsTests(_CalendarSyncDBTestCase):
         self.assertEqual(skipped, [])
         trip = created[0]
         self.assertEqual(trip.name, "Abandoned asylum weekend")
-        self.assertEqual(trip.start_date, datetime.date(2026, 9, 4))
-        self.assertEqual(trip.end_date, datetime.date(2026, 9, 6))  # exclusive end - 1
+        self.assertEqual(trip.start_date, dt.date(2026, 9, 4))
+        self.assertEqual(trip.end_date, dt.date(2026, 9, 6))  # exclusive end - 1
         self.assertEqual(trip.creator, self.profile)
         self.assertTrue(TripMembership.objects.filter(trip=trip, profile=self.profile).exists())
         link = TripCalendarLink.objects.get(trip=trip, profile=self.profile)
@@ -688,8 +682,8 @@ class ExportTripTests(_CalendarSyncDBTestCase):
         return Trip.objects.create(
             name="Export me",
             creator=self.profile,
-            start_date=datetime.date(2026, 10, 1),
-            end_date=datetime.date(2026, 10, 3),
+            start_date=dt.date(2026, 10, 1),
+            end_date=dt.date(2026, 10, 3),
         )
 
     def test_export_creates_event_and_link(self):
@@ -785,8 +779,8 @@ class DisconnectMemberCalendarSyncTests(_CalendarSyncDBTestCase):
         trip = Trip.objects.create(
             name="Shared trip",
             creator=self.profile,
-            start_date=datetime.date(2026, 11, 1),
-            end_date=datetime.date(2026, 11, 2),
+            start_date=dt.date(2026, 11, 1),
+            end_date=dt.date(2026, 11, 2),
         )
         link = TripCalendarLink.objects.create(
             trip=trip,
@@ -858,8 +852,8 @@ class TripMemberRemovalCalendarSyncTests(_CalendarSyncDBTestCase):
         self.trip = Trip.objects.create(
             name="Group trip",
             creator=self.creator,
-            start_date=datetime.date(2026, 12, 10),
-            end_date=datetime.date(2026, 12, 12),
+            start_date=dt.date(2026, 12, 10),
+            end_date=dt.date(2026, 12, 12),
         )
         TripMembership.objects.create(trip=self.trip, profile=self.profile, status=TripMembership.STATUS_JOINED)
         self.link = TripCalendarLink.objects.create(
@@ -928,8 +922,8 @@ class TripCalendarExportViewTests(_CalendarSyncDBTestCase):
         self.trip = Trip.objects.create(
             name="Export via view",
             creator=self.profile,
-            start_date=datetime.date(2026, 12, 1),
-            end_date=datetime.date(2026, 12, 2),
+            start_date=dt.date(2026, 12, 1),
+            end_date=dt.date(2026, 12, 2),
         )
 
     def test_export_with_auto_sync_checked_sets_flag(self):
@@ -1032,50 +1026,48 @@ class ActivityEventBodyTests(SimpleTestCase):
 
     @given(minutes=st.integers(min_value=1, max_value=60 * 24))
     def test_scheduled_end_used_when_after_start(self, minutes):
-        start = datetime.datetime(2026, 10, 1, 9, 0, tzinfo=datetime.UTC)
-        end = start + datetime.timedelta(minutes=minutes)
+        start = dt.datetime(2026, 10, 1, 9, 0, tzinfo=dt.UTC)
+        end = start + dt.timedelta(minutes=minutes)
         body = activity_to_event_body(self._activity(scheduled_at=start, scheduled_end=end))
         self.assertEqual(body["start"]["dateTime"], start.isoformat())
         self.assertEqual(body["end"]["dateTime"], end.isoformat())
 
     def test_missing_end_uses_default_duration(self):
-        start = datetime.datetime(2026, 10, 1, 9, 0, tzinfo=datetime.UTC)
+        start = dt.datetime(2026, 10, 1, 9, 0, tzinfo=dt.UTC)
         body = activity_to_event_body(self._activity(scheduled_at=start))
         self.assertEqual(body["end"]["dateTime"], (start + DEFAULT_ACTIVITY_EVENT_DURATION).isoformat())
 
     def test_end_equal_to_start_uses_default_duration(self):
         """Exact boundary of `end <= start`: a zero-length end is not a valid duration either."""
-        start = datetime.datetime(2026, 10, 1, 9, 0, tzinfo=datetime.UTC)
+        start = dt.datetime(2026, 10, 1, 9, 0, tzinfo=dt.UTC)
         body = activity_to_event_body(self._activity(scheduled_at=start, scheduled_end=start))
         self.assertEqual(body["end"]["dateTime"], (start + DEFAULT_ACTIVITY_EVENT_DURATION).isoformat())
 
     def test_end_before_start_uses_default_duration(self):
-        start = datetime.datetime(2026, 10, 1, 9, 0, tzinfo=datetime.UTC)
-        body = activity_to_event_body(
-            self._activity(scheduled_at=start, scheduled_end=start - datetime.timedelta(hours=1))
-        )
+        start = dt.datetime(2026, 10, 1, 9, 0, tzinfo=dt.UTC)
+        body = activity_to_event_body(self._activity(scheduled_at=start, scheduled_end=start - dt.timedelta(hours=1)))
         self.assertEqual(body["end"]["dateTime"], (start + DEFAULT_ACTIVITY_EVENT_DURATION).isoformat())
 
     def test_summary_includes_trip_and_activity_names(self):
-        start = datetime.datetime(2026, 10, 1, 9, 0, tzinfo=datetime.UTC)
+        start = dt.datetime(2026, 10, 1, 9, 0, tzinfo=dt.UTC)
         body = activity_to_event_body(self._activity(scheduled_at=start))
         self.assertEqual(body["summary"], "Mill weekend: Old mill")
 
     def test_marks_event_as_urbanlens_export(self):
-        start = datetime.datetime(2026, 10, 1, 9, 0, tzinfo=datetime.UTC)
+        start = dt.datetime(2026, 10, 1, 9, 0, tzinfo=dt.UTC)
         body = activity_to_event_body(self._activity(scheduled_at=start))
         self.assertTrue(event_originated_from_urbanlens(body))
         self.assertIn(ACTIVITY_ID_EVENT_PROPERTY, body["extendedProperties"]["private"])
 
     def test_hidden_location_not_exported(self):
-        start = datetime.datetime(2026, 10, 1, 9, 0, tzinfo=datetime.UTC)
+        start = dt.datetime(2026, 10, 1, 9, 0, tzinfo=dt.UTC)
         body = activity_to_event_body(
             self._activity(scheduled_at=start, location_hidden=True, lat_override=41.5, lng_override=-73.9)
         )
         self.assertEqual(body["location"], "")
 
     def test_coordinate_override_exported_as_location(self):
-        start = datetime.datetime(2026, 10, 1, 9, 0, tzinfo=datetime.UTC)
+        start = dt.datetime(2026, 10, 1, 9, 0, tzinfo=dt.UTC)
         body = activity_to_event_body(self._activity(scheduled_at=start, lat_override=41.5, lng_override=-73.9))
         self.assertEqual(body["location"], "41.500000, -73.900000")
 
@@ -1087,13 +1079,13 @@ class ExportActivityEventsTests(_CalendarSyncDBTestCase):
         trip = Trip.objects.create(
             name="Export me",
             creator=self.profile,
-            start_date=datetime.date(2026, 10, 1),
-            end_date=datetime.date(2026, 10, 3),
+            start_date=dt.date(2026, 10, 1),
+            end_date=dt.date(2026, 10, 3),
         )
         scheduled = TripActivity.objects.create(
             trip=trip,
             title="Morning mill",
-            scheduled_at=datetime.datetime(2026, 10, 1, 9, 0, tzinfo=datetime.UTC),
+            scheduled_at=dt.datetime(2026, 10, 1, 9, 0, tzinfo=dt.UTC),
         )
         unscheduled = TripActivity.objects.create(trip=trip, title="Maybe later")
         return trip, scheduled, unscheduled
@@ -1196,8 +1188,8 @@ class PushAutoSyncedTripChangesTests(_CalendarSyncDBTestCase):
         return Trip.objects.create(
             name="Auto-synced",
             creator=self.profile,
-            start_date=datetime.date(2026, 11, 1),
-            end_date=datetime.date(2026, 11, 2),
+            start_date=dt.date(2026, 11, 1),
+            end_date=dt.date(2026, 11, 2),
         )
 
     def test_pushes_trip_with_auto_sync_link(self):
@@ -1251,7 +1243,7 @@ class PushAutoSyncedTripChangesTests(_CalendarSyncDBTestCase):
             profile=other_profile,
             access_token="access2",  # noqa: S106
             refresh_token="refresh2",  # noqa: S106
-            token_expiry=timezone.now() + datetime.timedelta(hours=1),
+            token_expiry=timezone.now() + dt.timedelta(hours=1),
         )
         trip = self._trip()
         TripCalendarLink.objects.create(

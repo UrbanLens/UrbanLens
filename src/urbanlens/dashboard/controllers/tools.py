@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import logging
 import os
 from typing import TYPE_CHECKING, Any
@@ -597,7 +597,7 @@ def _parse_cluster(cluster: Any) -> list[LocationHit]:
             if not isinstance(raw_date, str):
                 continue
             try:
-                datetime.date.fromisoformat(raw_date)
+                dt.date.fromisoformat(raw_date)
             except ValueError:
                 continue
             valid_dates.append(raw_date)
@@ -616,8 +616,8 @@ def _parse_cluster(cluster: Any) -> list[LocationHit]:
     cluster_id = cluster.get("id")
     source_key = cluster_id if isinstance(cluster_id, str) and cluster_id else None
 
-    first_day = datetime.date.fromisoformat(valid_dates[0])
-    taken_at = datetime.datetime.combine(first_day, datetime.time(12, 0), tzinfo=datetime.UTC)
+    first_day = dt.date.fromisoformat(valid_dates[0])
+    taken_at = dt.datetime.combine(first_day, dt.time(12, 0), tzinfo=dt.UTC)
     return [
         LocationHit(
             latitude=latitude,

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import calendar
 from dataclasses import dataclass, field
-import datetime
+import datetime as dt
 from typing import TYPE_CHECKING
 
 from django.urls import reverse
@@ -26,15 +26,15 @@ class CalendarTrip:
     name: str
     status: str
     url: str
-    start: datetime.date
-    end: datetime.date
+    start: dt.date
+    end: dt.date
 
 
 @dataclass(slots=True)
 class CalendarDay:
     """One cell of the grid; ``day`` is None for the padding before the 1st."""
 
-    day: datetime.date | None
+    day: dt.date | None
     is_today: bool = False
     trips: list[CalendarTrip] = field(default_factory=list)
     more: int = 0
@@ -44,7 +44,7 @@ class CalendarDay:
 class TripMonth:
     """A month's grid plus what the prev/next controls need."""
 
-    first: datetime.date
+    first: dt.date
     days: list[CalendarDay]
     previous: str
     next: str
@@ -55,12 +55,12 @@ class TripMonth:
         return WEEKDAYS
 
 
-def month_param(value: datetime.date) -> str:
+def month_param(value: dt.date) -> str:
     """The ``?month=`` value naming *value*'s month."""
     return value.strftime("%Y-%m")
 
 
-def parse_month(raw: str | None, today: datetime.date) -> datetime.date:
+def parse_month(raw: str | None, today: dt.date) -> dt.date:
     """
     The first day of the month *raw* names (``YYYY-MM``), or of *today*'s month when it names none.
 
@@ -72,13 +72,13 @@ def parse_month(raw: str | None, today: datetime.date) -> datetime.date:
         A first-of-month date.
     """
     try:
-        parsed = datetime.datetime.strptime(raw or "", "%Y-%m").date()  # noqa: DTZ007 - a calendar month, not an instant
+        parsed = dt.datetime.strptime(raw or "", "%Y-%m").date()  # noqa: DTZ007 - a calendar month, not an instant
     except ValueError:
         parsed = today
     return parsed.replace(day=1)
 
 
-def trip_month(profile: Profile, month: datetime.date) -> TripMonth:
+def trip_month(profile: Profile, month: dt.date) -> TripMonth:
     """
     Lay out *profile*'s trips that meet *month* on a Sunday-first grid.
 
@@ -102,13 +102,13 @@ def trip_month(profile: Profile, month: datetime.date) -> TripMonth:
     leading = (first.weekday() + 1) % 7
     days = [CalendarDay(day=None) for _ in range(leading)]
     for offset in range(last.day):
-        day = first + datetime.timedelta(days=offset)
+        day = first + dt.timedelta(days=offset)
         cell = CalendarDay(day=day, is_today=day == today)
         on_day = [trip for trip in trips if trip.start <= day <= trip.end]
         cell.trips = on_day[:CHIPS_PER_DAY]
         cell.more = max(0, len(on_day) - CHIPS_PER_DAY)
         days.append(cell)
 
-    previous = (first - datetime.timedelta(days=1)).replace(day=1)
-    following = last + datetime.timedelta(days=1)
+    previous = (first - dt.timedelta(days=1)).replace(day=1)
+    following = last + dt.timedelta(days=1)
     return TripMonth(first=first, days=days, previous=month_param(previous), next=month_param(following))

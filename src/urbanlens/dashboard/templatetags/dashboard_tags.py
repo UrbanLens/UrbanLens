@@ -11,7 +11,7 @@ from django.utils.html import format_html, format_html_join
 
 if TYPE_CHECKING:
     from collections.abc import Collection, Iterable, Sequence
-    import datetime
+    import datetime as dt
 
     from django.utils.safestring import SafeString
 
@@ -304,7 +304,7 @@ def distance(distance_km: Any, units: str = "km") -> str:
 
 
 @register.filter
-def human_timesince(value: datetime.datetime | datetime.date) -> str:
+def human_timesince(value: dt.datetime | dt.date) -> str:
     """
     Return a human-friendly relative time string.
 

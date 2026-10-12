@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import itertools
 
 from django.contrib.auth.models import User
@@ -22,8 +22,8 @@ from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 _COORDS = itertools.count()
 
 
-def _aware(year: int, month: int, day: int) -> datetime.datetime:
-    return timezone.make_aware(datetime.datetime(year, month, day, 12, 0, 0))
+def _aware(year: int, month: int, day: int) -> dt.datetime:
+    return timezone.make_aware(dt.datetime(year, month, day, 12, 0, 0))
 
 
 def _make_pin(profile, *, last_visited=None, priority=5, name="Priority Spot") -> Pin:
@@ -89,46 +89,42 @@ class RecentTripsQuerySetTests(TestCase):
         TripMembership.objects.create(trip=trip, profile=self.profile)
         return trip
 
-    def _comment(self, trip: Trip, created: datetime.datetime) -> TripComment:
+    def _comment(self, trip: Trip, created: dt.datetime) -> TripComment:
         comment = baker.make("dashboard.TripComment", trip=trip, author=self.profile, text="hi")
         TripComment.objects.filter(pk=comment.pk).update(created=created)
         return comment
 
     def _recent(self, days: int = 7) -> list[Trip]:
-        since = timezone.now() - datetime.timedelta(days=days)
+        since = timezone.now() - dt.timedelta(days=days)
         return Trip.objects.recently_active_past(self.profile, since=since)
 
     def test_past_trip_with_recent_comment_is_included(self) -> None:
         today = timezone.localdate()
-        trip = self._trip(start_date=today - datetime.timedelta(days=10), end_date=today - datetime.timedelta(days=8))
-        self._comment(trip, timezone.now() - datetime.timedelta(days=1))
+        trip = self._trip(start_date=today - dt.timedelta(days=10), end_date=today - dt.timedelta(days=8))
+        self._comment(trip, timezone.now() - dt.timedelta(days=1))
         self.assertIn(trip, self._recent())
 
     def test_past_trip_with_stale_comment_is_excluded(self) -> None:
         today = timezone.localdate()
-        trip = self._trip(start_date=today - datetime.timedelta(days=30), end_date=today - datetime.timedelta(days=28))
-        self._comment(trip, timezone.now() - datetime.timedelta(days=20))
+        trip = self._trip(start_date=today - dt.timedelta(days=30), end_date=today - dt.timedelta(days=28))
+        self._comment(trip, timezone.now() - dt.timedelta(days=20))
         self.assertNotIn(trip, self._recent())
 
     def test_upcoming_trip_with_recent_comment_is_excluded(self) -> None:
         today = timezone.localdate()
-        trip = self._trip(start_date=today + datetime.timedelta(days=5), end_date=today + datetime.timedelta(days=7))
-        self._comment(trip, timezone.now() - datetime.timedelta(days=1))
+        trip = self._trip(start_date=today + dt.timedelta(days=5), end_date=today + dt.timedelta(days=7))
+        self._comment(trip, timezone.now() - dt.timedelta(days=1))
         self.assertNotIn(trip, self._recent())
 
     def test_past_trip_with_no_comments_is_excluded(self) -> None:
         today = timezone.localdate()
-        trip = self._trip(start_date=today - datetime.timedelta(days=10), end_date=today - datetime.timedelta(days=8))
+        trip = self._trip(start_date=today - dt.timedelta(days=10), end_date=today - dt.timedelta(days=8))
         self.assertNotIn(trip, self._recent())
 
     def test_results_ordered_by_most_recent_comment_first(self) -> None:
         today = timezone.localdate()
-        older_trip = self._trip(
-            start_date=today - datetime.timedelta(days=10), end_date=today - datetime.timedelta(days=8)
-        )
-        newer_trip = self._trip(
-            start_date=today - datetime.timedelta(days=20), end_date=today - datetime.timedelta(days=18)
-        )
-        self._comment(older_trip, timezone.now() - datetime.timedelta(days=5))
-        self._comment(newer_trip, timezone.now() - datetime.timedelta(days=1))
+        older_trip = self._trip(start_date=today - dt.timedelta(days=10), end_date=today - dt.timedelta(days=8))
+        newer_trip = self._trip(start_date=today - dt.timedelta(days=20), end_date=today - dt.timedelta(days=18))
+        self._comment(older_trip, timezone.now() - dt.timedelta(days=5))
+        self._comment(newer_trip, timezone.now() - dt.timedelta(days=1))
         self.assertEqual(self._recent(), [newer_trip, older_trip])

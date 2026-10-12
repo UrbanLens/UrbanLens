@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import json
 import logging
 import math
@@ -222,17 +222,17 @@ def _toast(message: str, level: str = "success", *, unlogged_count: int | None =
     return response
 
 
-def _parse_date(value: str | None, default: datetime.date) -> datetime.date:
+def _parse_date(value: str | None, default: dt.date) -> dt.date:
     """Parse an ISO date query param, falling back to *default* if missing/invalid."""
     if not value:
         return default
     try:
-        return datetime.date.fromisoformat(value)
+        return dt.date.fromisoformat(value)
     except ValueError:
         return default
 
 
-def _parse_datetime(value: str | None) -> datetime.datetime | None:
+def _parse_datetime(value: str | None) -> dt.datetime | None:
     """
     Parse the feed's exclusive page cursor, or None when absent or unusable.
 
@@ -246,7 +246,7 @@ def _parse_datetime(value: str | None) -> datetime.datetime | None:
     if not value:
         return None
     try:
-        parsed = datetime.datetime.fromisoformat(value)
+        parsed = dt.datetime.fromisoformat(value)
     except ValueError:
         return None
     return parsed if timezone.is_aware(parsed) else timezone.make_aware(parsed)
@@ -266,7 +266,7 @@ def _parse_bbox(request: HttpRequest) -> BBox | None:
     return BBox(min_lat, min_lng, max_lat, max_lng)
 
 
-def _active_span(earliest: datetime.date | None, today: datetime.date) -> tuple[int, str]:
+def _active_span(earliest: dt.date | None, today: dt.date) -> tuple[int, str]:
     """
     Describe how long a profile has been active in the largest sensible time unit.
 
@@ -295,9 +295,9 @@ def _active_span(earliest: datetime.date | None, today: datetime.date) -> tuple[
     return (count, unit if count == 1 else f"{unit}s")
 
 
-def _earliest_memory_date(profile: Profile) -> datetime.date | None:
+def _earliest_memory_date(profile: Profile) -> dt.date | None:
     """Return the earliest date across all of a profile's memory sources, for scrubber bounds."""
-    candidates: list[datetime.date] = []
+    candidates: list[dt.date] = []
 
     route_started = Route.objects.for_profile(profile).order_by("started_at").values_list("started_at", flat=True).first()
     if route_started:
@@ -446,7 +446,7 @@ class MemoriesFeedDataView(LoginRequiredMixin, View):
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
         today = timezone.now().date()
-        default_start = today - datetime.timedelta(days=_DEFAULT_WINDOW_DAYS)
+        default_start = today - dt.timedelta(days=_DEFAULT_WINDOW_DAYS)
         start = _parse_date(request.GET.get("start"), default_start)
         end = _parse_date(request.GET.get("end"), today)
         bbox = _parse_bbox(request)
@@ -759,12 +759,12 @@ class MemoriesVisitsBulkActionView(LoginRequiredMixin, View):
             raw_date = body.get("visited_date")
             if raw_date:
                 try:
-                    visited_date = datetime.date.fromisoformat(raw_date)
+                    visited_date = dt.date.fromisoformat(raw_date)
                 except (TypeError, ValueError):
                     return JsonResponse({"error": "Invalid date."}, status=400)
 
         pins = Pin.objects.filter(profile=profile, slug__in=raw_slugs).visited_without_record()
-        visited_at = datetime.datetime.combine(visited_date, datetime.time.min, tzinfo=datetime.UTC)
+        visited_at = dt.datetime.combine(visited_date, dt.time.min, tzinfo=dt.UTC)
 
         def act(pin: Pin) -> None:
             if action == "unmark":

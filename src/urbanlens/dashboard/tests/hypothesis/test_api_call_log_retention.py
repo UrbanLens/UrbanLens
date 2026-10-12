@@ -19,14 +19,14 @@ def _worst_case_cost_series_reach_days(months: int = _COST_SERIES_MONTHS) -> int
     The series covers ``months`` trailing *calendar* months, so the oldest row it reads is the 1st of the month
     ``months - 1`` back - and "now" can sit at the end of the current month."""
     import calendar
-    import datetime
+    import datetime as dt
 
     worst = 0
     for year in (2023, 2024):  # includes a leap year
         for month in range(1, 13):
-            as_of = datetime.date(year, month, calendar.monthrange(year, month)[1])
+            as_of = dt.date(year, month, calendar.monthrange(year, month)[1])
             oldest_year, oldest_month = divmod((year * 12 + month - 1) - (months - 1), 12)
-            oldest = datetime.date(oldest_year, oldest_month + 1, 1)
+            oldest = dt.date(oldest_year, oldest_month + 1, 1)
             worst = max(worst, (as_of - oldest).days)
     return worst
 

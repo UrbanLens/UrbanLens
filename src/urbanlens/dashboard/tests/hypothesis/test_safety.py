@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from uuid import uuid4
 
 from django.db import IntegrityError, transaction
@@ -40,8 +40,8 @@ def _checkin(profile, **kwargs) -> SafetyCheckin:
     defaults = {
         "profile": profile,
         "title": "Test hike",
-        "checkin_by": timezone.now() - datetime.timedelta(hours=2),
-        "grace_period": datetime.timedelta(hours=1),
+        "checkin_by": timezone.now() - dt.timedelta(hours=2),
+        "grace_period": dt.timedelta(hours=1),
         "destination_latitude": "40.000000",
         "destination_longitude": "-74.000000",
     }
@@ -218,21 +218,21 @@ class SafetyCheckinQuerySetTests(TestCase):
         due = _checkin(
             self.profile,
             status=SafetyCheckinStatus.SCHEDULED,
-            checkin_by=timezone.now() - datetime.timedelta(minutes=1),
+            checkin_by=timezone.now() - dt.timedelta(minutes=1),
         )
         not_yet = _checkin(
-            self.profile, status=SafetyCheckinStatus.SCHEDULED, checkin_by=timezone.now() + datetime.timedelta(hours=1)
+            self.profile, status=SafetyCheckinStatus.SCHEDULED, checkin_by=timezone.now() + dt.timedelta(hours=1)
         )
         past_grace = _checkin(
             self.profile,
             status=SafetyCheckinStatus.SCHEDULED,
-            checkin_by=timezone.now() - datetime.timedelta(hours=2),
-            grace_period=datetime.timedelta(hours=1),
+            checkin_by=timezone.now() - dt.timedelta(hours=2),
+            grace_period=dt.timedelta(hours=1),
         )
         already_reminded = _checkin(
             self.profile,
             status=SafetyCheckinStatus.AWAITING_CHECKIN,
-            checkin_by=timezone.now() - datetime.timedelta(minutes=1),
+            checkin_by=timezone.now() - dt.timedelta(minutes=1),
         )
 
         results = set(SafetyCheckin.objects.due_for_reminder().values_list("pk", flat=True))
@@ -246,20 +246,20 @@ class SafetyCheckinQuerySetTests(TestCase):
         overdue = _checkin(
             self.profile,
             status=SafetyCheckinStatus.AWAITING_CHECKIN,
-            checkin_by=timezone.now() - datetime.timedelta(hours=2),
-            grace_period=datetime.timedelta(hours=1),
+            checkin_by=timezone.now() - dt.timedelta(hours=2),
+            grace_period=dt.timedelta(hours=1),
         )
         unreminded_overdue = _checkin(
             self.profile,
             status=SafetyCheckinStatus.SCHEDULED,
-            checkin_by=timezone.now() - datetime.timedelta(hours=2),
-            grace_period=datetime.timedelta(hours=1),
+            checkin_by=timezone.now() - dt.timedelta(hours=2),
+            grace_period=dt.timedelta(hours=1),
         )
         within_grace = _checkin(
             self.profile,
             status=SafetyCheckinStatus.AWAITING_CHECKIN,
-            checkin_by=timezone.now() - datetime.timedelta(minutes=10),
-            grace_period=datetime.timedelta(hours=1),
+            checkin_by=timezone.now() - dt.timedelta(minutes=10),
+            grace_period=dt.timedelta(hours=1),
         )
 
         results = set(SafetyCheckin.objects.overdue().values_list("pk", flat=True))
@@ -490,8 +490,8 @@ class OneActiveCheckinAtATimeTests(TestCase):
         checkin = create_checkin(
             profile=self.profile,
             title="Ridge Hike",
-            checkin_by=timezone.now() + datetime.timedelta(hours=2),
-            grace_period=datetime.timedelta(hours=1),
+            checkin_by=timezone.now() + dt.timedelta(hours=2),
+            grace_period=dt.timedelta(hours=1),
         )
         self.assertEqual(get_active_checkin(self.profile), checkin)
 
@@ -499,16 +499,16 @@ class OneActiveCheckinAtATimeTests(TestCase):
         create_checkin(
             profile=self.profile,
             title="Ridge Hike",
-            checkin_by=timezone.now() + datetime.timedelta(hours=2),
-            grace_period=datetime.timedelta(hours=1),
+            checkin_by=timezone.now() + dt.timedelta(hours=2),
+            grace_period=dt.timedelta(hours=1),
         )
 
         with pytest.raises(ValueError):
             create_checkin(
                 profile=self.profile,
                 title="Another Hike",
-                checkin_by=timezone.now() + datetime.timedelta(hours=3),
-                grace_period=datetime.timedelta(hours=1),
+                checkin_by=timezone.now() + dt.timedelta(hours=3),
+                grace_period=dt.timedelta(hours=1),
             )
 
         self.assertEqual(SafetyCheckin.objects.filter(profile=self.profile).count(), 1)
@@ -517,16 +517,16 @@ class OneActiveCheckinAtATimeTests(TestCase):
         first = create_checkin(
             profile=self.profile,
             title="Ridge Hike",
-            checkin_by=timezone.now() + datetime.timedelta(hours=2),
-            grace_period=datetime.timedelta(hours=1),
+            checkin_by=timezone.now() + dt.timedelta(hours=2),
+            grace_period=dt.timedelta(hours=1),
         )
         cancel_checkin(first)
 
         second = create_checkin(
             profile=self.profile,
             title="Another Hike",
-            checkin_by=timezone.now() + datetime.timedelta(hours=3),
-            grace_period=datetime.timedelta(hours=1),
+            checkin_by=timezone.now() + dt.timedelta(hours=3),
+            grace_period=dt.timedelta(hours=1),
         )
 
         self.assertEqual(get_active_checkin(self.profile), second)
@@ -546,14 +546,14 @@ class TripScopedActiveCheckinTests(TestCase):
         general = create_checkin(
             profile=self.profile,
             title="General",
-            checkin_by=timezone.now() + datetime.timedelta(hours=2),
-            grace_period=datetime.timedelta(hours=1),
+            checkin_by=timezone.now() + dt.timedelta(hours=2),
+            grace_period=dt.timedelta(hours=1),
         )
         trip_checkin = create_checkin(
             profile=self.profile,
             title="Trip",
-            checkin_by=timezone.now() + datetime.timedelta(hours=2),
-            grace_period=datetime.timedelta(hours=1),
+            checkin_by=timezone.now() + dt.timedelta(hours=2),
+            grace_period=dt.timedelta(hours=1),
             trip=self.trip,
         )
 
@@ -564,15 +564,15 @@ class TripScopedActiveCheckinTests(TestCase):
         first = create_checkin(
             profile=self.profile,
             title="Trip A",
-            checkin_by=timezone.now() + datetime.timedelta(hours=2),
-            grace_period=datetime.timedelta(hours=1),
+            checkin_by=timezone.now() + dt.timedelta(hours=2),
+            grace_period=dt.timedelta(hours=1),
             trip=self.trip,
         )
         second = create_checkin(
             profile=self.profile,
             title="Trip B",
-            checkin_by=timezone.now() + datetime.timedelta(hours=2),
-            grace_period=datetime.timedelta(hours=1),
+            checkin_by=timezone.now() + dt.timedelta(hours=2),
+            grace_period=dt.timedelta(hours=1),
             trip=self.other_trip,
         )
 
@@ -583,8 +583,8 @@ class TripScopedActiveCheckinTests(TestCase):
         create_checkin(
             profile=self.profile,
             title="First",
-            checkin_by=timezone.now() + datetime.timedelta(hours=2),
-            grace_period=datetime.timedelta(hours=1),
+            checkin_by=timezone.now() + dt.timedelta(hours=2),
+            grace_period=dt.timedelta(hours=1),
             trip=self.trip,
         )
 
@@ -592,8 +592,8 @@ class TripScopedActiveCheckinTests(TestCase):
             create_checkin(
                 profile=self.profile,
                 title="Second",
-                checkin_by=timezone.now() + datetime.timedelta(hours=3),
-                grace_period=datetime.timedelta(hours=1),
+                checkin_by=timezone.now() + dt.timedelta(hours=3),
+                grace_period=dt.timedelta(hours=1),
                 trip=self.trip,
             )
 
@@ -603,14 +603,14 @@ class TripScopedActiveCheckinTests(TestCase):
         general = create_checkin(
             profile=self.profile,
             title="General",
-            checkin_by=timezone.now() + datetime.timedelta(hours=3),
-            grace_period=datetime.timedelta(hours=1),
+            checkin_by=timezone.now() + dt.timedelta(hours=3),
+            grace_period=dt.timedelta(hours=1),
         )
         trip_checkin = create_checkin(
             profile=self.profile,
             title="Trip",
-            checkin_by=timezone.now() + datetime.timedelta(hours=1),
-            grace_period=datetime.timedelta(hours=1),
+            checkin_by=timezone.now() + dt.timedelta(hours=1),
+            grace_period=dt.timedelta(hours=1),
             trip=self.trip,
         )
 
@@ -620,8 +620,8 @@ class TripScopedActiveCheckinTests(TestCase):
         checkin = create_checkin(
             profile=self.profile,
             title="Trip",
-            checkin_by=timezone.now() + datetime.timedelta(hours=2),
-            grace_period=datetime.timedelta(hours=1),
+            checkin_by=timezone.now() + dt.timedelta(hours=2),
+            grace_period=dt.timedelta(hours=1),
             trip=self.trip,
         )
         cancel_checkin(checkin)

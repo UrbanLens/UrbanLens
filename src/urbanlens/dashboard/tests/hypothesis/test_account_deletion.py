@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import smtplib
 from unittest import mock
 
@@ -41,7 +41,7 @@ def _fake_image(name: str) -> SimpleUploadedFile:
     return SimpleUploadedFile(name, b"fake-image-bytes", content_type="image/png")
 
 
-def _backdate_request(profile: Profile, ago: datetime.timedelta) -> Profile:
+def _backdate_request(profile: Profile, ago: dt.timedelta) -> Profile:
     Profile.objects.filter(pk=profile.pk).update(
         deletion_requested_at=timezone.now() - ago, deletion_reminder_sent_at=None
     )
@@ -65,11 +65,11 @@ class ProfileQuerySetDueForDeletionReminderTests(TestCase):
         self.assertNotIn(profile, Profile.objects.due_for_deletion_reminder())
 
     def test_excludes_profile_freshly_requested(self):
-        profile = _backdate_request(_new_profile(), datetime.timedelta(hours=1))
+        profile = _backdate_request(_new_profile(), dt.timedelta(hours=1))
         self.assertNotIn(profile, Profile.objects.due_for_deletion_reminder())
 
     def test_includes_profile_exactly_at_reminder_threshold(self):
-        profile = _backdate_request(_new_profile(), ACCOUNT_DELETION_GRACE_PERIOD - datetime.timedelta(days=1))
+        profile = _backdate_request(_new_profile(), ACCOUNT_DELETION_GRACE_PERIOD - dt.timedelta(days=1))
         self.assertIn(profile, Profile.objects.due_for_deletion_reminder())
 
     def test_includes_profile_past_reminder_threshold(self):
@@ -86,7 +86,7 @@ class ProfileQuerySetDueForDeletionReminderTests(TestCase):
     @given(hours_ago=st.floats(min_value=0, max_value=143, allow_nan=False, allow_infinity=False))
     @hyp_settings(deadline=None)
     def test_never_includes_profiles_under_six_days_old(self, hours_ago: float):
-        profile = _backdate_request(_new_profile(), datetime.timedelta(hours=hours_ago))
+        profile = _backdate_request(_new_profile(), dt.timedelta(hours=hours_ago))
         self.assertNotIn(profile, Profile.objects.due_for_deletion_reminder())
 
 
@@ -98,7 +98,7 @@ class ProfileQuerySetDueForHardDeleteTests(TestCase):
         self.assertNotIn(profile, Profile.objects.due_for_hard_delete())
 
     def test_excludes_profile_within_grace_period(self):
-        profile = _backdate_request(_new_profile(), ACCOUNT_DELETION_GRACE_PERIOD - datetime.timedelta(hours=1))
+        profile = _backdate_request(_new_profile(), ACCOUNT_DELETION_GRACE_PERIOD - dt.timedelta(hours=1))
         self.assertNotIn(profile, Profile.objects.due_for_hard_delete())
 
     def test_includes_profile_exactly_at_grace_period(self):
@@ -106,14 +106,14 @@ class ProfileQuerySetDueForHardDeleteTests(TestCase):
         self.assertIn(profile, Profile.objects.due_for_hard_delete())
 
     def test_includes_profile_past_grace_period(self):
-        profile = _backdate_request(_new_profile(), ACCOUNT_DELETION_GRACE_PERIOD + datetime.timedelta(days=1))
+        profile = _backdate_request(_new_profile(), ACCOUNT_DELETION_GRACE_PERIOD + dt.timedelta(days=1))
         self.assertIn(profile, Profile.objects.due_for_hard_delete())
 
     @pytest.mark.slow
     @given(days_ago=st.floats(min_value=0, max_value=6.99, allow_nan=False, allow_infinity=False))
     @hyp_settings(deadline=None)
     def test_never_includes_profiles_under_seven_days_old(self, days_ago: float):
-        profile = _backdate_request(_new_profile(), datetime.timedelta(days=days_ago))
+        profile = _backdate_request(_new_profile(), dt.timedelta(days=days_ago))
         self.assertNotIn(profile, Profile.objects.due_for_hard_delete())
 
 
@@ -202,12 +202,12 @@ class CancelDeletionTests(TestCase):
     """cancel_deletion() clears the pending state entirely."""
 
     def test_clears_deletion_requested_at(self):
-        profile = _backdate_request(_new_profile(), datetime.timedelta(days=1))
+        profile = _backdate_request(_new_profile(), dt.timedelta(days=1))
         cancel_deletion(profile)
         self.assertFalse(profile.is_pending_deletion)
 
     def test_clears_reminder_sent_at(self):
-        profile = _backdate_request(_new_profile(), datetime.timedelta(days=1))
+        profile = _backdate_request(_new_profile(), dt.timedelta(days=1))
         Profile.objects.filter(pk=profile.pk).update(deletion_reminder_sent_at=timezone.now())
         profile.refresh_from_db()
         cancel_deletion(profile)
@@ -513,7 +513,7 @@ class CancelAccountDeletionViewTests(TestCase):
 
     def setUp(self):
         self.user = baker.make(User)
-        self.profile = _backdate_request(self.user.profile, datetime.timedelta(days=1))
+        self.profile = _backdate_request(self.user.profile, dt.timedelta(days=1))
         self.client.force_login(self.user)
 
     def test_cancels_pending_deletion(self):
@@ -545,7 +545,7 @@ class AccountDeletionBannerTests(TestCase):
         self.assertNotContains(response, "account-deletion-banner")
 
     def test_banner_present_when_pending(self):
-        _backdate_request(self.user.profile, datetime.timedelta(days=1))
+        _backdate_request(self.user.profile, dt.timedelta(days=1))
         response = self.client.get(reverse("settings.view"))
         self.assertContains(response, "account-deletion-banner")
 
@@ -635,9 +635,7 @@ class HardDeleteOverlapLockTests(TestCase):
         baker.make(User)  # absorbs the bootstrap site-admin promotion
         self.user = baker.make(User, email="gone@example.com")
         self.profile = self.user.profile
-        self.profile.deletion_requested_at = timezone.now() - (
-            ACCOUNT_DELETION_GRACE_PERIOD + datetime.timedelta(hours=1)
-        )
+        self.profile.deletion_requested_at = timezone.now() - (ACCOUNT_DELETION_GRACE_PERIOD + dt.timedelta(hours=1))
         self.profile.save(update_fields=["deletion_requested_at"])
 
     def test_a_run_holding_the_lock_blocks_a_concurrent_one(self) -> None:
@@ -686,7 +684,7 @@ class HardDeleteSweepIdempotencyTests(TestCase):
 
     def _due(self, email: str) -> Profile:
         user = baker.make(User, email=email)
-        return _backdate_request(user.profile, ACCOUNT_DELETION_GRACE_PERIOD + datetime.timedelta(hours=1))
+        return _backdate_request(user.profile, ACCOUNT_DELETION_GRACE_PERIOD + dt.timedelta(hours=1))
 
     def test_a_deletion_that_fails_sends_no_email(self):
         profile = self._due("owner@example.com")

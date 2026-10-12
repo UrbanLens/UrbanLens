@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from decimal import Decimal
 from unittest import mock
 
@@ -69,7 +69,7 @@ class RolePwywThresholdCentsTests(TestCase):
         role = baker.make(
             SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=True, pwyw_minimum_cents=None
         )
-        as_of = datetime.datetime(2024, 6, 1, tzinfo=datetime.UTC)
+        as_of = dt.datetime(2024, 6, 1, tzinfo=dt.UTC)
         with mock.patch(
             "urbanlens.dashboard.services.admin.cost_tracking.cost_per_user", return_value=Decimal("1.00")
         ) as mock_cost_per_user:
@@ -114,7 +114,7 @@ class PledgeMeetsThresholdTests(TestCase):
         role = baker.make(
             SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=True, pwyw_minimum_cents=None
         )
-        as_of = datetime.datetime(2024, 6, 1, tzinfo=datetime.UTC)
+        as_of = dt.datetime(2024, 6, 1, tzinfo=dt.UTC)
         with mock.patch(
             "urbanlens.dashboard.services.admin.cost_tracking.cost_per_user", return_value=Decimal("5.00")
         ) as mock_cost_per_user:

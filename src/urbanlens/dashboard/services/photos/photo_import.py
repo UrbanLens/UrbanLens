@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from django.db.models import TextChoices
 
 if TYPE_CHECKING:
-    import datetime
+    import datetime as dt
 
     from urbanlens.dashboard.models.pin.model import Pin
 
@@ -24,7 +24,7 @@ class PhotoImportMode(TextChoices):
     ALL = "all", "All Photos"
 
 
-def visit_dates_for_pin(pin: Pin, limit: int = MAX_VISIT_DATES) -> list[datetime.date]:
+def visit_dates_for_pin(pin: Pin, limit: int = MAX_VISIT_DATES) -> list[dt.date]:
     """
     Return a pin's most recent distinct PinVisit calendar dates.
 
@@ -34,7 +34,7 @@ def visit_dates_for_pin(pin: Pin, limit: int = MAX_VISIT_DATES) -> list[datetime
 
     Returns:
         Distinct visit dates, newest first."""
-    dates: list[datetime.date] = []
+    dates: list[dt.date] = []
     for visited_at in pin.visit_history.order_by("-visited_at").values_list("visited_at", flat=True):
         day = visited_at.date()
         if day not in dates:

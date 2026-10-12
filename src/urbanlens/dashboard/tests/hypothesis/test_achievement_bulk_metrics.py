@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import itertools
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
@@ -97,13 +97,13 @@ def _seed_trips_planned(profile: Profile, value: int) -> None:
 
 
 def _seed_trips_attended(profile: Profile, value: int) -> None:
-    yesterday = timezone.localdate() - datetime.timedelta(days=1)
+    yesterday = timezone.localdate() - dt.timedelta(days=1)
     host = _profile()
     for _ in range(value):
         trip = baker.make(
             "dashboard.Trip",
             creator=host,
-            start_date=yesterday - datetime.timedelta(days=1),
+            start_date=yesterday - dt.timedelta(days=1),
             end_date=yesterday,
         )
         baker.make(
@@ -339,8 +339,8 @@ class BulkExclusionFilterTests(TestCase):
         trip = baker.make(
             "dashboard.Trip",
             creator=host,
-            start_date=today + datetime.timedelta(days=5),
-            end_date=today + datetime.timedelta(days=6),
+            start_date=today + dt.timedelta(days=5),
+            end_date=today + dt.timedelta(days=6),
         )
         baker.make(
             "dashboard.TripMembership",
@@ -354,7 +354,7 @@ class BulkExclusionFilterTests(TestCase):
         self.assertEqual(metric.value_for(profile), 0)
         self.assertEqual(metric.values_for_many([profile]), {profile.pk: 0})
 
-        trip.end_date = today - datetime.timedelta(days=1)
+        trip.end_date = today - dt.timedelta(days=1)
         trip.save(update_fields=["end_date"])
 
         self.assertEqual(metric.value_for(profile), 1)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import logging
 from typing import TYPE_CHECKING
 
@@ -152,7 +152,7 @@ def pin_exists_at(profile: Profile, *, location_id: int | None = None, latitude:
     return find_pin_at(profile, location_id=location_id, latitude=latitude, longitude=longitude) is not None
 
 
-def find_existing_visit_on_date(profile: Profile, *, location: Location | None, latitude: float | Decimal, longitude: float | Decimal, visited_at: datetime.datetime) -> PinVisit | None:
+def find_existing_visit_on_date(profile: Profile, *, location: Location | None, latitude: float | Decimal, longitude: float | Decimal, visited_at: dt.datetime) -> PinVisit | None:
     """
     Return a profile's own visit already logged for this place on this calendar date, if any.
 
@@ -278,7 +278,7 @@ def create_visit_suggestion(
     *,
     suggested_to: Profile,
     suggested_by: Profile | None,
-    visited_at: datetime.datetime,
+    visited_at: dt.datetime,
     location: Location | None,
     latitude: float | Decimal,
     longitude: float | Decimal,
@@ -581,10 +581,10 @@ class VisitInFutureError(Exception):
 #: How far ahead of this machine's clock a visit time may sit before it is
 #: refused. A client's clock is its own, and a phone a minute fast is not
 #: claiming to have visited somewhere tomorrow.
-MAX_VISIT_CLOCK_SKEW = datetime.timedelta(minutes=5)
+MAX_VISIT_CLOCK_SKEW = dt.timedelta(minutes=5)
 
 
-def create_manual_visit(pin: Pin, *, visited_at: datetime.datetime, notes: str | None = None, markup_map: MarkupMap | None = None) -> PinVisit:
+def create_manual_visit(pin: Pin, *, visited_at: dt.datetime, notes: str | None = None, markup_map: MarkupMap | None = None) -> PinVisit:
     """
     Log a user-entered visit to a pin, with the same side effects the web form has.
 
@@ -672,7 +672,7 @@ def find_pin_containing_point(profile: Profile, point: GEOSPoint, *, pins: Itera
     return matches[0] if matches else None
 
 
-def record_geolocation_pin_visits(profile: Profile, *, latitude: float | Decimal, longitude: float | Decimal, visited_at: datetime.datetime | None = None) -> list[PinVisit]:
+def record_geolocation_pin_visits(profile: Profile, *, latitude: float | Decimal, longitude: float | Decimal, visited_at: dt.datetime | None = None) -> list[PinVisit]:
     """
     Record geolocation-based visits for the profile's pins containing a point.
 

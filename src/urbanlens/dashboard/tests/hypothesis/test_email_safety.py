@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
@@ -99,13 +99,13 @@ class EmailLimitResolutionTests(TestCase):
     def test_old_sends_do_not_count_against_hour(self):
         for address in ("a@example.com", "b@example.com"):
             log = record_email_sent(self.profile, address, EmailType.JOIN_INVITE)
-            EmailSendLog.objects.filter(pk=log.pk).update(created=timezone.now() - datetime.timedelta(hours=2))
+            EmailSendLog.objects.filter(pk=log.pk).update(created=timezone.now() - dt.timedelta(hours=2))
         self.assertIsNone(email_rate_limit_error(self.profile))
 
     def test_monthly_cap_counts_older_sends(self):
         for i in range(10):
             log = record_email_sent(self.profile, f"user{i}@example.com", EmailType.JOIN_INVITE)
-            EmailSendLog.objects.filter(pk=log.pk).update(created=timezone.now() - datetime.timedelta(days=i + 1))
+            EmailSendLog.objects.filter(pk=log.pk).update(created=timezone.now() - dt.timedelta(days=i + 1))
         error = email_rate_limit_error(self.profile)
         self.assertIsNotNone(error)
         self.assertIn("month", error)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import re
 from unittest.mock import patch
 
@@ -39,7 +39,7 @@ class _VisitInviteTestCase(TestCase):
         self.pin = Pin.objects.create(profile=self.owner, location=self.location)
         self.visit = PinVisit.objects.create(
             pin=self.pin,
-            visited_at=datetime.datetime(2026, 7, 1, 12, 0, tzinfo=datetime.UTC),
+            visited_at=dt.datetime(2026, 7, 1, 12, 0, tzinfo=dt.UTC),
             source=VisitSource.MANUAL,
         )
         self.factory = RequestFactory()
@@ -173,7 +173,7 @@ class UnknownEmailInviteTests(_VisitInviteTestCase):
         self._tag_unknown()
         other_visit = PinVisit.objects.create(
             pin=self.pin,
-            visited_at=datetime.datetime(2026, 7, 2, 12, 0, tzinfo=datetime.UTC),
+            visited_at=dt.datetime(2026, 7, 2, 12, 0, tzinfo=dt.UTC),
             source=VisitSource.MANUAL,
         )
         self._tag_unknown(visit=other_visit)
@@ -189,7 +189,7 @@ class UnknownEmailInviteTests(_VisitInviteTestCase):
         """Same dedup guarantee as the friend-invite-by-email flow (see test_friend_invite_privacy.py) - this is a separate code path into the same FriendInvitation table, and must not let a Gmail dot/+ variant leave two open rows behind."""
         other_visit = PinVisit.objects.create(
             pin=self.pin,
-            visited_at=datetime.datetime(2026, 7, 2, 12, 0, tzinfo=datetime.UTC),
+            visited_at=dt.datetime(2026, 7, 2, 12, 0, tzinfo=dt.UTC),
             source=VisitSource.MANUAL,
         )
         self._tag_unknown("johndoe3@gmail.com")

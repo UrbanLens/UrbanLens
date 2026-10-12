@@ -9,7 +9,7 @@ calendar.
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import json
 import logging
 
@@ -190,7 +190,7 @@ class GoogleCalendarCallbackView(LoginRequiredMixin, View):
             profile,
             defaults={
                 "access_token": tokens["access_token"],
-                "token_expiry": timezone.now() + datetime.timedelta(seconds=expires_in),
+                "token_expiry": timezone.now() + dt.timedelta(seconds=expires_in),
                 "google_email": extract_email_from_id_token(tokens.get("id_token")),
                 "scopes": tokens.get("scope") or "",
             },

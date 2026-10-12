@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from unittest import mock
 
 from django.contrib.auth.models import User
@@ -26,8 +26,8 @@ class DeclineRevokesLiveAccessTests(TestCase):
         self.checkin = create_checkin(
             profile=self.owner,
             title="Quarry trip",
-            checkin_by=timezone.now() + datetime.timedelta(hours=6),
-            grace_period=datetime.timedelta(hours=1),
+            checkin_by=timezone.now() + dt.timedelta(hours=6),
+            grace_period=dt.timedelta(hours=1),
             plan_details="North rim, back by dark",
             contact_message="Please call me",
             contacts=[(None, "friend@example.com", "Friend")],

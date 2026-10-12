@@ -8,7 +8,7 @@ grace-window logic.
 from __future__ import annotations
 
 import base64
-import datetime
+import datetime as dt
 import json
 import os
 from typing import TYPE_CHECKING
@@ -54,8 +54,8 @@ def _checkin(profile: Profile, **kwargs) -> SafetyCheckin:
         "profile": profile,
         "title": "Test hike",
         "plan_details": "Hike to the summit and back",
-        "checkin_by": timezone.now() - datetime.timedelta(hours=1),
-        "grace_period": datetime.timedelta(hours=1),
+        "checkin_by": timezone.now() - dt.timedelta(hours=1),
+        "grace_period": dt.timedelta(hours=1),
         "status": SafetyCheckinStatus.FOUND_SAFE,
         "resolved_at": timezone.now(),
         "resolved_by_label": "you",
@@ -245,7 +245,7 @@ class ArchiveCheckinFailureCapTests(TestCase):
         self.assertIsNone(self.checkin.archive_failed_at)
 
     def test_gives_up_after_max_attempts_and_is_excluded_from_future_sweeps(self):
-        self.checkin.archive_scheduled_at = timezone.now() - datetime.timedelta(minutes=1)
+        self.checkin.archive_scheduled_at = timezone.now() - dt.timedelta(minutes=1)
         self.checkin.save(update_fields=["archive_scheduled_at"])
 
         for _ in range(MAX_ARCHIVE_ATTEMPTS):

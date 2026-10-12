@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from decimal import Decimal
 
 from django.utils import timezone
@@ -79,7 +79,7 @@ class SuggestForUnfiledPhotoTests(TestCase):
         )
 
     def test_creates_suggestion_when_near_a_pin(self):
-        taken_at = timezone.make_aware(datetime.datetime(2024, 6, 1, 12, 0, 0))
+        taken_at = timezone.make_aware(dt.datetime(2024, 6, 1, 12, 0, 0))
         photo = self._unfiled_photo(_PIN_LAT + 0.0003, _PIN_LNG + 0.0003, taken_at)
 
         suggestion = maybe_suggest_photo_visit(photo)
@@ -90,17 +90,17 @@ class SuggestForUnfiledPhotoTests(TestCase):
         self.assertTrue(suggestion.is_from_photo)
 
     def test_no_suggestion_when_far_from_all_pins(self):
-        taken_at = timezone.make_aware(datetime.datetime(2024, 6, 1, 12, 0, 0))
+        taken_at = timezone.make_aware(dt.datetime(2024, 6, 1, 12, 0, 0))
         photo = self._unfiled_photo(_PIN_LAT + 1.0, _PIN_LNG + 1.0, taken_at)
         self.assertIsNone(maybe_suggest_photo_visit(photo))
 
     def test_no_suggestion_without_coordinates(self):
-        taken_at = timezone.make_aware(datetime.datetime(2024, 6, 1, 12, 0, 0))
+        taken_at = timezone.make_aware(dt.datetime(2024, 6, 1, 12, 0, 0))
         photo = self._unfiled_photo(None, None, taken_at)
         self.assertIsNone(maybe_suggest_photo_visit(photo))
 
     def test_batch_same_day_yields_one_suggestion(self):
-        taken_at = timezone.make_aware(datetime.datetime(2024, 6, 1, 12, 0, 0))
+        taken_at = timezone.make_aware(dt.datetime(2024, 6, 1, 12, 0, 0))
         p1 = self._unfiled_photo(_PIN_LAT + 0.0003, _PIN_LNG + 0.0003, taken_at)
         p2 = self._unfiled_photo(_PIN_LAT + 0.0004, _PIN_LNG + 0.0004, taken_at)
 
@@ -112,7 +112,7 @@ class SuggestForUnfiledPhotoTests(TestCase):
     def test_photo_attached_to_wiki_is_not_treated_as_unfiled(self):
         # A wiki-gallery upload (wiki set, no pin) must not raise a
         # visit suggestion - it isn't an unfiled Memories upload.
-        taken_at = timezone.make_aware(datetime.datetime(2024, 6, 1, 12, 0, 0))
+        taken_at = timezone.make_aware(dt.datetime(2024, 6, 1, 12, 0, 0))
         wiki = baker.make("dashboard.Wiki", location=self.location)
         photo = baker.make(
             "dashboard.Image",

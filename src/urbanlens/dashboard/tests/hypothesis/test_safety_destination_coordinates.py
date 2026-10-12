@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from decimal import Decimal
 
 from django.urls import reverse
@@ -74,7 +74,7 @@ class CreateDestinationTests(TestCase):
         return self.client.post(
             reverse("safety.checkin.create"),
             {
-                "checkin_by": (timezone.now() + datetime.timedelta(hours=3)).isoformat(),
+                "checkin_by": (timezone.now() + dt.timedelta(hours=3)).isoformat(),
                 "title": "Trip",
                 "destination_latitude": latitude,
                 "destination_longitude": longitude,
@@ -115,8 +115,8 @@ class EditDestinationTests(TestCase):
             "dashboard.SafetyCheckin",
             profile=self.user.profile,
             title="Hike",
-            checkin_by=timezone.now() + datetime.timedelta(hours=3),
-            grace_period=datetime.timedelta(hours=1),
+            checkin_by=timezone.now() + dt.timedelta(hours=3),
+            grace_period=dt.timedelta(hours=1),
             destination_latitude=Decimal("40.000000"),
             destination_longitude=Decimal("-74.000000"),
             status=SafetyCheckinStatus.SCHEDULED,

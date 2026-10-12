@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 from urbanlens.dashboard.models.abstract.choices import TextChoices
 
 if TYPE_CHECKING:
-    import datetime
+    import datetime as dt
 
 
 class TargetKind(TextChoices):
@@ -41,7 +41,7 @@ class TargetKind(TextChoices):
 PERIOD_FORMAT = "%Y-%m"
 
 
-def period_key_for(moment: datetime.datetime | datetime.date | None = None) -> str:
+def period_key_for(moment: dt.datetime | dt.date | None = None) -> str:
     """
     Return the period bucket a moment falls in.
 

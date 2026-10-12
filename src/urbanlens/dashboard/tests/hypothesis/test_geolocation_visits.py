@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 
 from django.contrib.gis.geos import MultiPolygon, Polygon
 from django.db import connection
@@ -50,7 +50,7 @@ class RecordGeolocationPinVisitsTests(TestCase):
         )
 
     def test_creates_geolocation_visit_when_point_is_inside_pin_boundary(self):
-        visited_at = timezone.make_aware(datetime.datetime(2026, 7, 6, 15, 30, 0))
+        visited_at = timezone.make_aware(dt.datetime(2026, 7, 6, 15, 30, 0))
 
         visits = record_geolocation_pin_visits(
             self.profile, latitude=40.0002, longitude=-74.0002, visited_at=visited_at
@@ -64,14 +64,14 @@ class RecordGeolocationPinVisitsTests(TestCase):
         self.assertEqual(self.pin.last_visited, visited_at)
 
     def test_does_not_create_duplicate_visit_for_same_pin_on_same_day(self):
-        existing_at = timezone.make_aware(datetime.datetime(2026, 7, 6, 8, 0, 0))
+        existing_at = timezone.make_aware(dt.datetime(2026, 7, 6, 8, 0, 0))
         baker.make(PinVisit, pin=self.pin, source=VisitSource.MANUAL, visited_at=existing_at)
 
         visits = record_geolocation_pin_visits(
             self.profile,
             latitude=40.0002,
             longitude=-74.0002,
-            visited_at=timezone.make_aware(datetime.datetime(2026, 7, 6, 20, 0, 0)),
+            visited_at=timezone.make_aware(dt.datetime(2026, 7, 6, 20, 0, 0)),
         )
 
         self.assertEqual(visits, [])

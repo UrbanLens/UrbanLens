@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from decimal import Decimal
 import hashlib
 from unittest import mock
@@ -198,7 +198,7 @@ class FlickrGatewayTests(TestCase):
         with mock.patch(
             "urbanlens.dashboard.services.apis.flickr.gateway._consumer_credentials", return_value=("key", "secret")
         ):
-            results = gw.search_by_dates([datetime.date(2024, 1, 1), datetime.date(2024, 1, 2)])
+            results = gw.search_by_dates([dt.date(2024, 1, 1), dt.date(2024, 1, 2)])
         self.assertEqual(gw.session.get.call_count, 2)
         self.assertEqual({photo.id for photo in results}, {"1", "2"})
 
@@ -317,7 +317,7 @@ class PinFlickrSearchViewTests(TestCase):
         search_by_dates.assert_not_called()
 
     def test_visits_mode_searches_by_recorded_visit_dates(self) -> None:
-        baker.make(PinVisit, pin=self.pin, visited_at=timezone.make_aware(datetime.datetime(2024, 1, 5)))
+        baker.make(PinVisit, pin=self.pin, visited_at=timezone.make_aware(dt.datetime(2024, 1, 5)))
         photo = FlickrPhoto(
             id="v1", thumbnail_url="https://example.com/v1_s.jpg", original_url=None, lat=None, lon=None
         )
@@ -326,7 +326,7 @@ class PinFlickrSearchViewTests(TestCase):
         asset_ids = [a["id"] for a in response.context["assets"]]
         self.assertEqual(asset_ids, ["v1"])
         (dates_arg,), _kwargs = search_by_dates.call_args
-        self.assertEqual(list(dates_arg), [datetime.date(2024, 1, 5)])
+        self.assertEqual(list(dates_arg), [dt.date(2024, 1, 5)])
 
     def test_all_mode_calls_list_recent(self) -> None:
         photo = FlickrPhoto(

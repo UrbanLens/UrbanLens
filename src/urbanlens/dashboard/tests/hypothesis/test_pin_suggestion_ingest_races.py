@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 import contextlib
-import datetime
+import datetime as dt
 from decimal import Decimal
 import threading
 from typing import Any
@@ -29,7 +29,7 @@ from urbanlens.dashboard.services.pins.pin_suggestions import LocationHit, inges
 
 
 def _hit(lat: float, lon: float, day: str) -> LocationHit:
-    taken_at = datetime.datetime.combine(datetime.date.fromisoformat(day), datetime.time(12, 0), tzinfo=datetime.UTC)
+    taken_at = dt.datetime.combine(dt.date.fromisoformat(day), dt.time(12, 0), tzinfo=dt.UTC)
     return LocationHit(latitude=lat, longitude=lon, taken_at=taken_at)
 
 

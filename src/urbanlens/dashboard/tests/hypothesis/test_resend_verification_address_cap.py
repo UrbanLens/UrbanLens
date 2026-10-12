@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from unittest import mock
 
 from django.contrib.auth.models import User
@@ -45,7 +45,7 @@ class ResendVerificationAddressCapTests(TestCase):
 
     def test_a_resend_after_the_cooldown_goes_out(self) -> None:
         resend_verification("pending@example.com")
-        EmailSendLog.objects.update(created=EmailSendLog.objects.get().created - datetime.timedelta(minutes=10))
+        EmailSendLog.objects.update(created=EmailSendLog.objects.get().created - dt.timedelta(minutes=10))
 
         resend_verification("pending@example.com")
 

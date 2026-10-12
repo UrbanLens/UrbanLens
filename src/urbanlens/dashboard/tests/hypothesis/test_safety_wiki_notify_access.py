@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 
 from django.contrib.auth.models import User
 from django.urls import reverse
@@ -49,8 +49,8 @@ def _create(profile: Profile, *, latitude: float = LAT, notify: bool = True) -> 
     return create_checkin(
         profile=profile,
         title="Solo trip",
-        checkin_by=timezone.now() + datetime.timedelta(hours=4),
-        grace_period=datetime.timedelta(hours=1),
+        checkin_by=timezone.now() + dt.timedelta(hours=4),
+        grace_period=dt.timedelta(hours=1),
         destination_latitude=latitude,
         destination_longitude=LNG,
         notify_community_wiki=notify,
@@ -61,8 +61,8 @@ def _overdue(profile: Profile, **kwargs) -> SafetyCheckin:
     defaults = {
         "profile": profile,
         "title": "Solo trip",
-        "checkin_by": timezone.now() - datetime.timedelta(hours=2),
-        "grace_period": datetime.timedelta(hours=1),
+        "checkin_by": timezone.now() - dt.timedelta(hours=2),
+        "grace_period": dt.timedelta(hours=1),
         "destination_latitude": str(LAT),
         "destination_longitude": str(LNG),
         "status": SafetyCheckinStatus.AWAITING_CHECKIN,

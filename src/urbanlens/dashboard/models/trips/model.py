@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import logging
 from typing import TYPE_CHECKING
 
@@ -40,11 +40,11 @@ logger = logging.getLogger(__name__)
 
 #: The span an activity may be scheduled in; half-open. Wide enough for any real trip, narrow enough that a
 #: typo'd year is refused rather than stored and then planned, synced and forecast around.
-ACTIVITY_SCHEDULE_EARLIEST = datetime.datetime(1900, 1, 1, tzinfo=datetime.UTC)
-ACTIVITY_SCHEDULE_LATEST = datetime.datetime(2200, 1, 1, tzinfo=datetime.UTC)
+ACTIVITY_SCHEDULE_EARLIEST = dt.datetime(1900, 1, 1, tzinfo=dt.UTC)
+ACTIVITY_SCHEDULE_LATEST = dt.datetime(2200, 1, 1, tzinfo=dt.UTC)
 
 
-def within_activity_schedule(value: datetime.datetime | None) -> bool:
+def within_activity_schedule(value: dt.datetime | None) -> bool:
     """
     Whether an activity may be scheduled at *value*; None (unscheduled) always may.
 
@@ -56,7 +56,7 @@ def within_activity_schedule(value: datetime.datetime | None) -> bool:
     """
     if value is None:
         return True
-    aware = value if value.tzinfo is not None else value.replace(tzinfo=datetime.UTC)
+    aware = value if value.tzinfo is not None else value.replace(tzinfo=dt.UTC)
     return ACTIVITY_SCHEDULE_EARLIEST <= aware < ACTIVITY_SCHEDULE_LATEST
 
 
@@ -202,7 +202,7 @@ class Trip(abstract.PublicDashboardModel):
                 last_start=Max("scheduled_at"),
                 last_end=Max("scheduled_end"),
             )
-            candidates = [dt for dt in (latest["last_start"], latest["last_end"]) if dt is not None]
+            candidates = [ts for ts in (latest["last_start"], latest["last_end"]) if ts is not None]
             value = max(candidates).date() if candidates else None
         self._eff_end = value
         return value

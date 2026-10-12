@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import json
 
 from django.urls import reverse
@@ -305,7 +305,7 @@ class UnattachedQuerySetTests(TestCase):
         baker.make(
             "dashboard.SafetyCheckin",
             profile=self.profile,
-            checkin_by=timezone.now() + datetime.timedelta(hours=3),
+            checkin_by=timezone.now() + dt.timedelta(hours=3),
             markup_map=markup_map,
         )
         self.assertNotIn(markup_map, MarkupMap.objects.unattached())
@@ -515,7 +515,7 @@ class CheckinCreateLinksMapTests(TestCase):
     def _create_checkin(self, **extra) -> object:
         data = {
             "title": "Night hike",
-            "checkin_by": (timezone.now() + datetime.timedelta(hours=5)).isoformat(),
+            "checkin_by": (timezone.now() + dt.timedelta(hours=5)).isoformat(),
             "grace_period_hours": "1",
             **extra,
         }

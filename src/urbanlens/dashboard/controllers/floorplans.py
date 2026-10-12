@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import logging
 from typing import TYPE_CHECKING
 import uuid
@@ -92,11 +92,11 @@ def _parse_bbox(raw: str | None) -> tuple[float, float, float, float] | None:
     return (min_lng, min_lat, max_lng, max_lat)
 
 
-def _parse_date(raw: object) -> datetime.date | None:
+def _parse_date(raw: object) -> dt.date | None:
     if not raw or not isinstance(raw, str):
         return None
     try:
-        return datetime.date.fromisoformat(raw)
+        return dt.date.fromisoformat(raw)
     except ValueError:
         return None
 

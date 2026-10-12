@@ -45,7 +45,7 @@ from urbanlens.dashboard.services.visits.visits import create_visit_suggestion
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
-    import datetime
+    import datetime as dt
     from decimal import Decimal
 
     from django.contrib.auth.models import AnonymousUser, User
@@ -1480,7 +1480,7 @@ def community_wiki_opt_in(latitude: float | Decimal | None, longitude: float | D
     return requested and find_visible_community_wiki(latitude, longitude, owner) is not None
 
 
-def wiki_notify_stats(wiki: Wiki) -> tuple[datetime.datetime | None, int]:
+def wiki_notify_stats(wiki: Wiki) -> tuple[dt.datetime | None, int]:
     """
     Return the wiki-notify toggle's stats: last edit time and editor count.
 
@@ -1574,8 +1574,8 @@ def create_checkin(
     *,
     profile: Profile,
     title: str,
-    checkin_by: datetime.datetime,
-    grace_period: datetime.timedelta,
+    checkin_by: dt.datetime,
+    grace_period: dt.timedelta,
     plan_details: str = "",
     contact_message: str = "",
     trip: Trip | None = None,

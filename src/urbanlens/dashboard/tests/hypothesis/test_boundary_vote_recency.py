@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 
 from django.contrib.auth.models import User
 from django.utils import timezone
@@ -23,7 +23,7 @@ class BoundaryVoteRecencyTests(TestCase):
         """Anti-vacuity: the weighting this test depends on must actually decay."""
         now = timezone.now()
         fresh = vote_weight(now, now)
-        old = vote_weight(now - datetime.timedelta(days=60), now)
+        old = vote_weight(now - dt.timedelta(days=60), now)
         self.assertGreater(fresh, old, "weights do not decay - the recency test below would prove nothing")
 
     def test_re_affirming_the_same_choice_moves_the_updated_timestamp(self) -> None:
@@ -47,7 +47,7 @@ class BoundaryVoteRecencyTests(TestCase):
         )
 
         vote = cast_boundary_vote(place, self.profile, boundary.pk)
-        stale = timezone.now() - datetime.timedelta(days=30)
+        stale = timezone.now() - dt.timedelta(days=30)
         BoundaryVote.objects.filter(pk=vote.pk).update(updated=stale)
 
         cast_boundary_vote(place, self.profile, boundary.pk)

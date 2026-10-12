@@ -5,7 +5,7 @@ check, the detail view's partner fallback, and the chat consumer's widened acces
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import json
 from unittest.mock import patch
 
@@ -53,8 +53,8 @@ def _checkin(profile: Profile, **kwargs) -> SafetyCheckin:
     defaults = {
         "profile": profile,
         "title": "Test hike",
-        "checkin_by": timezone.now() + datetime.timedelta(hours=2),
-        "grace_period": datetime.timedelta(hours=1),
+        "checkin_by": timezone.now() + dt.timedelta(hours=2),
+        "grace_period": dt.timedelta(hours=1),
     }
     defaults.update(kwargs)
     return baker.make("dashboard.SafetyCheckin", **defaults)

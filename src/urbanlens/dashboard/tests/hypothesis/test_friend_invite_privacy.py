@@ -512,14 +512,14 @@ class SenderSeesTheSameAfterDeliveryTests(TestCase):
         self.assertEqual(self._each_kind(run), {"registered": 1, "unregistered": 1})
 
     def test_the_entry_expires_the_same_way_either_way(self) -> None:
-        import datetime
+        import datetime as dt
 
         from django.utils import timezone
 
         def run(inviter: User, email: str) -> int:
             self._invite(inviter, email)
             FriendInvitation.objects.filter(inviter=inviter.profile).update(
-                expires_at=timezone.now() - datetime.timedelta(minutes=1)
+                expires_at=timezone.now() - dt.timedelta(minutes=1)
             )
             return self._widget(inviter)["outgoing_pending_count"]
 

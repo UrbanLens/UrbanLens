@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import itertools
 
 from django.contrib.auth.models import User
@@ -27,8 +27,8 @@ from urbanlens.dashboard.services.memories.journal import (
 _COORDS = itertools.count()
 
 
-def _aware(year: int, month: int, day: int) -> datetime.datetime:
-    return timezone.make_aware(datetime.datetime(year, month, day, 12, 0, 0))
+def _aware(year: int, month: int, day: int) -> dt.datetime:
+    return timezone.make_aware(dt.datetime(year, month, day, 12, 0, 0))
 
 
 def _make_pin(profile, *, name=None):

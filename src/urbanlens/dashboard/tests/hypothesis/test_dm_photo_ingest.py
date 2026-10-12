@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from decimal import Decimal
 import io
 from unittest import mock
@@ -88,7 +88,7 @@ class DirectMessageAttachedPhotoTests(TestCase):
         photo = self._dm_photo(
             latitude=Decimal(str(_PIN_LAT + 0.0003)),
             longitude=Decimal(str(_PIN_LNG + 0.0003)),
-            taken_at=timezone.make_aware(datetime.datetime(2026, 6, 1, 12, 0, 0)),
+            taken_at=timezone.make_aware(dt.datetime(2026, 6, 1, 12, 0, 0)),
         )
 
         suggestion = maybe_suggest_photo_visit(photo)

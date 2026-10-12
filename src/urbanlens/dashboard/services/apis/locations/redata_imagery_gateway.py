@@ -13,7 +13,7 @@ from urbanlens.dashboard.services.apis.locations.redata_context_gateway import (
 from urbanlens.dashboard.services.core.gateway import read_capped
 
 if TYPE_CHECKING:
-    import datetime
+    import datetime as dt
 
     from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope
 
@@ -150,7 +150,7 @@ class RedataImageryGateway(RedataLocationContextGateway):
             self._raise_for_error_status(response, path)
         return read_capped(response, what="REData imagery")
 
-    def capture_time_series(self, asset_uuid: str, date: datetime.date, *, width: int = 1024, height: int = 1024) -> dict[str, Any] | None:
+    def capture_time_series(self, asset_uuid: str, date: dt.date, *, width: int = 1024, height: int = 1024) -> dict[str, Any] | None:
         """
         Materialize one date from a continuous (``time_series``) imagery source.
         Only meaningful for a result whose ``delivery`` is ``time_series`` (today, only ``nasa_gibs``) - its ``url`` is a range, not a picture, and this is what turns one date in that range into a real, permanently stored image.

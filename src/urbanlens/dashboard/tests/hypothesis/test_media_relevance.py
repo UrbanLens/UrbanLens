@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from itertools import count
 
 from django.utils import timezone
@@ -46,7 +46,7 @@ def _make_external_image(location: Location, item_key: str) -> Image:
 
 def _backdate(feedback: GamePhotoFeedback, *, days: float) -> None:
     """Age a feedback row. `created` is auto_now_add, so it needs a direct UPDATE."""
-    GamePhotoFeedback.objects.filter(pk=feedback.pk).update(created=timezone.now() - datetime.timedelta(days=days))
+    GamePhotoFeedback.objects.filter(pk=feedback.pk).update(created=timezone.now() - dt.timedelta(days=days))
 
 
 def _feedback(image: Image, profile: Profile, kind: str) -> GamePhotoFeedback:

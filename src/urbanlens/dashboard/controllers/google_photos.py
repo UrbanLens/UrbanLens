@@ -11,7 +11,7 @@ Two groups of views:
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import json
 import logging
 from typing import TYPE_CHECKING
@@ -149,7 +149,7 @@ class GooglePhotosCallbackView(LoginRequiredMixin, View):
             defaults={
                 "google_email": extract_email_from_id_token(tokens.get("id_token")),
                 "access_token": tokens["access_token"],
-                "token_expiry": timezone.now() + datetime.timedelta(seconds=expires_in),
+                "token_expiry": timezone.now() + dt.timedelta(seconds=expires_in),
             },
         )
         # A refresh token is only issued on fresh consent; keep the old one when Google omits it on a re-connect

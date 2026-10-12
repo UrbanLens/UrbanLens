@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from typing import TYPE_CHECKING
 
 from django.db.models import Q
@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 #: How long a recipient of an `@friend` recommendation can view the
 #: recommended profile as though they were friends, to decide whether to
 #: actually connect.
-FRIEND_RECOMMENDATION_ACCESS_DURATION = datetime.timedelta(days=1)
+FRIEND_RECOMMENDATION_ACCESS_DURATION = dt.timedelta(days=1)
 
 
 class ShareTargetNotFoundError(LookupError):
