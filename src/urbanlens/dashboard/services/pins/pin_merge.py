@@ -49,7 +49,7 @@ from urbanlens.dashboard.models.property_owner.model import PinOwner, PinPropert
 from urbanlens.dashboard.models.reviews.model import Review
 from urbanlens.dashboard.models.trips.model import TripActivity
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
-from urbanlens.dashboard.services.core.row_merge import repoint_references
+from urbanlens.dashboard.services.core.row_merge import column_field, repoint_references
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_NOTE_LENGTH
 
 if TYPE_CHECKING:
@@ -367,7 +367,7 @@ def _fold_owner(duplicate: PinOwner, kept: PinOwner) -> None:
         if not theirs or theirs == ours:
             continue
         if ours:
-            differing.append(f"{capfirst(PinOwner._meta.get_field(name).verbose_name)}: {theirs}")  # noqa: SLF001
+            differing.append(f"{capfirst(column_field(PinOwner, name).verbose_name)}: {theirs}")
         else:
             setattr(kept, name, theirs)
     kept.notes = _join_text(_join_text(kept.notes, duplicate.notes), "\n".join(differing)) or ""
@@ -803,7 +803,7 @@ def _has_value(pin: Pin, name: str) -> bool:
     Returns:
         True when the value is something a person or a pipeline set.
     """
-    model_field = pin._meta.get_field(name)  # noqa: SLF001
+    model_field = column_field(pin, name)
     value = getattr(pin, model_field.attname)
     if name == "custom_icon":
         return bool(pin.custom_icon) or bool(pin.custom_icon_upload)
@@ -825,7 +825,7 @@ def _display(pin: Pin, name: str) -> str:
     Returns:
         Readable text.
     """
-    model_field = pin._meta.get_field(name)  # noqa: SLF001
+    model_field = column_field(pin, name)
     value = getattr(pin, model_field.name)
     if model_field.choices:
         return str(dict(model_field.flatchoices).get(value, value))
@@ -853,7 +853,7 @@ def _merge_scalars(survivor: Pin, loser: Pin, record: _MergeRecord, labels: dict
 
     def take(name: str) -> None:
         for column in (name, *_COMPANIONS.get(name, ())):
-            attname = survivor._meta.get_field(column).attname  # noqa: SLF001
+            attname = column_field(survivor, column).attname
             value = getattr(loser, attname)
             # A file is taken by its stored name; the loser's FieldFile is bound to the loser.
             setattr(survivor, attname, value.name if isinstance(value, FieldFile) else value)
@@ -868,14 +868,14 @@ def _merge_scalars(survivor: Pin, loser: Pin, record: _MergeRecord, labels: dict
             loser_wins = not ours or (chosen_flag is not None and getattr(loser, chosen_flag) and not getattr(survivor, chosen_flag))
             dropped_from = survivor if loser_wins else loser
             if ours and _display(survivor, name) != _display(loser, name) and name not in _NOT_NOTED:
-                record.add(f"{capfirst(survivor._meta.get_field(name).verbose_name)} ({labels[dropped_from.pk]})", _display(dropped_from, name))  # noqa: SLF001
+                record.add(f"{capfirst(column_field(survivor, name).verbose_name)} ({labels[dropped_from.pk]})", _display(dropped_from, name))
             if loser_wins:
                 take(name)
         elif policy == _HIGHER:
             ours, theirs = getattr(survivor, name), getattr(loser, name)
             if ours != theirs:
                 lower_from = survivor if theirs > ours else loser
-                record.add(f"{capfirst(survivor._meta.get_field(name).verbose_name)} ({labels[lower_from.pk]})", str(getattr(lower_from, name)))  # noqa: SLF001
+                record.add(f"{capfirst(column_field(survivor, name).verbose_name)} ({labels[lower_from.pk]})", str(getattr(lower_from, name)))
                 if theirs > ours:
                     take(name)
         elif policy in _LOSER_REPLACES:

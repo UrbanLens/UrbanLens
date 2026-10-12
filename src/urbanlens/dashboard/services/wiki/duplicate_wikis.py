@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any
 from django.db import IntegrityError, transaction
 from django.db.models.fields.files import FieldFile
 
-from urbanlens.dashboard.services.core.row_merge import remaining_references, repoint_references, snapshot_row
+from urbanlens.dashboard.services.core.row_merge import column_field, remaining_references, repoint_references, snapshot_row
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.article.model import Article
@@ -79,7 +79,7 @@ def gap_filled_columns() -> list[str]:
 
 def _has_value(wiki: Wiki, name: str) -> bool:
     """Whether *wiki* holds a real value for column *name*, as opposed to an empty or default one."""
-    column = wiki._meta.get_field(name)  # noqa: SLF001
+    column = column_field(wiki, name)
     value = getattr(wiki, column.attname)
     if name == "pin_type" and wiki.pin_type_is_user_provided:
         return True
@@ -90,7 +90,7 @@ def _has_value(wiki: Wiki, name: str) -> bool:
 
 def _raw(wiki: Wiki, name: str) -> Any:
     """Column *name*'s stored value, JSON-safe enough for a snapshot."""
-    value = getattr(wiki, wiki._meta.get_field(name).attname)  # noqa: SLF001
+    value = getattr(wiki, column_field(wiki, name).attname)
     return value.name if isinstance(value, FieldFile) else value
 
 
@@ -109,7 +109,7 @@ def _merge_columns(kept: Wiki, absorbed: Wiki, result: WikiMergeResult) -> None:
         if ours and not chosen:
             continue
         for column in (name, *_COMPANIONS.get(name, ())):
-            attname = kept._meta.get_field(column).attname  # noqa: SLF001
+            attname = column_field(kept, column).attname
             setattr(kept, attname, getattr(absorbed, attname))
             changed.append(column)
     if changed:
@@ -291,6 +291,7 @@ def _untangle_nesting(kept: Wiki, absorbed: Wiki, result: WikiMergeResult) -> No
         kept.parent_wiki_id = absorbed.parent_wiki_id
         kept.save(update_fields=["parent_wiki", "updated"])
     for child in WikiModel.objects.filter(parent_wiki=absorbed).exclude(pk=kept.pk).order_by("pk"):
+        new_parent_id: int | None
         if not child.would_create_cycle(kept):
             new_parent_id = kept.pk
         else:

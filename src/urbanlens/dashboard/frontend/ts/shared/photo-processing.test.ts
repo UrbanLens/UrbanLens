@@ -152,7 +152,7 @@ describe("poller", () => {
             return statusResponse({ items: [], processing: [7] });
         });
         poller.watch(7, attached(document.createElement("li")), () => undefined);
-        await new Promise((resolve) => setTimeout(resolve, 60));
+        await settle(() => calls >= 3);
         expect(calls).toBe(3);
         expect(poller.size).toBe(1);
         poller.stop();
@@ -165,11 +165,24 @@ describe("poller", () => {
             return statusResponse({ items: [READY], processing: [] });
         });
         poller.watch(7, attached(document.createElement("li")), () => undefined);
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        await settle(() => calls >= 1);
         expect(calls).toBe(1);
         expect(poller.size).toBe(0);
     });
 });
+
+/**
+ * Wait until *reached* holds, then a little longer for any poll that should not come.
+ *
+ * A fixed sleep counted polls on a loaded CI runner before the 1 ms timers had all fired.
+ */
+async function settle(reached: () => boolean): Promise<void> {
+    const deadline = Date.now() + 2000;
+    while (!reached() && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    await new Promise((resolve) => setTimeout(resolve, 30));
+}
 
 describe("watching tiles", () => {
     test("a tile finds its status URL on an ancestor, and one poll per URL is shared", () => {
