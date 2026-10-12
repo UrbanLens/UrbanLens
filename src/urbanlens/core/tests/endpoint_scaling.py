@@ -107,10 +107,7 @@ class EndpointScalingMixin(InstantiationScalingMixin):
         Issue the request under test. Override for POST or a body.
 
         Args:
-            url: The URL to fetch. **extra: Passed to the test client.
-
-        Returns:
-            The response."""
+            url: The URL to fetch. **extra: Passed to the test client."""
         return self.client.get(url, **extra)
 
     def count_payload_rows(self, response: HttpResponse) -> int | None:
@@ -131,10 +128,7 @@ class EndpointScalingMixin(InstantiationScalingMixin):
         Fetch *url* once, reading every axis off the same request.
 
         Args:
-            url: The URL to measure. **extra: Passed to the test client.
-
-        Returns:
-            The sample."""
+            url: The URL to measure. **extra: Passed to the test client."""
         rows: list[int] = [0]
         with connection.execute_wrapper(_row_counting_wrapper(rows)), count_instantiations() as counted:
             response = self.request(url, **extra)

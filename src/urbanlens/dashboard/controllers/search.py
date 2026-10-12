@@ -81,13 +81,8 @@ def _get_profile(request: HttpRequest) -> Profile:
 
 
 #: How often one account may run a global search.
-#:
-#: The panel fires per keystroke, and each fire fans one query out to about
-#: eleven providers, each running a trigram-similarity scan over the account's
-#: rows that no index helps. Generous enough that nobody typing reaches it -
-#: a fast typist in a long word is well inside it - and low enough that a script
-#: cannot hold the pool open. Counted on GET, because GET is the expensive
-#: method here.
+#: Per-keystroke fan-out to ~eleven unindexed trigram scans; limit allows fast typing but not pool-holding scripts.
+#: Counted on GET, the expensive method here.
 GLOBAL_SEARCH_RATE = Rate(limit=120, window_seconds=60)
 
 #: Which methods the throttle counts for the panel.

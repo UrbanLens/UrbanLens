@@ -295,8 +295,8 @@ def probe_statement(model: type[Model], condition: Q, outer_pks: list[Any]) -> l
 
     ``outer_pks`` has to be a literal list and not ``queryset.values("pk")``, even though the
     subquery form is far cheaper to send and to plan: 17,010 bytes and 6.97 ms of planning become
-    361 bytes and 0.61 ms on the capacity population. Tried, and it fails the regression net P123
-    left behind - ``test_search_does_not_read_another_accounts_*``, nine of them. Given a subquery
+    361 bytes and 0.61 ms on the capacity population. The subquery form fails the regression net
+    ``test_search_does_not_read_another_accounts_*``, nine of them. Given a subquery
     the planner is free to drive from the far side of the join instead, filtering ``dashboard_labels``
     by name and joining back, which reads every label on the site: 545 rows where the literal list
     reads 5. The crossing table stays fine either way; it is the table the *condition* names that
@@ -306,7 +306,7 @@ def probe_statement(model: type[Model], condition: Q, outer_pks: list[Any]) -> l
     answers: this is exactly the shape Postgres's cost-based planner tie-breaks towards a
     sequential scan of the crossing table once that table is small enough to fit in a handful of
     pages, regardless of how selective ``pk__in=outer_pks`` actually is - legitimate, documented
-    behaviour for tiny tables, but one that reintroduces exactly the cost P123 is about for as long
+    behaviour for tiny tables, but one that reintroduces exactly the full-scan cost above for as long
     as that population stays in the small-table range. Measured directly: at ~400 unrelated rows
     Postgres chooses ``Seq Scan ... filter=(pin_id=1) removed=402`` over the available FK index; at
     20,000 rows the identical statement chooses ``Index Only Scan idx_cond=(pin_id=1) removed=0``.

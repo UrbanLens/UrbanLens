@@ -49,14 +49,9 @@ if ! docker inspect "$CONTAINER" >/dev/null 2>&1; then
     exit 2
 fi
 
-# Crash-looping containers only accept exec in brief windows; wait for one.
-#
-# Where there is a healthcheck, wait for it rather than for the first window: a container part way
-# through its entrypoint accepts exec while its workers are still spawning, and syncing into that
-# swaps the tree out from under a worker that then reads a file it does not own yet. The chown
-# lands a moment later and the container is already crash-looping, which reads as a bad sync
-# rather than a badly timed one. Unhealthy after the wait is still synced - that is the case the
-# brief-window handling exists for.
+# Wait for an exec window; prefer healthcheck over first window.
+# Syncing mid-entrypoint swaps the tree under spawning workers, reading as a bad sync.
+# Unhealthy after the wait is still synced.
 wait_for_exec() {
     local container="$1" attempt health
     for attempt in $(seq 1 60); do
@@ -78,11 +73,9 @@ wait_for_exec() {
     return 1
 }
 
-# Every other running container in the same compose project that carries a copy of the source.
-#
-# Found by looking for the app image's own interpreter rather than by image id: each app-family
-# service is its own compose service with its own build, so daphne and the workers run different
-# images from the same tree. nginx mounts `/app` too, which is why the test is the interpreter.
+# Other running containers in same compose project carrying a source copy.
+# Match by app interpreter, not image id: services build different images from same tree;
+# nginx mounts `/app` too.
 siblings_of() {
     local container="$1" project name
     project=$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "$container")

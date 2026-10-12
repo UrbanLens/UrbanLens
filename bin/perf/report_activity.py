@@ -65,9 +65,7 @@ def summarise(rows: list[dict[str, str]]) -> ActivitySummary:
 
     Args:
         rows: Parsed CSV rows.
-
-    Returns:
-        The summary."""
+    """
     per_second: dict[str, int] = collections.defaultdict(int)
     idle_per_second: dict[str, int] = collections.defaultdict(int)
     breakdown: dict[str, collections.Counter[str]] = collections.defaultdict(collections.Counter)

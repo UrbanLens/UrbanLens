@@ -62,7 +62,7 @@ class MarkupMapShareCreateView(LoginRequiredMixin, View):
         """
         sender, _ = Profile.objects.get_or_create(user=request.user)
         markup_map = get_object_or_404(MarkupMap, uuid=map_uuid, profile=sender)
-        # Among the sender's connections, so an id nobody holds and a stranger's are refused alike (P280).
+        # Among the sender's connections, so an id nobody holds and a stranger's are refused alike.
         recipient = Profile.objects.filter(Profile.connections_q(sender), pk=safe_int_or_none(request.POST.get("profile_id"))).first()
         if recipient is None:
             return HttpResponse(NOT_CONNECTED_MESSAGE, status=403)

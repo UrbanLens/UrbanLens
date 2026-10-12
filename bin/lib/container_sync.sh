@@ -18,21 +18,13 @@
 #
 # Callers set `set -euo pipefail` themselves; this file deliberately does not.
 
-# A `find` expression naming the files whose container copy must match the host
-# exactly - the hand-written source a run reads. Python, plus the template tree,
-# which is rendered by name and which nothing generates.
-#
-# Deliberately not "every file": the container's tree legitimately holds
-# artefacts the host does not (bytecode, collected/compressed static assets).
-# `__pycache__` is excluded for the same reason. Used unquoted via `eval`,
-# so it must stay a literal constant.
+# Hand-written source that must match in container: Python + templates.
+# Excludes container-only artefacts (bytecode, static assets, __pycache__).
+# Must stay literal: used unquoted via `eval`.
 SOURCE_FILES="\\( -name '*.py' -o \\( -path '*/templates/*' -name '*.html' \\) \\) -not -path '*/__pycache__/*'"
 
-# Paths under src/ the copy must not write into, relative to src/. Empty by
-# default - the test runner mounts nothing under /app/src, so everything there
-# is the container's own to overwrite. A caller that syncs into a container with
-# volumes mounted inside the tree sets this; see bin/sync_app.sh for why that is
-# not optional there.
+# Paths under src/ not to overwrite, relative to src/. Empty by default.
+# Set when target has volumes mounted inside tree; see bin/sync_app.sh.
 SYNC_EXCLUDES=()
 
 # Copy the working tree into a container and leave it owned by the app user.
@@ -62,14 +54,9 @@ sync_tree_into() {
     # without this they error against the image's stale copy.
     docker cp bin/. "$container":/app/bin/ || return 1
 
-    # Deployment files, for the same reason: tests assert on the topology
-    # (compose files, Dockerfile) by path, and they are baked into the image,
-    # not bind-mounted. Sync every tracked root file rather than a list - a
-    # list silently goes stale when a test starts reading a new one.
-    #
-    # These sit directly in /app, which is root's, so this is the one step appuser cannot do.
-    # Ownership is then restored where the container still has CAP_CHOWN; where it does not they
-    # stay root-owned and world-readable, which is all a test that reads them needs.
+    # Root deployment files: tests read them by path and they are baked into image, so sync all tracked ones.
+    # /app is root-owned so extract as root; chown back where CAP_CHOWN allows,
+    # else root-owned world-readable suffices for reading tests.
     local root_files
     root_files=$(git ls-files 2>/dev/null | grep -v "/" || true)
     if [ -n "$root_files" ]; then
@@ -90,12 +77,8 @@ sync_tree_into() {
     # either is a bad fixture, not the wrong code under test.
     docker cp sample_data/. "$container":/app/sample_data/ 2>/dev/null || true
 
-    # The workflow files, for the same reason and by the same argument as the
-    # root files above: they are baked into the image, a test reads them
-    # (test_typecheck_dependencies_are_installed), and a stale copy makes the
-    # run look verified while asserting against whatever the image was built
-    # with. Whole directory rather than a list, because picking the file a
-    # future test will read is the judgement that keeps being got wrong.
+    # Workflow files: baked into image and read by tests; sync whole dir,
+    # not a list, to avoid a stale copy looking verified.
     docker cp .github/. "$container":/app/.github/ 2>/dev/null || true
 
     # Belt and braces: extracting as appuser already leaves the tree owned correctly, and this
@@ -107,11 +90,7 @@ sync_tree_into() {
     prune_deleted_from "$container"
 }
 
-# Remove source files the container still has and the host no longer does.
-#
-# `docker cp` only ever adds and overwrites: a deleted module still satisfies
-# the import that should have broken, and a deleted template still renders.
-#
+# Remove container source files deleted on host (`docker cp` only adds/overwrites).
 # Args:
 #   $1: container name.
 prune_deleted_from() {
@@ -129,13 +108,10 @@ prune_deleted_from() {
     fi
 }
 
-# Fail unless the container's source tree is identical to the host's.
-#
+# Fail unless container source matches host.
 # Args:
 #   $1: container name.
-#
-# Returns:
-#   0 when the trees match; 1 with a diff on stderr when they do not.
+# Returns: 0 on match; 1 with diff on stderr otherwise.
 verify_parity_with() {
     local container="$1"
     echo "==> verifying host and container agree"
@@ -146,11 +122,8 @@ verify_parity_with() {
     (cd src && eval "find . $SOURCE_FILES" | sort) > "$host_list"
     docker exec "$container" sh -c "cd /app/src && find . $SOURCE_FILES | sort" > "$container_list"
 
-    # Cleaned up explicitly rather than with `trap ... RETURN`: a RETURN trap
-    # stays armed past the function that set it, so calling this through a
-    # one-line wrapper fires it a second time with the locals already gone and
-    # `set -u` turns that into "host_list: unbound variable" from a line that
-    # does not mention it.
+    # No `trap ... RETURN`: it stays armed past this function and re-fires in wrappers after locals are gone.
+    # Explicit rm avoids a `set -u` unbound-variable failure.
     if ! diff -q "$host_list" "$container_list" >/dev/null; then
         echo "error: host and container differ - the run would use the wrong code:" >&2
         diff "$host_list" "$container_list" | head -20 >&2

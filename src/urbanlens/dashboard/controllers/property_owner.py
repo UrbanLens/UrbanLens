@@ -496,10 +496,7 @@ class WikiPropertySaleTabView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.wiki.concealment import visible_rows
 
         def get_or_create(name: str) -> WikiOwner:
-            # visible_rows, not an unfiltered lookup: the sale record this helper feeds is the concealed
-            # viewer's own and therefore always rendered back to them - reusing a stranger's invisible WikiOwner
-            # would put that stranger's real name/contact directly into the concealed viewer's own,
-            # fully-visible Sale History row.
+            # Filter by visible_rows so a new sale row cannot expose another viewer's hidden owner name/contact.
             owner = visible_rows(WikiOwner.objects.for_location(location), wiki, profile).filter(name__iexact=name).first()
             if owner is None:
                 owner = WikiOwner.objects.create(name=name, created_by=profile)

@@ -93,12 +93,9 @@ def _ttl_for_absence(z: int) -> int:
 #: empty answer into a permanent hole in the map.
 _NO_TILE = "__ul_no_tile__"
 
-#: REData's 400 for a layer it publishes as a vector style rather than as tiles (its ``D11``). An
-#: answer about the layer, not the coordinate, so it is neither cacheable per tile nor something the
-#: catalogue that advertised the layer as raster should outlive.
-#: Live, not defensive: ``redata.urbanlens.org`` answers ``street`` and ``dark`` this way today,
-#: whatever REData's ``D15`` and ``T9`` say about every layer carrying both shapes. Without this
-#: branch such an answer falls through to the definitive-404 one and holds a week-long hole.
+#: REData's 400 for a layer published as a vector style rather than tiles: about the layer,
+#: not the coordinate, so not cacheable per tile; the advertising catalogue is the stale thing.
+#: Without this branch such an answer falls through to the definitive-404 path and is cached a week.
 _VECTOR_LAYER_REFUSAL = b"vector_layer_not_served"
 
 
@@ -185,12 +182,9 @@ def _keep_for(response: HttpResponse, ttl: int = _TILE_CACHE_TTL) -> HttpRespons
     Returns:
         The same response.
     """
-    # private: the endpoint is behind a login, so a shared cache holding the answer would hand it to
-    # anyone - and a cache hit there says that somebody here has looked at that coordinate.
+    # private: behind a login, a shared cache would leak answers and reveal viewed coordinates.
     response.headers["Cache-Control"] = f"private, max-age={ttl}, immutable"
-    # The type the upstream declared is allow-listed before it gets here; this is the other half,
-    # for bytes that do not match the type they were allowed under. nginx sets it on the media
-    # routes only, and this one is csp_exempt.
+    # nosniff is set here because nginx sets it on media routes only and this view is csp_exempt.
     response.headers["X-Content-Type-Options"] = "nosniff"
     return mark_viewer_independent(response)
 
@@ -254,12 +248,10 @@ class BasemapTileView(AccessMixin, View):
         cache_key = basemap_tile_cache_key(layer, z, x, y)
         session_key = session_key_for(request)
         auth_key = tile_auth_key(session_key) if session_key else None
-        # One round trip for both: the tile is useless without the gate and the gate costs nothing
-        # to carry alongside it.
+        # One round trip: tile needs the gate, carrying it costs nothing extra.
         found = bounded_cache.get_many_or_empty([auth_key, cache_key] if auth_key else [cache_key], label=f"Basemap tile {layer} {redact_tile(z, x, y)}")
 
         if auth_key is None or auth_key not in found:
-            # Nothing remembered about this session, so ask properly - and remember the answer.
             if not request.user.is_authenticated:
                 return self.handle_no_permission()
             if session_key:
@@ -269,19 +261,16 @@ class BasemapTileView(AccessMixin, View):
         if cached is not None:
             if cached == _NO_TILE:
                 return _keep_for(HttpResponse(status=404), _browser_ttl(layer, _ttl_for_absence(z)))
-            # The vendor's own content type is cached with the bytes: these layers are not all PNG, and
-            # mislabelling a JPEG or WebP on the cache-hit path but not the fresh one is the kind of difference
-            # that shows up only once a layer is already in the cache.
+            # Cache the vendor content type with the bytes: layers are not all PNG.
+            # Mislabelling only shows once a layer is cached.
             body, content_type = cached
             return _keep_for(HttpResponse(body, content_type=content_type), _browser_ttl(layer, _ttl_for(z)))
 
         with UpstreamSlots.hold() as slot:
             if not slot:
-                # Uncached, like every other 503 here: the tile is fine, this process is just
-                # already fetching as many as it is allowed to at once. Retry-After says so - the
-                # client paces its requests to this budget and retries what it is still refused
-                # (`frontend/ts/shared/own-tiles.ts`) rather than leaving a hole in the map, since a
-                # viewport-sized burst asks for far more tiles at once than there are slots.
+                # Uncached 503: tile is fine, process is at its fetch budget. Retry-After tells the
+                # client (`frontend/ts/shared/own-tiles.ts`) to pace retries rather than leave a hole,
+                # since a viewport burst asks for far more tiles than slots.
                 return HttpResponse(status=503, headers={"Retry-After": "1"})
             try:
                 status, body, content_type = _fetch_tile(layer, z, x, y)
@@ -289,11 +278,9 @@ class BasemapTileView(AccessMixin, View):
                 # The exception's text is the request URL, which carries the tile's own z/x/y.
                 logger.warning("Basemap tile fetch failed for %s %s: %s", layer, redact_tile(z, x, y), type(exc).__name__)
                 if isinstance(exc, ServiceDisabledError):
-                    # Switched off rather than busy or unreachable, so it will still be switched off
-                    # for as long as the catalogue advertising these layers stays cached - and a map
-                    # draws what the catalogue named and nothing else. A rate limit deliberately
-                    # does not land here: being over budget for a minute is not worth trading the
-                    # layers, or the REData call that rebuilding the catalogue costs.
+                    # Still switched off while the advertising catalogue stays cached, and maps draw only
+                    # what the catalogue named. Rate limits do not land here: a minute over budget is not
+                    # worth the REData call rebuilding the catalogue costs.
                     from urbanlens.dashboard.services.map.basemap_catalogue import forget_basemap_tile_catalogue
 
                     forget_basemap_tile_catalogue()
@@ -302,32 +289,25 @@ class BasemapTileView(AccessMixin, View):
         if status == 200:
             resolved_type = servable_tile_type(content_type)
             if resolved_type is None:
-                # Not cached, and not a retryable status: the upstream will answer the next
-                # coordinate the same way, and a viewport retrying five times each would turn one
-                # broken layer into 150 calls. Uncached so a fixed upstream is visible at once.
+                # Uncached: upstream answers every coordinate the same way, and viewport retries would
+                # turn one broken layer into 150 calls; uncached so a fix shows at once.
                 logger.warning("REData answered %s %s with %r, which this origin will not serve", layer, redact_tile(z, x, y), content_type)
                 return HttpResponse(status=404)
-            # Bounded like the Immich thumbnail proxy: these bytes come from a
-            # vendor and land in the same shared Dragonfly that holds sessions
-            # and the Channels layer - and a full store there raises rather
-            # than evicting to make room, so one surprise must not turn into
-            # failed cache writes for everyone sharing the store.
-            # The helper also swallows a cache failure - a full or unreachable
-            # Dragonfly is a degraded cache, not a broken map.
+            # Bounded: bytes land in shared Dragonfly holding sessions/layer, which raises rather than
+            # evicting when full, so one surprise must not break cache writes for everyone.
+            # Helper swallows cache failure: full/unreachable Dragonfly degrades the cache, not the map.
             bounded_cache.set_if_small(cache_key, body, resolved_type, _ttl_for(z), label=f"Basemap tile {layer} {redact_tile(z, x, y)}")
             return _keep_for(HttpResponse(body, content_type=resolved_type), _browser_ttl(layer, _ttl_for(z)))
         if status == 400 and _VECTOR_LAYER_REFUSAL in body:
-            # Same reasoning as the disabled-service branch above: the catalogue is what named this
-            # layer as raster, so it is the stale thing. Remembering the refusal per coordinate
-            # instead would keep answering 404 for a week after the layer is servable again.
+            # Catalogue named this layer raster, so it is the stale thing; per-coordinate refusal would
+            # answer 404 for a week after the layer is servable again.
             from urbanlens.dashboard.services.map.basemap_catalogue import forget_basemap_tile_catalogue
 
             logger.warning("REData now publishes %s as a vector layer; dropping the cached tile catalogue", layer)
             forget_basemap_tile_catalogue()
             return HttpResponse(status=404)
         if status in (400, 404):
-            # A definitive answer about the request: no such tile, unknown
-            # layer, or coordinates out of range. Safe to remember.
+            # Definitive about the request, so safe to remember.
             bounded_cache.set_or_skip(cache_key, _NO_TILE, _ttl_for_absence(z), label=f"Basemap tile {layer} {redact_tile(z, x, y)} (absent)")
             return _keep_for(HttpResponse(status=404), _browser_ttl(layer, _ttl_for_absence(z)))
         logger.warning("Basemap tile upstream status %s for %s %s", status, layer, redact_tile(z, x, y))

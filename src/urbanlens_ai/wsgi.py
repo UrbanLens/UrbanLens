@@ -24,11 +24,9 @@ logger = logging.getLogger("urbanlens_ai")
 # any request) rather than on whatever request happens to arrive first.
 get_config()
 
-#: A text-only chat turn is a few KB. The ceiling is sized for the one case
-#: that legitimately needs more - a vision call carrying a base64 image
-#: (``policy.MAX_IMAGE_BYTES`` bounds the image itself, and base64 inflates
-#: it by a third) - and still bounds memory in what gunicorn runs as a
-#: single worker process (see the compose command: ``-w 1``).
+#: Sized for vision calls carrying a base64 image (base64 inflates
+#: ``policy.MAX_IMAGE_BYTES`` by a third) while bounding memory in the
+#: single gunicorn worker (``-w 1``).
 MAX_REQUEST_BYTES = 4 * 1024 * 1024
 
 StartResponse = Callable[[str, list[tuple[str, str]]], object]

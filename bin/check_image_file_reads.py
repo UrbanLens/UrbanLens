@@ -65,9 +65,7 @@ def _unguarded(text: str) -> list[tuple[int, str]]:
     Returns:
         ``(line number, the expression read)`` for each unguarded read."""
     text = _blank_out(_COMMENT_LINE, _blank_out(_COMMENT_BLOCK, text))
-    # One entry per open block: the expressions that block's own tag guards.
-    # An `{% else %}` replaces the top entry, since the guard does not hold in
-    # its own else-branch.
+    # `{% else %}` replaces top entry: guard does not hold in its own else-branch.
     stack: list[set[str]] = []
     found: list[tuple[int, str]] = []
 
@@ -78,11 +76,7 @@ def _unguarded(text: str) -> list[tuple[int, str]]:
     for match in _SCAN.finditer(text):
         if match.group("tag"):
             name, body = match.group("tagname"), match.group("tagbody")
-            # A tag can carry a read of its own: the pin page passes its cover
-            # photo through `{% include ... with hero_image_url=... %}`, which
-            # is where this whole class of bug was found. Checked against the
-            # stack as it stands *before* the tag, since a tag cannot guard
-            # itself.
+            # Check tag's own read first: a tag cannot guard itself.
             for read in _READ.finditer(body):
                 report(read.group(1), match.start() + read.start())
             if name in _OPENERS:

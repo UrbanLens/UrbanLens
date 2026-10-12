@@ -48,7 +48,7 @@ def resolve_environment(explicit: str | None, *, environ: Mapping[str, str] | No
     The environment this start is for: ``--environment``, else ``UL_ENVIRONMENT``, else the checkout's ``.env``.
 
     The ``.env`` is read the way ``settings.base`` reads it, never over a variable the process already has, so the
-    ``manage.py`` children agree with this script. Unset used to mean production; since 2026-10-07 it refuses.
+    ``manage.py`` children agree with this script; unset or blank is refused.
 
     Args:
         explicit: The ``--environment`` argument, if given.

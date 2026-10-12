@@ -449,14 +449,11 @@ class LocationWikiEditView(LoginRequiredMixin, View):
 
         body = posted_fields(request)
 
-        # apply_wiki_edit mutates and saves the row it is given, so it needs the real one: resolve_visible_wiki
-        # hands back a concealed projection to a gated viewer, and saving that would persist their redacted view
-        # over what the community actually wrote.
+        # Save the real row: wiki may be a concealed projection that must not persist.
         target = writable_wiki(wiki)
         base_revision_id = safe_int_or_none(body.pop("base_revision_id", None))
         try:
-            # baseline=wiki: the dialog was prefilled from the projection and
-            # posts every field, touched or not.
+            # Dialog posts every field, so diff against the prefilled projection.
             edit = apply_wiki_edit(target, profile, body, baseline=wiki, base_revision_id=base_revision_id)
         except WikiEditValidationError as exc:
             logger.info("wiki edit rejected for %s by profile %s: %s", wiki.pk, profile.pk, exc.message)
@@ -468,9 +465,7 @@ class LocationWikiEditView(LoginRequiredMixin, View):
             return JsonResponse({"ok": True, "message": "No changes detected.", "revision": wiki_revision_marker(target)})
         changes = edit.changes
 
-        # Description, dates, and security indicators all render together in the "About" card - send back the
-        # freshly-rendered fragment so the client can swap it in place instead of leaving edited-but-unrendered
-        # fields stale.
+        # About card combines several fields; return it for in-place swap.
         about_html = render_to_string(
             "dashboard/partials/wiki/_wiki_about_card.html",
             {"wiki": conceal_wiki(target, profile), "wiki_links": visible_rows(target.links.all(), target, profile)},
@@ -493,15 +488,12 @@ def _render_history(request, location: Location, wiki: Wiki):
     edits = wiki.edits.select_related("editor__user", "reverted_by").order_by("-created")
 
     conceal = concealment_active(wiki, profile)
-    # Narrowed before paginating: a page taken over the unfiltered history
-    # would be short by however many of its rows concealment then removed.
+    # Filter before paginating so pages stay full after concealment removes rows.
     page = get_page(request, conceal_rows(edits, profile) if conceal else edits, _HISTORY_PAGE_SIZE)
-    # Materialised before mutating: a queryset re-runs its query on each iteration, so redacting in place and
-    # handing the page to the template would render the unredacted rows from a second fetch.
+    # Materialise before redacting: the queryset would re-fetch unredacted rows.
     rows: Any = list(page.object_list)
     if conceal:
-        # Two separate problems here. That half survives a perfect read gate, because it lands in content the
-        # rules promise always to show.
+        # Redact changes that survive the read gate in always-shown content.
         for edit in rows:
             edit.changes = redact_edit_changes(edit.changes)
 

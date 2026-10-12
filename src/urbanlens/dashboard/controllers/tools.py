@@ -319,16 +319,10 @@ class ExportDownloadView(LoginRequiredMixin, View):
         disposition = f'attachment; filename="urbanlens_export_{today}.zip"'
 
         if getattr(settings, "MEDIA_X_ACCEL", False):
-            # An export is every photo the account owns, and nginx only absorbs
-            # a response up to proxy_max_temp_file_size before matching the
-            # client's pace - so streaming it through here holds a worker for
-            # the length of somebody's download. Hand nginx the path instead,
-            # exactly as the media gate does. Content-Disposition is on the set
-            # nginx forwards through an X-Accel-Redirect (measured; see
-            # config/nginx/media.conf.template), so the filename survives.
-            #
-            # job_id is a parsed uuid by this point, so the path cannot escape
-            # the internal location.
+            # Hand nginx the path as the media gate does: streaming ties up a worker
+            # past proxy_max_temp_file_size. Content-Disposition survives X-Accel-Redirect
+            # (see config/nginx/media.conf.template).
+            # job_id is a parsed uuid, so the path cannot escape the internal location.
             handoff = HttpResponse()
             del handoff["Content-Type"]
             handoff["X-Accel-Redirect"] = f"{settings.MEDIA_X_ACCEL_PREFIX}exports/{job_id}/export.zip"

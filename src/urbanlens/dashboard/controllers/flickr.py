@@ -207,11 +207,9 @@ class PinFlickrSearchView(LoginRequiredMixin, View):
                 dates = visit_dates_for_pin(pin)
                 if not dates:
                     return render(request, _PICKER_PARTIAL, {**context, "assets": [], "empty_message": "No recorded visits for this pin yet."})
-                # One search per visit date, because Flickr's taken-date filter
-                # takes a range rather than a set of days. The per-call timeout
-                # bounds each of up to MAX_VISIT_DATES calls and nothing bounded
-                # their sum, so every inner timeout could be respected while the
-                # request itself ran for minutes.
+                # One search per visit date: Flickr's taken-date filter takes a range, not a set of days.
+                # Per-call timeouts bound each of up to MAX_VISIT_DATES calls, not their sum, so the
+                # outer deadline still applies.
                 photos = call_with_deadline(lambda: gateway.search_by_dates(dates), timeout=EXTERNAL_CALL_DEADLINE, default=None, name="flickr_search_by_dates")
             elif mode == PhotoImportMode.ALL:
                 photos = call_with_deadline(gateway.list_recent, timeout=EXTERNAL_CALL_DEADLINE, default=None, name="flickr_list_recent")

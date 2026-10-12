@@ -99,9 +99,6 @@ def resolve_sources_scope(request: HttpRequest, *, pin_slug: str = "", location_
         pin_slug: Selects pin scope: one of the requester's own pins.
         location_slug: Selects wiki scope.
 
-    Returns:
-        The scope.
-
     Raises:
         Http404: The pin is not the requester's, or the wiki is not visible to them.
     """

@@ -261,9 +261,6 @@ def _before_id(request: Request) -> int | None:
     """
     Read the ``before`` cursor from the query string.
 
-    Args:
-        request: The request.
-
     Returns:
         The message id to page back from, or None for the most recent page.
     """
@@ -602,7 +599,7 @@ class GroupsView(ExternalApiView):
         profile = request.user.profile
 
         slugs = serializer.validated_data["member_slugs"]
-        # Only those who would take a message from the caller, so a hidden account is refused as no one is (P280).
+        # Only those who would take a message from the caller, so a hidden account is refused as no one is.
         members = list(Profile.objects.select_related("user").filter(Profile.accepts_messages_from_q(profile) | Q(pk=profile.pk), slug__in=slugs))
         if set(slugs) - {member.slug for member in members}:
             return Response({"error": MEMBER_UNAVAILABLE_MESSAGE}, status=403)
@@ -912,7 +909,7 @@ class GroupMembersView(ExternalApiView):
         serializer = GroupMembersSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         slugs = serializer.validated_data["member_slugs"]
-        # Only this group's members, so a name nobody holds and an account outside the group answer alike (P280).
+        # Only this group's members, so a name nobody holds and an account outside the group answer alike.
         targets = list(Profile.objects.select_related("user").filter(slug__in=slugs, pk__in=group.active_memberships().values("profile_id")))
         if set(slugs) - {member.slug for member in targets}:
             return Response({"error": "They aren't a member of this group."}, status=400)

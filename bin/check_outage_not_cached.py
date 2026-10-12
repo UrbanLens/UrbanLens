@@ -12,9 +12,7 @@ SEARCH_ROOT = REPO_ROOT / "src" / "urbanlens"
 
 #: Functions whose job is "get data from a source and store it". Named rather
 #: than inferred: a function that caches is not automatically suspect - one that
-#: caches *what it just fetched* is. ``fetch`` alone missed
-#: ``get_satellite_slides``, which cached an empty carousel after its provider
-#: failed, so the list grew when that surfaced rather than staying a guess.
+#: caches *what it just fetched* is.
 _CHECKED_FUNCTIONS = frozenset({"fetch", "get_satellite_slides", "get_street_view_slides"})
 
 #: Calls that persist a fetch's result. Matched on attribute name so a caller

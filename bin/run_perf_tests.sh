@@ -212,7 +212,7 @@ if [[ -n "${SAMPLER_PID}" ]]; then
 	wait "${SAMPLER_PID}" 2>/dev/null || true
 	trap - EXIT
 	# The pool is the other half of the verdict. Latency can look survivable
-	# while one account holds every connection - that is what P104 was.
+	# while one account holds every connection.
 	docker logs "${DB_CONTAINER}" >"${OUT_DIR}/db.log" 2>&1 || true
 	python3 "${REPO_ROOT}/bin/perf/report_activity.py" "${OUT_DIR}/pg_activity.csv" \
 		--fail-on-pressure --db-log "${OUT_DIR}/db.log" || POOL_STATUS=$?

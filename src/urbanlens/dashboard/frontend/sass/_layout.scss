@@ -454,11 +454,8 @@ div.section {
         }
     }
 
-    // Hovering anywhere in the strip (not just the one button under the
-    // cursor) lifts every resting button partway out of its dim, so the row
-    // reads as "there's more here" before the pointer settles on one of them.
-    // Active/colored buttons are excluded - their own rules already hold them
-    // at full visibility and must not be pulled back down to this partial one.
+    // Hovering the strip previews all resting buttons so the row reads as interactive.
+    // Excludes active/colored buttons, which stay at full visibility.
     &:hover .sf-toolbar-btn:not(.active):not(.sf-toolbar-btn--colored),
     &:focus-within .sf-toolbar-btn:not(.active):not(.sf-toolbar-btn--colored) {
         opacity: .8;

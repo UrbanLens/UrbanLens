@@ -716,7 +716,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         ``fingerprint`` is the value to compare; ``last_updated`` is kept because it is the timestamp it
         claims to be and callers may want it, but it cannot answer the question on its own - deleting any
         pin other than the most recently updated one leaves it unchanged, so a pin deleted in another tab
-        stayed on the map (P106's sibling).
+        stayed on the map.
 
         Returns:
             JsonResponse: ``{"fingerprint": "<opaque>", "last_updated": "<ISO timestamp>" | null,

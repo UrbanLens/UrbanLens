@@ -58,8 +58,7 @@ def uniform_exception_handler(exc: Exception, context: dict[str, Any]) -> Respon
         The normalized response, or ``None`` for an exception DRF itself declines to handle (which
         Django then turns into a 500).
     """
-    # Before DRF's handler, which returns None for anything that is not an APIException - and Django renders
-    # that as a 500. Mapped once rather than in each view so a view added later inherits it.
+    # Handled before DRF so non-APIExceptions don't become 500s; centralized for future views.
     if isinstance(exc, MessageRateLimitedError):
         logger.info("external API message send rate-limited: %s", exc)
         return Response({"error": "You're sending messages too quickly. Wait a moment and try again."}, status=429)
@@ -70,15 +69,12 @@ def uniform_exception_handler(exc: Exception, context: dict[str, Any]) -> Respon
     if response is None:
         return None
 
-    # Collapse every not-found - Http404, NotFound, and any subclass - onto one constant body. Done before
-    # inspecting response.data so a detail message attached upstream can never survive into the response.
+    # Discard upstream detail so all not-founds share one body.
     if isinstance(exc, (Http404, NotFound)):
         response.data = dict(NOT_FOUND_BODY)
         return response
 
-    # Same reasoning as the 404 collapse above: discard whatever message DRF's parser attached (its exact
-    # wording depends on which parser ran and where in the request cycle it failed - see
-    # MALFORMED_JSON_BODY_MESSAGE) so every unparseable body renders identically regardless of cause.
+    # Discard parser wording so all malformed bodies render identically.
     if isinstance(exc, ParseError):
         response.data = {"error": MALFORMED_JSON_BODY_MESSAGE}
         return response
@@ -87,15 +83,11 @@ def uniform_exception_handler(exc: Exception, context: dict[str, Any]) -> Respon
     if isinstance(data, dict):
         detail = data.get("detail")
         if detail is not None and len(data) == 1:
-            # DRF's single-message shape ({"detail": "..."}) - e.g. throttling,
-            # permission denied, method not allowed.
             response.data = {"error": str(detail)}
         else:
-            # Field-keyed validation errors. Stringify the leaf messages so the
-            # payload is plain JSON rather than DRF's ErrorDetail instances.
+            # Stringify leaves for plain JSON, not ErrorDetail.
             response.data = {"error": INVALID_REQUEST_MESSAGE, "fields": _stringify(data)}
     elif isinstance(data, list):
-        # A serializer raising a bare non-field error yields a list.
         response.data = {"error": INVALID_REQUEST_MESSAGE, "fields": {"non_field_errors": _stringify(data)}}
 
     return response

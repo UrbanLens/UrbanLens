@@ -261,11 +261,8 @@ unfixable = ["RUF100"]
     "PLR09",   # too-many-...
     "PLR2004", # magic values
 ]
-# An __init__.py is a re-export surface: every name it imports is imported so
-# that someone else can import it from here, which is exactly what F401 calls
-# unused. 819 of the tree's 1,063 F401 hits were in these 163 files. Import
-# ORDER is deliberately still checked - it was verified safe by applying the
-# fixes and running `manage.py check` in the app container.
+# __init__.py files are re-export surfaces, so F401 does not apply.
+# Import order is still checked.
 "**/__init__.py" = [
     "F401",   # every import here IS the re-export; 110 of 163 have no __all__
     "F403",   # `from .x import *` - prospective re-export
@@ -310,12 +307,8 @@ dev = [
     # percentage that moves too slowly to mean anything on any one commit.
     "diff-cover~=10.5.1",
     "django-debug-toolbar>=7.0,<8.1",
-    # Records each covered view's query *fingerprint* to a checked-in .perf.yml,
-    # so an N+1 arrives as a reviewable diff. Chosen over a runtime detector
-    # (`nplusone`) because that one has not shipped since 2019, and because
-    # `django-auto-prefetch` already suppresses the access pattern such a
-    # detector watches for - which would make it quiet precisely where this
-    # codebase's N+1s actually came from. See core/tests/query_scaling.py.
+    # Records each view's query fingerprint to checked-in .perf.yml for reviewable N+1 diffs.
+    # Runtime detectors miss this codebase's N+1s; see core/tests/query_scaling.py.
     "django-perf-rec~=4.31.0",
     "django-stubs>=6.0.5,<6.2.0",
     "django-stubs-ext>=6.0.5,<6.2.0",
@@ -339,11 +332,8 @@ dev = [
     "pytest-django>=4.12,<4.15",
     # Installed but disabled in `addopts`; `bin/run_tests.sh --shuffle` enables it.
     "pytest-randomly>=4.1,<5.1",
-    # Parallel test workers. CI runs the suite under it (see docs/TOOLING.md).
-    # Off by default locally: each worker takes its own database, so the
-    # multiplier applies to database *setup* as well, and the local Postgres has
-    # been observed to fall over under exactly this load. Use it in the
-    # container, via `bin/run_tests.sh --parallel`.
+    # Parallel test workers; CI only (see docs/TOOLING.md).
+    # Off locally: each worker needs its own DB; use `bin/run_tests.sh --parallel` in container.
     "pytest-xdist~=3.8.0",
     "ruff>=0.16.10,<0.17.0",
     # Property-based conformance testing against the published OpenAPI document.
@@ -376,12 +366,8 @@ show_error_code_links = true
 pretty = true
 plugins = ["mypy_django_plugin.main"]
 ignore_missing_imports = true
-# These are unanchored REGEXES, not globs, so a literal dot has to be escaped.
-# `.github/` matched any path containing <anychar>github/, which silently
-# excluded services/apis/infra/github/ - production code that had therefore
-# never been type-checked at all.
-# `/__init__.py` used to be here too; those files hold ~123 real statements and
-# checking them costs zero errors.
+# Exclude patterns are unanchored REGEXES, not globs; escape literal dots.
+# __init__.py files are type-checked.
 exclude = [
     "migrations/",
     "tests/",
@@ -397,39 +383,19 @@ exclude = [
 # Off, i.e. mypy's own default: `def f(x: int = None)` should not type-check.
 # Measured at zero new errors, so this only guards future code.
 implicit_optional = false
-# Each measured at zero new errors on the current tree:
-#   strict_equality       - catches always-False comparisons (enum vs raw string)
-#   warn_redundant_casts  - enforces the "never use cast" rule mechanically
-# check_untyped_defs costs 2, and is the answer to the `annotation-unchecked`
-# notes: it actually checks those bodies instead of just naming them.
+# strict_equality catches always-False comparisons; warn_redundant_casts enforces no-cast rule.
+# check_untyped_defs actually checks unchecked bodies.
 strict_equality = true
 warn_redundant_casts = true
 check_untyped_defs = true
-# 'misc' stays off (P85): with managers typed it reports ~480, mostly
-# untriaged lookup-value types in filter() calls and a django-stubs artifact on
-# every model that redeclares `objects`.
-# 'override' is now ON - it found a Liskov violation and a too-narrow base
-# return type, at a cost of 12 errors in 6 files.
+# 'misc' stays off: untriaged filter() lookup types and django-stubs `objects` artifact.
+# 'override' is on.
 disable_error_code = ['misc', 'annotation-unchecked']
 
-# `override` is on globally because it found real defects. These modules
-# are the exceptions, and each is a documented django-stubs limitation rather
-# than a Liskov violation worth fixing:
-#
-#   models/fields.py            TYPE_CHECKING-only __get__/__set__ that exist
-#                               precisely to override the stub-derived attribute
-#                               type - the storage type is text, the Python type
-#                               is a JSON value.
-#   models/abstract/versioned.py  bulk_create/bulk_update widen `objs` to
-#                               Sequence[Any] because the queryset is generic
-#                               over models the stubs bind to a single _Model.
-#   models/wiki/queryset.py,    as_manager() is synthesised per QuerySet class by
-#   models/pin/queryset.py      the stubs, so ANY multiple-inheritance QuerySet
-#                               (here TreeQuerySetMixin) reports an incompatible
-#                               return type.
-#   services/photos/photo_enrichment.py
-#                               one source resolves service_keys at runtime, so
-#                               it is a property where its siblings are ClassVar.
+# Exceptions are django-stubs limitations, not Liskov violations:
+# fields.py: TEXT storage vs JSON value; versioned.py: generic queryset objs;
+# wiki/pin querysets: synthesised as_manager() with TreeQuerySetMixin;
+# photo_enrichment.py: runtime service_keys property vs ClassVar.
 [[tool.mypy.overrides]]
 module = [
     "urbanlens.dashboard.models.fields",
@@ -456,12 +422,8 @@ pythonpath = ["src", "tests/contract"]
 # deployment or an explicit opt-in to fuzzing, so neither belongs in the run a
 # pre-commit hook or a plain `pytest` performs.
 testpaths = ["src/urbanlens"]
-# -p no:randomly: pytest-randomly is installed but off unless asked for.
-# Shuffling was probed across three seeds on a subset and found no order
-# dependence, which is not the same as knowing all ~11,000 tests are
-# order-independent - and a plugin that reorders every run by default turns
-# that unknown into intermittent failures for everyone. `bin/run_tests.sh
-# --shuffle` turns it on deliberately.
+# pytest-randomly is installed but off; enable via `bin/run_tests.sh --shuffle`.
+# Default shuffling risks intermittent order-dependent failures.
 addopts = "--import-mode=importlib -p no:randomly"
 markers = [
     "contract: OpenAPI conformance checks (tests/contract). Needs --contract-* options; not collected by default.",
@@ -515,13 +477,8 @@ directory = "htmlcov"
 [tool.bandit]
 exclude_dirs = ["*/tests/*", "*/test_*.py"]
 
-# Mutation testing. Deliberately scoped rather than whole-tree: a mutant costs a
-# test run, so this is aimed at the modules where a silent test would be most
-# expensive - money, privacy, and the community-editable wiki.
-#
-# `pytest_add_cli_args` carries --reuse-db because building a test database costs
-# about three minutes against 3.5 seconds of actual tests; without it a few dozen
-# mutants would take hours. Run bin/run_mutation_tests.sh, which sets that up.
+# Scoped to money, privacy, and wiki modules; each mutant costs a test run.
+# --reuse-db avoids rebuilding the test DB; run bin/run_mutation_tests.sh.
 [tool.mutmut]
 source_paths = ["src/urbanlens"]
 only_mutate = [
@@ -530,11 +487,8 @@ only_mutate = [
     "src/urbanlens/dashboard/services/wiki/wiki_edits.py",
 ]
 do_not_mutate = ["*/tests/*", "*/migrations/*"]
-# mutmut runs the suite in a copy of the tree at `mutants/`, which does not
-# contain the collected static files - and any test that renders a full page
-# fails on a missing staticfiles manifest entry without them. STATIC_ROOT is
-# build output and no longer tracked, so this path exists only after a build has
-# run: on a fresh clone, run one before mutmut.
+# Mutant tree lacks collected static files, so build once before mutmut.
+# STATIC_ROOT is untracked build output.
 also_copy = ["src/urbanlens/frontend/static"]
 pytest_add_cli_args = ["--reuse-db", "-q"]
 # Scope both phases to the tests that actually cover the mutated modules.
@@ -543,12 +497,7 @@ pytest_add_cli_args = ["--reuse-db", "-q"]
 pytest_add_cli_args_test_selection = [
     "src/urbanlens/dashboard/tests/hypothesis/test_billing_banking.py",
     "src/urbanlens/dashboard/tests/hypothesis/test_billing_ledger_concurrency.py",
-    # test_identity_visibility_batch.py does NOT cover this module - it tests
-    # Profile.visible_profile_pks/Friendship batching and never imports
-    # services.profile.identity_visibility. Its presence here (instead of the
-    # files that actually do) is why every one of this module's ~105 mutants
-    # reported "no tests" rather than a real killed/survived verdict - fixed
-    # 2026-08-22.
+    # test_identity_visibility_batch.py does not cover this module; it never imports identity_visibility.
     "src/urbanlens/dashboard/tests/hypothesis/test_identity_visibility.py",
     "src/urbanlens/dashboard/tests/hypothesis/test_dm_share_live_updates.py",
     "src/urbanlens/dashboard/tests/hypothesis/test_map_pin_share_detection_integration.py",

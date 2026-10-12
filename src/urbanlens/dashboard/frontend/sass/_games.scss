@@ -7,13 +7,8 @@
 @use 'game_shell' as shell;
 
 // -- Per-game accent previews -----------------------------------------------------
-// `body.page-<name>` (declared in _game_shell.scss) only exists on that game's
-// own page, so the hub re-states each accent scoped to [data-game].
-//
-// The derived properties are re-declared alongside the accent they derive.
-//
-// A game absent from this map keeps the hub's own deep-purple accent, so a
-// fourth GAMES entry still renders sensibly with no change here.
+// Hub re-states accents scoped to [data-game]: body.page-<name> exists only on its game page.
+// Absent games fall back to the hub deep-purple accent.
 $game-accents: (
     'spotguessr': (
         light: (accent: $color-teal-700, strong: $color-teal-900, contrast: $color-grey-0a, ink: $color-teal-700),

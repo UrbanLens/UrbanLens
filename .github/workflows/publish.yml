@@ -140,12 +140,10 @@ jobs:
         run: gh release upload "$TAG" dist/* --clobber -R "$GITHUB_REPOSITORY"
 
   publish-egress-proxy:
-    # The AI tier's egress allowlist (src/urbanlens/config/egress) as an image of its own, for a
-    # deployment that runs published images rather than building this checkout - the k3s sites
-    # UrbanLens/infrastructure deploys. It carries the `filter` this commit's EgressFilterTests hold
-    # to the hosts this commit's tools call, so it is tagged exactly like the app image and an
-    # infrastructure pin of one tag names both. publish-container needs this job, so the app's
-    # :sha-<7> and :main never name a commit whose proxy is missing.
+    # Egress allowlist (src/urbanlens/config/egress) as its own image for k3s sites
+    # that run published images. Tagged exactly like the app image so one
+    # infrastructure pin names both; publish-container needs this job so :sha-<7>
+    # and :main never name a commit whose proxy is missing.
     name: Publish egress-proxy image
     needs: plan
     runs-on: ubuntu-latest
@@ -269,15 +267,10 @@ jobs:
           push-to-registry: true
 
   notify-infrastructure:
-    # A wake-up for UrbanLens/infrastructure's app-image.yml, whose own schedule runs
-    # hours apart. OPTIONAL: without INFRA_DISPATCH_TOKEN this step says so and
-    # succeeds. The payload is informational - the infrastructure side re-reads
-    # :main from ghcr, because two dispatches can arrive out of order.
-    #
-    # The token: a fine-grained PAT (or GitHub App token) scoped to the ONE
-    # repository UrbanLens/infrastructure with "Contents: read and write" - the
-    # permission GitHub requires for POST /repos/{owner}/{repo}/dispatches. That
-    # is also enough to push there, so it is a real credential.
+    # Wake-up for UrbanLens/infrastructure's app-image.yml. Optional without
+    # INFRA_DISPATCH_TOKEN (succeeds); payload is informational, infra re-reads
+    # :main from ghcr as dispatches can arrive out of order.
+    # Token needs Contents read+write on that repo (also allows push: a real credential).
     name: Tell the infrastructure repo
     needs: [plan, publish-container]
     if: needs.plan.outputs.move-main == 'true'

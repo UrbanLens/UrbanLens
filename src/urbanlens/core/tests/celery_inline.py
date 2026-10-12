@@ -68,17 +68,13 @@ def tasks_run_inline(*tasks) -> Iterator[mock.MagicMock]:
         for option in ("queue", "durable", "countdown", "expires"):
             kwargs.pop(option, None)
         if task in selected:
-            # A result, as the real enqueue returns - not the task's return value, which is None for
-            # a task that returns nothing and would read to the caller as a broker that refused it.
+            # Return EagerResult like the real enqueue; bare None would look like a refused broker.
             return EagerResult(uuid4().hex, task(*args, **kwargs), states.SUCCESS)
         return None
 
     original = celery_module.safely_enqueue_task
-    # Patching where the function is defined rebinds an attribute nobody reads:
-    # every caller does `from ... import safely_enqueue_task`, which copies the
-    # reference into its own module at import. Resolved from sys.modules rather
-    # than listed, so a module that starts importing it later is covered without
-    # anyone remembering to add it here.
+    # Callers bind via `from ... import`, so patch every holder found via sys.modules,
+    # including modules that import it later.
     holders = [
         module for module in list(sys.modules.values()) if getattr(module, "safely_enqueue_task", None) is original
     ]
@@ -92,12 +88,8 @@ def tasks_run_inline(*tasks) -> Iterator[mock.MagicMock]:
                     stack.enter_context(mock.patch.object(module, "safely_enqueue_task", enqueue))
             yield enqueue
     finally:
-        # A module imported for the first time *inside* the block binds whatever
-        # the celery module held at that moment, which is the mock - and
-        # mock.patch restores only the modules it was handed. Three of the
-        # holders are not imported at Django startup, so this is reachable, and
-        # the symptom would be the same silent one this helper's own bug had:
-        # every later enqueue through that module quietly doing nothing.
+        # Modules first imported inside the block bind the mock, which patch does not restore;
+        # fix them here or later enqueues through them silently do nothing.
         for module in list(sys.modules.values()):
             if getattr(module, "safely_enqueue_task", None) is enqueue:
                 vars(module)["safely_enqueue_task"] = original

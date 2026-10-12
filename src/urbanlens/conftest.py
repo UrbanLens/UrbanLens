@@ -88,11 +88,9 @@ _disable_hypothesis_example_patching()
 _configure_hypothesis()
 
 
-#: Files that each hold one pytest-xdist worker for many minutes, longest first. A worker takes classes in
-#: collection order (CI passes ``--dist loadscope --no-loadscope-reorder``), and alphabetically these come near the
-#: end: test_write_route_smoke.py alone kept one worker busy for 15-19 minutes after the others had finished.
-#: Handing them out first lets the rest of the suite fill in around them. An entry that no longer exists, or is no
-#: longer slow, costs nothing; a new slow file only costs wall time until it is listed here.
+#: Longest test files first: with ``--dist loadscope --no-loadscope-reorder`` workers take classes in
+#: collection order, so these run first and the rest fills in around them. Stale entries cost
+#: nothing; unlisted slow files only cost wall time until listed here.
 _LONGEST_FILES = (
     "dashboard/tests/hypothesis/test_write_route_smoke.py",
     "dashboard/tests/hypothesis/test_every_stored_photo_is_reencoded.py",
@@ -155,7 +153,7 @@ def django_db_modify_db_settings(
     django_db_createdb: bool,
 ) -> None:
     """
-    Stop, with directions, before a role that cannot create the test database reaches ``CREATE DATABASE`` (P130).
+    Stop, with directions, before a role that cannot create the test database reaches ``CREATE DATABASE``.
 
     Asked over a bare driver connection: Django caches PostGIS type ids per connection alias for the whole process, so
     asking through ``django.db.connection`` kept the configured database's ids for a reused test database, and every

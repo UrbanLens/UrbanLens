@@ -7,11 +7,9 @@ import pathlib
 import re
 import subprocess
 
-#: ``("app_label", "0007_name")`` inside a dependencies list. The optional
-#: trailing comma matters: formatters split long tuples across lines and leave
-#: one, and without it this silently matched nothing for those - which hid every
-#: dependency in a reformatted migration, including the ones that make a
-#: migration a non-leaf.
+#: ``("app_label", "0007_name")`` inside dependencies. Trailing comma optional
+#: because formatters leave one when splitting tuples; without it reformatted
+#: migrations silently match nothing.
 _DEPENDENCY = re.compile(r"""\(\s*['"]([\w.]+)['"]\s*,\s*['"](\w+)['"]\s*,?\s*\)""")
 
 #: The ``dependencies = [...]`` assignment itself. Non-greedy so a later

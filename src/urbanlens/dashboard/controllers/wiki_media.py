@@ -54,15 +54,12 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
         if not isinstance(panel, GalleryMediaSource):
             return HttpResponse(status=404)
 
-        # Same gate the pin page's own generic panel dispatch applies - a feature-gated source's photos must not
-        # leak through this separate wiki-media route, and LocationCache is shared with the pin page so a gated
-        # panel's row is just as reachable here without this check.
+        # Same gate as the pin page: shared LocationCache makes gated rows reachable here.
         if not panel_visible_to(profile.user, panel):
             return HttpResponse(status=404)
 
         cached = LocationCache.get_fresh(location, panel.cache_source)
-        # A row whose media half was never filled in is not an answer for this
-        # gallery, even though it is one for the info panel sharing the row.
+        # Unfilled media half answers the info panel, not this gallery.
         if cached is None or not panel.media_is_ready(cached.data or {}):
             return self._pending(request, location, profile, source, panel)
 
@@ -74,8 +71,7 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
         # The community's net vote keeps an item the automatic judgement would drop.
         kept = {key for key, score in scores.items() if score > 0}
         items = panel.gallery_items(panel.for_viewer(cached.data or {}, profile, location), subject_for_location(location), kept=kept)
-        # Prefer an already-materialized local copy over hot-linking the provider - see the matching comment in
-        # controllers.pin. Voting is wiki-side too, so this is the same lookup either flow benefits from.
+        # Prefer local copy over hot-linking, as in controllers.pin.
         local_images = local_images_for_gallery_items(location, source, [item.url for item in items])
         rendered_items = []
         for item, picture in zip(items, panel.pictures(items), strict=True):
@@ -89,16 +85,12 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
                     "vote_score": scores.get(key, 0),
                     "local_url": local_image.file_url if local_image else None,
                     "local_thumb_url": local_image.thumb_url if local_image else None,
-                    # TIFFs, scanned PDFs and HEICs reach the gallery routinely and none of them render in an
-                    # <img> - see services.media.previews.
+                    # TIFFs/PDFs/HEICs don't render in <img> - see services.media.previews.
                     "thumb_url": picture.thumb,
                     "view_url": picture.view,
-                    # Only present once this item has a local copy - a vote on a still-transient item has no
-                    # REData photo_id to attach to (see WikiMediaVoteView.post).
+                    # Transient items have no REData photo_id for votes (see WikiMediaVoteView.post).
                     "image_id": local_image.pk if local_image else None,
-                    # Ownership isn't meaningful for an external-provider result (explicitly None, not just
-                    # absent - see the "photos" branch below and pin_media_items.html's data-mine, which needs
-                    # to tell "no data" apart from "definitely not mine").
+                    # Explicit None: external results have no owner; separates "no data" from "not mine".
                     "is_mine": None,
                 },
             )

@@ -251,7 +251,7 @@ def _known_profile(actor: Profile, profile_id: int) -> Profile | None:
 
     Returns:
         The profile, or None when nothing holds the id or the actor has no way to know it does, after the same one
-        statement (P281).
+        statement.
     """
     return Profile.objects.select_related("user").filter(Profile.known_to_q(actor), pk=profile_id).first()
 
@@ -272,7 +272,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         requesting = request.user.profile
         # friend_request_visibility is its own, often looser, gate; a profile it admits may be requested
         # without being visible, so long as nothing below names it. Either rule finds the profile in the one
-        # statement, so an account it admits neither way answers as no account does (P281).
+        # statement, so an account it admits neither way answers as no account does.
         to_profile = Profile.objects.select_related("user").filter(Profile.known_to_q(requesting) | Profile.friend_requestable_q(requesting), pk=profile_id).first()
         if to_profile is None:
             return HttpResponse("User not found.", status=404)

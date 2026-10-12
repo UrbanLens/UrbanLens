@@ -84,9 +84,6 @@ def _get_group(profile: Profile, group_uuid) -> tuple[GroupChat, GroupChatMember
         profile: The requesting profile.
         group_uuid: UUID of the group chat.
 
-    Returns:
-        ``(group, membership)``.
-
     Raises:
         Http404: When the group doesn't exist or the profile isn't an active member - the two cases are
         indistinguishable by design.
@@ -179,7 +176,7 @@ class GroupCreateView(LoginRequiredMixin, View):
         profile = _get_profile(request)
         name = request.POST.get("name", "")
         slugs = [slug for slug in request.POST.getlist("member_slugs") if slug]
-        # Only those who would take a message from the caller, so a hidden account is refused as no one is (P280).
+        # Only those who would take a message from the caller, so a hidden account is refused as no one is.
         members = list(Profile.objects.select_related("user").filter(Profile.accepts_messages_from_q(profile) | Q(pk=profile.pk), slug__in=slugs))
         if len(members) != len(set(slugs)):
             return HttpResponseForbidden(MEMBER_UNAVAILABLE_MESSAGE)
@@ -545,7 +542,7 @@ class GroupRemoveMemberView(LoginRequiredMixin, View):
         profile_id_raw = request.POST.get("profile_id", "")
         if not profile_id_raw.isdigit():
             return HttpResponseBadRequest("A valid profile_id is required.")
-        # Among the group's members, so an id nobody holds and an outsider's are refused alike (P280).
+        # Among the group's members, so an id nobody holds and an outsider's are refused alike.
         target = Profile.objects.select_related("user").filter(pk=profile_id_raw, pk__in=group.active_memberships().values("profile_id")).first()
         if target is None:
             return HttpResponseBadRequest("They aren't a member of this group.")

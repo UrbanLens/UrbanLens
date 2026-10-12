@@ -451,7 +451,7 @@ def geocode_address(request: HttpRequest) -> JsonResponse:
                     logger.warning("Google geocoding returned malformed result for %s", redact_text(address), exc_info=True)
             logger.warning("Google geocoding returned no results for %s (status: %s)", redact_text(address), result.get("status"))
     except (ImportError, OSError, ValueError, GatewayRequestError):
-        # GatewayRequestError also covers a rate-limiter refusal (P122) - routine (dev/demo refuse
+        # GatewayRequestError also covers a rate-limiter refusal - routine (dev/demo refuse
         # most services outright), not grounds to 500 when Nominatim can still answer below.
         logger.warning("Google geocoding unavailable for %s", redact_text(address), exc_info=True)
 

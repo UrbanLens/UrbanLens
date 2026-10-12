@@ -53,9 +53,8 @@ class PinShareRespondView(ExternalApiView):
         serializer = PinShareRespondSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        # to_profile= belongs in the lookup, never in a follow-up check: share ids are sequential, so a 403 (or
-        # any distinguishable answer) for someone else's id would turn this into an inbox scanner - and the rows
-        # it addresses are writable.
+        # to_profile= stays in the lookup: sequential ids would turn a 403 into
+        # an inbox scanner for writable rows.
         share = get_object_or_404(
             PinShare.objects.select_related("pin__location", "location"),
             pk=share_id,
@@ -63,9 +62,7 @@ class PinShareRespondView(ExternalApiView):
         )
 
         if share.status != PinShareStatus.PENDING:
-            # Not idempotent-and-silent: a retried accept on an already-accepted share must not run the
-            # acceptance path again, and telling the client "already handled" is safe here because they were
-            # provably shown this share (the lookup above proved it is addressed to them).
+            # Must not re-run acceptance; the caller was already shown this share.
             return Response({"error": "This shared pin has already been handled."}, status=400)
 
         target_pin, message = apply_pin_share_response(share, serializer.validated_data["action"])
@@ -73,9 +70,7 @@ class PinShareRespondView(ExternalApiView):
         return Response(
             {
                 "status": share.status,
-                # Falls back to the uuid because a Pin's slug is derived from its name and a share can produce
-                # an unnamed pin (a location-only share detected in a message); the client needs an addressable
-                # identifier either way, and every pin-scoped route in this API accepts both.
+                # Slug derives from name, so unnamed shares need the uuid fallback; pin routes accept both.
                 "pin_slug": (target_pin.slug or str(target_pin.uuid)) if target_pin is not None else None,
                 "detail": message,
             },

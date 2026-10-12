@@ -249,10 +249,7 @@ class SearchForm(forms.Form):
                 return None
             from django.conf import settings
 
-            # Ceilings, not rejections: a saved filter built before they existed
-            # must still return results rather than start erroring. The client
-            # chooses this JSON, and every id in it becomes a descendant walk and
-            # a join, so its length is the request's cost.
+            # Ceilings not rejections: each id costs a descendant walk and join.
             max_groups = settings.SEARCH_MAX_LABEL_GROUPS
             remaining_ids = settings.SEARCH_MAX_LABEL_FILTER_IDS
 
@@ -263,14 +260,10 @@ class SearchForm(forms.Form):
                 op = g.get("op")
                 ids = g.get("ids")
                 if op in {"and", "or", "not"} and isinstance(ids, list):
-                    # str(i).isdigit() returns False for a leading "-", so any negative-number id is
-                    # silently dropped. Known, accepted edge case: label PKs are always positive
-                    # (Django's default auto-incrementing PK), so this never occurs for a real
-                    # label, and this function's contract is to never raise on malformed input.
+                    # Negative ids are dropped by the isdigit check; harmless as label PKs are always positive.
                     group = {"op": op, "ids": [int(i) for i in ids if str(i).isdigit()][:remaining_ids]}
                     remaining_ids -= len(group["ids"])
-                    # Only meaningful on an "or" group - see
-                    # PinQuerySet.apply_label_groups.
+                    # min_priority only applies to "or" groups (see PinQuerySet.apply_label_groups).
                     if op == "or" and str(g.get("min_priority") or "").isdigit():
                         group["min_priority"] = int(g["min_priority"])
                     validated.append(group)

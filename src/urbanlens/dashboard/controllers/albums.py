@@ -338,11 +338,8 @@ def _album_detail_context(owner: Pin | Wiki | Profile, album: Album, viewer: Pro
     # The gallery's own per-image endpoint owns repositioning; the album map posts to it rather than growing a
     # second writer for Image coordinates.
     row["reposition_base"] = "" if isinstance(owner, Profile) else reverse("pin.gallery" if isinstance(owner, Pin) else "location.wiki.gallery", args=_owner_url_args(owner))
-    # The grid pages at ALBUM_GRID_PAGE_SIZE; the map used to embed every photo
-    # in the album inline in the same response, so pagination bounded what you
-    # could see and nothing bounded what was sent. Capped by the same mechanism
-    # the gallery map layers use, which keeps the area covered rather than
-    # keeping the first N - see services/geo/sampling.py.
+    # Map layer is capped like the gallery map layers to bound the payload.
+    # Sampling keeps the area covered rather than the first N - see services/geo/sampling.py.
     map_queryset, map_truncated, map_total = bound_map_layer(Image.objects.filter(pk__in=visible_image_ids, latitude__isnull=False, longitude__isnull=False))
     map_images = list(map_queryset.select_related("location"))
     row["map_photos"] = _photo_map_payload(map_images, viewer)
@@ -661,9 +658,7 @@ def _attach_owner_action_urls(ctx: dict, owner: Pin | Wiki | Profile) -> None:
     """
     URLs the album UI needs for delete / send-to-wiki / share, when they exist.
 
-    Three separate questions, and P61 is what came of answering them with one URL: a vault album got no
-    bulk endpoint at all, so its Delete button rendered hidden forever alongside the two that genuinely
-    do not apply.
+    Delete, send-to-wiki, and share differ in availability, so each gets its own URL.
 
     - Delete works for a pin and for the vault, at their own endpoints.
     - Send to wiki is pin-only: the endpoint derives the wiki from ``pin.location``, and a vault album

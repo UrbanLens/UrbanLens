@@ -18,11 +18,9 @@ SLACK_FLOOR_MS = 250.0
 #: about where a page stops feeling like it responded.
 CEILING_MS = 1000.0
 
-#: Where k6 puts the neighbour's trend for the baseline phase. The phase name is
-#: `baselinePhase()` in `tests/perf/k6/lib/schedule.js`; renaming it there
-#: without changing it here falls back to the metric below, which is why the
-#: fallback says so out loud rather than quietly producing a slightly different
-#: number.
+#: Where k6 puts the neighbour's trend for the baseline phase. Must match
+#: `baselinePhase()` in `tests/perf/k6/lib/schedule.js`; mismatch falls back
+#: to the metric below.
 _METRIC = "http_req_duration{scenario:neighbour,phase:idle}"
 
 #: Used when the phase-tagged metric is missing. Wider than intended - it

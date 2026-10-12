@@ -30,11 +30,9 @@ env:
   UL_DRAGONFLY_URL: redis://localhost:6379/0
   UL_RABBITMQ_URL: amqp://urbanlens:ci-placeholder@localhost:5672/urbanlens
   UL_UNSAFE_ALLOW_HTTP: "True"
-  # Required for the gateway to construct at all. Unroutable on purpose, and the
-  # test suite's network guard refuses a real socket regardless - without it,
-  # every REData test fails here and passes on a developer machine. The key is
-  # checked for presence before any request is built, so a placeholder is what
-  # the tests need and a real credential is what they must not have.
+  # Gateway requires configuration; intentionally unroutable and checked for presence before requests.
+  # Network guard blocks real sockets, so a placeholder is required here
+  # and a real credential must never be set.
   UL_REDATA_API_URL: http://redata.invalid/api/
   UL_REDATA_API_KEY: ci-placeholder-not-a-real-key
   UL_ENVIRONMENT: testing
@@ -146,21 +144,10 @@ jobs:
         run: python3 bin/check_css_variables.py
       - name: No missing migrations
         run: python src/urbanlens/manage.py makemigrations --check --dry-run
-      # Two passes, one coverage data file per process, combined at the end (pyproject.toml's `patch = ["subprocess"]`
-      # follows coverage into the pytest-xdist workers).
-      #
-      # 1. Everything not marked `serial`, across four pytest-xdist workers, one per vCPU on ubuntu-latest. Measured
-      #    2026-10-07: 4 workers took 50-53 min twice; 6 took 53; 8 took 36 on one runner and 59 on another; 12 took
-      #    68, since every worker collected the suite and migrated its own database first. The workers now copy one
-      #    migrated template (src/urbanlens/core/tests/template_database.py), which the `serial` pass reuses. `-n auto`
-      #    counts physical cores, which is 2 there. pytest-django suffixes each worker's database with its id
-      #    (test_urbanlens_ci_gw0, ...). `--dist loadscope --no-loadscope-reorder` hands out whole classes in the
-      #    order pytest-django sorted them - every TestCase before any TransactionTestCase, whose teardown empties the
-      #    tables migrations seeded - so each worker keeps Django's order.
-      # 2. Tests marked `serial` assert on wall-clock time, and a neighbouring worker's load failed them. They run alone,
-      #    in one process with its own database.
-      #
-      # Both passes run even if the first fails, so one CI run reports every failure.
+      # Two passes with one coverage file per process, combined at end (subprocess patch follows coverage into workers).
+      # Non-serial tests run on 4 workers copying one migrated template; loadscope keeps TestCase before TransactionTestCase
+      # order whose teardown empties seeded tables. `serial` tests assert wall-clock time so run alone in one process.
+      # Both passes run even if the first fails, so one run reports every failure.
       - name: Tests with coverage
         run: |
           status=0

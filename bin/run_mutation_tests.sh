@@ -50,7 +50,7 @@ case "${1:-run}" in
         in_container "/app/.venv/bin/python -m pytest src/urbanlens/core/tests/test_version.py -q --reuse-db" >/dev/null
 
         echo "==> mutating (this takes roughly one second per mutant)"
-        # Tree is recopied each run; a stale copy would mutate old code.
+        # Ensure mutants derive from current working tree.
         in_container "rm -rf mutants && /app/.venv/bin/mutmut run --max-children $MAX_CHILDREN" 2>&1 \
             | tr '\r' '\n' | grep -v "Generating mutants" | tail -5
         echo

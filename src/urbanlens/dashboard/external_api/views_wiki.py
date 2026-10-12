@@ -447,9 +447,8 @@ class WikiAliasUseView(WikiApiView):
             Http404: The wiki is not visible to this caller, or *alias_id* is not an alias of it.
         """
         location, wiki, profile = self.resolve(request, location_slug)
-        # Scoped to this wiki: a bare id lookup would turn alias ids into an oracle for the names on wikis this
-        # caller cannot see - the same leak the module docstring describes for edit and comment ids, and worse
-        # here because an alias *is* content rather than just a handle.
+        # Scoped to this wiki: a bare id lookup would leak alias names on invisible wikis.
+        # An alias *is* content, not just a handle.
         alias = get_object_or_404(visible_rows(WikiAlias.objects.filter(wiki=wiki), wiki, profile), id=alias_id)
 
         # Renaming saves the wiki; `wiki` may be a concealed projection.
@@ -460,7 +459,6 @@ class WikiAliasUseView(WikiApiView):
         except WikiAliasNameError as exc:
             return Response({"error": exc.message}, status=400)
 
-        # Built strictly after the save.
         return Response(build_wiki_detail(target, location, profile))
 
 
@@ -1029,14 +1027,11 @@ class _CommentListMixin(PaginatedListMixin):
         Returns:
             A paginated envelope of serialized comments.
         """
-        # Gates 1-3 in SQL, so the database cuts the page rather than the whole thread being
-        # built and then sliced. Replies are narrowed by the same filter, since comment.replies
-        # is keyed on the parent's pk and survives whatever was done to the parent's queryset.
+        # Gates 1-3 in SQL so the database pages, not the whole thread.
+        # Replies use the same filter since replies are keyed on the parent pk.
         visible_qs = comments_qs.visible_to(profile)
         top_level = top_level_comment_queryset(visible_qs, replies_qs=Comment.objects.visible_to(profile))
-        # visible_comment_tree still runs, on the page: it applies gate 4 (identity masking) and
-        # resolves mentions. Re-applying gates 1-3 keeps the SQL filter narrowing-only - a
-        # divergence hides a comment rather than exposing one.
+        # Tree still runs on the page for gate 4 and mentions; re-applying gates 1-3 stays narrowing-only.
         return self.paginated_response(
             top_level,
             CommentSerializer,

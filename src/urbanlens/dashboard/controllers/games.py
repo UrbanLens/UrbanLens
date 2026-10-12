@@ -89,7 +89,7 @@ def posted_invitees(request: HttpRequest, host: Profile) -> list[Profile] | None
 
     Returns:
         The profiles, empty for a solo start; None when any id is malformed or names no friend of *host*. An id
-        nobody holds and one held by a stranger are refused after the same statement (P280).
+        nobody holds and one held by a stranger are refused after the same statement.
     """
     raw_ids = [raw for raw in request.POST.getlist("invite_profile_ids") if raw]
     if not all(_is_id(raw) for raw in raw_ids):
@@ -104,7 +104,7 @@ def posted_invitee(request: HttpRequest, host: Profile) -> Profile | JsonRespons
     The friend of *host* an invite request names in ``profile_id``, or the 400 to answer with.
 
     Call it only once the requester is known to be the host, or the answer tells a player who the host's friends
-    are. An id nobody holds and one held by a stranger are refused after the same statement (P280).
+    are. An id nobody holds and one held by a stranger are refused after the same statement.
     """
     invitee_id = safe_int_or_none(request.POST.get("profile_id"))
     if invitee_id is None:
@@ -117,7 +117,7 @@ def posted_player(request: HttpRequest, players: QuerySet[Any]) -> Profile | Jso
     """
     The player a kick request names in ``profile_id``, among a session's participant rows, or the 400 to answer with.
 
-    An id nobody holds and one held by someone outside the session are refused after the same statement (P280).
+    An id nobody holds and one held by someone outside the session are refused after the same statement.
     """
     player_id = safe_int_or_none(request.POST.get("profile_id"))
     if player_id is None:
