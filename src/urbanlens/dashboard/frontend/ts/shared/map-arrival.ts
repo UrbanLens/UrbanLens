@@ -20,6 +20,8 @@ export function handleMapArrival(search: string, options: MapArrivalOptions): vo
     document.getElementById("pin-suggestions-intro-accept")?.addEventListener("click", () => {
         const target = new URL(options.suggestionsUrl, window.location.origin);
         if (target.origin !== window.location.origin) return;
+        // `/.//host` parses to the path `//host`, which a browser reads as another site.
+        if (!target.pathname.startsWith("/") || target.pathname.startsWith("//")) return;
         target.searchParams.set("onboarding", "1");
         window.location.assign(`${target.pathname}${target.search}`);
     });

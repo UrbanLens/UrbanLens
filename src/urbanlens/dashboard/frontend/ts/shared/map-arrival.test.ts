@@ -57,6 +57,12 @@ describe("arriving at the map", () => {
         expect(assigned).toEqual([]);
     });
 
+    test("a suggestions path that reads as another host is not followed", () => {
+        handleMapArrival("", { showPinSuggestionsIntro: true, suggestionsUrl: "/.//elsewhere.test/phish/" });
+        document.getElementById("pin-suggestions-intro-accept")!.click();
+        expect(assigned).toEqual([]);
+    });
+
     test("returning from accepting every suggestion confirms they are on the map", () => {
         handleMapArrival("?suggestions_imported=1", QUIET);
         expect(toasts).toEqual(["Your accepted pin suggestions are now on the map."]);

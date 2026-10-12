@@ -291,7 +291,7 @@
     "path": "src/urbanlens/dashboard/frontend/ts/shared/map-arrival.ts",
     "fingerprint": "bdce8bab967c689f:1",
     "language": "javascript",
-    "reason": "suggestionsUrl is a reverse()d URL the server writes into the page's json_script config, not text a user controls, and it is followed only when it resolves to this origin."
+    "reason": "suggestionsUrl is a reverse()d URL the server writes into the page's json_script config, not text a user controls, and it is followed only when it resolves to this origin and to a path that starts with a single slash."
   },
   {
     "rule": "py/stack-trace-exposure",
