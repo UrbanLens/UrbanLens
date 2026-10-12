@@ -3,8 +3,7 @@ Generation and verification of external-application API keys.
 
 Only a digest of a key's secret half is ever stored, and it is a bare SHA-256 rather than a password
 KDF: the secret is 32 bytes of ``secrets.token_urlsafe``, so there is nothing for a work factor to
-price, and PBKDF2 charged ~0.9s of CPU to every request naming a real (public) prefix. Keys issued
-before that change still verify through ``check_password`` and are rewritten on first use - see P146.
+price. Keys issued with PBKDF2 still verify through ``check_password`` and are rewritten on first use.
 User passwords are untouched and still go through ``PASSWORD_HASHERS``.
 """
 
@@ -48,7 +47,7 @@ _HASH_SCHEME = "ulk1$"
 MIN_FAST_HASH_SECRET_LENGTH = 40
 
 #: How stale ``last_used_at`` may get. Writing it on every request made one row the lock every
-#: concurrent request on a key queued behind (measured in P146).
+#: concurrent request on a key queued behind.
 LAST_USED_RESOLUTION = timedelta(minutes=1)
 
 #: API keys listed per page in Settings > Advanced > API Keys.
@@ -71,13 +70,9 @@ def generate_api_key(user: User, name: str) -> tuple[ApiKey, str]:
 
     Raises:
         RuntimeError: Every attempt drew a prefix that was already taken (should never happen in practice)."""
-    # sanitize_name strips control characters (including NUL, which Postgres
-    # rejects outright) and markup-significant characters - this label is
-    # rendered back in the settings page same as any other user-facing name.
     cleaned_name = (sanitize_name(name) or "").strip()[:100] or "API Key"
     secret = secrets.token_urlsafe(_SECRET_ENTROPY_BYTES)
     key_hash = _hash_secret(secret)
-    # The unique prefix column decides a collision, so the insert is what is retried.
     for _ in range(5):
         prefix = secrets.token_urlsafe(8)[:_PREFIX_LENGTH]
         try:
@@ -85,9 +80,6 @@ def generate_api_key(user: User, name: str) -> tuple[ApiKey, str]:
                 api_key = ApiKey.objects.create(user=user, name=cleaned_name, prefix=prefix, key_hash=key_hash)
         except IntegrityError:
             continue
-        # No separator between prefix and secret: token_urlsafe's alphabet includes "_", so a
-        # delimiter-based split could misparse a randomly generated prefix/secret that happens to
-        # contain one. Fixed-length slicing in authenticate_api_key recovers the boundary.
         return api_key, f"{KEY_LABEL}_{prefix}{secret}"
     raise RuntimeError("Failed to generate a unique API key prefix.")
 

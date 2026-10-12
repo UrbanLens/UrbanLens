@@ -1,4 +1,4 @@
-"""A vault album had no bulk delete, and no comment saying why (P61)."""
+"""Tests for the vault album bulk delete endpoint."""
 
 from __future__ import annotations
 
@@ -60,11 +60,6 @@ class VaultGalleryBulkViewTests(TestCase):
         self.assertFalse(Image.objects.filter(pk=contributed.pk).exists())
 
     def test_it_never_detaches_a_photo_from_a_pin_the_request_did_not_mention(self) -> None:
-        # A vault album may hold a photo that is also filed to one of the
-        # profile's pins - `owner_kwargs_to_image_scope`'s docstring says so
-        # deliberately. Reusing the pin endpoint's unlink rule here set
-        # `pin=None` on that photo, quietly emptying a gallery the user was not
-        # looking at, while leaving the vault tile exactly where it was.
         pin = baker.make("dashboard.Pin", profile=self.profile)
         wiki = baker.make("dashboard.Wiki", location=baker.make("dashboard.Location"))
         filed_everywhere = baker.make(Image, profile=self.profile, pin=pin, wiki=wiki)

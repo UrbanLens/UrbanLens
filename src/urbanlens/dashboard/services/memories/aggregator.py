@@ -191,10 +191,6 @@ def _trips_for_range(profile: Profile, start: date, end: date, bbox: BBox | None
     from urbanlens.dashboard.models.trips.model import Trip, TripActivity
     from urbanlens.dashboard.services.trips.trip_visibility import viewer_hidden_activity_ids
 
-    # Mirrors Trip.effective_start_date/effective_end_date: explicit start_date/end_date win, else
-    # fall back to the earliest/latest scheduled activity.
-    # A trip with no end_date and no later activity is treated as ending on its effective start
-    # date, same as Trip.duration_days/timeline_status do.
     trips = (
         Trip.objects.filter(pk__in=Trip.objects.filter(profiles=profile).values("pk"))
         .overlapping(start, end)
@@ -207,14 +203,9 @@ def _trips_for_range(profile: Profile, start: date, end: date, bbox: BBox | None
         .order_by("-_eff_start", "-pk")
     )
     if before is not None:
-        # A trip is day-granular, so this is the coarse half of the cursor: it
-        # keeps the boundary day, and get_memory_events drops the events on it
-        # that were already delivered. Everything newer is excluded here, so the
-        # per-source cap is not spent on rows the caller has already seen.
         trips = trips.filter(_eff_start__lte=before.date())
 
     for batch in _slices(trips, limit):
-        # Which stops the viewer may not see, for the whole slice at once rather than a query or two per trip.
         hidden = viewer_hidden_activity_ids([activity for trip in batch for activity in trip.activities.all()], profile)
         yield from _trip_events(batch, hidden, bbox)
 
@@ -282,15 +273,6 @@ def _photos_for_range(profile: Profile, start: date, end: date, bbox: BBox | Non
     """Yield a MemoryEvent for each of the profile's own geotagged photos within the given range."""
     from urbanlens.dashboard.models.images.model import Image
 
-    # Named `_effective_taken_at`, not `effective_taken_at`: annotating the
-    # latter collides with Image.effective_taken_at (a real @property), and
-    # Django raises AttributeError trying to setattr the annotated column
-    # onto that name during row materialization - silently swallowed by
-    # get_memory_events' broad exception guard, so every photo vanished from
-    # the feed. The Coalesce fallback matches the property's own chain
-    # (EXIF taken_at, else a filename-parsed date) so the two stay in sync;
-    # reading the real property below (not this annotation) keeps that the
-    # single source of truth.
     photos = (
         Image.objects.filter(profile=profile)
         .with_coords()
@@ -364,17 +346,13 @@ def get_memory_events(profile: Profile, start: date, end: date, *, bbox: BBox | 
         end: Latest date (inclusive).
         bbox: Optional map-viewport bounding box to further narrow results.
         limit: The most events to return. Each source is also stopped at this
-            many, so the merge is bounded whatever date range was asked for -
-            which is the point, since the range comes from the client. Correct
-            only because every source yields newest-first; taking the first N of
-            an unordered source would keep an arbitrary N.
+            many, so the merge is bounded whatever date range was asked for.
         before: Exclusive cursor - only events strictly older than this. A date
             would not do: a single day holding more events than *limit* would
             return the same page forever, because the cursor could never move
             past it. Known limit: events sharing an exact timestamp cannot be
             split across pages, so more than *limit* of them at one instant
-            loses the overflow rather than looping. Real timestamps collide
-            rarely enough that a composite cursor has not been worth its cost.
+            loses the overflow rather than looping.
 
     Returns:
         List of MemoryEvent across every source that succeeded, newest first, at

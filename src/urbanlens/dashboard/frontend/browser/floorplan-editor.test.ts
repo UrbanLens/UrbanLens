@@ -704,11 +704,8 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
             await settle();
 
             const overlaps = await page.evaluate(() => {
-                // Leaflet's own zoom control is on this list too - it is no
-                // longer reparented into .floorplan-canvas-controls, so it is
-                // once again a free-floating control that could collide with
-                // the rest, same as on every other map. The shared undo bar
-                // must clear the floor strip (and the rest) once it is visible.
+                // Leaflet's zoom control is free-floating and could collide.
+                // The shared undo bar must clear the floor strip once visible.
                 const selectors = ["#floorplan-tools", ".floorplan-tool-options", ".floorplan-canvas-controls", ".floorplan-canvas-floors", ".map-bottom-controls", ".leaflet-control-zoom", "#ul-undo-bar"];
                 const boxes = selectors
                     .map((selector) => ({ selector, node: document.querySelector(selector) }))
@@ -2301,11 +2298,9 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
     });
 
     test("every control on the canvas can be named", async () => {
-        // Icon-only button with no accessible name announces as "button";
-        // editor is almost entirely icon-only buttons. Checked with selection and
-        // tool armed to include state-dependent controls.
-        // Only editor-built controls in scope. Toolbar/undo row are static template
-        // markup; fixture copies are bare. harness-parity.test.ts covers template attributes.
+        // Icon-only buttons announce as "button"; editor is almost entirely icon-only.
+        // Checked with selection and tool armed for state-dependent controls.
+        // Only editor-built controls in scope; harness-parity covers template markup.
         await openEditor();
         await page.locator('[data-tool="marker"]').click();
         const frame = await planExtent();

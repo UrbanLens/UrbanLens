@@ -93,8 +93,6 @@ class PendingScanUploadFlowTests(TestCase):
         self.assertTrue(image.pending_scan)
 
     def test_exif_is_not_populated_until_the_task_runs(self) -> None:
-        # Before this change these came back populated synchronously - that
-        # synchronous read is exactly the decode this redesign removes.
         image = self._upload()
         self.assertIsNone(image.exif_data)
         self.assertIsNone(image.author)
@@ -204,10 +202,6 @@ class PendingScanUploadFlowTests(TestCase):
         self.assertEqual(image.author, "A Photographer")
 
     def test_permanent_failure_on_a_fresh_upload_rejects_it_rather_than_publishing_it_raw(self) -> None:
-        # Once retries are exhausted, a still-pending row has no "already
-        # safe, just unprocessed" fallback available (nothing has ever opened
-        # the file) - the only safe outcome is removal, not clearing
-        # pending_scan and serving the raw file.
         from urbanlens.dashboard.tasks import process_image_upload
 
         image = self._upload()
@@ -246,11 +240,6 @@ class PendingScanUploadFlowTests(TestCase):
         self.assertTrue(Image.objects.filter(pk=image.pk).exists())
 
     def test_rejecting_the_original_also_rejects_a_pending_dedup_sibling(self) -> None:
-        # attach_deduped_copy copies pending_scan from its original, and
-        # nothing but _sync_deduped_siblings (which only runs on the
-        # *success* path) ever revisits a sibling - so if the original is
-        # rejected instead, the sibling has to be handled here or it is
-        # stuck pending_scan=True forever with no path to clearing.
         from urbanlens.dashboard.services.photos.uploads import attach_deduped_copy
         from urbanlens.dashboard.tasks import process_image_upload
 

@@ -67,9 +67,6 @@ def pooled_session(key: str) -> requests.Session:
 
     Args:
         key: The service the session is for.
-
-    Returns:
-        The session.
     """
     sessions: dict[str, requests.Session] | None = getattr(_pooled, "sessions", None)
     if sessions is None:
@@ -218,19 +215,14 @@ def upstream_retry_after(response: requests.Response, *, maximum: int = UPSTREAM
 
 
 #: Largest body a gateway will pull into the web worker for one proxied file.
-#:
-#: Generous against real content - a full-resolution listing photo, a map tile,
-#: a scanned attachment - and small against the worker's own memory limit, which
-#: is the number that matters: a worker killed for memory takes every other
-#: in-flight request on it down too.
+#: Generous against real content (photos, tiles, scans) but small against the
+#: worker's memory limit, since an OOM kill takes every in-flight request down.
 MAX_PROXIED_MEDIA_BYTES = 25 * 1024 * 1024
 
 
 #: What a tile proxy will pass through to a browser under this deployment's own origin.
-#:
-#: An allow-list, because every interesting case is one a deny-list forgets. ``image/svg+xml`` is
-#: an image and can carry script; ``text/html`` served from here is a document, on a route that is
-#: ``csp_exempt`` because a policy on a tile is 1.2kB of header that can never apply.
+#: An allow-list, because a deny-list forgets interesting cases. ``image/svg+xml`` can carry
+#: script; ``text/html`` is a document on a ``csp_exempt`` route (policy would be 1.2kB header).
 SERVABLE_TILE_TYPES = frozenset({"image/avif", "image/gif", "image/jpeg", "image/png", "image/webp"})
 
 
@@ -257,13 +249,9 @@ def read_capped(response: requests.Response, *, max_bytes: int = MAX_PROXIED_MED
     """
     Read a proxied body, refusing one larger than *max_bytes*.
 
-    The response must have been requested with ``stream=True``. That is not a
-    style preference: without it ``requests`` has already read the whole body
-    into memory during ``send()``, so a size check here would be measuring
-    memory that is already spent, and ``response.raw.read()`` would return an
-    empty body - a refusal that looks exactly like a successful download of
-    nothing. Handed such a response this raises instead, so the mistake is loud
-    at the call site rather than silent in production.
+    The response must have been requested with ``stream=True``; otherwise
+    ``requests`` has already read the whole body into memory, a size check
+    here would measure spent memory, and ``raw.read()`` would return empty.
 
     Args:
         response: A streamed response whose body has not been read.
@@ -274,9 +262,8 @@ def read_capped(response: requests.Response, *, max_bytes: int = MAX_PROXIED_MED
         The body, at most *max_bytes* long.
 
     Raises:
-        GatewayRequestError: The body is larger than *max_bytes*, the
-            response was not streamed and so cannot be capped, or the
-            connection failed while the body was being read.
+        GatewayRequestError: Body larger than *max_bytes*, not streamed,
+            or connection failed during read.
     """
     if response.raw is None or getattr(response, "_content_consumed", False):
         raise GatewayRequestError(f"{what} was fetched without stream=True, so its size cannot be bounded")

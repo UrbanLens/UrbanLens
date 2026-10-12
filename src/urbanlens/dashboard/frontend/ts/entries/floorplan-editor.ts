@@ -838,7 +838,7 @@ function boot(): void {
                     dy = snapped.y;
                     // A room's own walls can still swing into a room that was never adjacent to begin with (dragged clean across a hall).
                     //
-                    // A freshly detached wall starts exactly on the boundary it used to share, which a plain point-in-polygon test cannot reliably call.
+                    // A freshly detached wall starts exactly on the boundary it shared, which a plain point-in-polygon test cannot reliably call.
                     const drag = roomDrag;
                     const candidate: Pt[] = [];
                     for (const corner of corners) candidate.push(anchoredMove(corner, dx, dy, drag));
@@ -1697,11 +1697,8 @@ function boot(): void {
         render();
     }
 
-    // Box select is the Box tool's gesture, and only its gesture.
-    //
-    // Shift+drag used to start one from the Select tool as well, over anything including a wall.
-    //
-    // One meaning per modifier is worth more than a second way in to a tool that already has its own button.
+    // Box select is the Box tool's gesture only. Shift+drag from the Select tool was removed;
+    // one meaning per modifier is worth more than a second way into a tool that already has its own button.
     map.getContainer().addEventListener("mousedown", (event: MouseEvent) => {
         if (state.tool !== "box" || event.button !== 0) return;
         const target = event.target as HTMLElement;
@@ -2461,12 +2458,9 @@ function boot(): void {
             setTool("marker");
         }
     });
-    // Arrow keys, taken on the canvas in the capture phase so this runs before
-    // Leaflet's own keydown listener on the same element.
-    //
-    // Leaflet pans the map with the arrows.
-    //
-    // Stopping propagation here rather than disabling Leaflet's handler, because that handler only listens while it believes the container.
+    // Arrow keys, taken in the capture phase so this runs before Leaflet's keydown listener.
+    // Leaflet pans the map with arrows; we stop propagation rather than disable its handler,
+    // which only listens while it believes the container has focus.
     mapEl.addEventListener(
         "keydown",
         (raw) => {
@@ -3656,7 +3650,7 @@ function boot(): void {
  * The locks fitted to one opening.
  */
     function renderLockControls(host: HTMLElement, opening: Opening): void {
-        // A window does not have a lock worth recording for getting in, and a doorway is the hole where a door used to be.
+        // A window has no lock worth recording for entry; a doorway is the hole where a door was.
         if (!swings(opening.kind) && opening.kind !== "hatch") return;
         const wrap = document.createElement("div");
         wrap.className = "floorplan-locks";

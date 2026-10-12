@@ -68,8 +68,8 @@ SHARED_BUDGET_CATEGORIES = frozenset({EgressCategory.QUOTA, EgressCategory.BILLE
 #: Production only, unless an override opts a service in.
 PRODUCTION_ONLY_CATEGORIES = frozenset({EgressCategory.MESSAGING, EgressCategory.PUBLIC_WRITE})
 #: Where a hosted AI provider may be called: production and staging, whose AI the audit measured and logged, and the
-#: test suite, which mocks the network. Development, local and an unknown environment make no hosted AI call (Jess,
-#: 2026-10-06), unless an override opts one in.
+#: test suite, which mocks the network. Development, local and an unknown environment make no hosted AI call
+#: unless an override opts one in.
 HOSTED_AI_ENVIRONMENTS = frozenset({EnvironmentTypes.PRODUCTION, EnvironmentTypes.STAGING, EnvironmentTypes.TESTING})
 
 #: How a service no one has classified is treated: as a shared budget, so refused by default off production.
@@ -229,8 +229,6 @@ def decide(service: str, category: EgressCategory, environment: str, *, environm
         overrides: Per-service shares from ``UL_ENVIRONMENT_SHARE_OVERRIDES``. Ignored for an unrestricted
             category, which the admin switch on its ``ApiRateLimit`` row turns off instead.
 
-    Returns:
-        The decision.
     """
     if category in UNRESTRICTED_CATEGORIES:
         return EgressDecision(service, category, environment, 1.0)
@@ -262,7 +260,7 @@ def scaled_limit(limit: int | None, share: float) -> int | None:
 
 
 #: Where the street and dark basemaps' tiles come from Protomaps' hosted API rather than this project's own mirror:
-#: production and staging (Jess, 2026-10-06), and the test suite. The browser fetches them directly with the key, so
+#: production and staging, and the test suite. The browser fetches them directly with the key, so
 #: the service is browser-side - free for noncommercial use, and nothing server-side spends or counts it - and no
 #: ``UL_ENVIRONMENT_SHARE`` applies. Development and local draw our own tiles, which are internal and free.
 HOSTED_BASEMAP_ENVIRONMENTS = frozenset({EnvironmentTypes.PRODUCTION, EnvironmentTypes.STAGING, EnvironmentTypes.TESTING})
@@ -342,12 +340,6 @@ class BeatEgress(StrEnum):
 #: Every ``CELERY_BEAT_SCHEDULE`` entry, classified. Off production only ``INTERNAL`` entries are scheduled,
 #: plus any named in ``UL_BACKGROUND_TASKS_ALLOWLIST``; an ``EXTERNAL`` task also checks for itself
 #: (``services.core.egress.external_background_task``), so a run enqueued some other way stops too.
-#:
-#: ``EXTERNAL`` is a task whose job is to call out. A task whose job is this deployment's own state stays
-#: ``INTERNAL`` even when it sends mail, pushes or texts, or asks a provider on a user's behalf (a SpotGuessr
-#: round, an upload's scan): messaging is console or nothing off production, and every such call is held by
-#: the call-level policy, so skipping the task would only lose the maintenance (a check-in turning overdue,
-#: a stalled game ending, a refused enqueue being replayed).
 BEAT_EGRESS: Mapping[str, BeatEgress] = {
     "scheduled-database-backup-check": BeatEgress.INTERNAL,
     "scheduled-vestigial-asset-cleanup": BeatEgress.INTERNAL,

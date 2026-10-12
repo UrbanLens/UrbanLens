@@ -275,7 +275,7 @@ def require_in_range[N: (int, float)](service: str, name: str, value: N, *, mini
         exclusive_minimum: Refuse ``minimum`` itself.
 
     Returns:
-        ``value``.
+        The validated number, unchanged.
 
     Raises:
         ImpossibleInputError: ``value`` is not finite, or falls outside the bounds.
@@ -300,7 +300,7 @@ def require_format(service: str, name: str, value: object, pattern: re.Pattern[s
         pattern: The provider's format.
 
     Returns:
-        ``value``.
+        The validated identifier, unchanged.
 
     Raises:
         ImpossibleInputError: ``value`` is not a string, or ``pattern`` does not match all of it.
@@ -348,7 +348,7 @@ def require_date_within[D: date](service: str, name: str, value: D, *, earliest:
         latest: The last date the provider holds, if known.
 
     Returns:
-        ``value``.
+        The validated date, unchanged.
 
     Raises:
         ImpossibleInputError: ``value`` is before ``earliest`` or after ``latest``.

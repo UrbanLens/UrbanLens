@@ -39,18 +39,12 @@ class ProfileContactEditableRenderingTests(TestCase):
         return self.client.get(reverse("profile.view"))
 
     def test_contact_section_hidden_for_owner_with_no_contact_info_yet(self) -> None:
-        """
-        Same "hide the section entirely" behavior as other viewers now -
-        an owner adds a first contact value via the Edit Profile page."""
+        """Owner hides the section entirely until they add a first contact value via Edit Profile."""
         response = self._get_own()
         self.assertNotContains(response, ">Contact<")
         for cls in _CONTACT_EDITABLE_CLASSES.values():
-            # The wiring script's `simpleTextField('.profile-xxx-editable', ...)`
-            # calls legitimately contain each class name as inert text on
-            # every render regardless of field population (see the hero-meta
-            # test's identical caveat) - check the actual rendered element's
-            # class list, not just "does this string appear anywhere in the
-            # page source".
+            # Wiring script calls contain class names as inert text regardless of field population.
+            # Check the rendered element's class list, not string presence anywhere.
             self.assertNotContains(response, f'contact-info-item {cls}"')
 
     def test_populated_field_carries_the_raw_value(self) -> None:
@@ -112,16 +106,11 @@ class ProfileBirthDateEditableRenderingTests(TestCase):
         return self.client.get(reverse("profile.view"))
 
     def test_additional_details_hidden_for_owner_with_no_birth_date_and_no_secondary_emails(self) -> None:
-        """
-        Same reasoning as the Contact section - an owner adds a first
-        birthday via the Edit Profile page rather than an inline placeholder."""
+        """Owner adds a first birthday via Edit Profile; no inline placeholder."""
         response = self._get_own()
         self.assertNotContains(response, "Additional Details")
-        # data-raw-birth-date only ever appears on the real editable span,
-        # which is now only rendered once profile.birth_date has a value -
-        # unlike the bare class name, the wiring script's
-        # `wireMetaField({selector: '.profile-birth-date-editable', ...})`
-        # call never emits this attribute name as inert text.
+        # data-raw-birth-date appears only on the real editable span, rendered when
+        # profile.birth_date has a value. The wiring script never emits it as inert text.
         self.assertNotContains(response, "data-raw-birth-date")
 
     def test_populated_birth_date_carries_the_raw_iso_value(self) -> None:

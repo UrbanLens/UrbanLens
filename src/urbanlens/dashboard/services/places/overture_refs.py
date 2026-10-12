@@ -2,7 +2,7 @@
 Moving building places off Overture's legacy content-hash refs, onto ``overture:<gers_id>``.
 
 REData served an Overture building's ``ref`` as a hash of its name and position, which changes whenever an Overture
-release reshapes or renames the building (REData P98). Places keyed on it, and floorplans and swept-building records
+release reshapes or renames the building. Places keyed on it, and floorplans and swept-building records
 that name it, drift with it. REData now serves ``stable_ref``, the ref each building keeps, and
 ``/buildings/resolve/``, which maps a hash it served to that ref.
 
@@ -403,7 +403,7 @@ def migrate_legacy_refs(
     Re-key every building place, floorplan and swept-building record still on a legacy Overture ref.
 
     A place moves to the stable ref REData resolves its key to. A key REData never recorded (served before its
-    2026-10-11 release) is matched by footprint against its REData parcel's current buildings (the parent, or when
+    stable-ref release) is matched by footprint against its REData parcel's current buildings (the parent, or when
     the parent is not from REData, REData's parcel at the place's centroid): the one stable
     Overture building whose footprint and the place's outline each hold the other's centroid. More than one match is
     ambiguous, and a stable ref another place already holds is a duplicate to merge;
@@ -455,7 +455,7 @@ def migrate_legacy_refs(
 
 
 def legacy_refs_remaining() -> dict[str, int]:
-    """How many legacy Overture refs each store still holds: the "zero references remain" check of REData's P98."""
+    """How many legacy Overture refs each store still holds: the "zero references remain" check."""
     from urbanlens.dashboard.models.floorplans.model import Floorplan
     from urbanlens.dashboard.models.pin.model import Pin
 

@@ -81,19 +81,11 @@ test.describe("Hudson River State Hospital - enrichment panels", () => {
     });
 
     test("the panels backing this place's own data become ready", async ({ campus }) => {
-        // Scoped to EXPECTED_PANELS rather than to everything offered, and the
-        // reason is a measurement rather than a preference: of the 33 panels
-        // offered on this pin, 21 become ready and 12 do not - and the 12 are
-        // overwhelmingly providers this deployment holds no credentials for
-        // (flickr, azure_maps, searxng_images, gdelt, inaturalist,
-        // census_tigerweb). They are *offered* because their gate only asks
-        // whether the pin has coordinates, and they can never become ready
-        // without configuration.
-        //
-        // So "every offered panel becomes ready" is not an invariant of the
-        // application at all; it is a statement about how one deployment is
-        // configured, and asserting it fails against a healthy instance. What is
-        // an invariant is that the panels backing this place's own data fill in.
+        // Scoped to EXPECTED_PANELS: of 33 offered panels, 12 never become ready
+        // because providers (flickr, azure_maps, etc.) lack credentials. They are
+        // offered because their gate only checks for coordinates. "All offered panels
+        // become ready" is not an application invariant; only panels for this
+        // place's own data must fill in.
         const settled = await waitForOrNull(
             () => panels(campus),
             (listed) => EXPECTED_PANELS.every((expected) => listed.find((panel) => panel.key === expected.key)?.ready),
@@ -121,12 +113,9 @@ test.describe("Hudson River State Hospital - enrichment panels", () => {
     });
 
     test("how many panels are stuck is reported, not asserted", async ({ campus }, testInfo) => {
-        // Deliberately cannot fail on the stuck set. That set is genuinely
-        // useful - it is how you notice a provider that used to work has stopped
-        // - but it is also legitimately non-empty on any deployment missing
-        // third-party credentials, and a test that is red on every run gets
-        // muted and then catches nothing. Attached to the report instead, where
-        // it can be read when something else prompts the question.
+        // Deliberately not failing on stuck panels: the set is useful for noticing
+        // regressions, but legitimately non-empty without third-party credentials.
+        // A perpetually red test gets muted; attaching to the report keeps it readable.
         const listed = await panels(campus);
         const stuck = listed.filter((panel) => !panel.ready).map((panel) => panel.key);
 
@@ -155,18 +144,10 @@ test.describe("Hudson River State Hospital - enrichment panels", () => {
                 broken.push(`${panel.key}: HTTP ${response.status()}`);
                 continue;
             }
-            // 204 is a documented, correct answer here, not an empty one to
-            // complain about: `PinPanelDetailView` returns "the web panel's
-            // quiet 204" when a ready source has nothing to show for this place,
-            // and declares `204: None` in its own schema. Several sources reach
-            // it legitimately - there is no NPS park at these coordinates, and
-            // no Overture building attributes.
-            //
-            // Two earlier versions of this test were wrong about exactly this:
-            // one treated `{}` as a defect, the next called JSON.parse on a 204
-            // body and reported six healthy panels as broken. What actually has
-            // to hold is narrower - a panel that answers 200 must answer
-            // parseable JSON, because a 200 is a promise of a document.
+            // 204 is a documented, correct answer: PinPanelDetailView returns it when
+            // a ready source has nothing to show, and declares 204: None in its schema.
+            // Several sources reach it legitimately (no NPS park, no Overture attributes).
+            // A panel answering 200 must return parseable JSON; 200 promises a document.
             if (response.status() === 204) {
                 continue;
             }

@@ -4,18 +4,15 @@ Searching your own pins must not read private note rows belonging to a pin you c
 ``PinSearchProvider.search`` feeds ``notes__text`` to ``apply_text`` alongside ``labels__name`` and
 ``aliases__name`` - Pin's own reverse foreign key to ``PinNote`` (``related_name="notes"``). Notes are
 private per-pin text (``PinNote``'s own docstring: "only the pin owner can see"), so this is not just
-a capacity concern: the unscoped ``Exists(Pin._base_manager.filter(notes__text__icontains=..., ...))``
-semijoin at the heart of P123 means the *content* of a stranger's private notes is read by Postgres to
+a capacity concern: the unscoped semijoin means the *content* of a stranger's private notes is read by Postgres to
 answer the viewer's search, even though it can never appear in a result. No index covers
 ``PinNote.text``, so both the matching and non-matching variant reproduced, matching every other
-relation P123 generalises to that lacks Label.name's migration-0049 GIN trigram index.
+relation that lacks Label.name's GIN trigram index.
 
-**Fixed 2026-09-17.** ``notes`` crosses at *path*'s own first segment, so ``_semijoin`` now bounds its
+The ``notes`` path crosses at *path*'s own first segment, so ``_semijoin`` now bounds its
 filter by the outer queryset's own candidate primary keys, materialised as a concrete list first
 rather than left as a nested subquery - which also means the stranger's private note content is no
-longer read at all to answer the viewer's search. See
-``test_search_does_not_read_another_accounts_labels.py``'s module docstring for the measured
-mechanism.
+longer read at all to answer the viewer's search.
 """
 
 from __future__ import annotations
@@ -138,11 +135,11 @@ class SearchDoesNotReadAnotherAccountsPinNotesTests(_PinNoteCase):
     """One account's private pin notes must not be read to answer a different account's pin search."""
 
     def test_it_does_not_read_a_strangers_matching_notes(self) -> None:
-        """Fixed 2026-09-17 by the bounded semi-join - see the module docstring."""
+        """The viewer's search does not read a stranger's matching private notes."""
         self.assertDoesNotGrow(SECOND_BATCH, matching=True)
 
     def test_it_does_not_read_a_strangers_unrelated_notes(self) -> None:
-        """Fixed 2026-09-17 by the bounded semi-join - see the module docstring."""
+        """The viewer's search does not read a stranger's unrelated private notes."""
         self.assertDoesNotGrow(SECOND_BATCH, matching=False)
 
 

@@ -1,5 +1,5 @@
 """
-P269: a profile-addressed URL must cost the same for an account the requester cannot see as for no account at all.
+A profile-addressed URL must cost the same for an account the requester cannot see as for no account at all.
 
 Usernames are guessable and profile slugs come from them, so a hidden account that answered 404 after more queries
 than a missing one told anyone timing the two that the username is registered.
@@ -427,14 +427,14 @@ class ReachablePartnerQueryTests(_RelationshipGrid):
 
 
 def _known_by_the_old_rule(viewer: Profile, subject: Profile) -> bool:
-    """What the friendship controller's ``_known_profile`` decided in Python, before P281."""
+    """What the friendship controller's ``_known_profile`` decided in Python."""
     if subject.pk == viewer.pk or subject.can_view_profile(viewer) or conversation_reachable(viewer, subject):
         return True
     return Friendship.objects.all().between(viewer, subject) is not None and not subject.has_blocked(viewer)
 
 
 class KnownProfileQueryTests(_RelationshipGrid):
-    """P281: the one-query lookup of a profile the actor could already know of agrees with the Python rule."""
+    """The one-query lookup of a profile the actor could already know of agrees with the Python rule."""
 
     @pytest.mark.slow
     def test_the_query_agrees_with_the_python_rule_everywhere(self) -> None:
@@ -459,7 +459,7 @@ class KnownProfileQueryTests(_RelationshipGrid):
 
 
 class FriendRequestableQueryTests(_RelationshipGrid):
-    """P281: the one-query lookup of a profile the actor may send a friend request agrees with the Python rule."""
+    """The one-query lookup of a profile the actor may send a friend request agrees with the Python rule."""
 
     def test_the_query_agrees_with_may_send_friend_request_everywhere(self) -> None:
         for relationship in self.RELATIONSHIPS:

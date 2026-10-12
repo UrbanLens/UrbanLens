@@ -26,9 +26,8 @@ from urbanlens.dashboard.models.trips.model import (
 
 #: A rendered CSRF token: exactly 64 characters from Django's 62-character
 #: alphabet. ``{% csrf_token %}`` re-masks the same secret on every call, so a
-#: page embeds several *different* strings (the hidden input, base.html's
-#: csrf-token meta, the JS config blob) and two renders never match
-#: byte-for-byte. Matching on the shape covers all of them at once.
+#: page embeds several different strings; two renders never match byte-for-byte.
+#: Matching on the shape covers all of them at once.
 _CSRF_TOKEN_RE = re.compile(rb"(?<![A-Za-z0-9])[A-Za-z0-9]{64}(?![A-Za-z0-9])")
 
 
@@ -174,10 +173,9 @@ class TripListPartialTests(TestCase):
 
     def test_start_checkin_button_hidden_without_membership(self):
         trip = _make_trip(self.profile)
-        # trip.viewer_membership deliberately left unset, as it would be for
-        # a viewer whose membership row doesn't exist (shouldn't happen on
-        # the real list page, which only shows the viewer's own trips, but
-        # covers the template's gating logic in isolation).
+        # viewer_membership left unset, as for a viewer with no membership row
+        # (shouldn't happen on the real list page, but covers the template's
+        # gating logic in isolation).
 
         html = render_to_string(
             "dashboard/partials/trips/trip_list_partial.html", {"trips": [trip], "profile": self.profile}
@@ -429,7 +427,7 @@ class TripDetailViewTests(TestCase):
         self.assertIn('data-trip-action="reveal-edit-end"', html)
 
     def test_propose_and_hide_location_explainers_are_behind_a_tooltip(self):
-        """Regression guard: these used to be always-visible <p class="form-help"> paragraphs in both dialogs instead of a click-to-reveal tooltip icon, matching the rest of the site's explainer convention."""
+        """Regression guard: the propose/hide-location explainers are click-to-reveal tooltips, not always-visible paragraphs."""
         client = Client()
         client.force_login(self.creator_user)
         html = client.get(self._url()).content.decode()
@@ -946,9 +944,8 @@ class TripAddableFriendsPickerTests(TestCase):
     """
     The add-member dialog's friend picker (trip_members_panel.html/_addable_friends).
 
-    Regression coverage: the dialog used to be a bare "type the exact username" box with no way to browse the
-    creator's friends - the picker lives in trip_members_panel.html (not detail.html) specifically so it stays
-    in sync after an add/remove, rather than showing a stale list."""
+    The picker lives in trip_members_panel.html (not detail.html) so it stays in sync
+    after an add/remove, rather than showing a stale list."""
 
     def setUp(self):
         super().setUp()

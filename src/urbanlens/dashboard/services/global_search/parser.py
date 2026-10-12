@@ -405,28 +405,16 @@ _CLAUSE_BOUNDARY_KEYWORDS = ("in", "near", "around", "at", "during")
 def _extract_person(text: str) -> tuple[str, str | None]:
     """
     Strip a "from <person>" clause from ``text``, stopping at the next clause.
-    Only recognized when the query already named the ``messages`` or ``pins`` type (see call site), so "photos from paris" keeps "paris" as free text/place instead of being misread as a person's name.
-
-    Args:
-        text: Query text with dates/types/near-me already removed.
-
-    Returns:
-        (remaining text, person name or None)."""
-    # Bound matches Django's User.username max_length (150) so long usernames are still captured in
-    # full.
-    # The match is non-greedy and stops before a following recognized clause keyword (e.g.
+    Only recognized for ``messages`` or ``pins`` types, so "photos from paris"
+    keeps "paris" as place text.
+    """
     boundary = "|".join(_CLAUSE_BOUNDARY_KEYWORDS)
     match = re.search(rf"(?:^|\s)from\s+(.{{2,150}}?)(?=\s+(?:{boundary})\s+|$)", text)
     if not match:
         return text, None
-    # Unlike place names, usernames commonly include digits ("john123"), so
-    # (unlike _extract_place) digits do not disqualify a person clause.
     person = match.group(1).strip(" .,")
     if not person:
         return text, None
-    # Unlike the old end-anchored match, a following clause (e.g. "in
-    # cincinnati") is not consumed by the match (only asserted via lookahead),
-    # so it must be preserved in the remainder for _extract_place to see.
     remaining = (text[: match.start()] + " " + text[match.end() :]).strip()
     return remaining, person
 
@@ -499,32 +487,19 @@ def extract_fallback_terms(raw: str) -> list[str]:
 def parse_query(raw: str) -> ParsedQuery:
     """
     Parse a raw global-search query into structured filters plus free text.
-
-    Args:
-        raw: The query exactly as the user typed it.
-
-    Returns:
-        A populated :class:`ParsedQuery`."""
+    """
     today = timezone.localdate()
     cleaned = " ".join(raw.split())
     parsed = ParsedQuery(raw=raw, text=cleaned)
     if not cleaned:
         return parsed
 
-    # Operators are exact, so they are read first and the English heuristics below only ever see
-    # what is left over.
-    # That ordering is what lets `place:"Poughkeepsie, NY"` survive a place-guesser that would
-    # otherwise have split it at the comma.
     scanned = scan(cleaned)
     _apply_clauses(parsed, scanned)
     working = scanned.text.lower()
     if not working and not parsed.has_structure:
         return parsed
 
-    # Each heuristic still runs, because its job is also to *consume* the words it recognized so
-    # they don't fall through into free-text terms.
-    # But an operator already answered is never overwritten: what the user stated outranks what we
-    # guessed.
     working, guessed_start, guessed_end, guessed_phrase = _extract_dates(working, today)
     if parsed.date_start is None:
         parsed.date_start, parsed.date_end, parsed.date_phrase = guessed_start, guessed_end, guessed_phrase
@@ -537,9 +512,6 @@ def parse_query(raw: str) -> ParsedQuery:
         parsed.near_phrase = parsed.near_phrase or guessed_near
         parsed.near_me = guessed_near is not None
 
-    # "from <person>" only means a person for types that actually have a
-    # sender/sharer concept - messages (from/to) and pins (shared with me by).
-    # Otherwise "photos from paris" would misread "paris" as a person's name.
     if parsed.types & {"messages", "pins"}:
         working, guessed_person = _extract_person(working)
         parsed.person = parsed.person or guessed_person
@@ -626,16 +598,13 @@ def _apply_clauses(parsed: ParsedQuery, scanned: OperatorScan) -> None:
 
 def _apply_date_clause(parsed: ParsedQuery, key: str, value: str) -> None:
     """
-    Resolve one date operator's value onto *parsed*.
-    Reuses the same phrase vocabulary the English path uses, so ``visited:"last march"`` and "visited last march" resolve identically rather than being two date parsers that drift."""
+    Resolve one date operator's value onto *parsed*, reusing the English phrase vocabulary
+    so operators and free text parse identically.
+    """
     today = timezone.localdate()
     spoken = value.lower().replace("-", " ").strip()
     _, start, end, phrase = _extract_dates(spoken, today)
     if start is None:
-        # A bare value ("2019", "march") carries no preposition, which is what most of the phrase
-        # patterns key on.
-        # Saying it the long way reuses that vocabulary rather than growing a second date parser
-        # here - and it keeps a value meaning an *interval* ("2019" is the whole year) rather than
         _, start, end, phrase = _extract_dates(f"in {spoken}", today)
     if start is None:
         return

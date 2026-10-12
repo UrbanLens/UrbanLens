@@ -9,15 +9,13 @@ Searching photos via `label:` must not read label rows belonging to a photo you 
 ``PhotoSearchProvider.search`` also calls ``apply_label_clause`` for the `label:`/`tag:` operator,
 which filters through the same ``_semijoin(Image, "labels", ...)`` shape as the bare-term path -
 ``Exists(Image._base_manager.filter(condition, pk=OuterRef("pk")))``, unscoped to photos the viewer
-can see. The one difference: `label:` matches with ``iexact``, not ``icontains``. P123's fix (a GIN
-trigram index on ``Label.name``, migration 0049) targets ``icontains``'s compiled form specifically;
-measured here rather than assumed, it says nothing about an ``iexact`` plan - so unlike the
-bare-term path's matching variant (partially fixed by the index alone), both variants of this
-operator needed the bounded-semi-join rewrite, the same result already found for Wiki's and Pin's
-identical call to ``apply_label_clause``.
+can see. The one difference: `label:` matches with ``iexact``, not ``icontains``. A GIN trigram index
+on ``Label.name`` targets ``icontains`` specifically; it says nothing about an ``iexact`` plan -
+so both variants of this operator needed the bounded-semi-join rewrite, the same result already
+found for Wiki's and Pin's identical call to ``apply_label_clause``.
 
-**Fixed 2026-09-17.** ``_semijoin`` now bounds ``labels``' filter by the outer queryset's own
-candidate primary keys, materialised as a concrete list first. See
+``_semijoin`` now bounds ``labels``' filter by the outer queryset's own candidate primary keys,
+materialised as a concrete list first. See
 ``test_search_does_not_read_another_accounts_labels.py``'s module docstring for the measured
 mechanism.
 """
@@ -155,19 +153,11 @@ class SearchDoesNotReadAnotherAccountsPhotoLabelOperatorTests(_PhotoLabelOperato
     """One account's labels must not be read to answer a `label:` search for a different account's photo."""
 
     def test_it_does_not_read_a_strangers_labels_when_the_term_matches_elsewhere(self) -> None:
-        """
-        A `label:` search that DOES match the viewer's own photo must not also scan the stranger's.
-
-        Fixed 2026-09-17 by the bounded semi-join - see the module docstring.
-        """
+        """A `label:` search that DOES match the viewer's own photo must not also scan the stranger's."""
         self.assertDoesNotGrow(MINE)
 
     def test_it_does_not_read_a_strangers_labels_when_the_term_matches_nothing(self) -> None:
-        """
-        A `label:` search that matches nothing anywhere is the true negative: nothing to short-circuit on.
-
-        Fixed 2026-09-17 by the bounded semi-join - see the module docstring.
-        """
+        """A `label:` search that matches nothing anywhere is the true negative: nothing to short-circuit on."""
         self.assertDoesNotGrow(NOWHERE)
 
 

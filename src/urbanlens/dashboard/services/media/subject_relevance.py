@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 
 #: The version of the rules in this module. Bump it with any change to what they keep, so cached results already
 #: swept under the old rules are judged again (``services.media.public_media_sweep``).
-#: 2: a newspaper page's dateline is no longer read (P216).
+#: 2: a newspaper page's dateline is no longer read.
 RULE_VERSION = 2
 
 #: Words that say what sort of place something is rather than which one.
@@ -392,7 +392,7 @@ _FILE_EXTENSION = re.compile(r"\.[A-Za-z0-9]{2,4}$")
 #: The title the Library of Congress gives a newspaper page: "Image 7 of River Falls journal (River Falls, Pierce County,
 #: Wis.), July 30, 1908". It is the dateline of the paper that printed the page, so it says where the paper was
 #: published, not where any story on the page happened: in 1908 one syndicated article about the Hudson River State
-#: Hospital ran under Kansas, Minnesota, Michigan and Louisiana datelines (P216).
+#: Hospital ran under Kansas, Minnesota, Michigan and Louisiana datelines.
 _NEWSPAPER_DATELINE = re.compile(r"^\s*Image \d+ of .+\), (?:January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}, \d{4}")
 
 
@@ -674,9 +674,6 @@ class MediaSubject:
 
         Args:
             item: An item a provider returned for this place.
-
-        Returns:
-            The judgement.
         """
         located = self._located(item)
         if located is not None:
@@ -941,9 +938,6 @@ def subject_for_location(location: Location, *, names: Iterable[str | None] = ()
         names: More names to judge by, e.g. a pin's own.
         context: Names of the places it stands in.
         shared: ``shared_names(location)``, when the caller already has it.
-
-    Returns:
-        The subject.
     """
     from urbanlens.dashboard.services.pins.search_names import shared_names
 
@@ -973,9 +967,6 @@ def subject_for_pin(pin: Pin, *, names: SearchNames | None = None) -> MediaSubje
     Args:
         pin: A pin with a location.
         names: ``search_names(pin)``, when the caller already has it.
-
-    Returns:
-        The subject.
     """
     from urbanlens.dashboard.models.aliases.model import AliasType
     from urbanlens.dashboard.services.pins.search_names import search_names

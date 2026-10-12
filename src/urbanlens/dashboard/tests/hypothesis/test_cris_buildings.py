@@ -68,20 +68,16 @@ class PanelGateTests(RedataConfiguredMixin, TestCase):
             self.assertFalse(self.source.gate(pin))
 
     def test_gate_false_without_coordinates(self) -> None:
-        # Location.latitude/longitude are non-nullable at the DB level (pre-existing,
-        # unrelated to this plugin) - gate() only reads effective_latitude/longitude
-        # (Pin's own passthrough property), so a duck-typed stand-in exercises the
-        # same branch without needing a real, impossible-to-persist Location.
+        # gate() reads effective_latitude/longitude (Pin's passthrough), not the
+        # non-nullable Location fields. A duck-typed stand-in exercises the branch.
         stub_pin = SimpleNamespace(effective_latitude=None, effective_longitude=None)
         with patch.object(CrisBuildingPanelSource, "geo_boundary", _NY_ISH):
             self.assertFalse(self.source.gate(stub_pin))
 
 
-# Field values here mirror REData's own serializers exactly - `resource_type`
-# from CulturalResourceType and `kind` from CulturalResourceAttachmentKind,
-# both lowercase TextChoices values. Earlier fixtures used invented uppercase
-# kinds and a "district" resource type that REData never emits, which is what
-# let the plugin's mismatched comparisons pass tests while matching nothing live.
+# Field values mirror REData's serializers: `resource_type` from
+# CulturalResourceType and `kind` from CulturalResourceAttachmentKind (lowercase).
+# Earlier fixtures used uppercase kinds and a "district" type REData never emits.
 _BUILDING_RESOURCE = {
     "uuid": "res-1",
     "resource_type": "building",
@@ -507,7 +503,7 @@ class SiteScopeRenderTests(SimpleTestCase):
         self.assertIn({"label": "NYSHPO National Register Number", "value": "94NR00622"}, ctx["meta"])
 
     def test_a_parcel_scope_card_leaves_the_campus_buildings_to_the_buildings_list(self) -> None:
-        """Jess, 2026-09-30: the Buildings on this Property list carries CRIS's buildings; a second list here was a duplicate."""
+        """The Buildings on this Property list carries CRIS's buildings; a second list here was a duplicate."""
         attachments = [
             {"id": 1, "subject": "BLDG 45/MORTUARY & LAB (1896)", "subject_kind": "building"},
             {"id": 2, "subject": "BLDG 51/MAIN/ADMIN (1871) - NHL", "subject_kind": "building", "site_building": True},
@@ -691,7 +687,7 @@ class EnrichmentSourceTests(RedataConfiguredMixin, TestCase):
         self.assertEqual(query_key, "42.650000,-73.750000")
 
     def test_fetch_raises_an_outage_rather_than_answering_nothing(self) -> None:
-        """None here is cached as "no CRIS record" for the whole cache term (P187)."""
+        """None here is cached as "no CRIS record" for the whole cache term."""
         location = baker.make(Location, latitude="42.650000", longitude="-73.750000", google_place=None)
 
         with (

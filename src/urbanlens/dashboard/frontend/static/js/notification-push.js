@@ -1,19 +1,16 @@
 // Live notification push (partials/layout/_notification_push.html). Connects to
 // ws/notifications/ (UserNotificationConsumer). Served as a file so the browser caches it across
-// navigations instead of re-downloading it inline on every page (P133).
+// navigations instead of re-downloading it inline on every page.
 (function () {
     var WS_PATH = '/ws/notifications/';
     var RETRY_MIN_MS = 1000;
     var RETRY_MAX_MS = 30000;
     var POLL_MS = 60000;
     var FAILURES_BEFORE_POLLING = 2;
-    // Cloudflare closes a tunnelled WebSocket that has carried no traffic for
-    // roughly 100 seconds, and the threshold isn't configurable below an
-    // Enterprise plan. A quiet account sends nothing for hours, so without this
-    // ping the socket dies while the page still believes it's connected. Same
-    // interval, and the same reasoning, as ts/shared/live-socket.ts - which this
-    // script can't import. UserNotificationConsumer ignores every client
-    // frame, so the ping needs no reply.
+    // Cloudflare closes an idle tunnelled WebSocket after ~100s (not configurable below Enterprise).
+    // A quiet account sends nothing for hours; without a ping the socket dies while the page
+    // still believes it's connected. Same interval and reasoning as ts/shared/live-socket.ts.
+    // UserNotificationConsumer ignores client frames, so the ping needs no reply.
     var HEARTBEAT_MS = 45000;
 
     var ws = null;
@@ -23,13 +20,10 @@
     var reconnectTimer = null;
     var heartbeatTimer = null;
     var stopped = false;   // set on close 4404 (unauthenticated) - retrying won't help
-    // Set on close 4429: this account already holds as many sockets as it may
-    // (services/security/socket_budget.py). Temporary - closing a tab frees a
-    // place - so unlike `stopped` this keeps retrying, but it must not retry
-    // eagerly. Every attempt is a handshake, an auth resolution and a store
-    // round trip, which is the cost the cap exists to bound; and the polling
-    // fallback below would replace one refused socket with a stream of HTTP
-    // requests, which is worse than the socket it is standing in for.
+    // Set on close 4429: account holds the max sockets (services/security/socket_budget.py).
+    // Temporary - closing a tab frees a slot - so unlike `stopped` this keeps retrying
+    // but must not retry eagerly. Every attempt costs a handshake and store round trip,
+    // which the cap exists to bound; polling would be worse.
     var overLimit = false;
 
     function refreshBadge() {
@@ -64,21 +58,10 @@
         return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
-    // NotificationLog.url is a plain CharField - NotificationLog.save() now
-    // normalizes it, but this stays as the client-side backstop for rows
-    // written before that, and for any future path that bypasses save().
-    //
-    // Everything goes through the browser's own URL parser. There is
-    // deliberately no hand-parsed fast path for "starts with a slash": the
-    // guard used to early-return true for that, which let "/\evil.com",
-    // "/<TAB>/evil.com" and nine other inputs through, because WHATWG treats
-    // "\" as "/" in an authority and strips TAB/LF/CR before parsing. Any
-    // check that parses differently than the sink will eventually disagree
-    // with it, so the sink's own parser is the only safe arbiter.
-    // Returns the URL to navigate to, or null. It hands back the *parsed*
-    // href rather than a yes/no, so a caller cannot check one string and then
-    // navigate to another - the value that was validated is the only value
-    // available to assign.
+    // NotificationLog.url is a plain CharField; save() normalizes it, but this is the
+    // client-side backstop for legacy rows and paths bypassing save(). Uses the browser's
+    // URL parser exclusively - no hand-parsed fast path for "starts with a slash", since
+    // WHATWG treats "\" as "/" and strips control chars. Returns the validated href or null.
     function safeNotifUrl(url) {
         if (typeof url !== 'string' || !url) return null;
         try {

@@ -293,7 +293,7 @@ def admit(service: str, *, endpoint: str = "") -> Admission:
         endpoint: What is being called, as the ledger describes it.
 
     Returns:
-        The admission.
+        An ``Admission`` object recording the allowed call.
 
     Raises:
         EnvironmentRefusedError: This environment does not call the service; nothing is recorded.

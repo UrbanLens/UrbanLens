@@ -79,14 +79,8 @@ def _named_this_viewer(viewer_profile: Profile) -> Q:
 
 def _shared_within_reach_of(viewer_profile: Profile) -> Q:
     """
-    The container gate: shared deliberately, into a wiki this viewer can reach.
-    This is the *first* of two gates, not the only one: ``photo_upload_visibility`` then decides which of the people who can reach that wiki may actually see it.
-
-    Args:
-        viewer_profile: The profile doing the looking.
-
-    Returns:
-        A ``Q`` matching photos in containers within this viewer's reach.
+    The container gate: shared into a wiki this viewer can reach. This is the first of two gates;
+    ``photo_upload_visibility`` then decides which of those who can reach the wiki may see the photo.
     """
     # Uses a primed value when a caller has said it is about to resolve this viewer repeatedly (see
     # prime_viewer_scope), and reads fresh otherwise.
@@ -244,10 +238,8 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet["Image"]):
 
     def _allowed_uploader_ids(self, viewer_profile: Profile, viewer_filter: str) -> set[int]:
         """
-        Return the set of profile IDs whose photos this viewer may see.
-
-        Takes into account both the viewer's filter preference and each
-        uploader's own upload-visibility setting.
+        Return profile IDs whose photos this viewer may see, considering both the viewer's
+        filter preference and each uploader's upload-visibility setting.
         """
         from urbanlens.dashboard.models.profile.model import Profile
 

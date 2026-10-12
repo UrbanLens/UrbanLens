@@ -1,11 +1,11 @@
 """
-Remove cached public-source results that no one is shown (P233).
+Remove cached public-source results that no one is shown.
 
-P196's relevance rule (``services.media.subject_relevance``) is applied when a gallery is read, so a result about
+Relevance rule (``services.media.subject_relevance``) is applied when a gallery is read, so a result about
 somewhere else is never shown, but it stays in its ``LocationCache`` row. This removes it from the row once nobody
 can be shown it: no reader's subject matches it, and nobody has marked, voted on or copied it.
 
-Readers follow P188's audiences. The shared row is judged by the place's public names alone. A row cached for a set
+Readers follow audiences. The shared row is judged by the place's public names alone. A row cached for a set
 of custom names is judged by the names of each pin holding that set, and is left alone when no pin holds it any more.
 
 Only the cached results change. The row keeps its age, so it is refetched when it would have been, and no row of

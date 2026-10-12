@@ -97,11 +97,9 @@ async function resetFriendship(api: ApiClient, secondaryApi: ApiClient, meUuid: 
     await api.delete(`friends/${themUuid}/`);
     await secondaryApi.delete(`friends/${meUuid}/`);
 
-    // Verified rather than assumed: an unverified reset lets a stale row
-    // become a mystery two tests later. If `DELETE friends/{uuid}/` declines to
-    // clear a merely *requested* row, the next `POST friends/` meets an existing
-    // request and fails with a misleading message. Checking both seats distinguishes
-    // "delete misses requests" from "delete is one-directional".
+    // Verified reset: an unverified reset lets a stale row become a mystery later.
+    // If DELETE misses a requested row, the next POST meets it and fails misleadingly.
+    // Checking both seats distinguishes "delete misses requests" from "delete is one-directional".
     const survivors: string[] = [];
     for (const [label, client, otherUuid] of [
         ["requester", api, themUuid],
@@ -168,11 +166,9 @@ test.describe.serial("friendships", () => {
             const inbound = await findRelationship(secondaryApi, me.uuid);
             expect(inbound, "the recipient cannot see the request in any feed - settled or unsettled - so it was sent to nobody").toBeTruthy();
 
-            // `request_or_accept_friendship` accepts outright when the other
-            // party already had a reverse request pending - two people who want to
-            // be friends need not round-trip twice. The request may already be
-            // settled; calling accept on nothing pending is a 404. The outcome
-            // matters, not which route reached it.
+            // request_or_accept_friendship accepts outright when a reverse request is pending.
+            // The request may already be settled; accept on nothing pending is a 404.
+            // The outcome matters, not the route.
             const alreadyAccepted = String(inbound?.status ?? "").toLowerCase().includes("accept");
             if (!alreadyAccepted) {
                 const accepted = await secondaryApi.post(`friends/${me.uuid}/accept/`);
@@ -197,11 +193,8 @@ test.describe.serial("friendships", () => {
     });
 
     ifSecondaryAccount()("re-adding somebody you removed produces a request they can accept", async ({ api, secondaryApi }) => {
-        // `DELETE friends/{uuid}/` soft-deletes: row survives as `Removed` with
-        // original direction. A later `POST friends/` revives it without
-        // re-orienting, so the request appears sent by the other person - the
-        // actual recipient sees no incoming request and cannot accept.
-        // User-visible: remove, re-add, request sits permanently unacceptable.
+        // DELETE soft-deletes: row survives as Removed with original direction.
+        // POST revives it without re-orienting; recipient sees no incoming request.
         // Written from B's seat so the surviving row belongs to B.
         const me = await whoami(api);
         const them = await whoami(secondaryApi);
@@ -234,11 +227,9 @@ test.describe.serial("friendships", () => {
     });
 
     ifSecondaryAccount()("a request carrying a note can still be accepted", async ({ api, secondaryApi }) => {
-        // Isolating `message`: three runs showed requests with a message failed
-        // at accept with "Friend request not found"; identical requests without
-        // one accepted. Recipient saw `status="Requested" direction="outgoing"`
-        // - incoming request labelled as if they sent it. If this fails while the
-        // basic test passes, `message` is the cause in the note-carrying path.
+        // Isolating message: requests with a message failed at accept with
+        // "Friend request not found"; identical ones without accepted.
+        // Recipient saw incoming request labelled as if they sent it.
         const me = await whoami(api);
         const them = await whoami(secondaryApi);
         await resetFriendship(api, secondaryApi, me.uuid, them.uuid);

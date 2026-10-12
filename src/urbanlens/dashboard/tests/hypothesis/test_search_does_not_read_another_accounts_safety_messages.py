@@ -1,7 +1,7 @@
 """
 Searching your own safety check-ins must not read chat messages on a check-in you do not own.
 
-Same mechanism as P123 (``test_search_does_not_read_another_accounts_labels.py``):
+Same mechanism as ``test_search_does_not_read_another_accounts_labels.py``:
 ``SafetySearchProvider.search`` feeds ``messages__body`` to ``apply_text``, and it crosses a to-many
 relation (``SafetyCheckinMessage`` is a reverse foreign key, ``related_name="messages"``), so it goes
 through the same unscoped ``_semijoin`` as labels do - an ``Exists(SafetyCheckin._base_manager.filter(...))``
@@ -12,7 +12,7 @@ Unlike Article/Trip, a check-in has exactly one owning profile (no membership mo
 stranger's check-in here is simply owned by a different profile - the same "not mine" shape as the
 original labels reproduction, just for a different to-many relation.
 
-**Fixed 2026-09-17.** ``messages`` crosses at *path*'s own first segment, so ``_semijoin`` now bounds
+``messages`` crosses at *path*'s own first segment, so ``_semijoin`` now bounds
 its filter by the outer queryset's own candidate primary keys, materialised as a concrete list first
 rather than left as a nested subquery. See
 ``test_search_does_not_read_another_accounts_labels.py``'s module docstring for the measured
@@ -150,11 +150,11 @@ class SearchDoesNotReadAnotherAccountsSafetyMessagesTests(_SafetyMessageCase):
     """One check-in's messages must not be read to answer a search for a different, owned check-in."""
 
     def test_it_does_not_read_a_strangers_matching_messages(self) -> None:
-        """Fixed 2026-09-17 by the bounded semi-join - see the module docstring."""
+        """A stranger's matching messages must not be read."""
         self.assertDoesNotGrow(SECOND_BATCH, matching=True)
 
     def test_it_does_not_read_a_strangers_unrelated_messages(self) -> None:
-        """Fixed 2026-09-17 by the bounded semi-join - see the module docstring."""
+        """A stranger's unrelated messages must not be read."""
         self.assertDoesNotGrow(SECOND_BATCH, matching=False)
 
 
