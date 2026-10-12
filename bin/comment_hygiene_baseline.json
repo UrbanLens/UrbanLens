@@ -3,7 +3,6 @@
   ".github/workflows/ci.yml": 2,
   ".github/workflows/integration.yml": 1,
   ".github/workflows/nuclei.yml": 2,
-  ".github/workflows/publish.yml": 2,
   ".github/workflows/sqlmap.yml": 1,
   "bin/check_docs_refs.py": 2,
   "bin/check_image_file_reads.py": 1,
