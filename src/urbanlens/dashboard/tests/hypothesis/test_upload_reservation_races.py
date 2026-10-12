@@ -157,7 +157,7 @@ class _RaceCase(TransactionTestCase):
 
 
 class ParallelUploadQuotaTests(_RaceCase):
-    """G3-21 / G5-19: the quota check and the insert were never one critical section."""
+    """The quota check and the insert were never one critical section."""
 
     def test_two_parallel_uploads_cannot_both_fit_where_one_does(self) -> None:
         from urbanlens.dashboard.services.photos.photo_upload import PhotoUploadError, upload_photo
@@ -176,7 +176,7 @@ class ParallelUploadQuotaTests(_RaceCase):
 
 
 class ParallelDuplicateUploadTests(_RaceCase):
-    """G3-23 / G3-30: the checksum lookup ran before the critical section."""
+    """The checksum lookup ran before the critical section."""
 
     def test_the_vault_service_stores_identical_bytes_once(self) -> None:
         from urbanlens.dashboard.services.photos.photo_upload import upload_photo
@@ -231,7 +231,7 @@ EXTERNAL_CEILING = 1000
 
 @override_settings(EXTERNAL_MEDIA_DAILY_BYTES=EXTERNAL_CEILING)
 class ParallelExternalMediaCeilingTests(_RaceCase):
-    """G2-22: the daily external-media ceiling was read, then written."""
+    """The daily external-media ceiling was read, then written."""
 
     def setUp(self) -> None:
         super().setUp()

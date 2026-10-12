@@ -64,9 +64,6 @@ def get_comment(trip: Trip, comment_id: int) -> TripComment:
         trip: The trip that must own the comment.
         comment_id: The comment's primary key.
 
-    Returns:
-        The comment.
-
     Raises:
         TripNotFoundError: No such comment on this trip."""
     comment = TripComment.objects.filter(id=comment_id, trip=trip).select_related("author__user", "markup_map").first()
@@ -280,11 +277,9 @@ def build_comment_tree(trip: Trip, viewer: Profile, *, comments: Any = None) -> 
             },
         )
 
-    # The queryset above is meant to admit exactly what this loop admits, so a
-    # caller paging on it reports a count that matches what it renders. If the
-    # two ever part company the count becomes an upper bound - it announces
-    # that something was hidden, which is the oracle gate 3 exists to deny - and
-    # nothing else would say so.
+    # The queryset above must admit exactly what this loop admits, so a caller
+    # paging on it reports a count that matches what it renders. If they diverge,
+    # the count becomes an upper bound - announcing hidden content that gate 3 denies.
     if len(rendered) != len(top_comments):
         logger.error(
             "Trip comment gates disagree: SQL admitted %s top-level comments, the render pass kept %s (trip %s, viewer %s).",

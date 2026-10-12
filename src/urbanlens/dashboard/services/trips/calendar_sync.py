@@ -162,8 +162,8 @@ def trip_to_event_body(
     Convert a trip into a Google Calendar all-day event payload.
     Trips carry dates (not times), so they map to all-day events.
 
-    An update is a PATCH, which keeps every field the body leaves out, so a location this export withholds is sent as
-    ``""`` rather than left out (P335).
+    An update is a PATCH, which keeps every field the body leaves out, so a withheld location is sent as
+    ``""`` rather than omitted.
 
     Args:
         trip: The trip to export.
@@ -278,9 +278,9 @@ def activity_to_event_body(
     Convert one scheduled trip activity into a timed calendar event payload.
     Activities without a scheduled start cannot be placed on a calendar and yield None.
 
-    A location withheld from the exporting viewer is sent as ``""``, so an update clears it (P335), and the title as
-    the activities panel shows it to them (:func:`~urbanlens.dashboard.services.trips.trip_visibility.masked_activity_title`):
-    a title the author typed, else "Secret Location". A title taken from the place is never sent.
+    A withheld location is sent as ``""`` so an update clears it. Title matches the activities panel
+    (:func:`~urbanlens.dashboard.services.trips.trip_visibility.masked_activity_title`):
+    author's title or "Secret Location"; place-derived titles are never sent.
 
     Args:
         activity: The TripActivity to export (with ``trip`` loaded).
@@ -1078,8 +1078,6 @@ class _TripCalendarExport:
             revealed: Build the bodies as if the calendar's owner could see every stop, as when it was written before
                 a stop was withheld: no stop hidden, and no stop's own "hide location" set.
 
-        Returns:
-            The plan.
         """
         profile = self.account.profile
         trip_url = _trip_page_url(self.trip)

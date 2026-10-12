@@ -63,12 +63,8 @@ test.describe("Hudson River State Hospital - where the parcel came from", () => 
     });
 
     test("the outline is not a hull fitted around this pin's own child pins", async ({ campus, page }) => {
-        // The sharp version of the test above, and the one that would still
-        // fail if `source` were reported correctly while the geometry stayed
-        // wrong. Deliberately derives the hull from live data rather than
-        // hard-coding an area: REData's suggested candidate for this parcel is
-        // expected to change (its own boundary selection is being corrected),
-        // and a test pinned to today's number would fail for that instead.
+        // Sharp version of the above test; fails even if `source` is correct but geometry is wrong.
+        // Derives hull from live data: REData's candidate changes as its boundary selection is corrected.
         campus.requireBoundary();
 
         const pins = await allPins(campus.api);
@@ -76,12 +72,9 @@ test.describe("Hudson River State Hospital - where the parcel came from", () => 
         test.skip(children.length < 2, "fewer than two child pins exist, so no hull could have been fitted around them.");
 
         const markers: Array<[number, number]> = [[campus.origin.longitude, campus.origin.latitude], ...children.map((row): [number, number] => [row.longitude, row.latitude])];
-        // Padded before hulling, because the application pads: `_fitted_polygon`
-        // buffers every marker by CHILD_BOUNDARY_PADDING_METERS and hulls the
-        // resulting rings, so a hull of the bare points is materially smaller
-        // and the comparison below silently passes. It did exactly that on the
-        // first run against known-broken data - the reason this reproduces the
-        // padding rather than approximating it.
+        // Padded before hulling: `_fitted_polygon` buffers each marker by
+        // CHILD_BOUNDARY_PADDING_METERS and hulls the rings. Bare-point hull is
+        // smaller and would silently pass; this reproduces the actual padding.
         const padded = markers.flatMap((marker) => ringAround(marker, CHILD_BOUNDARY_PADDING_METERS));
         const hullArea = approximateAreaSqm({ type: "Polygon", coordinates: [convexHull(padded)] });
         const drawnArea = approximateAreaSqm(payloadPolygon(await boundaryPayload(page, campus.pin.slug)));
@@ -100,14 +93,9 @@ test.describe("Hudson River State Hospital - where the parcel came from", () => 
     });
 
     test("a pin on ground nobody has asked about is not born already-enriched", async ({ campus, page }) => {
-        // The root cause, isolated - and the only test here that needs no
-        // enrichment to have finished, so it stays meaningful even when the
-        // campus fixture found no parcel.
-        //
-        // A randomised coordinate rather than a constant: `Location` rows are
-        // keyed by coordinate and outlive the pins that created them, so a
-        // fixed one would carry the previous run's `place_resolved_at` and the
-        // test would assert nothing on its second execution.
+        // Root cause isolated; needs no enrichment, so meaningful even when campus fixture finds no parcel.
+        // Randomized coordinate: `Location` rows are keyed by coordinate and outlive pins,
+        // so a fixed one would carry previous run's `place_resolved_at`.
         const latitude = 41.62 + Math.random() * 0.02;
         const longitude = -73.82 - Math.random() * 0.02;
 

@@ -36,13 +36,11 @@ class _AssistantApiTestCase(TestCase):
         from urbanlens.dashboard.models.site_settings.model import SiteSettings
         from urbanlens.dashboard.models.subscriptions import SiteFeature
 
-        baker.make(User)  # the first user is auto-promoted to bootstrap site admin
+        baker.make(User)  # first user is auto-promoted to bootstrap site admin
         self.user = baker.make(User)
         self.profile = Profile.objects.get(user=self.user)
         self.raw_key = self._key_with_scopes([ApiKeyScope.ASSISTANT_WRITE.value])
-        # assistant_available() requires SiteFeature.AI - unlike the old
-        # test suite, which mocked get_gateway directly and never actually
-        # evaluated that gate.
+        # assistant_available() requires SiteFeature.AI; old tests mocked get_gateway directly.
         settings_obj = SiteSettings.get_current()
         SiteSettings.objects.filter(pk=settings_obj.pk).update(default_features=SiteFeature.AI)
 
@@ -198,11 +196,8 @@ class AssistantTurnPollTests(_AssistantApiTestCase):
         self.assertIn("expired", response.json()["reply"])
 
     def test_polling_a_resolved_turn_again_returns_the_same_reply(self) -> None:
-        # A GET must be idempotent. The first poll to see SUCCESS clears the
-        # Celery result (AsyncResult.forget), so a client that retries -
-        # because it lost the response, or simply because its poll loop asks
-        # again - would otherwise find the task id unknown (Celery reports
-        # PENDING) and be told to keep waiting for a reply it can never get.
+        # GET must be idempotent: first SUCCESS clears the Celery result, so a retry
+        # would see PENDING and wait forever for a reply it already has.
         turn_id = self._start_turn("hi", history=[])
         progress = TaskProgress(task_id="task-abc-123", state="SUCCESS", result={"reply": "Hi there!", "actions": []})
         with patch("urbanlens.dashboard.external_api.views_assistant.get_task_progress", return_value=progress):

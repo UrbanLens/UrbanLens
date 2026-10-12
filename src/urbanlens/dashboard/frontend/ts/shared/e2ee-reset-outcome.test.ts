@@ -23,7 +23,6 @@ describe("a reset that preserved nothing", () => {
 });
 
 describe("a partial reset", () => {
-    // The case the old code got wrong: it reported unqualified success.
     test("warns rather than claiming success", () => {
         const outcome = resetOutcomeMessage({ rewrapped: 3, notRewrapped: 9 });
         expect(outcome.level).toBe("warning");
@@ -46,8 +45,6 @@ describe("a partial reset", () => {
 });
 
 describe("a reset on an account with no encrypted history", () => {
-    // The other case the old code got wrong - it showed no toast at all, so a
-    // reset that had worked looked like one that had silently failed.
     test("still confirms the reset happened", () => {
         const outcome = resetOutcomeMessage({ rewrapped: 0, notRewrapped: 0 });
         expect(outcome.level).toBe("success");

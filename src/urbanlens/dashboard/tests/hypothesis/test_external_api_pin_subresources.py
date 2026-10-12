@@ -212,10 +212,8 @@ class PinVisitEndpointTests(SubResourceTestCase):
         self.assertIsNotNone(self.pin.last_visited)
 
     def test_create_adds_the_visited_status_label(self) -> None:
-        # Every profile is seeded with a default "Visited" status label, and
-        # add_visited_status looks it up by (profile, kind, name) - so this must
-        # assert on the seeded row. Creating another "Visited" label here would
-        # pass the lookup a duplicate the service never selects.
+        # Seeded "Visited" label is looked up by (profile, kind, name); a duplicate
+        # here would pass the lookup but the service never selects it.
         visited = Label.objects.get(profile=self.profile, kind="status", name="Visited")
         response = self._post(f"{_base(self.pin)}visits/", {"visited_at": self.visited_at.isoformat()})
         self.assertEqual(response.status_code, 201, response.content)
@@ -311,11 +309,8 @@ class SubResourcePureLogicTests(SimpleTestCase):
     @_PURE_LOGIC_SETTINGS
     @given(st.text(alphabet=st.characters(codec="ascii")))
     def test_name_normalization_ignores_case(self, name: str) -> None:
-        # ASCII only: a few characters change length under case mapping (U+00DF
-        # "sharp s" uppercases to "SS"), and since normalization also strips
-        # non-alphanumerics, upper() and lower() of such a character genuinely
-        # do not normalize alike. That is a property of Unicode casing, not a
-        # defect in the comparison helper.
+        # ASCII only: some chars change length under case mapping (U+00DF -> SS);
+        # normalization strips non-alphanumerics, so upper/lower may differ.
         self.assertEqual(normalize_name_for_comparison(name.upper()), normalize_name_for_comparison(name.lower()))
 
     @_PURE_LOGIC_SETTINGS

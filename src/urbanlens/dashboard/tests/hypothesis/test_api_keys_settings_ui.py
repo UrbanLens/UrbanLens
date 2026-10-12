@@ -119,10 +119,9 @@ class ApiKeysSettingsPageContentTests(TestCase):
         self.assertContains(response, reverse("external_api:pins"))
 
     def test_page_shows_recent_activity_only_after_the_key_is_used(self) -> None:
-        # A whoami/pins path would be a false-positive match here: the usage
-        # docs example above always renders those same URLs regardless of
-        # this key's actual activity. Use a distinctive endpoint so the
-        # assertion can only be satisfied by the real per-key activity block.
+        # A whoami/pins path would be a false-positive match: the usage
+        # docs example always renders those URLs regardless of this key's activity.
+        # Use a distinctive endpoint so the assertion can only be satisfied by the real per-key activity block.
         endpoint = "/dashboard/api/external/v1/distinctive-test-endpoint/"
         api_key, _raw_key = generate_api_key(self.user, "Zapier")
 
@@ -143,7 +142,7 @@ class ApiKeysSettingsPageContentTests(TestCase):
 
 class ApiKeyListPaginationTests(TestCase):
     """
-    P69: the key list grows forever, because revoking never removes a row.
+    The key list grows forever, because revoking never removes a row.
 
     Revoked keys are shown on purpose - ``revoke_all_api_keys``' docstring says so, and an owner needs to see
     that a key went away - which is exactly why the list cannot be trimmed and has to page instead."""
@@ -186,10 +185,9 @@ class ApiKeyListPaginationTests(TestCase):
         self.assertEqual(self._listed(response), [f"key-{index:03d}" for index in range(3, -1, -1)])
 
     def test_pagination_links_target_the_section_and_its_own_parameter(self) -> None:
-        # The partial is rendered by the whole settings page as well as by its
-        # own view, so a link built from request.path would point at
-        # /dashboard/settings/. `page` is avoided because the settings page
-        # carries other paginated sections.
+        # The partial is rendered by the whole settings page and its own view,
+        # so a link built from request.path would point at /dashboard/settings/.
+        # `page` is avoided because the settings page carries other paginated sections.
         self._keys(API_KEYS_PAGE_SIZE + 4)
 
         response = self.client.get(reverse("settings.view"))

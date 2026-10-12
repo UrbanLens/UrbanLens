@@ -229,11 +229,7 @@ class CreateGroupMessageTests(TestCase):
             )
 
     def test_encrypted_message_persists(self) -> None:
-        # The key row is part of the fixture because it is part of reality: a
-        # client cannot encrypt under version 1 until it has uploaded that
-        # version's envelopes, which is the only thing that creates a GroupKey
-        # (controllers/e2ee.py). The send path checks it now - see
-        # test_group_key_version_is_real.
+        # GroupKey must exist before a client can encrypt under that version.
         GroupKey.objects.create(group=self.group, version=1)
 
         message = create_group_message(
@@ -775,10 +771,7 @@ class GroupKeyEndpointTests(TestCase):
         self.assertTrue(group_e2ee_ready(self.group))
 
     def test_rotation_payload_never_contains_member_slugs(self) -> None:
-        """
-        The whole point of the opaque tokens (PR #111
-        finding): fetching the rotation payload must not reveal the real slug
-        of any member - their profile_visibility may mask them elsewhere."""
+        """Opaque tokens prevent leaking real slugs that profile_visibility may mask."""
         _enroll(self.creator)
         _enroll(self.member)
         content = self.client.get(self.url).content.decode()

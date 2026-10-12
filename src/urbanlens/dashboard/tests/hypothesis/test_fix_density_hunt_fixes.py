@@ -1,4 +1,4 @@
-"""Three defects found by hunting the highest fix-density modules (2026-08-20)."""
+"""Three defects found by hunting the highest fix-density modules."""
 
 from __future__ import annotations
 
@@ -24,11 +24,8 @@ class ActivityLocationRefTests(TestCase):
         super().setUp()
         baker.make(User)  # absorbs the bootstrap site-admin promotion
         self.profile = baker.make(User).profile
-        # A *named* location on purpose: its slug is then a word-slug rather
-        # than something uuid-shaped, which is what makes the uuid-filter
-        # failure reachable. A nameless location can slug from its own uuid and
-        # parse cleanly, so a fixture without a name tests nothing here - the
-        # first version of this test did exactly that and passed either way.
+        # Named location: slug is a word-slug, not uuid-shaped, so uuid-filter
+        # failure is reachable. Nameless location would parse cleanly either way.
         self.location = baker.make(
             Location,
             latitude=42.35,

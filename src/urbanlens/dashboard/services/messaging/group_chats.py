@@ -508,14 +508,7 @@ def _notify_group_event(group: GroupChat, recipient: Profile, text: str) -> None
 
 
 def _notify_group_message(message: GroupMessage) -> None:
-    """
-    Raise on-site notifications for a new group message.
-
-    Args:
-        message: The freshly created message.
-
-    Note:
-        Runs a small, fixed number of queries regardless of group size - see the comments inline for how the per-membership unread check and the notification-preference lookup each avoid a query-per-membership loop."""
+    """Raise on-site notifications for a new group message; runs a fixed query count regardless of group size."""
     from django.urls import reverse
 
     from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
@@ -531,9 +524,7 @@ def _notify_group_message(message: GroupMessage) -> None:
 
     group = message.group
     url = reverse("messages.group", kwargs={"group_uuid": group.uuid})
-    # profile__notification_preferences is a reverse OneToOne - select_related
-    # pulls it in the same JOIN as profile/profile__user, so the preference
-    # check below never issues its own per-membership query.
+    # select_related pulls notification_preferences in the same JOIN, avoiding per-membership queries.
     memberships = list(
         group.active_memberships().exclude(profile_id=message.sender_id).select_related("profile", "profile__user", "profile__notification_preferences"),
     )
@@ -561,17 +552,11 @@ def _notify_group_message(message: GroupMessage) -> None:
             return True
         return False
 
-    # One query for the whole membership rather than one per member, for the same reason the unread
-    # check above is batched: this runs on the synchronous send path and a 50-member group would
-    # otherwise pay 50 lookups.
-    # Friendship-level mute is separate from `membership.muted` below - that one silences the group,
+    # Batched to one query (sync send path; 50 members = 50 lookups otherwise). Friendship mute differs from membership.muted.
     from urbanlens.dashboard.services.social.friendship import profiles_muting
 
     muted_recipients = profiles_muting(message.sender_id, [m.profile_id for m in memberships])
-    # The last per-member query in this function.
-    # The docstring has claimed a fixed query count since the unread check and the preference lookup
-    # were batched; the sender's masked name was resolved one member at a time the whole time, so
-    # the claim was true of two of the three things it named.
+    # Sender identity resolved per viewer (the third per-member query the docstring didn't count).
     sender_identities = resolve_identity_for_viewers(message.sender, [membership.profile for membership in memberships])
 
     for membership in memberships:
@@ -580,14 +565,10 @@ def _notify_group_message(message: GroupMessage) -> None:
         if _already_unread(membership):
             continue
         pref = delivery_preference(membership.profile, "message")
-        # Unlike the 1:1 path (which suppresses the in-app row for EMAIL-only users because a
-        # delayed email actually goes out instead), group messages have no email channel - so
-        # anything short of NONE still gets the in-app row rather than silently nothing.
+        # Group messages lack an email channel, so any pref != NONE gets an in-app row (unlike 1:1 where EMAIL-only gets email instead).
         if pref == DeliveryPreference.NONE:
             continue
-        # Same viewer-scoped masking the thread render applies - a sender whose
-        # profile_visibility hides them from this member must not be revealed
-        # by the bell notification before the (masked) thread is even opened.
+        # Viewer-scoped masking (matches thread render): hidden senders not revealed by notification.
         sender_display_name = sender_identities[membership.profile_id]["display_name"]
         NotificationLog.objects.notify(
             muted_recipients=muted_recipients,
@@ -934,20 +915,11 @@ def hidden_by_block(message: GroupMessage, viewer: Profile) -> bool:
 
 def group_thread_page(membership: GroupChatMembership, *, before_id: int | None = None, limit: int = GROUP_THREAD_PAGE_SIZE, blocks: SharedSpaceBlocks | None = None) -> tuple[list[GroupMessage], bool]:
     """
-    Return one page of a group thread, mirroring ``direct_messages.thread_page``.
-
-    Args:
-        membership: The viewer's active membership (scopes visibility).
-        before_id: When given, only messages with a smaller pk are considered; None loads the most recent page.
-        limit: Maximum number of messages to return.
-        blocks: The viewer's blocks, when the caller already resolved them.
+    Return one page of a group thread (mirrors direct_messages.thread_page).
 
     Returns:
-        ``(messages, has_more_older)``: messages oldest-first; ``has_more_older`` is True when older visible messages remain."""
-    # "reactions__profile" joins the prefetch list because every renderer of this page now
-    # summarizes reactions per message (see
-    # ``external_api.serializers_messaging.build_group_message_payload``); without it a 50-message
-    # page issues 50 extra queries.
+        ``(messages, has_more_older)``: messages oldest-first; ``has_more_older`` True if older visible messages remain."""
+    # reactions__profile prefetched to avoid 50 extra queries on 50-message page (renderers summarize reactions).
     queryset = GroupMessage.objects.visible_window(membership, blocks=blocks).select_related("sender", "sender__user").prefetch_related("shares__pin_share__location__wiki", "shares__pin_share__pins_created", "reactions__profile")
     if before_id is not None:
         queryset = queryset.filter(pk__lt=before_id)

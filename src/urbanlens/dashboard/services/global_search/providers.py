@@ -27,11 +27,10 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.services.global_search.parser import ParsedQuery
 from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_locations_cached
 
-#: Preserves the concrete queryset class through the shared helpers.
-#: Without it they hand back a plain QuerySet, and a provider that then calls a custom manager method
-#: - PhotoSearchProvider's visible_to() is the one that matters - is calling something the type no
-#: longer admits exists. Bounded by the app's own base queryset rather than Django's, because the
-#: helpers call `semijoin()`, which only exists there.
+#: Preserves the concrete queryset class through the shared helpers. Without it they hand back
+#: a plain QuerySet, and a provider calling a custom manager method (e.g. PhotoSearchProvider's
+#: visible_to()) would call something the type no longer admits. Bounded by the app's base queryset
+#: because helpers call `semijoin()`, which only exists there.
 _QS = TypeVar("_QS", bound="DashboardQuerySet[Any]")
 
 logger = logging.getLogger(__name__)
@@ -1228,11 +1227,9 @@ class CommentSearchProvider(SearchProvider):
             return []
         results: list[SearchResult] = []
 
-        # Held for the whole provider rather than per term_filter call. Both access scopes here
-        # are lists of ids on the comment tables' own columns, and at 8,000 comments Postgres
-        # prefers reading the table to reading three indexes - correct at that size, and the
-        # site's comment count rather than the viewer's. With the hint it is a BitmapOr of the
-        # three: 7.21 ms and 7,980 rows discarded become 0.20 ms and none.
+        # Held for the whole provider. Both access scopes are lists of ids on the comment
+        # tables' columns; at 8,000 comments Postgres prefers a table scan over three indexes.
+        # With the hint it becomes a BitmapOr: 7.21 ms and 7,980 rows discarded become 0.20 ms.
         with probe_scope():
             # reachable_by carries the same domain-aware access rule as the wiki page itself, not just
             # an exact-Location pin match.

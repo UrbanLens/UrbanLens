@@ -34,9 +34,6 @@ class ConcealedRenderTests(TestCase):
     def setUp(self) -> None:
         """Build a wiki a stranger contributed to, and a viewer with no tie to them."""
         super().setUp()
-        # official_name is what enrichment resolves and what every creation
-        # path names a wiki from, so it is the automatic name a concealed
-        # viewer should end up seeing.
         self.location = baker.make(
             Location,
             latitude=43.0731,
@@ -46,11 +43,7 @@ class ConcealedRenderTests(TestCase):
         )
         self.wiki = baker.make(Wiki, location=self.location, name="Provider Name")
 
-        # A real automatic write. Without one, every field falls to its model
-        # default and resolve_fields is never exercised - the whole file passed
-        # with it stubbed to return {}, which is how this went unnoticed.
-        # baker.make() runs outside a request or task, so its create rows record
-        # as SYSTEM, which qualifies for nobody.
+        # A real automatic write exercises resolve_fields; baker runs as SYSTEM.
         with writing_as(WriteSource.AUTOMATIC):
             Wiki.objects.filter(pk=self.wiki.pk).update(description=AUTOMATIC_BLURB)
 
@@ -63,11 +56,7 @@ class ConcealedRenderTests(TestCase):
                 fences=SecurityLevel.SOME,
             )
 
-        # Kept as fixtures so the wiki under test is a realistically populated
-        # one, but deliberately not in CANARIES: both load over HTMX from their
-        # own endpoints, so asserting them against the page response would be
-        # asserting an absence the page was never going to contain.
-        # ConcealedPanelTests covers them where they actually render.
+        # Aliases and comments load via HTMX; ConcealedPanelTests covers them.
         baker.make("dashboard.WikiAlias", wiki=self.wiki, name="PANEL-ONLY-ALIAS", created_by=self.stranger)
         baker.make("dashboard.Comment", wiki=self.wiki, pin=None, profile=self.stranger, text="PANEL-ONLY-COMMENT")
         # Unlike the two above, WikiLink renders directly in the About card on

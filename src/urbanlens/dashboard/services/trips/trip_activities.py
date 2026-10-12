@@ -118,9 +118,6 @@ def get_activity(trip: Trip, activity_id: int) -> TripActivity:
         trip: The trip that must own the activity.
         activity_id: The activity's primary key.
 
-    Returns:
-        The activity.
-
     Raises:
         TripNotFoundError: No such activity on this trip."""
     activity = TripActivity.objects.filter(id=activity_id, trip=trip).select_related("location", "pin", "added_by__user", "child_trip").first()
@@ -220,8 +217,7 @@ def resolve_activity_place(body: Mapping[str, Any], profile: Profile, *, trip: T
     Resolve an activity's target place from submitted location fields.
 
     A ``location_uuid``/``location_slug`` names only a Location *profile* may see, or one already on an activity of
-    *trip* (what the edit dialog sends back); anything else is treated as not given, at the same cost as a reference
-    nothing matches, so the field cannot be used to learn which places exist.
+    *trip*; anything else is treated as not given, so the field cannot be used to learn which places exist.
 
     Args:
         body: Submitted fields - any of ``pin_uuid``/``pin_slug``, ``location_uuid``/``location_slug``, ``geocoded_lat``/``geocoded_lng``.
@@ -232,7 +228,7 @@ def resolve_activity_place(body: Mapping[str, Any], profile: Profile, *, trip: T
         The resolved ``(location, pin)`` pair - either or both may be None.
 
     Raises:
-        TripValidationError: A ``pin_uuid``/``pin_slug`` was submitted but does not resolve to one of *profile*'s own pins - either it does not exist, or it belongs to someone else."""
+        TripValidationError: A ``pin_uuid``/``pin_slug`` was submitted but does not resolve to one of *profile*'s own pins."""
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
 
@@ -969,7 +965,7 @@ def complete_activity(trip: Trip, actor: Profile, activity_id: int, *, completed
 def reorder_activities(trip: Trip, actor: Profile, order: Sequence[int]) -> None:
     """
     Apply an explicit ordering to the trip's non-completed activities.
-    Only ever accepts an exact permutation of the trip's own current non-completed activities - never partial, never containing another trip's ids - so a stale or tampered order can't silently drop or hijack anything.
+    Only accepts an exact permutation of the trip's current non-completed activities.
 
     Args:
         trip: The trip being reordered.

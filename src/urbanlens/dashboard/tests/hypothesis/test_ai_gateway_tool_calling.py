@@ -22,11 +22,9 @@ class SendWithToolsTests(SimpleTestCase):
     def setUp(self) -> None:
         self.enterContext(real_ai_chokepoint("urbanlens.dashboard.services.ai.gateway.LLMGateway.send_with_tools"))
 
-        # "claude-*" isn't a tiktoken-native model, so calculate_tokens falls
-        # back to downloading the o200k_base encoding on first use - fine in
-        # the sandboxed containers (baked at build time, see the Dockerfile),
-        # but these are unit tests of send_with_tools's own logic, not of
-        # tiktoken, and must not depend on network access or a warm cache.
+        # "claude-*" isn't tiktoken-native, so calculate_tokens falls back to
+        # downloading o200k_base encoding - fine in containers (baked at build),
+        # but these are unit tests of send_with_tools logic, not tiktoken.
         patcher = mock.patch.object(AnthropicGateway, "calculate_tokens", return_value=10)
         patcher.start()
         self.addCleanup(patcher.stop)
@@ -60,9 +58,8 @@ class SendWithToolsTests(SimpleTestCase):
         self.assertEqual(gateway._inference_client.send.call_args.args[0].timeout_seconds, 12.5)
 
     def test_ignores_a_gateway_constructed_with_the_answer_formatting(self) -> None:
-        # Even a caller that forgot formatting="" must not leak the <ANSWER>
-        # wrapping instruction into a native tool-calling call - it has
-        # nothing to do with real tool use and would only confuse the model.
+        # A caller that forgot formatting="" must not leak the <ANSWER>
+        # wrapping instruction into a native tool-calling call - it would only confuse the model.
         gateway = AnthropicGateway(instructions="test instructions")  # default formatting, not ""
         gateway._inference_client = mock.Mock()
         gateway._inference_client.send.return_value = InferenceResponse(

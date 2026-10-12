@@ -1,4 +1,4 @@
-"""P222: a pin's map draws every building child's own outline while child pin details are on, and none while off."""
+"""A pin's map draws every building child's own outline while child pin details are on, and none while off."""
 
 from __future__ import annotations
 
@@ -99,7 +99,7 @@ class BuildingChildOutlineTests(_Campus):
         self.assertEqual(self.outlines("1"), [drawn.pk])
 
     def test_an_outline_drawn_on_the_childs_wiki_counts_where_its_building_has_no_footprint(self) -> None:
-        """P264."""
+        """A wiki's building outline counts even when the building place has no footprint."""
         child = self.building_child(0, outline=False)
         wiki = baker.make(Wiki, location=child.location, name="Building 0")
         baker.make(
@@ -253,7 +253,7 @@ class WikiChildOutlineTests(_Campus):
         self.assertEqual(self.wiki_outlines("1"), [drawn.pk])
 
     def test_an_outline_drawn_on_a_building_with_no_footprint_counts(self) -> None:
-        """P264: the building place says a building outline applies; it only lacks one."""
+        """A drawn outline counts for a building place that lacks its own footprint."""
         drawn = self.child_wiki(0, outline=False)
         baker.make(
             Boundary,

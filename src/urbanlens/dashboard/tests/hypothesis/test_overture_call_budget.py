@@ -1,12 +1,11 @@
 """
-P110: Overture's parquet/STAC reads must be visible to, and bounded by, the rate limiter.
+Overture's parquet/STAC reads must be visible to, and bounded by, the rate limiter.
 
 `_fetch` bypasses `self.session` entirely - it reads GeoParquet straight from S3 via
 `pyarrow`/`geopandas` via the `overturemaps` library, so `Gateway.__post_init__`'s automatic
 session-wrapping never sees these calls (`OvertureMapsGateway.service_key` is set to `None` on the
 class precisely so nothing tries). Nothing bounded how often enrichment reached Overture in the
-first place, including the STAC index lookup that actually earns Overture's 429 - see P110's "Still
-open" note: "the reads remain invisible to the rate limiter and to the outbound-call guard."
+first place, including the STAC index lookup that actually earns Overture's 429.
 
 This tests the fix: `OvertureMapsGateway._reserve_call_budget`, called at the top of `_fetch`
 before the STAC lookup or the data read.
@@ -110,7 +109,7 @@ class OvertureCallBudgetTests(TestCase):
         self.assertFalse(entry.success)
 
     def test_a_disabled_service_refuses_without_touching_overture_at_all(self) -> None:
-        """Closes the other half of P110's gap: the outbound-call guard, not just the rate window."""
+        """The outbound-call guard refuses a disabled service, not just the rate window."""
         ApiRateLimit.objects.filter(service=_SERVICE).update(enabled=False)
         gateway = OvertureMapsGateway()
         with (

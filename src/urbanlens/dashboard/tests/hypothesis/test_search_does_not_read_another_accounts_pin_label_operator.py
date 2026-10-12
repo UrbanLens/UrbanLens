@@ -9,7 +9,7 @@ gap was not checked." This file is that check, for Pin.
 ``PinSearchProvider.search`` also calls ``apply_label_clause`` for the `label:`/`tag:` operator,
 which filters through the same ``_semijoin(Pin, "labels", ...)`` shape as the bare-term path -
 ``Exists(Pin._base_manager.filter(condition, pk=OuterRef("pk")))``, unscoped to pins the viewer
-owns. The one difference: `label:` matches with ``iexact``, not ``icontains``. P123's fix (a GIN
+owns. The one difference: `label:` matches with ``iexact``, not ``icontains``. The fix (a GIN
 trigram index on ``Label.name``, migration 0049) targets ``icontains``'s compiled form specifically,
 so it was expected to say nothing about an ``iexact`` plan - the same result already found for
 Wiki's identical call to ``apply_label_clause``
@@ -28,8 +28,7 @@ triggered by ``iexact``'s own comparison rather than the trigram index - but tha
 explain why the same mechanism does not equally rescue Photo's or Wiki's matching variant, and that
 was not chased down; recorded as a measured fact, not a diagnosed one.
 
-**The non-matching variant fixed 2026-09-17**, by the same bounded-semi-join rewrite as P123's own
-file: ``_semijoin`` now bounds ``labels``' filter by the outer queryset's own candidate primary keys,
+**The non-matching variant was fixed** by the same bounded-semi-join rewrite: ``_semijoin`` now bounds ``labels``' filter by the outer queryset's own candidate primary keys,
 materialised as a concrete list first. See ``test_search_does_not_read_another_accounts_labels.py``'s
 module docstring for the measured mechanism.
 """
@@ -183,8 +182,6 @@ class SearchDoesNotReadAnotherAccountsPinLabelOperatorTests(_PinLabelOperatorCas
     def test_it_does_not_read_a_strangers_labels_when_the_term_matches_nothing(self) -> None:
         """
         A `label:` search that matches nothing anywhere is the true negative: nothing to short-circuit on.
-
-        Fixed 2026-09-17 by the bounded semi-join - see the module docstring.
         """
         self.assertDoesNotGrow(NOWHERE)
 

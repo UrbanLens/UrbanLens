@@ -1,5 +1,5 @@
 """
-Uploads storage failed on wait for storage to recover, rather than being dropped or rejected (P119, P201).
+Uploads wait for storage to recover rather than being dropped or rejected.
 
 A held icon or avatar, a pending comment image and a photo, video or document being processed are already in media
 storage, so retrying needs nothing from their owner. Waiting must not cost anyone else: each upload's attempts back off from :data:`RETRY_BASE` to :data:`RETRY_CAP`,
@@ -238,13 +238,7 @@ def adopt_stalled_comment_scans() -> int:
 
 
 def give_up(waiting: UploadRetry) -> None:
-    """
-    Stop waiting on an upload: drop the held one, reject the pending comment and tell its author, or offer the photo
-    back to its owner to retry or discard.
-
-    Args:
-        waiting: The upload.
-    """
+    """Stop waiting on an upload: drop held, reject pending comment, or return photo to owner for retry/discard."""
     from urbanlens.dashboard.services.media.held_upload import HELD_FIELDS, drop_held
 
     if waiting.target in HELD_FIELDS:

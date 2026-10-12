@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 
 def _pin_every_card_applies_to(profile) -> Pin:
-    """A cold pin no card's gate refuses, so every card renders its placeholder (P53 leaves out the ones that do)."""
+    """A cold pin no card's gate refuses, so every card renders its placeholder."""
     location = baker.make_recipe(
         "dashboard.location",
         street_number="1",
@@ -211,10 +211,6 @@ class PendingPanelPlaceholderMarkerTests(TestCase):
         self.profile = self.user.profile
         self.client.force_login(self.user)
         self.pin: Pin = baker.make_recipe("dashboard.pin", profile=self.profile)
-        # schedule_panel_fetch's apply_async would otherwise try to reach a
-        # real Celery broker/result-backend - not available in this test
-        # environment (matches the established pattern in
-        # test_external_apis_toggle.py).
         patcher = mock.patch("urbanlens.dashboard.tasks.fetch_panel_source")
         self.addCleanup(patcher.stop)
         patcher.start()
@@ -262,7 +258,7 @@ class ConsistentLoadingPlaceholderTests(TestCase):
 
 
 class LocationDataTabsTests(TestCase):
-    """Nominatim, Photon, and Building Characteristics used to be three separate standalone cards with no explanation of how they related to one another - merged into one "Location Data" card with tabs (see _pin_location_data_tabs.html and PinController.view's location_data_tabs)."""
+    """Nominatim, Photon, and Building Characteristics are merged into one "Location Data" card with tabs (see _pin_location_data_tabs.html and PinController.view's location_data_tabs)."""
 
     def setUp(self) -> None:
         super().setUp()

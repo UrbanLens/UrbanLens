@@ -1,5 +1,5 @@
 """
-A trip's Google Calendar export resumes where the budget stopped it, and never sends an event twice (P334).
+A trip's Google Calendar export resumes where the budget stopped it, and never sends an event twice.
 
 Measured before the fix with the real limiter and the HTTP layer stubbed: a trip with 40 scheduled activities under
 the site-wide 30-a-minute budget sent 30 requests per attempt (the trip event and the first 29 activities) and was
@@ -250,7 +250,7 @@ class _CalendarExportCase(TestCase):
 
 
 class FortyActivitiesUnderThirtyAMinuteTests(_CalendarExportCase):
-    """P334's measurement, now finishing: the first attempt writes 30, the sweep's push writes the other 11."""
+    """The first attempt writes 30, the sweep's push writes the other 11."""
 
     def test_the_continuation_writes_the_rest_and_no_activity_is_sent_twice(self) -> None:
         self._limit(30)

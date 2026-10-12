@@ -11,7 +11,7 @@ distinct from ``ArticleSearchProvider``'s ``wiki__aliases__name``
 semijoin is built from ``Wiki._base_manager`` directly. No index covers ``WikiAlias.name`` for this
 ``icontains`` path, so both the matching and non-matching variant reproduced.
 
-**Fixed 2026-09-17.** ``aliases`` crosses at *path*'s own first segment, so ``_semijoin`` now bounds
+``aliases`` crosses at *path*'s own first segment, so ``_semijoin`` now bounds
 its filter by the outer queryset's own candidate primary keys, materialised as a concrete list first
 rather than left as a nested subquery. See
 ``test_search_does_not_read_another_accounts_labels.py``'s module docstring for the measured
@@ -141,11 +141,9 @@ class SearchDoesNotReadAnotherAccountsWikiOwnAliasesTests(_WikiOwnAliasCase):
     """One wiki's aliases must not be read to answer a search over a different wiki."""
 
     def test_it_does_not_read_a_strangers_matching_aliases(self) -> None:
-        """Fixed 2026-09-17 by the bounded semi-join - see the module docstring."""
         self.assertDoesNotGrow(SECOND_BATCH, matching=True)
 
     def test_it_does_not_read_a_strangers_unrelated_aliases(self) -> None:
-        """Fixed 2026-09-17 by the bounded semi-join - see the module docstring."""
         self.assertDoesNotGrow(SECOND_BATCH, matching=False)
 
 

@@ -139,11 +139,7 @@ class BoundaryManager(_BoundaryManagerBase["Boundary"]):
         """The pin's own boundary row of one type, or None."""
         return self.for_pin(pin).of_type(boundary_type).with_coordinate_location().first()
 
-    # ------------------------------------------------------------------
-    # Batched row lookups Counterparts to row_for_pin/row_for_wiki/row_for_location for callers
-    # resolving many pins' boundaries at once (e.g. markup-triggered pin-share detection) - one
-    # query for the whole batch instead of one per item.
-    # ------------------------------------------------------------------
+    # Batched row lookups: one query for many pins (e.g. markup-triggered pin-share detection).
 
     def rows_by_pin_id(self, pin_ids: Iterable[int], boundary_type: str) -> dict[int, Boundary]:
         """
@@ -344,10 +340,8 @@ class BoundaryManager(_BoundaryManagerBase["Boundary"]):
         if row is not None and row.polygon:
             return row.polygon, "pin"
 
-        # A hull fitted around this pin's own children describes the markers we happen to know
-        # about, not the property - so it stands in only while nobody has offered the real outline,
-        # and steps aside the moment one exists.
-        # Left ahead of the place, geometry the chain had just fetched stayed invisible on the very
+        # A hull fitted around this pin's own children describes known markers, not the property.
+        # It stands in only while no real outline exists.
         if row is not None and row.generated_polygon and not (row.generated_from_children and scoped is not None):
             return row.generated_polygon, "generated"
 
@@ -362,12 +356,9 @@ class BoundaryManager(_BoundaryManagerBase["Boundary"]):
                 if point is not None and (parent_polygon.contains(point) or parent_polygon.touches(point)):
                     return parent_polygon, "inherited"
             if boundary_type != BoundaryType.PROPERTY:
-                # Buildings: a detail pin outside the parent's building has no
-                # building of its own - no further fallback.
+                # Buildings: a detail pin outside the parent's building has no building of its own.
                 return None, None
-            # Property: a detail pin outside the parent's property boundary
-            # (or whose parent has none) falls through to its own
-            # wiki/circle chain below, using its own Location.
+            # Property: a detail pin outside the parent's property boundary falls through to its own wiki/circle chain.
         return None
 
     @staticmethod

@@ -130,7 +130,7 @@ def confirmed_pin_cid(pin: dict[str, Any]) -> int | None:
     The CID a pin the browser posted back names, checked against the Google Maps URL it came from.
 
     The confirm step's pins are client data. A ``cid`` that crossed the browser as a JSON number has
-    lost its low digits (REData P120); when the pin still carries its source URL, the URL's own CID
+    lost its low digits; when the pin still carries its source URL, the URL's own CID
     stands in for it.
 
     A pin that claims no CID - a falsy one included, as a zero-CID feature id used to post - has
@@ -1428,8 +1428,7 @@ def _kml_tuples(text: str) -> Iterator[str]:
     """
     Each whitespace-separated tuple of a ``coordinates`` text, whitespace beside a comma taken as part of it.
 
-    The same tuples as removing the whitespace around every comma and then splitting, without a substitution: one
-    builds a string for every piece between commas before joining them, about seven times the text (P95).
+    Same tuples as removing whitespace around commas then splitting, without building intermediate strings.
     """
     pieces: list[str] = []
     for match in _KML_TOKEN.finditer(text):

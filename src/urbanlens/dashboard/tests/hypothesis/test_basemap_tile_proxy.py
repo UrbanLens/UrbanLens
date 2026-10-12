@@ -93,11 +93,8 @@ class BasemapTileProxyTests(RedataConfiguredMixin, TestCase):
     def test_a_layer_switched_to_vector_is_not_remembered_as_a_missing_tile(self) -> None:
         """
         ``vector_layer_not_served`` answers a question about the layer, not the coordinate.
-
-        REData switched ``street`` and ``dark`` to vector on 2026-09-20, and answers a tile-by-tile
-        request for either with this 400. Remembering that per coordinate for a week means the day
-        the layer is raster again, every coordinate this deployment happened to probe keeps
-        answering 404 until those entries expire - an outage inflicted on the recovery.
+        Caching a layer-level refusal per coordinate would cause an outage when the layer
+        switches back to raster, until those entries expire.
         """
         refusal = b'{"error":"vector_layer_not_served","message":"\'street\' is a vector layer published at \'https://tiles.urbanlens.org/styles/street.json\'"}'
         with (
@@ -370,9 +367,8 @@ class BasemapCatalogueTests(RedataConfiguredMixin, TestCase):
 
     def test_a_d15_entry_keeps_both_shapes(self) -> None:
         """
-        Since REData's D15 a self-hosted layer serves both ways, and the rewriter used to be an
-        if/else that discarded one before any client saw it - which left every Leaflet map on the
-        hardcoded vendor CDN, because a vector entry arrived with no template to draw instead."""
+        Since REData's D15 a self-hosted layer serves both ways, the rewriter must keep both
+        entries so clients can choose vector or raster."""
         rows = [_D15_STREET]
 
         with mock.patch(_CONFIGURED, return_value=True), self._sources(rows):
@@ -422,7 +418,7 @@ _D15_STREET = {
 class SignedOutCatalogueTests(RedataConfiguredMixin, TestCase):
     """
     What a public share page may be handed: the proxy is login-required, so a template offered to
-    an anonymous visitor paints 404s where a working layer used to be."""
+    an anonymous visitor paints 404s where a working layer would be."""
 
     def setUp(self) -> None:
         super().setUp()

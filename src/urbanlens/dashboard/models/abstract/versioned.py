@@ -131,10 +131,7 @@ class VersionedQuerySet(QuerySet):
 
     def bulk_update(self, objs: Sequence[Any], fields: Sequence[str], batch_size: int | None = None) -> int:
         """Apply the bulk update, recording a revision per versioned field touched."""
-        # Django implements bulk_update by ending with
-        # `queryset.filter(pk__in=...).update(**case_expressions)` on a clone of this very class, so
-        # `update()` above re-enters and would record a `Case` expression's repr as the value.
-        # Suppress that inner pass and record the real values here.
+        # Django's bulk_update re-enters via update() on a cloned queryset; suppress to record real values.
         with unversioned(reason="bulk_update records its own revisions"):
             result = super().bulk_update(objs, fields, batch_size=batch_size)
 
@@ -265,18 +262,12 @@ def _record_fields(model: type[Model], pk: Any, values: dict[str, Any]) -> None:
 def concrete_field(model: type[Model], field_name: str) -> Field | None:
     """
     Return a versioned field's definition, or None if it is not a real column.
-
-    ``_meta.get_field`` also returns reverse relations, which have no
-    ``to_python`` and cannot be versioned. Narrowing here keeps the two call
-    sites from each having to know that.
+    Reverse relations lack ``to_python`` and cannot be versioned.
     """
     try:
         field = model._meta.get_field(field_name)  # noqa: SLF001
     except FieldDoesNotExist:
-        # `field_name` is historical text in an append-only table, so a field that is later renamed
-        # or dropped leaves rows naming a column that no longer exists.
-        # Without this, the first such rename turns every resolve_fields call on an affected row
-        # into a 500 on the concealed render path.
+        # Field was renamed or dropped; historical rows may still reference it.
         return None
     return field if isinstance(field, Field) else None
 

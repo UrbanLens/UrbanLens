@@ -235,8 +235,6 @@ class RequestUpstream(UpstreamSlots):
         Args:
             key: What identifies the answer.
 
-        Returns:
-            The value.
         """
         return bounded_cache.get_or_none(cls.cache_key(key), label=f"{cls.name} answer")
 
@@ -338,8 +336,6 @@ class RequestUpstream(UpstreamSlots):
             cacheable: Whether a returned value may be cached.
             errors: More exception types that mean the upstream failed.
 
-        Returns:
-            The result.
         """
         return cls.start(fetch, key=key, ttl=ttl, caller=caller, cacheable=cacheable, errors=errors).result()
 

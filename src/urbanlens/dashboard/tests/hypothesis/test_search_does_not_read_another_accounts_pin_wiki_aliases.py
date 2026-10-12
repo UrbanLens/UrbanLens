@@ -12,7 +12,7 @@ segment crosses a to-many relation, so this still triggers the same unscoped
 - one more account's pins can be slowed down by a completely unrelated wiki's alias count. No index
 covers ``WikiAlias.name`` for this ``icontains`` path (migration 0049 only targets ``Label.name``).
 
-**Fixed 2026-09-17.** The crossing relation sitting three segments in does not change the fix: bounding
+The crossing relation sitting three segments in does not change the fix: bounding
 and materialising the semi-join's candidate primary keys, and forcing the index plan for that internal
 lookup, fixes the non-matching variant here too - see
 ``test_search_does_not_read_another_accounts_labels.py``'s module docstring for the measured mechanism.
@@ -141,11 +141,9 @@ class SearchDoesNotReadAnotherAccountsPinWikiAliasesTests(_PinWikiAliasCase):
     """An unrelated wiki's aliases must not be read to answer a pin search over a different wiki."""
 
     def test_it_does_not_read_a_strangers_matching_wiki_aliases(self) -> None:
-        """Fixed 2026-09-17 by the bounded semi-join - see the module docstring."""
         self.assertDoesNotGrow(SECOND_BATCH, matching=True)
 
     def test_it_does_not_read_a_strangers_unrelated_wiki_aliases(self) -> None:
-        """Fixed 2026-09-17 by the bounded semi-join - see the module docstring."""
         self.assertDoesNotGrow(SECOND_BATCH, matching=False)
 
 

@@ -82,10 +82,9 @@ def _shared_within_reach_of(viewer_profile: Profile) -> Q:
     The container gate: shared into a wiki this viewer can reach. This is the first of two gates;
     ``photo_upload_visibility`` then decides which of those who can reach the wiki may see the photo.
     """
-    # Uses a primed value when a caller has said it is about to resolve this viewer repeatedly (see
-    # prime_viewer_scope), and reads fresh otherwise.
-    # Never populates: reading through the self-caching variant would make every caller a cacher,
-    # and a request that pins a place and then asks what it can see would get the answer from before
+    # Uses a primed value when a caller will resolve this viewer repeatedly (see
+    # prime_viewer_scope), reading fresh otherwise. Never populates: the self-caching
+    # variant would make every caller a cacher.
     from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_locations, visible_wiki_locations_if_primed
 
     primed = visible_wiki_locations_if_primed(viewer_profile)
@@ -197,35 +196,22 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet["Image"]):
     def visible_to(self, viewer_profile: Profile | None) -> Self:
         """
         Filter to images the given viewer is allowed to see.
-        Enforces two independent settings: - The uploader's ``photo_upload_visibility`` (who can see my photos). - The viewer's own ``viewer_photo_filter`` (whose photos I want to see).
-        ``authorize_image`` enforces the same rule for a direct media-URL fetch; this is what keeps it out of a gallery listing in the first place, rather than appearing as a broken image.
+        Enforces two settings: uploader's ``photo_upload_visibility`` and viewer's ``viewer_photo_filter``.
+        ``authorize_image`` enforces the same rule for direct media-URL fetches.
         """
         from urbanlens.dashboard.models.profile.model import VisibilityChoice
 
         if viewer_profile is None:
-            # Wiki access is earned by having pinned the place, which a signed-out visitor cannot
-            # have done, so no container is in reach - and the most permissive setting is labelled
-            # "Anyone (Logged In)", which does not describe them either.
             return self.none()
 
-        # 1. Determine which uploader profiles this viewer is allowed to see photos from,
-        #    based on the VIEWER's own photo filter preference.
         viewer_filter = viewer_profile.viewer_photo_filter
         if viewer_filter == VisibilityChoice.NO_ONE:
-            # Viewer has opted out of all other users' photos.
             return self.filter(profile=viewer_profile)
 
-        # Start with all images, then restrict by uploader's upload_visibility.
-        # We only have ORM access to the uploader's setting directly; relationship checks (friends,
-        # common pins, etc.) happen per-uploader so we rely on a Python-level filter over the
-        # resulting set when advanced checks are needed.
         allowed_uploader_ids = self._allowed_uploader_ids(viewer_profile, viewer_filter)
 
-        # Both gates, in this order: the photo must have been shared, and the uploader's
-        # setting must admit this viewer. Sharing alone isn't enough - that's what the
-        # setting is for - and a permissive setting alone isn't enough either, which is
-        # the half that was missing: a photo filed under a pin was reachable by anyone
-        # the setting admitted, and the default admits whoever pinned the same place.
+        # Both gates: photo must be shared within reach, and uploader's setting must admit viewer.
+        # Sharing alone isn't enough; a permissive setting alone isn't either.
         if allowed_uploader_ids:
             shared = Q(profile_id__in=allowed_uploader_ids) & _shared_within_reach_of(viewer_profile)
         else:
@@ -243,19 +229,15 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet["Image"]):
         """
         from urbanlens.dashboard.models.profile.model import Profile
 
-        # Scope candidate uploaders to those who actually have an image in
-        # *this* queryset (the gallery being rendered), not every uploader on
-        # the whole site - keeps the cost proportional to the gallery size.
+        # Scope to uploaders with images in *this* queryset (gallery being rendered).
         uploaders = Profile.objects.filter(pk__in=self.values_list("profile_id", flat=True).distinct()).exclude(pk=viewer_profile.pk).values_list("pk", "photo_upload_visibility")
 
         scope = _ViewerScope(viewer_profile)
 
         allowed: set[int] = set()
         for uploader_id, upload_vis in uploaders:
-            # a) Uploader's own restriction
             if not self._relationship_allows(upload_vis, uploader_id, scope):
                 continue
-            # b) Viewer's own filter
             if not self._relationship_allows(viewer_filter, uploader_id, scope):
                 continue
             allowed.add(uploader_id)

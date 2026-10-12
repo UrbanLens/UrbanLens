@@ -1,5 +1,5 @@
 """
-A newspaper page is judged by its own text, not by the dateline of the paper that printed it (P216).
+A newspaper page is judged by its own text, not by the dateline of the paper that printed it.
 
 The Library of Congress titles a Chronicling America page with its paper's dateline: "Image 2 of Western Kansas world
 (WaKeeney, Kan.), August 8, 1908". That says where the paper was printed, not where a story on the page happened. In 1908
@@ -8,7 +8,7 @@ the relevance rule dropped every Kansas, Michigan and Louisiana printing because
 New York.
 
 The rows below are REData ``/reference-documents/search/`` results as REData 0.3.4 builds them from the live
-collection. Titles, URLs and OCR excerpts were taken from the collection on 2026-10-06 and trimmed. Each goes through
+collection. Titles, URLs and OCR excerpts were taken from the collection and trimmed. Each goes through
 the provider that parses it in production.
 """
 
@@ -229,8 +229,6 @@ class OnlyTheLibraryOfCongressHasDatelinesTests(SimpleTestCase):
 
 class DistinctiveNameAloneTests(_JudgedCase):
     """
-    The trade P216 makes, pinned so it is not undone by accident.
-
     A page naming the place by a distinctive name, with no geography of its own, is kept from any paper: that is how
     the Kansas and Michigan printings of the HRSH article pass, since their OCR mangles "Poughkeepsie" and "New York".
     The cost is that a distinctive name several towns share ("Mount Hope Cemetery") is kept from another town's paper

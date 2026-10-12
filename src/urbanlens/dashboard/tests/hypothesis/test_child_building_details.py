@@ -28,7 +28,7 @@ BUILDING_LEVEL_KEYS = (
     "redata_historic_registers",
 )
 AREA_LEVEL_KEYS = ("photon", "open_elevation", "census_tigerweb", "hazard_history", "gdelt")
-#: Building-level panels a building's card shows inside another one's (P226).
+#: Building-level panels a building's card shows inside another one's.
 SHOWN_INSIDE_ANOTHER = {"cris_building": "redata_historic_registers"}
 
 _CARD = 'class="child-building-detail"'
@@ -119,7 +119,7 @@ class _Base(TestCase):
 
 
 class BuildingCardTests(_Base):
-    """A building child's card, opened in place from the property's Buildings list (P172)."""
+    """A building child's card, opened in place from the property's Buildings list."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -201,7 +201,7 @@ class BuildingCardTests(_Base):
 
 
 class ChildPinsWithoutBuildingDataTests(_Base):
-    """A property whose building data cannot be fetched still lists its child pins (P172)."""
+    """A property whose building data cannot be fetched still lists its child pins."""
 
     def setUp(self) -> None:
         super().setUp()

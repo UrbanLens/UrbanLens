@@ -37,8 +37,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: The task's own limits, sized to the ceiling at the measured per-pin cost (P96).
-#: The site-wide hour ends a full-size import partway.
+#: Task limits, sized to measured per-pin cost ceiling.
+#: Site-wide hour ends a full-size import partway.
 SOFT_TIME_LIMIT_SECONDS = 90 * 60
 TIME_LIMIT_SECONDS = SOFT_TIME_LIMIT_SECONDS + 5 * 60
 
@@ -319,9 +319,7 @@ def run_confirmed_import(profile_id: int, job_id: str) -> dict[str, Any]:
 
         events = _import_events(GoogleMapsGateway(), payload, profile)
         try:
-            # One import's per-pin signals (wiki creation, category suggestion, reputation scoring)
-            # otherwise queue one broker task each - thousands for a large import, sharing the bulk
-            # queue with every other account's jobs (P109). Coalesced into bounded chunks instead.
+            # Per-pin signals (wiki creation, category suggestion, reputation) would queue thousands of tasks; coalesced into bounded chunks.
             with batching_follow_on_work():
                 for event in events:
                     kind = event["type"]

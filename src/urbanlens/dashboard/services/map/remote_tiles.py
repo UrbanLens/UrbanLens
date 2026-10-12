@@ -1,5 +1,5 @@
 """
-Map tiles from another host, drawn from this site's kept copies (Jess, 2026-09-30, item 16 of the rulings).
+Map tiles from another host, drawn from this site's kept copies.
 
 An overlay given a foreign XYZ template draws through :func:`kept_tile_template` instead. The first request for a tile
 downloads it, the sandbox worker re-encodes it (``render_remote_tile``), and every later request is served from the
@@ -160,9 +160,6 @@ def pending_marker(digest: str, z: int, x: int, y: int) -> str:
 def retry_is_due(tile: RemoteTile) -> bool:
     """
     Whether a tile whose downloads failed may be tried again yet.
-
-    Args:
-        tile: The tile.
 
     Returns:
         True when it has never failed, or its backoff has run out.

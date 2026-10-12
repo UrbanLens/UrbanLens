@@ -1,5 +1,5 @@
 """
-A building's wiki nests under its parcel's from what the places say about its location, never from pins (P231).
+A building's wiki nests under its parcel's from what the places say about its location, never from pins.
 
 A child pin's wiki was created as a root by ``tasks.ensure_wiki_for_location`` and nested only when the location's
 boundary generation ran, which waits for an owner who allows enrichment. A wiki holding no place of its own then
@@ -79,7 +79,7 @@ class BuildingWikiNestingTests(TestCase):
         self.assertEqual(wiki.parent_wiki_id, self.campus_wiki.pk)
 
     def test_a_share_that_creates_the_buildings_wiki_nests_it(self) -> None:
-        """P263: a share racing ahead of ``ensure_wiki_for_location`` creates the wiki itself."""
+        """A share racing ahead of ``ensure_wiki_for_location`` creates the wiki itself."""
         pin = baker.make(Pin, profile=self.profile, location=self.location, parent_pin=None)
         self.assertFalse(Wiki.objects.filter(location=self.location).exists())
 
@@ -90,7 +90,7 @@ class BuildingWikiNestingTests(TestCase):
 
     @override_settings(MEDIA_ROOT=_MEDIA_ROOT)
     def test_an_enrichment_photo_that_creates_the_buildings_wiki_nests_it(self) -> None:
-        """P263."""
+        """An enrichment photo that creates the building's wiki nests it."""
         buffer = io.BytesIO()
         PILImage.new("RGB", (8, 8)).save(buffer, format="JPEG")
 

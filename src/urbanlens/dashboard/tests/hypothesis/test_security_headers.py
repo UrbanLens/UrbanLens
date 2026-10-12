@@ -218,7 +218,7 @@ class CspHeaderTests(SimpleTestCase):
         )
 
     def test_enforcing_is_the_default(self) -> None:
-        """A report-only policy is not a backstop: it blocks nothing, and no deployment ever set the flag (P143)."""
+        """A report-only policy is not a backstop: it blocks nothing."""
         self.assertIs(AppSettings.model_fields["csp_enforce"].default, True)
         self.assertTrue(settings.CSP_ENFORCE)
         self.assertTrue(hasattr(settings, "CONTENT_SECURITY_POLICY"))
@@ -281,7 +281,7 @@ class CspHeaderTests(SimpleTestCase):
 
     def test_scripts_cannot_run_inline(self) -> None:
         """
-        No template or bundle-built markup runs inline script (P34, P83), so an injected one must not run either.
+        No template or bundle-built markup runs inline script, so an injected one must not run either.
 
         Styles keep 'unsafe-inline': Leaflet and the pages position elements with inline styles.
         """
@@ -317,9 +317,7 @@ class CspMatchesTheTemplatesTests(SimpleTestCase):
         """
         A missing host here is a blank page once the policy is enforced.
 
-        Read from the asset table rather than scraped out of base.html, which is where these URLs used to be
-        written: the table is what the templates resolve through now, and it covers every page rather than the
-        one this test happened to open."""
+        Read from the asset table, which is what the templates resolve through and covers every page."""
         from urllib.parse import urlparse
 
         from urbanlens.dashboard.services.core.vendor_assets import VENDOR_ASSETS

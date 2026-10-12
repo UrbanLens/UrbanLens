@@ -142,7 +142,7 @@ class LocationManager(_LocationManagerBase["Location"]):
     def get_exact_or_create(self, latitude, longitude, defaults=None) -> tuple[Location, bool]:
         """
         Get or create the Location at exactly these coordinates.
-        The counterpart to :meth:`get_nearby_or_create` for callers that must keep a submitted point exactly as given - a detail pin's own marker, a child wiki, a manual pin move - rather than snapping it onto whatever Location happens to sit within the dedup radius.
+        Counterpart to :meth:`get_nearby_or_create` for callers that must keep a submitted point exactly as given.
 
         Args:
             latitude: WGS-84 latitude.
@@ -180,8 +180,7 @@ class LocationManager(_LocationManagerBase["Location"]):
     def get_nearby_or_create(self, latitude, longitude, threshold_meters=0, defaults=None):
         """
         Get or create a Location instance, optionally treating nearby coordinates as the same.
-        The threshold now defaults to **exact**.
-        Consolidating two drops at one real place is the *place's* job: they resolve onto the same parcel and share its wiki, its community, and its "places in common" entry without either coordinate being thrown away.
+        Threshold defaults to exact match.
 
         Args:
             latitude (float): Latitude of the location.

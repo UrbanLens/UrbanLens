@@ -1,23 +1,15 @@
 """
 Staging and production share a host, so staging's limits have to lose to it.
 
-Measured on damballa on 2026-09-11: `urbanlens_staging_app` and
-`urbanlens_staging_db` each carried `CpuShares: 2048`, while every production
-container carried `0` - the key was absent when they were created, so the kernel
-gives them 1024. Under contention staging's web tier and database each had twice
-production's weight. See P114.
+Staging's web tier and database each had twice production's weight under contention.
+Staging's numbers were exactly `docker-compose.yml`'s defaults, while production
+containers carried no `cpu_shares` at all (kernel default 1024).
 
-Staging's numbers were exactly `docker-compose.yml`'s defaults, so nothing was
-misconfigured: staging simply ran what the file says, and the file's defaults are
-written for the stack that matters. `config/env/staging.sample.env` is the set of
-values that are not, and this is what keeps it complete and keeps it lower - a
-sample that drifts from the file it shadows is worse than none, because it reads
-as coverage.
+`config/env/staging.sample.env` provides the values that differ; a sample that
+drifts from the file it shadows is worse than none.
 
-The weight ceiling is the part worth stating twice: half of 2048 is 1024, which
-*ties* with a container that sets nothing rather than losing to it, and a tie is
-what the measurement above found. So the assertion is against 1024 directly, not
-against the file's default.
+Half of 2048 is 1024, which *ties* with a container that sets nothing rather than
+losing to it. The assertion is against 1024 directly, not the file's default.
 """
 
 from __future__ import annotations
@@ -131,8 +123,7 @@ class StagingLosesToProductionTests(SimpleTestCase):
         Against 1024, not against the file's default.
 
         Production's containers carry no `cpu_shares` at all, so halving a 2048
-        default gives staging a tie rather than a loss - which is precisely the
-        state P114 measured.
+        default gives staging a tie rather than a loss.
         """
         for name, value in sorted(_sample_values().items()):
             if name.startswith("CPU_SHARES__"):

@@ -1,13 +1,12 @@
 """
-P125: the app container is CPU-bound under concurrent load, and production has cores to spare.
+The app container is CPU-bound under concurrent load, and production has cores to spare.
 
-`capacity-content` (2026-09-15) found the app container pegged at `docker-compose.yml`'s shared
+The app container was pegged at `docker-compose.yml`'s shared
 `CPU_LIMIT__APP` default of 2 cores - 84.41% throttled at 1,000 concurrent users, uniformly across
 every endpoint, which is the signature of a starved shared resource rather than any one slow query.
 
-Production and staging/dev share a host (P114), so raising the *shared* default would hand staging
-and every local checkout the same increase and let them compete with production for it - exactly
-what P114 exists to prevent. Production alone gets more, via its own override, the same mechanism
+Production and staging/dev share a host, so raising the *shared* default would hand staging
+and every local checkout the same increase and let them compete with production for it. Production alone gets more, via its own override, the same mechanism
 `staging.sample.env` already uses to make staging lose.
 """
 
@@ -23,7 +22,7 @@ _COMPOSE_PATH = _REPO_ROOT / "docker-compose.yml"
 _PRODUCTION_SAMPLE_PATH = _REPO_ROOT / "src" / "urbanlens" / "config" / "env" / "production.sample.env"
 _STAGING_SAMPLE_PATH = _REPO_ROOT / "src" / "urbanlens" / "config" / "env" / "staging.sample.env"
 
-#: The floor P125 asked for.
+#: The production CPU floor.
 _PRODUCTION_APP_CPU_MINIMUM = 4.0
 
 #: The shared default every other environment (local, dev, testing, and staging unless it

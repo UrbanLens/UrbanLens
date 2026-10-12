@@ -90,7 +90,7 @@ class WikiManager(_WikiManagerBase["Wiki"]):
     def get_for_location(self, location: Location | None) -> Wiki | None:
         """
         Return the Location's Wiki, or None when it has none yet.
-        Identical to :meth:`existing_for_location`, and kept because it is the name most call sites use.
+        Identical to :meth:`existing_for_location`; kept as the common call-site name.
 
         Args:
             location: The shared Location to look up (None-safe).

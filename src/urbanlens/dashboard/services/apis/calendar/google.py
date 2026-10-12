@@ -45,11 +45,8 @@ ACTIVITY_ID_EVENT_PROPERTY = "urbanlens_activity_id"
 #: Google's own ceiling on ``maxResults`` for ``events.list``.
 EVENTS_PAGE_SIZE = 250
 
-#: Error ``reason`` values for a rate or usage limit, which Google answers with 403 as well as 429. The Calendar API's
-#: error guide ("Handle API errors") names ``rateLimitExceeded``, ``userRateLimitExceeded`` and ``quotaExceeded``.
-#: Google's standard error list adds ``dailyLimitExceeded``, ``servingLimitExceeded``, ``concurrentLimitExceeded`` and
-#: ``variableTermLimitExceeded``; ``RATE_LIMIT_EXCEEDED`` and ``RESOURCE_QUOTA_EXCEEDED`` are the ``ErrorInfo`` reasons
-#: of its newer envelope (``google/api/error_reason.proto``).
+#: Error ``reason`` values for rate/usage limits (403 or 429). From Calendar API guide and standard error list;
+#: ``RATE_LIMIT_EXCEEDED``/``RESOURCE_QUOTA_EXCEEDED`` are ErrorInfo reasons.
 RATE_LIMIT_REASONS = frozenset(
     {
         "rateLimitExceeded",
@@ -64,11 +61,8 @@ RATE_LIMIT_REASONS = frozenset(
     },
 )
 
-#: Error ``reason`` values for a refusal of the site's Google project rather than of the user. ``accessNotConfigured``
-#: ("Your project is not configured to access this API") and the ``*Unreg`` limits (the client developer was not
-#: identified) are from Google's standard error list; the rest are ``ErrorInfo`` reasons from
-#: ``google/api/error_reason.proto``: the API disabled (``SERVICE_DISABLED``, which Google sends alongside
-#: ``accessNotConfigured``), billing disabled, or the consumer project suspended, invalid, denied or unable to see the API.
+#: Error ``reason`` values for refusal of the site's Google project (not the user). From standard error list
+#: and ErrorInfo reasons: API disabled, billing disabled, consumer project suspended/invalid/denied.
 SITE_REFUSAL_REASONS = frozenset(
     {
         "accessNotConfigured",

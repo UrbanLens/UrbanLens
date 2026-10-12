@@ -348,12 +348,6 @@ class TripMembershipQuerySet(abstract.DashboardQuerySet["TripMembership"]):
     def joined(self, trip: Trip) -> TripMembershipQuerySet:
         """
         Members who have actually joined (not just invited) a trip.
-
-        Args:
-            trip: The trip.
-
-        Returns:
-            Matching membership rows.
         """
         from urbanlens.dashboard.models.trips.model import TripMembership
 
@@ -393,21 +387,17 @@ class TripCommentQuerySet(abstract.DashboardQuerySet["TripComment"]):
     def visible_to(self, profile: Profile) -> TripCommentQuerySet:
         """
         The gates ``trip_comments.build_comment_tree`` applies, in SQL.
+        Queryset counterpart to ``trip_comments.trip_comment_is_visible``,
+        verified by ``test_trip_comment_visibility_is_a_queryset``.
 
-        The queryset counterpart to ``trip_comments.trip_comment_is_visible``,
-        and held to it across the product of every visibility setting and every
-        relationship by ``test_trip_comment_visibility_is_a_queryset``.
-
-        Answering these in SQL is what lets the panel and the API page a trip
-        thread with LIMIT instead of building all of it and slicing the result.
-        Identity masking is absent, as it is on the pin/wiki side: it shapes how
-        a surviving author is displayed, not whether a row is admitted.
+        Answering in SQL lets the panel and API page a trip thread with LIMIT.
+        Identity masking is absent; it shapes display, not admission.
 
         Args:
             profile: The viewing profile.
 
         Returns:
-            The subset *profile* may see, less what a block hides (``models.friendship.blocks``).
+            The subset *profile* may see, less what a block hides.
         """
         from urbanlens.dashboard.models.friendship.blocks import SharedSpaceBlocks
         from urbanlens.dashboard.models.friendship.meta import FriendshipStatus

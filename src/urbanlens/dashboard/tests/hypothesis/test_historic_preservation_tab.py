@@ -1,7 +1,7 @@
 """
-P226: "NY Historic Preservation (CRIS)" and "Historic Registers" are one Property Records tab, "Historic Preservation".
+"NY Historic Preservation (CRIS)" and "Historic Registers" are one Property Records tab, "Historic Preservation".
 
-Modelled on the Hudson River State Hospital campus, as P230's tests are: NPS lists the Main Building, its listing's
+Modelled on the Hudson River State Hospital campus: NPS lists the Main Building, its listing's
 boundary holds other buildings, and CRIS's record of each building says which one is listed.
 """
 
@@ -173,7 +173,7 @@ class HistoricPreservationTabTests(_Campus):
         self.assertContains(response, "BLDG 51/MAIN/ADMIN (1871) - NHL")
 
     def test_a_building_inside_the_listings_boundary_is_not_listed_by_it(self) -> None:
-        """P230's rule holds in the merged tab: CRIS calls this building eligible, not listed."""
+        """CRIS calls this building eligible, not listed."""
         response = self._tab(
             self.storage,
             registers=[_listing()],

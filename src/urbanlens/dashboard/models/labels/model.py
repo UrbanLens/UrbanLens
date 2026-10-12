@@ -104,7 +104,7 @@ class Label(HeldUploadModel, abstract.FrontendDashboardModel):
         self.color = clean_color(self.color, default=None)
 
     def coerce_icon(self) -> None:
-        """Drop `icon` to NULL unless it is an icon shape `clean_icon` accepts (P128)."""
+        """Drop `icon` to NULL unless it is an icon shape `clean_icon` accepts."""
         self.icon = clean_icon(self.icon, max_length=column_max_length(Label, "icon"))
 
     def save(self, *args, **kwargs) -> None:
@@ -326,13 +326,9 @@ class Label(HeldUploadModel, abstract.FrontendDashboardModel):
             # Partial: the hourly held-upload sweep reads the few rows holding an upload, never the table.
             Index(fields=["custom_icon_upload"], name="idxdb_label_held_icon", condition=~Q(custom_icon_upload="")),
             Index(fields=["profile", "order"], name="idxdb_label_pfile_ord"),
-            # Matches `name__icontains`'s compiled form exactly (`UPPER(name::text) LIKE ...`) - a plain
-            # index on `name` is not usable for that predicate at all. Measured: this does not
-            # change the scan strategy (Postgres still seq-scans the table at this size either way), but the
-            # expression index gives ANALYZE a real cardinality estimate for the predicate instead of a fixed
-            # default, which changes how the enclosing query plans and removes the growth for a matching term.
-            # See this migration's test for the measured
-            # before/after.
+            # Matches `name__icontains`'s compiled form exactly (`UPPER(name::text) LIKE ...`).
+            # A plain index on `name` is not usable for that predicate.
+            # The expression index gives ANALYZE a real cardinality estimate, improving query plans.
             GinIndex(OpClass(Upper(Cast("name", output_field=TextField())), name="gin_trgm_ops"), name="idxdb_label_name_upper_trgm"),
         ]
         constraints = [
