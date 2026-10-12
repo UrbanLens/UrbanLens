@@ -204,7 +204,8 @@ def conceal_rows[QuerySetT: QuerySet[Any]](queryset: QuerySetT, viewer: Profile 
         return queryset.filter(~_own_contribution_q() | Q(profile_id__in=allowed))
 
     if model_name == "WikiAlias":
-        # created_by is NULL for geocoder backfill and auto-rename; filter by source instead.
+        # Not created_by: it is NULL for geocoder backfill and for the alias every rename creates,
+        # so filtering on it would re-expose a concealed name as an alias row. Filter by source.
         from urbanlens.dashboard.models.aliases.model import AliasSource
 
         return queryset.filter(~Q(source=AliasSource.USER) | Q(created_by_id__in=allowed))
