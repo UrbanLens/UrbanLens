@@ -19,4 +19,4 @@ Maintainers should acknowledge reports within 5 business days, triage severity, 
 
 ## Automated security coverage
 
-The repository runs CodeQL, dependency review, Dependabot updates, and container provenance generation for release images. These checks supplement, but do not replace, manual review and runtime hardening.
+The repository runs CodeQL, dependency review, Renovate dependency updates, and container provenance generation for release images. These checks supplement, but do not replace, manual review and runtime hardening.
