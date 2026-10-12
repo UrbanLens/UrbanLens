@@ -1146,7 +1146,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                         }
                         continue
 
-                    # The client posts these back, so they are checked as the preview checked them (P282).
+                    # The client posts these back, so they are checked as the preview checked them.
                     coordinates = _on_the_globe(*cached_coords) if cached_coords else _on_the_globe(pin_dict.get("lat"), pin_dict.get("lng"))
                     if location is None and coordinates is None:
                         pin, created = None, False
@@ -1413,7 +1413,7 @@ def _iter_kml_coordinates(element: Element) -> Iterator[tuple[float, float]]:
     """
     Each ``(longitude, latitude)`` of an element's ``coordinates``, parsed as it is reached.
 
-    One placemark's geometry may be the whole file, so neither its tokens nor its pairs are listed (P95).
+    One placemark's geometry may be the whole file, so neither its tokens nor its pairs are listed.
     """
     for child in element:
         if _kml_local_name(child.tag) == "coordinates":

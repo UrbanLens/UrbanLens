@@ -38,13 +38,7 @@ declare global {
         // first filtered pin batch can zoom to fit rather than leaving the default view.
         _fitToFilteredPinsOnce?: boolean;
         _addPinCustomIconFile: File | null;
-        // IconPicker, pickColor and openAddPinDialog are each also declared (with a
-        // different but assignable signature) by shared/icon-picker.ts,
-        // shared/color-picker.ts and entries/map-annotations.ts respectively - those
-        // other pages' bundles never load here, but `tsc` type-checks every entry
-        // point as one program, so this page's richer functions are assigned to
-        // those ambient names rather than re-declaring (and conflicting with) them.
-        // _refreshAllPins is likewise already declared (optional) by shared/undo-bar.ts.
+        // IconPicker, pickColor, openAddPinDialog, _refreshAllPins: ambient declarations from other entries; this page assigns richer implementations to avoid conflicts.
         addMarker: typeof addMarker;
         updatePinCounter: typeof updatePinCounter;
         invalidatePinCache: () => void;
@@ -468,15 +462,7 @@ window.pin = null;
 // see MapLayers.registerRedataLayers()'s own docstring.
 const _redataLayersPromise = MapLayers.registerRedataLayers();
 
-// Show the "you are here" dot immediately from a cached fix (if any) rather
-// than waiting up to 8s for the live read below to resolve; that live read
-// then relocates this same marker once it comes back.
-//
-// Deliberately independent of _MAP_CENTER_MODE: knowing where you are is
-// useful on every map, not only one that centres on you. Gating this on
-// GPS mode meant a user who centres on their last position - or a custom
-// point - had shared their location and still had no idea where they were
-// standing relative to their pins.
+// Show cached location dot immediately; live read updates it later. Independent of _MAP_CENTER_MODE — location awareness is useful on every map.
 if (_cachedUserLoc) {
     _showUserLocationMarker(_cachedUserLoc.lat, _cachedUserLoc.lng);
 }
@@ -506,12 +492,7 @@ if (_MAP_CENTER_MODE !== "gps" && navigator.geolocation && navigator.permissions
         });
 }
 
-// GPS mode: refine the initial centre with a live geolocation read.
-// If we already used a cached position, the map won't visibly jump; we just
-// silently refresh the cache so the next load is accurate. If we had no cached
-// position to seed the initial centre with, _needsGeoFix below holds the
-// cold-start overlay open (briefly) so the fallback centre is never shown.
-// Skip when the URL already specifies a viewport (shareable / back-button link).
+// GPS mode: live geolocation read refines initial centre. Cached position prevents visible jump; _needsGeoFix holds overlay if no cache. Skipped when URL specifies viewport.
 const _needsGeoFix = _MAP_CENTER_MODE === "gps" && !_cachedUserLoc && !_urlMapView && !!navigator.geolocation;
 
 // Resolves once we have a fresh GPS fix (or fail) or 1s has elapsed, whichever is
@@ -528,12 +509,7 @@ function _markGeoReady(): void {
 if (_needsGeoFix) setTimeout(_markGeoReady, 1000);
 
 if (_MAP_CENTER_MODE === "gps" && navigator.geolocation && !_urlMapView) {
-    // UL-221: a cached position already seeded _initialCenter above, so the
-    // map must NOT visibly jump once this fresh fix resolves - only the
-    // cache gets updated (for next load's accuracy). Without this guard
-    // every returning GPS-mode user saw the map load at their last known
-    // position and then silently snap to the fresh one a moment later,
-    // regardless of the comment above already promising it wouldn't.
+    // Cached position seeded _initialCenter; fresh fix must not jump map — only updates cache. Without guard, map would snap from cached to fresh position.
     const _hadCachedLocation = !!_cachedUserLoc;
     navigator.geolocation.getCurrentPosition(
         (pos) => {
@@ -561,13 +537,7 @@ if (_MAP_CENTER_MODE === "gps" && navigator.geolocation && !_urlMapView) {
 }
 
 // -- Cluster layer (replaces plain LayerGroup) -----------------------------
-// P92: this used to hand-roll its own L.markerClusterGroup(), including its
-// own copy of the numbered-badge iconCreateFunction - a second, driftable
-// copy of exactly what shared/map-clusters.ts's createPinClusterGroup()
-// already draws for every other map. The main map's only real differences
-// from that helper's defaults are its own maxClusterRadius policy and the
-// chunked-loading options a multi-thousand-pin account needs; both are
-// passed through as overrides instead of re-implemented.
+// Uses shared createPinClusterGroup with custom maxClusterRadius and chunked-loading overrides for large pin sets.
 const _userClusterRadius = MAP_CFG.clusterRadius;
 const clusterGroup = createPinClusterGroup(
     {
@@ -744,11 +714,7 @@ function _readCache(): CachedPinBlob | null {
         const raw = localStorage.getItem(_CACHE_KEY);
         if (!raw) return null;
         const c = JSON.parse(raw) as CachedPinBlob;
-        // Explicitly remove (not just ignore) an outdated/foreign-profile blob -
-        // otherwise it sits under this same key forever, re-parsed and rejected
-        // on every load, until a fresh _writeCache() happens to overwrite it
-        // (which isn't guaranteed - e.g. if the next fetch fails, or the tab
-        // closes before a scheduled write fires).
+        // Explicitly remove outdated/foreign-profile blobs so they don't persist and get re-rejected on every load.
         if (c.v !== PIN_CACHE_VERSION || c.profileUuid !== _PROFILE_UUID) {
             localStorage.removeItem(_CACHE_KEY);
             return null;
@@ -865,11 +831,7 @@ function _purgeOrphanCaches(): number {
         return 0;
     }
 }
-// Reclaim every pin-cache blob that is not this profile's current one: retired
-// versions, pre-v5 PK-shaped keys, and other accounts' blobs on a shared
-// browser. Nothing else ever reads those, so _readCache's expiry can't free
-// them, and a stale multi-MB orphan is what pushes a write over the ~5 MB
-// origin quota (see UL-355 - clearing site data by hand "fixed" that report).
+// Reclaim orphaned pin-cache blobs (retired versions, other profiles) that _readCache expiry can't free — they consume quota and can block writes.
 _purgeOrphanCaches();
 
 // Call after any pin mutation (add/delete) to force a fresh fetch next time.
@@ -943,13 +905,7 @@ window.updateCachedPin = function (pinData: PinData): void {
     _refreshPinList();
 };
 
-// Look up a pin already in the local store within threshold_meters of a
-// coordinate, using a stricter threshold than Pin.objects.get_nearby_or_create's default
-// 50m "same location" threshold server-side. Used by the import wizard
-// to pre-flag rows that would just come back as "existed" anyway, without
-// needing a round trip. Only ever populated/accurate on this page (the
-// main map) - other pages that reuse the import dialog (e.g. Memories)
-// simply won't find this global and skip the pre-flagging step.
+// Finds local pin within threshold_meters (stricter than server's 50m). Used by import wizard to pre-flag duplicates without a round trip. Only accurate on this page.
 window.findLocalPinNear = function (lat: number, lng: number, thresholdMeters = 5): PinData | null {
     lat = Number(lat);
     lng = Number(lng);
@@ -1061,11 +1017,7 @@ function _setOffline(offline: boolean): void {
 }
 const _checkPinsMeta = pinsMetaChecker(MAP_CFG.urls.mapPinsMeta, _setOffline);
 
-// -- Temporary place markers (search jump + right-click context menu) -----
-// isSearch=true uses amber styling so search markers are visually distinct from
-// permanent pins and from the blue context-menu marker. Both variants get a
-// pulsing halo at the anchor point so the temporary marker is unmissable at
-// any zoom level and on any tile style.
+// Temporary place markers (search jump + context menu). Amber for search, blue for context menu; both have pulsing halo for visibility at any zoom.
 function _createTempPlaceMarker(lat: number, lng: number, title = "", isSearch = false): L.Marker {
     const modifier = isSearch ? " search-result-marker-icon--search" : "";
     const haloModifier = isSearch ? " search-result-marker-halo--search" : "";
@@ -1081,11 +1033,7 @@ function _createTempPlaceMarker(lat: number, lng: number, title = "", isSearch =
     });
 }
 
-// -- "You are here" marker --------------------------------------------------
-// Unlike _searchMarker (a temp place-pin cleared on the next search), this
-// persists across pans/searches once a GPS fix has been shown - it's
-// updated in place rather than recreated, so repeated fixes (initial load,
-// background refresh, "jump to my location") just relocate the same dot.
+// "You are here" marker persists across pans/searches; updated in place rather than recreated on each GPS fix.
 function _showUserLocationMarker(lat: number, lng: number): void {
     if (_userLocationMarker) {
         _userLocationMarker.setLatLng([lat, lng]);
@@ -1219,10 +1167,7 @@ async function _pollForUpdates(): Promise<void> {
 }
 
 // -- Marker builder --------------------------------------------------------
-// Merge a response's label dictionary in rather than replacing it: a paged
-// fetch sends one per page, and the quick-edit endpoints send none at all.
-// Records which entries actually moved, because a renamed or recoloured
-// label changes what a pin draws without changing anything in the pin.
+// Merges label dictionaries (paged fetches send one per page). Tracks changed labels so pin rendering updates when label color/name changes.
 function _mergeLabels(labels: LabelDict | null | undefined): void {
     if (!labels || typeof labels !== "object") return;
     const merged: LabelDict = Object.assign({}, _labelDict);
@@ -1243,11 +1188,7 @@ function _labelsDiffer(before: PinData | undefined, after: PinData | undefined):
     return ids.some((id) => _changedLabelIds.has(String(id)));
 }
 
-// A pin's labels as objects, whatever wrote the entry. The map endpoints
-// send `label_ids` and the dictionary to resolve them against. `tags` is
-// still what the quick-edit and pin-list endpoints return, `tags_data` was
-// the filter panel's separate shape, and a comma-joined string was the same
-// paths' `tags` before they were unified.
+// Resolves pin labels from label_ids, tags, tags_data, or comma-joined string — legacy shapes still served by some endpoints.
 function _pinTagObjects(pin: PinData): PinTagLike[] {
     if (Array.isArray(pin.label_ids)) {
         return pin.label_ids.map((id) => _labelDict[String(id)]).filter((x): x is LabelDictEntry => Boolean(x));
@@ -1281,12 +1222,7 @@ function _hexToRgba(hex: unknown, alpha: number): string {
     return `rgba(${r},${g},${b},${alpha})`;
 }
 
-// Mirrors shared/color-safety.ts's safeColor, which this file cannot import.
-// The colour is interpolated into style="..." strings handed to innerHTML, so
-// a stored value that is not a colour is an attribute breakout - and rows
-// predating the column's own coercion are still served. Validated rather
-// than escaped: escaping stops the breakout and still permits url(...) and
-// friends inside the style value.
+// Mirrors shared/color-safety.ts (cannot import). Validates hex colors for safe innerHTML interpolation — legacy rows may contain non-colors.
 const _UL_HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 
 function _safePinColor(value: unknown): string | null {
@@ -1497,14 +1433,7 @@ window.addMarker = addMarker;
 // blocking map use. Dismissals are stored per profile so users stay in control.
 const _ONBOARDING_PREFIX = `ul_onboarding_v1_${_PROFILE_UUID}`;
 const _ONBOARDING_SESSION_KEY = `${_ONBOARDING_PREFIX}_later`;
-// Declared (as null) here rather than where it's actually built further down
-// this script (MapLayers.create(...)), so the 'map-layers' card's
-// shouldShow()/action() below - which read it via closure - see `null`
-// instead of hitting the temporal dead zone. A `let` declared later would
-// throw "Cannot access '_mapLayers' before initialization" if the onboarding
-// trigger ever ran before that later line executes (e.g. if something else
-// earlier in this very long script throws first and the assignment is never
-// reached) - null is a safe, checkable placeholder instead of a crash.
+// Declared here as null so onboarding cards' closures see a safe placeholder instead of temporal dead zone; assigned later in MapLayers.create().
 let _mapLayers: MapLayersInstance | null = null;
 
 interface OnboardingCard {
@@ -1666,12 +1595,7 @@ function initMapOnboarding(): void {
     if (card) setTimeout(() => _showOnboardingCard(card), 450);
 }
 
-// -- Fetch tiles from server -----------------------------------------------
-// Thin shim over shared/fetch-json.ts's fetchJson (imported directly now that
-// this is a module), kept so the timeout stays a positional argument at the
-// call sites below. The map endpoints below never actually answer 204, so a
-// null body is treated as a fetch failure rather than threaded through as an
-// optional result everywhere it's used.
+// Thin shim over fetchJson keeping timeout positional; null body treated as failure (endpoints never return 204).
 async function _fetchJson<T>(url: string, options?: FetchJsonOptions, timeoutMs?: number): Promise<T> {
     const result = await fetchJson<T>(url, { ...(options || {}), timeoutMs: timeoutMs || 120000 });
     if (result === null) throw new Error(`Empty response from ${url}`);
@@ -1942,13 +1866,7 @@ if (_MAP_CENTER_MODE === "remember") {
     map.on("moveend", _onRememberChange);
     map.on("zoomend", _onRememberChange);
 
-    // The 800ms debounce above can still be pending when the user
-    // navigates away (closes the tab, follows a link) - fetch() isn't
-    // guaranteed to finish once the page starts unloading, so the very
-    // last pan/zoom was silently never saved. sendBeacon is designed
-    // for exactly this: the browser keeps it alive across the
-    // navigation. Both events are registered since pagehide doesn't
-    // fire reliably in every browser for every kind of navigation.
+    // sendBeacon saves pending position on pagehide/beforeunload — fetch may not complete during unload, and pagehide isn't reliable everywhere.
     const _flushPendingPosition = (): void => {
         if (!_pendingPositionBody || _rememberTid === null) return;
         clearTimeout(_rememberTid);
@@ -1961,14 +1879,7 @@ if (_MAP_CENTER_MODE === "remember") {
 }
 
 // -- Filter mode -----------------------------------------------------------
-// The filter POST answers with identifiers rather than payloads whenever this
-// page can prove its store is the account's current pin set, which turns an
-// 11.45MB document for a 10,000-pin account into ~360KB of uuids and removes
-// the payload build from a request the user is waiting on. The proof is the
-// fingerprint map.pins.meta serves: the server re-derives it and only trusts
-// a claim that still matches. _filterStoreTrusted is this side's veto - it
-// drops the claim after an identifier the store could not resolve, until the
-// next full refresh re-establishes it.
+// Filter POST returns identifiers (not payloads) when store fingerprint matches server's — reduces 11MB to ~360KB for 10k pins. _filterStoreTrusted vetoes claim on unresolved IDs.
 let _filterStoreTrusted = true;
 
 function _syncFilterStoreClaim(): void {
@@ -2000,16 +1911,7 @@ function _applyFilterMeta(meta: { truncated?: boolean; shown?: number; total?: n
     }
 }
 
-// An identifier the store cannot resolve means the claim was wrong - the
-// store is behind what the server just filtered. Ask again for payloads
-// rather than drawing a map that is quietly missing pins.
-//
-// Bounded at one recovery, because this reaches the server by re-submitting
-// the form the identifier response came from: a store that stays behind
-// would otherwise turn one filter change into an unbounded series of them,
-// which is the shape of cost this programme exists to remove. A second miss
-// means the handshake is wrong rather than the store stale, so trust is not
-// restored again and this page asks for payloads from then on.
+// Unresolved identifier = store is behind server. One recovery attempt (re-fetch payloads); second miss means handshake broken — stop retrying to avoid unbounded loops.
 let _filterStoreMisses = 0;
 
 function _refilterWithPayloads(missing: number): void {
@@ -2147,11 +2049,7 @@ window._exitFilterMode = _exitFilterMode;
         _lastKnownUpdated = cache.lastUpdated || null;
         _updateCacheStatus(cache.ts);
 
-        // Trigger a silent background refresh when:
-        //   • Cache has no lastUpdated baseline (old format) - can't validate freshness
-        //   • Cache used partial tile keys instead of '*' - panning would hit server
-        // _refreshAllPins() fetches all pins, marks _fetchedTiles as '*', and
-        // reschedules the cache write with the upgraded format.
+        // Trigger silent refresh if cache lacks lastUpdated baseline or has partial tiles — _refreshAllPins upgrades cache to full '*' tile set.
         if (!_lastKnownUpdated || !_fetchedTiles.has("*")) {
             const reason = !_lastKnownUpdated ? "no lastUpdated baseline" : "partial tile cache";
             console.log("[UL] Cache needs upgrade (%s) - triggering silent refresh", reason);
@@ -2175,12 +2073,7 @@ window._exitFilterMode = _exitFilterMode;
             if (txt) txt.textContent = "Could not load pins. Try refreshing.";
         }
     }
-    // Deferred to a macrotask so the loading indicator has a chance to clear
-    // and other post-load UI settles first. _mapLayers may not be built yet
-    // at this point (it's assigned further down this script) - the
-    // 'map-layers' card's shouldShow()/action() guard against that (see
-    // where _mapLayers is declared, above _onboardingCards) instead of
-    // assuming ordering here.
+    // Deferred to macrotask so loading indicator clears; _mapLayers may not be built yet — onboarding card guards against that.
     setTimeout(initMapOnboarding, 0);
     // Begin background polling.  First call compares cache.lastUpdated to the
     // server's value and triggers _refreshAllPins() only when they differ.
@@ -2188,14 +2081,8 @@ window._exitFilterMode = _exitFilterMode;
     startPoller(_pollForUpdates, { intervalMs: _POLL_INTERVAL, element: map.getContainer(), immediate: true });
 })();
 
-// -- Child pins (child pins) layer ---------------------------------------------
-// Pins nested inside another pin (merged pins, child pins) are hidden from
-// the main map by default; this layer renders them as smaller markers with
-// a link back to their parent. Loaded lazily the first time it's turned on,
-// and re-fetched with the active filter criteria whenever filters change.
-// Markers are added directly into the shared clusterGroup (not a separate
-// plain layer group) so child pins cluster together with regular pins when
-// zoomed out instead of always rendering as loose individual markers.
+// -- Child pins layer ---------------------------------------------
+// Nested pins hidden by default; rendered as smaller markers with parent link. Lazy-loaded, re-fetched on filter change. Added to shared clusterGroup so they cluster with regular pins.
 const _childPinStore = new Map<string, PinData>(); // uuid → child pin data
 const _childMarkerMap = new Map<string, L.Marker>(); // uuid → L.Marker
 let _childPinsActive = false;
@@ -2486,10 +2373,7 @@ function _renderMapAttribution(): void {
 }
 
 // -- Layers: shared engine (ts/shared/map-layers.ts) ------------------------
-// Tile layers, the layers flyout panel, dark map mode, "remember"
-// persistence, tile-loading feedback, and footer attribution all live in
-// the shared MapLayers engine - the exact same code every other map on the
-// site runs. This page only contributes its own custom toggles (pins, places).
+// Tile layers, flyout panel, dark mode, persistence, loading feedback, attribution. This page adds custom toggles (pins, places).
 await _redataLayersPromise;
 _mapLayers = MapLayers.create(map, {
     root: document.getElementById("map-layers-panel"),
@@ -3135,11 +3019,7 @@ async function _deletePinByUuid(pinUuid: string, pinName: string): Promise<boole
     return true;
 }
 
-// -- Pin popup overflow menu -----------------------------------------
-// The popup's destructive and secondary actions (add to list, promote,
-// edit, delete) live behind one button so the popup reads as information
-// with a way in, rather than a row of icons to decode. Leaflet rebuilds
-// popup DOM on every open, so they are data-map-action controls.
+// Pin popup overflow menu: destructive/secondary actions behind one button; Leaflet rebuilds popup DOM on open, so actions are data-map-action controls.
 function closePinPopupMenus(): void {
     document.querySelectorAll<HTMLElement>(".popup-menu-items:not([hidden])").forEach(function (menu) {
         menu.hidden = true;
@@ -3287,11 +3167,7 @@ map.on("zoomend moveend", function () {
 function _renderBulkSelectToolbar(): void {
     if (!window.ulBulkToolbar) return;
     const n = _selectedPinUuids.size;
-    // Select mode itself stays on regardless of count (see
-    // enterSelectMode/exitSelectMode) - only the shared bar's visibility
-    // and per-button availability track the selection. Merge needs at
-    // least 2 pins; everything else needs at least 1. "deselect" doubles
-    // as "exit select mode" here, same as every other page's bulk bar.
+    // Select mode stays on; toolbar visibility/buttons track selection count. Merge needs 2+ pins; deselect = exit select mode.
     window.ulBulkToolbar.sync("pins", n, {
         add_to_list: n >= 1 ? _openAddToListForSelection : null,
         merge: n >= 2 ? openBulkMergeDialog : null,
@@ -3561,11 +3437,7 @@ function _renderBulkMergeDialog(): void {
     _setMergeTargetHighlight(_bulkMergeTargetUuid);
 }
 
-// -- Merge target/hover highlight sync (map <-> list) ----------------------
-// Same UX as the trip page's map<->list hover-sync: the target pin is
-// enlarged and highlighted on the map so it's unmistakable, and hovering
-// either a marker or its mini-card in the dialog highlights the other, both
-// ways.
+// Merge target/hover sync (map <-> list): target pin highlighted on map; hovering marker or mini-card highlights the other.
 let _mergeTargetHighlightUuid: string | null = null;
 
 function _mergeDialogIsOpen(): boolean {
@@ -3999,11 +3871,7 @@ function toggleFilterPanel(): void {
 }
 window.toggleFilterPanel = toggleFilterPanel;
 
-// Measures the filter panel's actual available height vs. its fully-expanded
-// content height, and collapses accordion sections (least important first)
-// until it fits - rather than guessing from fixed window-height breakpoints.
-// Panels carry data-importance="high|medium|low"; new panels just need the
-// attribute, no code change here.
+// Collapses filter accordion sections (least important first) to fit panel height; panels use data-importance attribute.
 function _autoFitFilterSections(): void {
     const panel = document.getElementById("filter-panel");
     const form = document.getElementById("filter-form") as HTMLFormElement | null;
@@ -4056,13 +3924,7 @@ function _togglePinListPanel(): void {
 }
 window._togglePinListPanel = _togglePinListPanel;
 
-// The pin list sidebar's page size adapts to however many .pin-list-item
-// rows actually fit in the scrollable body without a scrollbar, instead of
-// a fixed count - row height varies with label/meta content, so this is
-// measured from the actually-rendered DOM after each fetch rather than
-// computed up front from CSS alone. Seeded with the server's own default
-// (matches _PIN_LIST_PAGE_SIZE) and refined once real rows exist to
-// measure.
+// Pin list page size adapts to rendered row height (varies with label/meta); measured from DOM after fetch, seeded from server default.
 let _pinListPageSize = 25;
 const _PIN_LIST_MIN_PAGE_SIZE = 5;
 const _PIN_LIST_MAX_PAGE_SIZE = 100;
@@ -4074,11 +3936,7 @@ function _refreshPinList(): void {
     if (!panel || !panel.classList.contains("open")) return;
     const form = document.getElementById("filter-form") as HTMLFormElement;
     const params = new URLSearchParams(new FormData(form) as unknown as Record<string, string>);
-    // Scopes the sidebar's list (and its total count) to pins within the
-    // map's current viewport - kept as a plain query param here rather
-    // than a #filter-form field, since #filter-form is also read by
-    // map.search and "add these pins to a list" (addPinsToList), neither
-    // of which should become viewport-scoped.
+    // Scope sidebar list to map viewport via query param (not filter-form field) so map.search and addPinsToList aren't viewport-scoped.
     const b = map.getBounds();
     params.set("bounds", `${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()}`);
     params.set("page_size", String(_pinListPageSize));
@@ -4175,11 +4033,7 @@ function _flyToPinFromList(uuid: string, lat: number | null, lng: number | null)
 window._flyToPinFromList = _flyToPinFromList;
 
 // -- Add pins to a list ----------------------------------------------------
-// Three modes, chosen by what's passed to openAddToListDialog():
-//  - no args: replay the active filter-form criteria (sidebar's "Add these
-//    pins to a list" button, over the full unpaginated filtered set)
-//  - a single pin id (string/number): the pin popup's list icon
-//  - an array of pin ids: the multi-select toolbar's "Add to List" tool
+// Three modes for openAddToListDialog(): no args (filtered set), single pin id (popup), or array (multi-select toolbar).
 let _addToListPinIds: Array<number | string> | null = null;
 function openAddToListDialog(pinIdOrIds?: number | string | Array<number | string> | null): void {
     _addToListPinIds = pinIdOrIds == null ? null : Array.isArray(pinIdOrIds) ? pinIdOrIds : [pinIdOrIds];
@@ -4330,15 +4184,7 @@ function _countActiveFilters(): number {
         const el = form.querySelector(`input[name=${key}]`) as HTMLInputElement | null;
         if ((el?.value || "").trim()) n++;
     }
-    // Bottom-right toolbar's own active saved filters (toggleToolbarSavedFilter) -
-    // a SEPARATE mechanism from every field above (its state lives in
-    // _activeToolbarFilters/#fp-toolbar-filter-ids, not a sidebar form field).
-    // Omitting this meant a toolbar-only filter (no sidebar criteria) made
-    // _hasActiveFilters() report false, so the htmx:beforeRequest handler
-    // below treated it as "no filters" and skipped the server round-trip
-    // entirely - the toolbar filter's client-side optimistic pass (which
-    // doesn't even support every criteria type _apply_toolbar_filters does
-    // server-side) was left as the only, never-reconciled, effect.
+    // Toolbar saved filters (toggleToolbarSavedFilter) are separate from sidebar fields; state in _activeToolbarFilters. Must count them so _hasActiveFilters() doesn't skip server round-trip.
     n += _activeToolbarFilters.size;
     return n;
 }
@@ -4423,11 +4269,7 @@ interface SavedFilterCriteria {
     exclude_regions?: GeoJSON.MultiPolygon;
 }
 
-// -- Apply a saved filter, merged additively with whatever is already active --
-// Conflict rule: for a given scalar/range field, an already-active sidebar
-// value always wins - the saved filter only fills in fields currently at
-// their default. Labels are always UNIONED into the current included set
-// (never touching excludes), regardless of whether other labels are active.
+// Apply saved filter additively: sidebar values win for scalar/range fields; labels UNION into included set (excludes untouched).
 function applySavedFilter(chipEl: HTMLElement): void {
     let criteria: SavedFilterCriteria;
     try {
@@ -4504,15 +4346,7 @@ function applySavedFilter(chipEl: HTMLElement): void {
         if (select && !(select.value || "").trim()) select.value = value;
     }
 
-    // Labels: union saved include-ids into the current included set; never
-    // touch excludes, and never auto-add a saved filter's exclusions.
-    // Structured label_groups (from the map's own formula bar) takes
-    // precedence; a filter saved from the Filters tab's simple
-    // include/exclude picker instead stores flat tags/exclude_tags (it has
-    // no formula-bar UI to produce label_groups), so that shape needs its
-    // own union-into-included handling here too - otherwise a filter whose
-    // only criterion is "include label X" (a very common case from that
-    // dialog) merged nothing at all and looked like a dead click.
+    // Labels: union saved include-ids into current set; never touch excludes. Handle both label_groups (formula bar) and flat tags (Filters tab) shapes.
     if (Array.isArray(criteria.label_groups)) {
         const mergeIds: number[] = [];
         for (const group of criteria.label_groups) {
@@ -4564,9 +4398,7 @@ function applySavedFilter(chipEl: HTMLElement): void {
         if (hidden && !(hidden.value || "").trim()) hidden.value = JSON.stringify(value);
     }
 
-    // Mark the chip as applied - the merge above can't be cleanly un-applied
-    // (values are written straight into shared form fields), so this stays
-    // on until resetFilters() clears the whole panel rather than toggling.
+    // Chip stays marked applied until resetFilters() clears panel — merge writes directly to shared fields, can't be cleanly un-applied.
     chipEl.classList.add("fp-saved-filter-apply--active");
 
     // Trigger the sidebar's normal submission path. The form's own 'change'
@@ -4580,11 +4412,7 @@ function applySavedFilter(chipEl: HTMLElement): void {
 window.applySavedFilter = applySavedFilter;
 
 // -- Bottom-right saved-filters toolbar: independent, AND-combined toggle layer --
-// Unlike applySavedFilter() above (which merges values into the sidebar form and
-// can't be cleanly un-applied), toolbar filters are tracked separately and ride
-// along with #filter-form via the hidden toolbar_filter_ids input, so the server
-// ANDs them against the sidebar's own criteria (controllers/maps.py) without any
-// of applySavedFilter()'s "only fill empty fields" merge logic.
+// Toolbar filters tracked separately, sent via hidden toolbar_filter_ids; server ANDs them with sidebar criteria (no merge logic).
 const _activeToolbarFilters = new Map<string, SavedFilterCriteria>(); // filterUuid -> criteria
 const _toolbarHiddenByFilter = new Map<string, Set<string>>(); // pinUuid -> Set<filterUuid> currently hiding it
 let _sfToolbarPageIdx = 0;
@@ -4617,13 +4445,7 @@ function _sfPointInMultiPolygon(pt: GeoJSON.Position, geojson: GeoJSON.MultiPoly
     return geojson.coordinates.some((polygon) => _sfPointInPolygon(pt, polygon));
 }
 
-// Best-effort client-side predicate over a cached pin, using only fields the map's
-// pin payload actually carries (name, rating, last_visited, label ids, lat/lng).
-// Dimensions the payload doesn't carry at all today (danger, priority, vulnerability,
-// visited/created date ranges, custom fields, overlapping_pins, and label-group
-// ancestor/descendant expansion) are NOT evaluated here - this function only ever
-// narrows on fields it's confident about, and the authoritative server response
-// (triggered right alongside this) corrects anything it couldn't judge.
+// Best-effort client-side filter using only fields in pin payload (name, rating, last_visited, label ids, lat/lng). Missing dimensions (danger, priority, date ranges, custom fields) evaluated server-side.
 function _sfClientMatches(pin: PinData, criteria: SavedFilterCriteria): boolean {
     if (criteria.name) {
         const q = String(criteria.name).toLowerCase();
@@ -4751,11 +4573,7 @@ function _sfToolbarRender(): void {
     if (!track || !root || !viewport) return;
     const offset = _sfToolbarPageIdx * _sfToolbarPageSize();
     track.style.transform = `translateX(-${offset}px)`;
-    // Whether there's actually more content is a direct pixel-geometry
-    // question, not a perPage/total arithmetic estimate (which inherits the
-    // same "assumes a trailing gap" rounding the page-size calc above has to
-    // work around) - a 1px tolerance avoids sub-pixel rounding flicker for
-    // content that fits exactly.
+    // More content = pixel-geometry check (not perPage/total estimate); 1px tolerance avoids sub-pixel flicker.
     root.classList.toggle("has-prev", offset > 1);
     root.classList.toggle("has-next", track.scrollWidth - offset - viewport.clientWidth > 1);
 }
@@ -5077,11 +4895,7 @@ window._lastViewedRange = _lastViewedRange;
     });
 })();
 
-// -- Floating address search bar --------------------------------------
-// Uses the shared LocationSearchEngine (see ts/shared/location-search-engine.ts)
-// bound to the {% map_search_bar %} component; this page supplies the
-// map-specific callbacks (panning, temp markers, opening pin popups) and keeps
-// the pin-recently-viewed tracking, which is specific to this page's marker/popup model.
+// Floating address search bar using shared LocationSearchEngine; this page provides map-specific callbacks and pin-recently-viewed tracking.
 const _homeLat = _SERVER_CENTER_LAT !== null ? _SERVER_CENTER_LAT : _GPS_FALLBACK_LAT;
 const _homeLng = _SERVER_CENTER_LNG !== null ? _SERVER_CENTER_LNG : _GPS_FALLBACK_LNG;
 const _searchHome = _homeLat !== null && _homeLng !== null && _MAP_CENTER_MODE !== "gps" ? { lat: _homeLat, lng: _homeLng, zoom: _defaultZoom } : null;
@@ -5183,10 +4997,7 @@ function _onLocationSelect(result: LocationSelectResult): void {
     }
 }
 
-// One-time cleanup: 'ul_addr_history_v1' used to be unscoped, so a shared
-// browser leaked one user's typed search queries to the next user who
-// logged in (UL-239). Drop the stale global entry; going forward the key
-// carries the profile id, matching recentPinsKey below.
+// Clean up legacy unscoped address history key (leaked queries across profiles on shared browser); new key is profile-scoped.
 try {
     localStorage.removeItem("ul_addr_history_v1");
 } catch {
@@ -5248,12 +5059,7 @@ setTimeout(() => {
     }
 }, 0);
 
-// -- Combined label filter section ----------------------------------------
-// Backed by the shared picker engine (ts/shared/label-picker.ts) - the same
-// engine drives the saved-filter dialog and detail page, so include/exclude,
-// chip dragging, the AND/OR toggle, and the formula bar behave identically
-// everywhere labels filter pins. Serializes into the #fp-label-groups hidden
-// input as label_groups JSON.
+// Combined label filter section backed by shared label-picker.ts engine (same as saved-filter dialog and detail page). Serializes to #fp-label-groups as label_groups JSON.
 const _labelPicker: FilterPickerApi | null = (() => {
     const list = document.getElementById("fp-label-list");
     if (!list) return null; // the Labels accordion only renders when the user has labels
@@ -5293,11 +5099,7 @@ function pickColor(pickerId: string, valueId: string, colorHex: string, btn?: HT
 }
 window.pickColor = pickColor;
 
-// The icon catalogue is fetched on first open rather than rendered into
-// every picker - one grid is 594 KB of markup (P68). This mirrors
-// frontend/ts/shared/icon-picker.ts; the copy exists because this page
-// defines its own IconPicker with add-pin-specific behaviour in pick()
-// and _handleUpload(), so it cannot import the shared one.
+// Icon catalogue fetched on first open (594 KB markup); mirrors shared/icon-picker.ts but duplicated for add-pin-specific pick() and _handleUpload().
 interface IconCatalogue {
     tabs: string;
     items: string;
@@ -5393,11 +5195,7 @@ const IconPicker = {
                 IconPicker.search(id, "");
             }
             IconPicker.setTabSilent(id, "");
-            // Revealed first, filled second, so the fetch shows as a loading
-            // row inside an open panel rather than as a click that does nothing.
-            // The chrome is live while the icons are still arriving, so
-            // whatever the user typed or clicked meanwhile is re-applied to
-            // them rather than reset - _reapplyIconFilter, not setTabSilent.
+            // Panel revealed first, then filled — fetch shows as loading row; user interactions re-applied via _reapplyIconFilter.
             _fillIconGrid(id).then(() => _reapplyIconFilter(id));
         }
     },
@@ -5684,11 +5482,7 @@ function openEditPinDialog(pinUuid: string): void {
         _setAddPinLocation(lat, lng, `${lat.toFixed(5)}, ${lng.toFixed(5)}`);
     }
 
-    // Pre-fill icon/color from the pin's OWN overrides only - never from
-    // pin.icon/pin.color, which are the *effective* (possibly label-inherited)
-    // display values. Pre-filling from those would silently bake a label's
-    // icon/color onto the pin the next time this form is saved, even if the
-    // user never opened the Customize section.
+    // Pre-fill from pin's OWN overrides only (own_icon, own_color), not effective values which may be label-inherited — would silently bake label's icon/color on save.
     if (pin.own_custom_icon_url) {
         const iconCurrent = document.getElementById("icon-current-add-pin");
         if (iconCurrent) iconCurrent.innerHTML = `<img src="${escHtml(pin.own_custom_icon_url)}" class="icon-picker-custom-preview" alt="">`;
@@ -5711,12 +5505,7 @@ function openEditPinDialog(pinUuid: string): void {
         pickColor("apdlg-color-picker", "apdlg-color-value", pin.own_color, swatch ?? undefined);
     }
 
-    // Pre-fill labels from the pin's own labels. Match by id (the reliable key -
-    // label names aren't guaranteed unique across kinds/owners) and fall back
-    // to a name match only for stale cache entries from before ids were cached.
-    // If a label can't be found in _apdlgAllLabels at all (e.g. it's no longer
-    // visible to this profile), keep it selected anyway using the cached data
-    // so saving the form doesn't silently drop it from the pin.
+    // Pre-fill labels from pin's own labels: match by id (reliable), fall back to name for stale cache. Keep labels not in _apdlgAllLabels so save doesn't drop them.
     const tagsData = _pinTagObjects(pin);
     _apdlgSelectedLabels = tagsData
         .map((tag): LabelCandidate | null => {
@@ -6234,14 +6023,7 @@ document.getElementById("apdlg-submit")!.addEventListener("click", function (thi
             return;
         }
         const formData = new FormData();
-        // Leave name blank (never 'Unnamed Location') when the user
-        // didn't type one - Pin.effective_name already falls back to the
-        // location's own display name, live, forever. Submitting a
-        // placeholder string here used to get saved as a real pin.name
-        // AND get flagged name_is_user_provided=True (see post_add_pin's
-        // bool((name or "").strip())), permanently locking the pin out of
-        // ever picking up a better name once one becomes available - the
-        // exact opposite of what leaving the field blank should mean.
+        // Leave name blank when user didn't type one — Pin.effective_name falls back to location display name. Submitting placeholder would lock pin out of future better names via name_is_user_provided.
         formData.append("name", (document.getElementById("apdlg-name") as HTMLInputElement).value.trim());
         formData.append("latitude", lat);
         formData.append("longitude", lng);

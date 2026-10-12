@@ -36,10 +36,10 @@ load_dotenv(find_dotenv())
 # pytest-django skips DiscoverRunner's HTTPS-redirect disable, so detect tests here too.
 TESTING = env_bool("DJANGO_TESTING", default=False) or running_under_pytest()
 
-# An unset UL_ENVIRONMENT refuses to start (Jess, 2026-10-07), except in a test run, which is never a deployment:
+# An unset UL_ENVIRONMENT refuses to start, except in a test run which is never a deployment:
 # one started without it (a worktree has no .env) is the suite, named as CI names it. Both are written to os.environ
-# so anything reading the variable later agrees, and so xdist workers, which hide pytest from argv, know they are a
-# test run as well as its name: without DJANGO_TESTING a worker redirects every request to HTTPS.
+# so anything reading the variable later agrees, and so xdist workers know they are a test run as well as its name:
+# without DJANGO_TESTING a worker redirects every request to HTTPS.
 if TESTING and not os.environ.get("UL_ENVIRONMENT", "").strip():
     os.environ["UL_ENVIRONMENT"] = str(EnvironmentTypes.TESTING)
     if not os.environ.get("DJANGO_TESTING", "").strip():
@@ -274,11 +274,10 @@ DRAGONFLY_URL = require_deployment_setting(
     reason=("Without a shared store the cache falls back to per-process memory, so every lock, throttle and single-flight guard only holds within one worker, and there is no Channels layer for live updates."),
 )
 
-#: Cache alias for bytes proxied from somewhere else - map tiles, Immich thumbnails, Google Photos
-#: previews. Its keyspace is bounded by nobody: a tile is cached per layer and coordinate, so the
-#: number of keys is the number of coordinates anyone looked at, and the store holding them raises
-#: rather than evicting once full. Sessions and the Channels layer live in `default` and must not
-#: be what breaks when a week of panning fills it, so this points at an instance that may evict.
+#: Cache alias for bytes proxied from elsewhere - map tiles, Immich thumbnails, Google Photos
+#: previews. Keyspace bounded by coordinates viewed; store raises rather than evicting when full.
+#: Sessions and Channels layer live in `default` and must not break when panning fills this cache,
+#: so this points at an instance that may evict.
 PROXIED_BYTES_CACHE = "proxied_bytes"
 #: Falls back to the shared store, which is the arrangement this exists to end - so a deployment
 #: that has not provisioned the second instance still works, and is measurably not fixed.
@@ -295,7 +294,7 @@ if DRAGONFLY_URL:
             # two paths Django leaves unguarded in cached_db (login and
             # logout), and every request pays socket_timeout once per cache
             # call - measured at 32s per request, readiness probe included.
-            # See core/cache_backend.py and P105.
+            # See core/cache_backend.py.
             "BACKEND": "urbanlens.core.cache_backend.ResilientRedisCache",
             "LOCATION": DRAGONFLY_URL,
             "KEY_PREFIX": "urbanlens",
@@ -607,7 +606,7 @@ FULL_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.backfill_image_analysis_thumbnails",
         "schedule": crontab(minute=19),
     },
-    # Keyword sources asked again about the photos they did not answer for (P323); see services/photos/keyword_retry.py.
+    # Keyword sources asked again about the photos they did not answer for; see services/photos/keyword_retry.py.
     "keyword-retry-sweep": {
         "task": "urbanlens.dashboard.tasks.sweep_keyword_retries",
         "schedule": crontab(minute="11-59/15"),
@@ -811,11 +810,9 @@ X_PERMITTED_CROSS_DOMAIN_POLICIES = "none"
 CROSS_ORIGIN_EMBEDDER_POLICY_REPORT_ONLY = "credentialless"
 
 # Content-Security-Policy (django-csp >= 4).
-#
-# script-src refuses inline script: no template or bundle-built markup carries any, and
-# test_templates_run_no_inline_script.py keeps it that way. htmx must not need 'unsafe-eval' either: no hx-on, js:
-# hx-vals or trigger filters (frontend/ts/shared/htmx-actions.ts replaces them).
-#: The keyless public vector basemap (openfreemap.org): free, no key, no usage limits, any use allowed.
+# script-src refuses inline script; no template or bundle-built markup carries any.
+# htmx must not need 'unsafe-eval': no hx-on, js: hx-vals or trigger filters.
+#: The keyless public vector basemap (openfreemap.org): free, no key, no usage limits.
 OPENFREEMAP_ORIGIN = "https://tiles.openfreemap.org"
 
 _CSP_DIRECTIVES: dict[str, list[str]] = {

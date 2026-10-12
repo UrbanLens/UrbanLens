@@ -1,9 +1,8 @@
 """
 State transitions that raced: each is now one guarded step with a database guarantee.
 
-G2-6 pin-share reject, G2-15 trip member cap, G2-18 friend accept, G4-17 backup overlap,
-G4-28 wiki field edits. Interleavings are forced - a stale in-memory row, or a barrier inside
-the window - rather than left to timing.
+Pin-share reject, trip member cap, friend accept, backup overlap, wiki field edits.
+Interleavings are forced - a stale in-memory row, or a barrier inside the window - not left to timing.
 """
 
 from __future__ import annotations
@@ -48,7 +47,7 @@ def _barrier_after(real, barrier: threading.Barrier):  # noqa: ANN001, ANN202
 
 
 class PinShareAnswersSettleOnceTests(TestCase):
-    """G2-6: reject wrote REJECTED from a stale row over a committed accept."""
+    """Reject wrote REJECTED from a stale row over a committed accept."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -97,7 +96,7 @@ class PinShareAnswersSettleOnceTests(TestCase):
 
 
 class TripSeatRaceTests(TransactionTestCase):
-    """G2-15: every add path counted the roster, then wrote it, with nothing between."""
+    """Every add path counted the roster, then wrote it, with nothing between."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -171,7 +170,7 @@ class TripSeatRaceTests(TransactionTestCase):
 
 
 class DirectMessageTripInviteSeatTests(TestCase):
-    """G2-15 sibling: inviting from a chat thread wrote the membership without consulting the cap."""
+    """Inviting from a chat thread wrote the membership without consulting the cap."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -226,7 +225,7 @@ class DirectMessageTripInviteSeatTests(TestCase):
 
 
 class FriendAcceptRaceTests(TransactionTestCase):
-    """G2-18: two accepts sharing a profile both read its friend count before either wrote."""
+    """Two accepts sharing a profile both read its friend count before either wrote."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -266,7 +265,7 @@ class FriendAcceptRaceTests(TransactionTestCase):
 
 
 class BackupOverlapTests(TestCase):
-    """G4-17: the admin button, the schedule and an OSError retry could each start a pg_dump at once."""
+    """The admin button, the schedule and an OSError retry could each start a pg_dump at once."""
 
     def test_a_second_backup_waits_its_turn(self) -> None:
         from urbanlens.dashboard import tasks
@@ -290,7 +289,7 @@ class BackupOverlapTests(TestCase):
 
 
 class WikiEditConflictTests(TestCase):
-    """G4-28: an edit overwrote a newer value and recorded a stale "from"."""
+    """An edit overwrote a newer value and recorded a stale "from"."""
 
     def setUp(self) -> None:
         super().setUp()

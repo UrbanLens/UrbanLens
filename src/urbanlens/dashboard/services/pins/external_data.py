@@ -979,8 +979,6 @@ class DocumentPanelSource(LocationCachePanelSource, ABC):
             site_scope: Whether the page describes a parcel/site rather than one building.
             subject: The place, as for :meth:`source_documents`.
 
-        Returns:
-            The document, or None.
         """
         return next((document for document in self.source_documents(data, site_scope=site_scope, subject=subject) if document.document_id == document_id), None)
 
@@ -1241,11 +1239,8 @@ class BoundaryPanelSource(PanelSource):
     Location-scoped: the generated property/building boundaries are shared place data, so one fetch serves every pin (and the wiki page) at that Location."""
 
     key = "boundary"
-    # The prefork pool, not the fast thread-pool queue - generate_location_boundaries
-    # does real CPU-bound work (gunzipping building-footprint shards, shapely
-    # geometry ops), and several of those running concurrently on a thread pool
-    # would cause enough GIL contention to slow down every other panel sharing
-    # it. See PanelSource.queue.
+    # The prefork pool: generate_location_boundaries does CPU-bound work
+    # (gunzipping shards, shapely ops) that would cause GIL contention on threads.
     queue = Queue.INTERACTIVE
     api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset({PanelApiKind.BOUNDARY})
 
@@ -1255,15 +1250,7 @@ class BoundaryPanelSource(PanelSource):
 
     @classmethod
     def location_flight_key(cls, location_id: int | None) -> str:
-        """
-        The flight marker of a location's boundary fetch, for a caller generating it with no pin in hand.
-
-        Args:
-            location_id: The location.
-
-        Returns:
-            The key :meth:`flight_key` gives for any pin standing there.
-        """
+        """The flight marker of a location's boundary fetch, for a caller generating it with no pin in hand."""
         return f"ulfetch:flight:{cls.key}:loc{location_id}"
 
     def flight_key(self, pin: Pin) -> str:
@@ -1352,16 +1339,7 @@ def _street_view_gateways() -> list[StreetViewProvider]:
 
 
 def collect_satellite_slides(lat: float, lng: float) -> tuple[list[SatelliteSlide], list[ProviderFetchResult]]:
-    """
-    Gather satellite slides from every provider, tolerating per-provider failure.
-    Each provider caches its own slides (24h, keyed by coordinates), so running this twice is one round of upstream fetches followed by pure cache hits -- the Celery warm-up task and the request-path render share this exact function.
-
-    Args:
-        lat: WGS-84 latitude.
-        lng: WGS-84 longitude.
-
-    Returns:
-        Tuple of (all slides in provider order, per-provider outcomes for the admin debug overlay)."""
+    """Gather satellite slides from every provider, tolerating per-provider failure."""
     slides: list[SatelliteSlide] = []
     results: list[ProviderFetchResult] = []
     for gateway in _satellite_gateways():
@@ -1846,15 +1824,7 @@ def panel_visible_to(user: AbstractBaseUser | AnonymousUser, source: PanelSource
 
 
 def seed_site_descendants(site: Pin) -> int:
-    """
-    Answer the markers nested under ``site`` from every panel's cached site payload, without asking any upstream.
-
-    Args:
-        site: The site pin.
-
-    Returns:
-        How many nested cache rows were written, across every source.
-    """
+    """Answer the markers nested under ``site`` from every panel's cached site payload, without asking any upstream."""
     written = 0
     for source in panel_sources().values():
         if not isinstance(source, LocationCachePanelSource):
@@ -1886,15 +1856,7 @@ def fetch_blocked(source: PanelSource, pin: Pin) -> bool:
 
 
 def schedule_panel_fetch(source_key: str, pin: Pin) -> bool:
-    """
-    Ensure a background fetch is in flight for this panel, single-flight.
-
-    Args:
-        source_key: A :func:`panel_sources` key.
-        pin: The pin whose panel data should be fetched.
-
-    Returns:
-        True when a fetch is in flight (newly scheduled or already running) -- the caller should return a polling placeholder."""
+    """Ensure a background fetch is in flight for this panel, single-flight."""
     source = get_panel_source(source_key)
     if source is None:
         logger.warning("schedule_panel_fetch: unknown source '%s' for pin %s", source_key, getattr(pin, "pk", None))

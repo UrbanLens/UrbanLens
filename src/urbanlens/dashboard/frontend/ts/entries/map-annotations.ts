@@ -267,11 +267,9 @@ function initMapRectangleSelect(element: HTMLElement, map: L.Map, isActive: () =
         }
 
         element.addEventListener("pointermove", onMove);
-        // The terminators go on window, not the element: capture is only taken
-        // once the drag threshold is crossed, so a press that ends before that
-        // (a flick off the map edge) would otherwise never be delivered here -
-        // leaving these listeners attached and map dragging disabled, and
-        // letting the next gesture fire a stale onUp with the previous bounds.
+        // Terminators on window: capture starts after drag threshold, so a
+        // press ending before that (flick off edge) would never fire here,
+        // leaving listeners attached and map dragging disabled.
         window.addEventListener("pointerup", onUp);
         window.addEventListener("pointercancel", onCancel);
     });
@@ -281,11 +279,8 @@ function init(): void {
     const mediaGalleryGrid = document.getElementById("media-gallery-grid");
     if (mediaGalleryGrid) observeMediaGalleryProcessing(mediaGalleryGrid);
     const mapEl = document.getElementById("map");
-    // Config lives on a dedicated element rather than #map itself: #map is
-    // rendered by _map_annotations_panels.html (included from page content,
-    // before the {% url %} endpoint variables this page defines further down
-    // in {% block scripts %} exist), while #map-annotations-config sits right
-    // next to this entry's own <script> tag where those URLs are in scope.
+    // Config on dedicated element: #map rendered before {% url %} vars exist;
+    // #map-annotations-config sits next to this entry's <script> where URLs are in scope.
     const configEl = document.getElementById("map-annotations-config");
     if (!mapEl || !configEl) return;
     const cfg = readConfig(configEl);
@@ -308,11 +303,9 @@ function init(): void {
         window._openCommentMapComposer({ context, initialView: { lat: center.lat, lng: center.lng, zoom: map.getZoom() } });
     };
 
-    // attributionControl: false - required attribution renders in the page
-    // footer instead (show_map_footer=True; see createMapLayers' onAttribution below).
-    // maxZoom is explicit because the cluster groups below are added before the
-    // first tile layer, and leaflet.markercluster throws on an infinite
-    // getMaxZoom() - see MAP_MAX_ZOOM.
+    // attributionControl: false - attribution renders in page footer (show_map_footer=True).
+    // maxZoom explicit: cluster groups added before first tile layer,
+    // leaflet.markercluster throws on infinite getMaxZoom().
     const map = L.map("map", { scrollWheelZoom: false, attributionControl: false, maxZoom: MAP_MAX_ZOOM, minZoom: MAP_MIN_ZOOM }).setView(
         [mapCenterLat, mapCenterLng],
         15,
@@ -324,13 +317,9 @@ function init(): void {
     // opened before Leaflet is initialized so the map has measurable bounds.
     let buildingImportMap: L.Map | null = null;
 
-    // Map select tool (top-right toolbar button) - lets the user click, or
-    // drag a box over, buildings on the preview map to toggle their checkbox,
-    // mirroring the main map's/pin detail map's select-mode tools. The dialog
-    // body (and so the map + button) is HTMX-swapped fresh on every open, so
-    // the mode itself and its DOM side effects are tracked separately: the
-    // former survives across opens (reset below), the latter is rebound each
-    // time via `applyBuildingSelectMode`.
+    // Map select tool: click/drag box to toggle building checkboxes.
+    // Dialog body HTMX-swapped on each open; mode state persists,
+    // DOM effects rebound via applyBuildingSelectMode.
     let buildingSelectMode = false;
     let applyBuildingSelectMode: ((active: boolean) => void) | null = null;
     window.toggleBuildingImportSelectMode = function (): void {
@@ -364,11 +353,9 @@ function init(): void {
         buildingImportMap = previewMap;
         tileLayer("street").addTo(previewMap);
 
-        // Buildings and existing-pin candidates share one selection key space
-        // (a building's selection_key hash vs. a pin's stringified pk never
-        // collide in practice) so select-all/count/rectangle-select treat both
-        // uniformly; only the per-row "child pin vs merge" mode toggle below is
-        // pin-specific.
+        // Buildings and pin candidates share selection key space (hash vs pk
+        // never collide), so select-all/count/rect-select treat both uniformly;
+        // only per-row child-pin-vs-merge toggle is pin-specific.
         const checkboxes = Array.from(form.querySelectorAll<HTMLInputElement>('input[name="building_keys"], input[name="nest_keys"]'));
         const checkboxByKey = new Map(checkboxes.map((checkbox) => [checkbox.value, checkbox] as const));
         const rowByKey = new Map<string, HTMLElement>();
@@ -553,24 +540,14 @@ function init(): void {
     };
     window.ulHtmxActions?.register("building-import-open", () => window.openBuildingImportDialog());
 
-    // Dedicated panes keep markup shapes clickable even when a boundary
-    // polygon visually overlaps them - without this, both layer groups share
-    // the default overlayPane and whichever one's SVG was appended to the DOM
-    // last (boundaries, since they load after markup) silently swallows
-    // clicks meant for the markup shape underneath. Both stay below the
-    // default markerPane (600) so our own arrowhead/text/label markers still
-    // render on top of their own shapes, but above the default overlayPane
-    // (400) that any unrelated vector layer would otherwise share.
+    // Dedicated panes: markupPane (550) and boundaryPane (540) keep shapes
+    // clickable when boundaries overlap markup. Both below markerPane (600)
+    // so our markers render on top, above default overlayPane (400).
     map.createPane("markupPane")!.style.zIndex = "550";
     map.createPane("boundaryPane")!.style.zIndex = "540";
 
-    // Enable scroll-wheel zoom only after the user has hovered over the map
-    // for a moment, so normal page scrolling is not hijacked by a mouse that's
-    // merely passing over the map on its way down the page. 750ms erred too
-    // far the other way though: a user who actually paused on the map to zoom
-    // still had to wait most of a second, past when their scroll gesture had
-    // already been read as a page scroll - 350ms is enough to reject a quick
-    // pass-through while responding promptly to real zoom intent.
+    // Enable scroll-wheel zoom after brief hover (350ms) to avoid hijacking
+    // page scroll; 750ms was too slow for genuine zoom intent.
     const SCROLL_ZOOM_ENABLE_DELAY_MS = 350;
     let scrollEnableTimer: ReturnType<typeof setTimeout> | undefined;
     mapEl.addEventListener("mouseenter", () => {
@@ -665,13 +642,8 @@ function init(): void {
         window.addEventListener("orientationchange", () => setTimeout(() => map.invalidateSize(), 300));
     })();
 
-    // -- Map resize handle (Private Pin page only - wiki page has no handle in ---
-    // its DOM, so this is a silent no-op there). Dragging the bottom border
-    // saves the new height (see PinController.set_map_height) so every pin
-    // detail page's map opens at that height going forward. Bounds must match
-    // the server's own clamp (_MAP_HEIGHT_MIN_PX/_MAP_HEIGHT_MAX_PX in
-    // controllers/pin.py) - the server re-clamps regardless, this is just to
-    // avoid a jarring snap once the save round-trips.
+    // Map resize handle (Private Pin only; wiki has none). Drag saves height
+    // via PinController.set_map_height; bounds match server clamp to avoid snap.
     (() => {
         const wrapper = document.getElementById("pin-detail-map-wrapper");
         const handle = document.getElementById("pin-detail-map-resize-handle");
@@ -832,12 +804,9 @@ function init(): void {
           }
         : {};
 
-    // -- Custom layers: user-created groupings of markup items (e.g. "Tunnels"), --
-    // independently toggleable from the base Markup layer. One Leaflet LayerGroup
-    // per CustomLayer row, keyed by uuid so markup-toolbar.ts's layerGroupFor hook
-    // can route each item's shapes into the right one. See templatetags/
-    // map_components.py's custom_layer_button() for the matching "layer-<uuid>"
-    // button key rendered into the layers panel.
+    // Custom layers: user-created markup groupings (e.g. "Tunnels"), toggled
+    // independently. One LayerGroup per CustomLayer, keyed by uuid for
+    // markup-toolbar.ts's layerGroupFor hook.
     const customLayers = readCustomLayers();
     const customLayerGroups = new Map<string, L.LayerGroup>();
     const customLayerToggles: Record<string, CustomLayerToggle> = {};
@@ -888,11 +857,8 @@ function init(): void {
         },
     });
 
-    // -- Beta time slider: OpenHistoricalMap overlay ------------------------
-    // Below the map, not in .map-bottom-controls (which overlays the tiles).
-    // Absent from the DOM entirely unless the viewer has BETA_FEATURES and
-    // this location has dated OHM coverage nearby (see readConfig() above and
-    // _temporal_imagery_slider.html's server-side gate).
+    // Beta time slider: OpenHistoricalMap overlay below map (not in
+    // .map-bottom-controls). Only present with BETA_FEATURES and dated OHM coverage.
     if (cfg.temporalYears.length > 0) {
         const temporalSliderContainer = document.getElementById("temporal-imagery-slider");
         if (temporalSliderContainer) {
@@ -905,13 +871,9 @@ function init(): void {
         }
     }
 
-    // Manage Layers dialog changes (create/rename/recolor/reorder/delete) fire
-    // this event with the fresh layer list (see custom_layers.py's
-    // _render_layer_list HX-Trigger). Re-sync the panel buttons, this map's
-    // LayerGroups, and the toggle engine in place so a change made in the
-    // dialog shows up immediately - no page reload needed. customLayers is
-    // mutated (not reassigned) since the markup layer-assignment dropdown
-    // above closes over this same array reference.
+    // Manage Layers dialog fires event with fresh layer list (custom_layers.py
+    // _render_layer_list HX-Trigger). Re-sync panel, LayerGroups, toggle engine
+    // in-place; customLayers mutated (not reassigned) as dropdown closes over it.
     const customLayersMenu = document.querySelector<HTMLElement>("#detail-map-layers [data-layers-menu]");
     const customLayersManageBtn = customLayersMenu?.querySelector<HTMLElement>(".map-layers-manage-btn") ?? null;
 
@@ -973,11 +935,9 @@ function init(): void {
         syncCustomLayers((e as CustomEvent).detail?.layers || []);
     });
 
-    // -- Georeferenced image overlays -------------------------------------
-    // Historical sheets (Sanborn maps, site plans) the user has aligned onto
-    // this map by dragging their four corners. Each gets its own toggle in the
-    // layers panel unless it was assigned to a custom layer, in which case it
-    // shows and hides with that layer's other markup instead.
+    // Georeferenced image overlays: historical sheets aligned by dragging
+    // corners. Each toggles in layers panel unless assigned to a custom layer,
+    // then follows that layer's visibility.
     const overlayCornersTemplate = cfg.overlayCornersUrlTemplate || "";
     const imageOverlays = overlayCornersTemplate
         ? createMapImageOverlays(L, map, {
@@ -1085,13 +1045,9 @@ function init(): void {
         return `${r},${g},${b}`;
     }
 
-    // Mirrors the `is_material_icon` Django filter (dashboard_tags.py): a bare
-    // ligature name renders fine inside a material-icons span, but an
-    // uploaded custom icon's URL rendered the same way shows up as literal
-    // text - far wider than one glyph, which stretched the fixed-size
-    // flex circle into an oval and threw off iconAnchor's centered-square
-    // math. A URL gets an <img> sized to match instead; anything else
-    // (an emoji) is plain text, un-fonted so it isn't mistaken for a glyph.
+    // Mirrors is_material_icon Django filter: bare ligature works in
+    // material-icons span; URL would render as literal text, stretching the
+    // flex circle. URL gets <img>; emoji is plain text.
     const MATERIAL_ICON_NAME = /^[a-z0-9_]+$/;
     const ICON_URL = /^(?:https?:)?\//;
 

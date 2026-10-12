@@ -27,9 +27,6 @@ def bounded(request: HttpRequest) -> JsonResponse:
     """
     A projection: no instances, one database row per rendered row, small.
 
-    Args:
-        request: The HTTP request.
-
     Returns:
         One small dict per achievement."""
     rows = list(Achievement.objects.order_by("pk").values("id", "name"))
@@ -49,9 +46,6 @@ def builds_objects(request: HttpRequest) -> JsonResponse:
     and a per-row query would trip the statement counter too and make the harness ambiguous about which axis
     caught it.
 
-    Args:
-        request: The HTTP request.
-
     Returns:
         The same payload as: func:`bounded`, built the expensive way."""
     rows = []
@@ -69,9 +63,6 @@ def fetches_every_row(request: HttpRequest) -> JsonResponse:
     The shape `QueryScalingMixin` is blind to: the query count never moves, because there is only ever one
     query.
 
-    Args:
-        request: The HTTP request.
-
     Returns:
         A constant-size body, whatever the row count."""
     ids = list(Achievement.objects.values_list("id", flat=True))
@@ -81,9 +72,6 @@ def fetches_every_row(request: HttpRequest) -> JsonResponse:
 def ships_too_much(request: HttpRequest) -> JsonResponse:
     """
     Attaches several kilobytes of filler to every row.
-
-    Args:
-        request: The HTTP request.
 
     Returns:
         A payload whose size is set by the row count, generously."""
@@ -98,9 +86,6 @@ def capped(request: HttpRequest) -> HttpResponse:
 
     A per-row budget cannot express "and never more than N records"; this is what the ceiling axis reads.
 
-    Args:
-        request: The HTTP request.
-
     Returns:
         At most: data:`PAYLOAD_CEILING` records, with a truncation marker."""
     rows = list(Achievement.objects.order_by("pk").values("id", "name")[: PAYLOAD_CEILING + 1])
@@ -112,9 +97,6 @@ def capped(request: HttpRequest) -> HttpResponse:
 def uncapped(request: HttpRequest) -> HttpResponse:
     """
     The same shape with no ceiling - what the ceiling axis must catch.
-
-    Args:
-        request: The HTTP request.
 
     Returns:
         Every record, with a marker that always says complete."""
@@ -128,9 +110,6 @@ def streams_too_much(request: HttpRequest) -> StreamingHttpResponse:
 
     A `StreamingHttpResponse` has no `.content`, so an instrument that reads the body the obvious way cannot
     measure the largest endpoint in the application at all.
-
-    Args:
-        request: The HTTP request.
 
     Returns:
         One NDJSON line per achievement, each carrying the same filler."""
@@ -146,9 +125,6 @@ def streams_too_much(request: HttpRequest) -> StreamingHttpResponse:
 def streams_bounded(request: HttpRequest) -> StreamingHttpResponse:
     """
     The same transport, honest per-row cost - the negative half.
-
-    Args:
-        request: The HTTP request.
 
     Returns:
         One small NDJSON line per achievement."""

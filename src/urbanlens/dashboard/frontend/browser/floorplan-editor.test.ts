@@ -7,11 +7,8 @@ import { join } from "node:path";
 
 import { type Browser, type Page, chromium } from "playwright";
 
-// bunfig.toml preloads happy-dom for every test file, which is right for the
-// rest of the suite and wrong here: this file drives a *real* browser, and the
-// simulated globals it installs are not inert. Bun.serve handed a happy-dom
-// Response does not recognise it and quietly serves its own welcome page
-// instead, so the harness never loads and the editor looks broken.
+// bunfig.toml preloads happy-dom, which is right for the suite but wrong here:
+// this file drives a real browser, and the simulated globals interfere.
 GlobalRegistrator.unregister();
 
 const ROOT = join(import.meta.dir, "../../../../..");
@@ -677,12 +674,9 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
     });
 
     test("the floating controls do not sit on top of each other", async () => {
-        // Five things float over this canvas - the tool pill, the tool options,
-        // the undo/zoom/delete row, the floor strip, the layers panel -
-        // positioned across two stylesheets. Overlap is the failure mode nobody
-        // notices until a button cannot be pressed, and it turns up at whatever
-        // width the pieces happen to rearrange, which is why this runs at four
-        // of them rather than one.
+        // Five floating controls (tool pill, options, undo/zoom/delete, floor strip,
+        // layers panel) positioned across two stylesheets. Overlap is the failure mode
+        // nobody notices until a button cannot be pressed, so we test four viewport widths.
         for (const viewport of [
             // 320 is the narrowest phone still in use, and the width where the
             // tool pill wraps to a second row - which makes it taller, which is
@@ -779,10 +773,8 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
     });
 
     test("box select follows the rectangle on screen, even when the plan is turned", async () => {
-        // The selection used to be tested against a latitude/longitude box built
-        // from the rectangle's corners, which is only the same shape while the
-        // map faces north. Turning the plan to face its building is the first
-        // thing anyone does here.
+        // Selection was tested against a lat/long box, which only matches the
+        // rectangle while the map faces north. Turning the plan is the first thing users do.
         await openEditor();
         await page.locator('[data-tool="box"]').click();
 
@@ -859,13 +851,8 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
     });
 
     test("a slide-and-lift finger gesture actually places the corner", async () => {
-        // Driven through CDP rather than synthetic DOM events, because the
-        // question is exactly what the browser's own touch pipeline does with a
-        // finger that moves before it lifts. A hand-dispatched MouseEvent would
-        // be assuming the answer.
-        //
-        // Desktop viewport deliberately: this asks about touch semantics rather
-        // than layout, and a full-width map gives the gesture room to run.
+        // Driven through CDP to test the browser's actual touch pipeline, not
+        // synthetic events. Desktop viewport: this tests touch semantics, not layout.
         await openEditor({ width: 1200, height: 800 }, true);
         const before = await page.locator(".floorplan-wall").count();
         await page.locator('[data-tool="wall"]').click();
@@ -895,12 +882,8 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
     });
 
     test("tapping the zoom control does not drop a corner underneath it", async () => {
-        // Leaflet's controls live inside the map container and stop their own
-        // click from reaching the map - but they stop "click", not
-        // "pointerdown", so a handler listening for pointers sees every tap on
-        // every control. The mouse path is protected by Leaflet; the touch one
-        // has to exclude them itself, which is what the two drag handlers
-        // above already do.
+        // Leaflet controls stop "click" but not "pointerdown", so pointer
+        // handlers see every tap. Mouse path is protected; touch path must exclude controls.
         await openEditor({ width: 1200, height: 800 }, true);
         await page.locator('[data-tool="wall"]').click();
         const dashed = () => page.evaluate(() => document.querySelectorAll('#floorplan-map path[stroke-dasharray="5 5"]').length);
@@ -920,13 +903,8 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
     });
 
     test("switching tools closes a marker's open popup instead of leaving it to eat the next tap", async () => {
-        // A popup that outlived a switch away from Select used to eat the
-        // very next click as "just dismissing that" - including a click on a
-        // newly-armed drawing tool that had every intention of doing
-        // something else, which read to a user as their first tap on a new
-        // tool silently doing nothing. Closing the popup as part of the
-        // switch removes the stale state instead of working around it per
-        // click.
+        // A popup that outlives a tool switch eats the next click as "dismissal",
+        // even on a newly-armed drawing tool. Closing the popup on switch removes the stale state.
         await openEditor({ width: 1200, height: 800 }, true);
         await page.locator('[data-tool="marker"]').click();
         const frame = await page.locator("#floorplan-map").boundingBox();
@@ -960,9 +938,8 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
     });
 
     test("the floor strip adds where it says it will, basements included", async () => {
-        // One "Add floor" button now opens a dialog to choose the direction -
-        // there used to be two buttons (above/below) and no way to tell them
-        // apart except by which end of the strip they sat at.
+        // One "Add floor" button opens a dialog to choose direction. Previously
+        // there were two buttons (above/below) distinguishable only by position.
         await openEditor();
         const strip = "#floorplan-floors";
         const chips = () => page.evaluate((sel) => Array.from(document.querySelectorAll(`${sel} .floorplan-floor-tab__chip`)).map((n) => (n.textContent ?? "").trim()), strip);
@@ -986,11 +963,8 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
     });
 
     test("a marker's colour is picked with the site's own colour picker", async () => {
-        // Not a set of swatches this editor grew for itself: the same markup,
-        // classes and pickColor() call as the label and pin dialogs, so the
-        // control cannot drift from the rest of the site. That means the page
-        // has to install the window.pickColor global the core bundle's swatch
-        // handler calls.
+        // Uses the site's shared colour picker (same markup, classes, pickColor())
+        // so it cannot drift. The page must install window.pickColor for the swatch handler.
         await openEditor();
         await page.locator('[data-tool="marker"]').click();
         const frame = await page.locator("#floorplan-map").boundingBox();
@@ -1017,14 +991,9 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         // frame of every drag. This is the behaviour behind the timing below,
         // asserted directly because a threshold alone would not say what broke.
         await openEditor({ width: 1200, height: 800 }, false, "grid");
-        // Exactly one label per face, not "some". The old drag path left a
-        // stale generation of tooltips behind and read 288 for 144 rooms, and
-        // an at-least assertion cannot tell a duplicate from a redraw.
-        //
-        // Waited for rather than sampled: 144 tooltips do not all arrive in the
-        // same frame on a loaded machine, and a count read too early is a
-        // flake, not a finding. A count stuck at the wrong number still fails,
-        // which is the whole point of the exact figure.
+        // Exactly one label per face. The old drag path left stale tooltips
+        // (288 for 144 rooms); an at-least assertion cannot distinguish duplicates.
+        // Waited for, not sampled: 144 tooltips arrive across frames; early reads flake.
         const ROOMS = 144;
         const settleLabels = async (want: number): Promise<void> => {
             await page.waitForFunction((n) => document.querySelectorAll(".floorplan-room-label").length === n, want, { timeout: 10000 });
@@ -1047,15 +1016,10 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
     });
 
     test("a survey-sized plan still drags at a usable frame rate", async () => {
-        // The same gesture is run on the four-wall plan first and subtracted.
-        // Playwright dispatches each move over a pipe, which costs about as
-        // much as a small redraw; timing one plan alone measures that pipe as
-        // much as the editor. The difference is the editor.
-        //
-        // The bound is deliberately loose. This runs on whatever machine is
-        // free, so a tight one would be flaky - but the regression it exists to
-        // catch (rebuilding every room label per frame) cost 205ms, so there is
-        // still a wide margin between "slower than we would like" and "broken".
+        // Same gesture on four-wall plan first, subtracted. Playwright's pipe
+        // costs similar to a small redraw; the difference isolates editor cost.
+        // Bound is loose (runs on any machine); the regression (rebuilding labels/frame)
+        // cost 205ms, leaving wide margin between slow and broken.
         const MOVES = 10;
         const dragTime = async (plan: "square" | "grid"): Promise<number> => {
             await openEditor({ width: 1200, height: 800 }, false, plan);
@@ -1096,11 +1060,8 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
             return page.evaluate(() => document.querySelector(".floorplan-measure")?.textContent ?? "");
         };
 
-        // Start a chain, then aim at an existing corner, which is snappable.
-        // The bottom-left one, not the top-left: the floating tool-options
-        // panel legitimately covers part of the canvas near the top-right of
-        // the map, and a corner tucked under it would make this a test of
-        // panel layout rather than of snapping.
+        // Start a chain, aim at existing snappable corner (bottom-left, not
+        // top-left: tool-options panel covers top-right, which would test layout, not snapping).
         await page.mouse.click(wall.left + 40, wall.bottom - 40);
         const snapped = await readout(wall.left, wall.bottom);
         expect(snapped).toContain("·");
@@ -1116,11 +1077,9 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
     });
 
     test("the snap-off key does not stick when the window loses focus", async () => {
-        // A held key whose keyup lands on somebody else - alt-tab, a system
-        // shortcut, the browser's own find bar - leaves the mode latched, and
-        // the editor goes on silently not snapping until the key is pressed and
-        // released again. The user's report of that is "snapping stopped
-        // working", with nothing to reproduce it from.
+        // A held key whose keyup lands elsewhere (alt-tab, system shortcut) leaves
+        // mode latched; editor silently stops snapping until key is pressed again.
+        // User reports "snapping stopped working" with no reproduction steps.
         await openEditor();
         const wall = await planExtent();
         await page.locator('[data-tool="wall"]').click();
@@ -1212,11 +1171,9 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
     });
 
     test("a room inside a building can be moved, and leaves the shell alone", async () => {
-        // It could not. A wall counted as the room's own only if it bordered no
-        // other face, and in a planar subdivision every partition borders two -
-        // so a closet inside a building owned nothing, and the drag, the turn
-        // and the delete all declined on the grounds that there was nothing to
-        // act on.
+        // A wall counted as the room's own only if it bordered no other face.
+        // In a planar subdivision every partition borders two, so a closet owned nothing
+        // and drag/turn/delete all declined.
         await openEditor({ width: 1200, height: 800 }, false, "closet");
         const shell = async (): Promise<string> =>
             page.evaluate(() => {
@@ -1265,11 +1222,9 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
     });
 
     test("a free-standing room moves rigidly and can snap to the shell", async () => {
-        // Two things at once, because they are the same drag: a room touching
-        // nothing translates as a block, and the shell is a snap target for it.
-        // The shell used to be excluded on the grounds that this drag stretched
-        // it, which it no longer does - it stays exactly where it is, which is
-        // what makes it worth lining up against.
+        // Two things in one drag: a free room translates as a block, and the
+        // shell is a snap target. The shell was excluded (drag was thought to stretch it);
+        // it stays fixed, making it worth snapping to.
         await openEditor({ width: 1200, height: 800 }, false, "island");
         const island = async (): Promise<{ x: number; y: number; w: number; h: number } | null> =>
             page.evaluate(() => {
@@ -1301,18 +1256,13 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
     });
 
     test("moving a room detaches the wall it shares with its neighbour, rather than dragging the neighbour's side of it too", async () => {
-        // splitRoomBoundary correctly counts a shared partition as "unique" to
-        // both rooms that border it - right for delete, where removing it
-        // merges the neighbour in, but wrong for a move: dragging the west
-        // room used to drag the partition (and the east room's own side of
-        // it) along, tearing a piece off a room nobody selected.
+        // splitRoomBoundary counts a shared partition as unique to both rooms —
+        // right for delete (merges neighbour), wrong for move: dragging west room
+        // used to drag the partition and east room's side, tearing off a piece.
         await openEditor({ width: 1200, height: 800 }, false, "duplex");
-        // Identified as the rightmost fill rather than "the other of two":
-        // once west's own edge detaches and slides away from the partition,
-        // the vacated strip between the two is itself a newly enclosed
-        // (unnamed) region - a real, correct third fill in this model, not a
-        // symptom to assert away. East, at the far side, is unaffected either
-        // way and stays identifiable as whichever fill is furthest right.
+        // Identified as rightmost fill. Once west's edge detaches, the vacated
+        // strip becomes a new enclosed region (correct third fill). East stays
+        // identifiable as the furthest-right fill.
         const eastBox = async (): Promise<{ left: number; top: number; width: number; height: number } | null> =>
             page.evaluate(() => {
                 const rooms = Array.from(document.querySelectorAll("#floorplan-map path.floorplan-room")).map((n) => n.getBoundingClientRect());
@@ -1464,11 +1414,9 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
     });
 
     test("duplicating a floor copies the plan and leaves the original alone", async () => {
-        // Re-tracing an exterior by hand for every storey is the bulk of the
-        // work in a multi-floor plan, and the copy must not carry the source's
-        // uuids: the server matches items to rows by uuid and deletes by
-        // omission, so a carried-over one would move the source floor's rows
-        // rather than duplicate them - emptying the floor that was copied from.
+        // Re-tracing exteriors per storey is the bulk of multi-floor work.
+        // Copy must not carry source uuids: server matches by uuid, deletes by omission;
+        // carried uuids would move source rows instead of duplicating, emptying the source floor.
         await openEditor({ width: 1200, height: 800 }, false, "closet");
         const chips = () => page.evaluate(() => Array.from(document.querySelectorAll("#floorplan-floors .floorplan-floor-tab__chip")).map((n) => (n.textContent ?? "").trim()));
         const wallCount = () => page.locator(".floorplan-wall").count();
@@ -1545,14 +1493,10 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
     });
 
     test("a room whose enclosure is gone takes its name with it", async () => {
-        // Otherwise the seed stays behind as a dot labelled "Room - not
-        // enclosed", sitting in the middle of nothing: the name belonged to a
-        // region that no longer exists.
-        //
-        // Deleting one wall of a room *inside* a building is a different case
-        // and deliberately behaves differently - the region merges with its
-        // surroundings and the name goes with it, because the seed still lands
-        // in a face. This is the case where it lands in none.
+        // Otherwise the seed remains as a dot labelled "Room - not enclosed"
+        // in empty space: the name belonged to a region that no longer exists.
+        // Deleting a wall of an interior room merges regions and keeps the name
+        // (seed still lands in a face); this case has no enclosing face.
         await openEditor();
         const centre = await planCentre();
         await page.mouse.click(centre.x, centre.y, { button: "right" });
@@ -1583,7 +1527,7 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
             undefined,
             { timeout: 10000 },
         );
-        // And no dot where the room used to be.
+        // No dot remains where the room was.
         expect(await page.evaluate(() => document.querySelectorAll('#floorplan-map path[stroke="#ef6c00"]').length)).toBe(0);
         await page.close();
     });
@@ -1754,11 +1698,8 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await settle();
 
         expect(await page.locator(".floorplan-wall").count()).toBe(4);
-        // The shell itself gets no label, which is the whole point of the rule:
-        // an outline nobody has divided up is the building, not a room in it.
-        // (Subdividing one is what makes rooms; the closet, island and grid
-        // fixtures cover that, and doing it here only made this test depend on
-        // where a fitted plan happens to land.)
+        // Shell gets no label: an undivided outline is the building, not a room.
+        // Subdividing creates rooms (covered by closet/island/grid fixtures).
         expect(await page.locator(".floorplan-room-label").count()).toBe(0);
 
         // And the prompt gets out of the way once there is something to edit.
@@ -1821,11 +1762,9 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         // The menu is gone once it has been used.
         expect(await page.locator(".floorplan-context-menu").count()).toBe(0);
 
-        // Away from the opening just cut: it is drawn over the wall, so the
-        // same point now belongs to it and Delete would take the opening.
-        // Deleting the *wall* takes the opening with it, which is the point of
-        // storing an opening as an interval along its wall rather than as
-        // geometry of its own.
+        // Away from the opening just cut: it draws over the wall, so the same
+        // point now belongs to the opening. Deleting the wall takes the opening with it —
+        // the point of storing openings as wall intervals, not separate geometry.
         await page.mouse.click(plan.grab.x - 80, plan.grab.y, { button: "right" });
         await page.waitForSelector("text=Delete", { timeout: 10000 });
         await page.locator(".floorplan-context-menu >> text=Delete").click();
@@ -1836,13 +1775,9 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
     });
 
     test("delete is on the canvas, not only in the sidebar", async () => {
-        // Under 900px the sidebar stacks below a map that is 72vh tall, so the
-        // Delete button living there is below the fold for the whole time
-        // anyone is drawing - and a phone has no Delete key either. Same
-        // reasoning that put the floor strip on the canvas.
-        //
-        // Structural rather than positional: which container the control
-        // belongs to is the claim, and it holds at every width.
+        // Under 900px the sidebar stacks below a 72vh map, putting Delete below
+        // the fold while drawing; phones lack a Delete key. Same reasoning as floor strip.
+        // Structural claim: container membership, not position, holds at every width.
         await openEditor();
         const button = page.locator("#floorplan-delete");
         const hidden = () => page.evaluate(() => (document.getElementById("floorplan-delete") as HTMLElement).hidden);
@@ -1892,11 +1827,8 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
     });
 
     test("the zoom buttons render exactly like every other map's", async () => {
-        // Leaflet's own default top-left control, untouched - the same
-        // classes and position as the main map, rather than reparented into
-        // a custom row with its own override CSS. The floor strip that once
-        // collided with this corner is bottom-right at every breakpoint now,
-        // so nothing else claims it.
+        // Leaflet's default top-left control, untouched — same classes/position
+        // as main map, not reparented. Floor strip (once colliding) is now bottom-right.
         await openEditor();
         expect(await page.evaluate(() => Boolean(document.querySelector(".leaflet-top.leaflet-left .leaflet-control-zoom")))).toBe(true);
         expect(await page.evaluate(() => Boolean(document.querySelector(".floorplan-canvas-controls .leaflet-control-zoom")))).toBe(false);
@@ -1962,10 +1894,9 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
     });
 
     test("undo takes back a renamed plan the way it takes back a moved wall", async () => {
-        // The plan name and date are the only fields in static markup rather than a
-        // panel renderSidebar() rebuilds, which is how they came to sit outside the
-        // undo framework: undo restores state.doc, and these were read out of the
-        // DOM at save time instead of ever being written into it.
+        // Plan name/date are the only fields in static markup (not in renderSidebar()
+        // panels). They sat outside undo: undo restores state.doc, but these were read
+        // from DOM at save time, never written into state.doc.
         saves.lastName = "unset";
         await openEditor();
         // The plan name lives behind "Add more details".
@@ -1991,12 +1922,10 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
     });
 
     test("naming a storey, or renumbering it, shows on the strip when you leave the field", async () => {
-        // Both fields defer their redraw to the commit rather than the keystroke,
-        // because rebuilding the strip under the cursor would take the focus with
-        // it - and on commit the focus has already gone, which is the whole point
-        // of waiting. The commit called renderSidebar(), which rebuilds the
-        // selected item's form and touches neither the strip nor these fields, so
-        // a storey stayed unlabelled until some unrelated edit called render().
+        // Both fields defer redraw to commit (not keystroke): rebuilding strip
+        // under cursor would steal focus; on commit, focus has already moved.
+        // Commit calls renderSidebar(), which rebuilds form but not strip — storey
+        // stayed unlabelled until unrelated edit triggered render().
         await openEditor();
         const strip = "#floorplan-floors";
         const tab = () => page.locator(`${strip} .floorplan-floor-tab`).first();
@@ -2015,10 +1944,9 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
     });
 
     test("tabbing from the floor code to its nickname keeps the focus", async () => {
-        // The commit redraws the strip, and the strip's own render rebuilds these
-        // two fields at the end of it. Tab is what fires that commit, and by then
-        // the focus has already moved to the next field - the very element about
-        // to be replaced. Redrawing has to not cost the user their place.
+        // Commit redraws strip, which rebuilds these fields. Tab fires commit,
+        // but focus has already moved to the next field — the element about to be replaced.
+        // Redraw must not cost the user their place.
         await openEditor();
         await page.locator(".floorplan-floor-fields__code").focus();
         await page.keyboard.type("M");
@@ -2030,12 +1958,10 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
     });
 
     test("deleting a storey from the middle renumbers the rest without moving their contents", async () => {
-        // The destructive one, and the only floor operation the editor's own path
-        // to it was never driven for. The stack has to close up behind a deletion:
-        // a storey above a deleted one keeps a level with nothing underneath, so
-        // "the floor below" quietly starts meaning two down. deriveDesignations is
-        // unit-tested, but nothing checked that renumbering relabels the storeys
-        // rather than shuffling what is drawn on them.
+        // Only floor operation the editor's path never drove. Stack must close up:
+        // storey above deleted one keeps a level with nothing underneath, so
+        // "floor below" means two down. deriveDesignations is unit-tested, but
+        // nothing checked that renumbering relabels storeys, not contents.
         await openEditor();
         const strip = "#floorplan-floors";
         const chips = () => page.evaluate((sel) => [...document.querySelectorAll(`${sel} .floorplan-floor-tab__chip`)].map((n) => (n.textContent ?? "").trim()), strip);
@@ -2050,13 +1976,9 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         }
         expect(await chips()).toEqual(["2", "1", "G"]);
 
-        // A plain .click() intermittently reports this freshly-rebuilt strip's
-        // buttons as covered by the panel's own collapse toggle, even though
-        // their own measured boxes do not overlap it - a stale hit-test frame
-        // in this host's chrome-headless-shell, not a real layering bug (the
-        // same coordinates, clicked directly, land correctly). Clicking the
-        // measured centre point sidesteps the actionability check that trips
-        // on it.
+        // .click() intermittently reports rebuilt strip's buttons as covered by
+        // panel's collapse toggle — stale hit-test frame in chrome-headless-shell,
+        // not a real layering bug. Clicking measured centre sidesteps the actionability check.
         const clickAt = async (locator: ReturnType<typeof page.locator>) => {
             const box = await locator.boundingBox();
             if (!box) throw new Error("not rendered");
@@ -2094,11 +2016,9 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
     });
 
     test("a citation whose photo is gone can be seen and let go of", async () => {
-        // FloorplanReference.image is SET_NULL precisely so deleting a photo from
-        // somebody's media does not delete the plan's note about it. That leaves a
-        // citation with nothing to draw, and the photo strip is built from photos
-        // that still exist - so without a form of its own it is attached, invisible
-        // and impossible to remove.
+        // FloorplanReference.image is SET_NULL so deleting a photo doesn't delete
+        // the plan's note. Citation has nothing to draw; photo strip only shows existing
+        // photos — without its own form, the citation is attached, invisible, irremovable.
         page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
         await page.goto(`http://127.0.0.1:${server.port}/?plan=lostphoto`, { waitUntil: "load" });
         await page.waitForSelector(".floorplan-wall", { state: "attached", timeout: 20000 });
@@ -2119,11 +2039,9 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
     });
 
     test("a plan turned to face its building keeps its angle, plugin or no plugin", async () => {
-        // rotation_degrees is the plan's own north, and every other fixture leaves
-        // it at 0 - so nothing exercised a turned plan at all. It matters most in
-        // the degraded case: without leaflet-rotate the view cannot be turned, and
-        // an editor that answered by saving 0 would flatten the building's angle
-        // on the first autosave after opening it on a bad connection.
+        // rotation_degrees is the plan's north; other fixtures leave it at 0,
+        // so nothing exercised a turned plan. Critical in degraded case: without
+        // leaflet-rotate, view can't turn; editor saving 0 would flatten building angle.
         for (const query of ["plan=rotated", "plan=rotated&norotate=1"]) {
             saves.lastRotation = -1;
             page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
@@ -2141,11 +2059,9 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
     });
 
     test("losing only the rotate plugin costs rotation, not the editor", async () => {
-        // Leaflet and leaflet-rotate are two requests, so one can land without the
-        // other. leaflet-rotate patches L.Map in place, and setBearing() is called
-        // partway through loading the document - so its absence used to throw there
-        // and take the rest of the load with it, blanking an editor whose only
-        // missing piece was a convenience.
+        // Leaflet and leaflet-rotate are separate requests; one can fail.
+        // leaflet-rotate patches L.Map; setBearing() called mid-load — its absence
+        // used to throw and blank the editor, whose only missing piece was a convenience.
         page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
         await page.goto(`http://127.0.0.1:${server.port}/?norotate=1`, { waitUntil: "load" });
         await page.waitForSelector(".floorplan-wall", { state: "attached", timeout: 20000 });
@@ -2167,11 +2083,9 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
     });
 
     test("a map library that never loaded says so, rather than showing a blank rectangle", async () => {
-        // Leaflet and leaflet-rotate are CDN scripts, so an unreachable CDN leaves
-        // `L` undefined and every line of the editor is built on L.map(). Unguarded,
-        // the entry threw on the first call: a blank rectangle, no message, and no
-        // sign that the plan on the server was untouched. Which it must be - nothing
-        // is wired at that point, so nothing can save the empty screen over it.
+        // Leaflet/leaflet-rotate are CDN scripts; unreachable CDN leaves `L`
+        // undefined. Editor built on L.map(); unguarded entry throws: blank rectangle,
+        // no message, no sign server plan is untouched (nothing wired, nothing can save).
         saves.attempts = 0;
         page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
         await page.goto(`http://127.0.0.1:${server.port}/?nomap=1`, { waitUntil: "load" });
@@ -2185,12 +2099,9 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
     });
 
     test("a failed save keeps retrying when the toast library never loaded", async () => {
-        // toastr is fetched from a CDN, so window.toastr is simply absent when
-        // that request does not land - and the network that loses the script is
-        // the same network that loses the save. The warning toast sits directly
-        // above the call that arms the retry, so a throw on the missing library
-        // strands the document: dirty, unsaved, nothing scheduled to try again.
-        // The harness never loads toastr, so this is that machine.
+        // toastr from CDN; absent when request fails — same network that loses
+        // the save. Warning toast sits above retry call; throw on missing library
+        // strands document: dirty, unsaved, no retry scheduled. Harness never loads toastr.
         saves.fail = true;
         saves.attempts = 0;
         try {
@@ -2390,16 +2301,11 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
     });
 
     test("every control on the canvas can be named", async () => {
-        // An icon-only button with no accessible name is a button a screen
-        // reader announces as "button", and this editor is almost entirely
-        // icon-only buttons. Checked with a selection and a tool armed, so the
-        // controls that only exist in those states are included.
-        //
-        // Only what the editor *builds* is in scope here. The toolbar and the
-        // undo row are static template markup, and the fixture's copies of them
-        // are deliberately bare - checking those through here would be checking
-        // the fixture's attributes, not the site's. harness-parity.test.ts
-        // reads the template itself for those.
+        // Icon-only button with no accessible name announces as "button";
+        // editor is almost entirely icon-only buttons. Checked with selection and
+        // tool armed to include state-dependent controls.
+        // Only editor-built controls in scope. Toolbar/undo row are static template
+        // markup; fixture copies are bare. harness-parity.test.ts covers template attributes.
         await openEditor();
         await page.locator('[data-tool="marker"]').click();
         const frame = await planExtent();
@@ -2554,11 +2460,9 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
     });
 
     test("a marker's pickers sit with its label, and survive being deselected", async () => {
-        // The icon and colour pickers are static template markup, because the
-        // icon set lives in Python - and they sat wherever the template put
-        // them, which was after the details block. Moving them into the form
-        // means the form's own replaceChildren() detaches them, so the editor
-        // has to hold the node rather than look it up.
+        // Icon/colour pickers are static template markup (icon set in Python).
+        // They sat after details block; moving into form means replaceChildren()
+        // detaches them, so editor must hold the node, not look it up.
         await openEditor();
         await page.locator('[data-tool="marker"]').click();
         const frame = await planExtent();
@@ -2873,11 +2777,9 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
     });
 
     test("editing someone else's plan forks rather than overwriting it", async () => {
-        // A plan that arrived from the community wiki or from REData is not
-        // this user's to change. Saving has to leave the uuid off so the server
-        // creates their own version, and the banner has to say so before they
-        // have typed anything - an autosave a second after the page opens is
-        // nobody's decision to edit someone else's work in place.
+        // Community/REData plan is not the user's to change. Save must omit uuid
+        // so server creates their version; banner must warn before first keystroke —
+        // autosave seconds after open is not a decision to edit in place.
         saves.lastHadUuid = true;
         await openEditor({ width: 1200, height: 800 }, false, "community");
 
@@ -2911,11 +2813,9 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
     });
 
     test("the room tool builds a room the size of the ones already drawn", async () => {
-        // One click generates a whole rectangular room rather than four walls
-        // drawn by hand, and it takes its size from the rooms already on the
-        // plan - the alternative being a fixed default that is wrong in every
-        // building. The island fixture's room is 3m square against a 4 by 3.5
-        // default, so a learned size and a default one are told apart.
+        // One click generates a rectangular room (not four hand-drawn walls),
+        // sized from existing rooms on plan — fixed default is wrong for every building.
+        // Island fixture's room is 3m square vs 4×3.5 default; learned vs default differ.
         await openEditor({ width: 1200, height: 800 }, false, "island");
         const boxes = () =>
             page.evaluate(() =>
@@ -2936,11 +2836,9 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         const after = await boxes();
         expect(after.length, "no room was generated").toBeGreaterThan(before.length);
 
-        // Which box is new, by removing one match per box that was there
-        // before. Identifying it by "not the same size as the island" would be
-        // exactly wrong here: a room learned from a 3m room *is* 3m, so the
-        // right answer would disqualify itself and the test would pass only on
-        // the rounding between them.
+        // Find new box by removing one match per pre-existing box. Identifying
+        // by "not island size" would be wrong: learned from 3m room *is* 3m, so
+        // correct answer would disqualify itself, passing only on rounding.
         const remaining = [...after];
         for (const was of before) {
             const at = remaining.findIndex((box) => Math.abs(box.w - was.w) <= 2 && Math.abs(box.h - was.h) <= 2);
@@ -2955,10 +2853,9 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
     });
 
     test("save as a new version forks, and is offered only once there is one to fork", async () => {
-        // The one deliberate save in an editor that otherwise saves itself. It
-        // has to leave the uuid off - a fork that overwrote the version it
-        // forked from would be a rename - and it makes no sense on a plan that
-        // has never been saved, where it would mean the same thing as Save.
+        // The one deliberate save in an auto-saving editor. Must omit uuid —
+        // a fork overwriting its source is a rename. On a never-saved plan,
+        // it would equal Save.
         saves.lastHadUuid = true;
         await openEditor();
 

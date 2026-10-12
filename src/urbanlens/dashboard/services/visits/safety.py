@@ -620,6 +620,9 @@ def list_partnered_checkins(profile: Profile) -> SafetyCheckinQuerySet:
 
     Returns:
         Queryset of other profiles' check-ins where ``profile`` has an ACCEPTED partner row, newest deadline first, annotated with ``contact_count`` and ``partner_count``."""
+    # Annotations must precede partnered_with's filter; Django reuses a join when a filter follows
+    # an annotation over the same relation, which would constrain the aggregate to matched rows
+    # and make partner_count permanently 1 (the caller's own row).
     return (
         # The annotations MUST come before partnered_with's filter, not after. partnered_with
         # filters on the multi-valued `partners` relation, and Django reuses a single join when a
@@ -658,8 +661,8 @@ def invite_checkin_partner(checkin: SafetyCheckin, *, inviter: Profile, username
         The newly created (INVITED) SafetyCheckinPartner row.
 
     Raises:
-        MaxPartnersReachedError: The site's ``max_safety_checkin_partners`` cap is already reached (checked before the username is resolved, so check-in capacity can never be used to infer whether an arbitrary username exists).
-        PartnerNotFoundError: The username doesn't resolve to an account, a block exists between the two, or the invitee's profile is hidden from the inviter (all answer identically to an unknown username - see below).
+        MaxPartnersReachedError: The site's ``max_safety_checkin_partners`` cap is already reached (checked before username resolution, so check-in capacity cannot be used as a username-existence oracle).
+        PartnerNotFoundError: The username doesn't resolve to an account, a block exists, or the invitee's profile is hidden from the inviter (all answer identically to an unknown username).
         CannotInviteSelfError: The invitee is the check-in's own owner.
         PartnerAlreadyInvitedError: The named profile already has an invited or accepted partner row on this check-in."""
     from urbanlens.dashboard.models.site_settings.model import SiteSettings
@@ -674,7 +677,7 @@ def invite_checkin_partner(checkin: SafetyCheckin, *, inviter: Profile, username
 
     from urbanlens.dashboard.services.auth.username import find_profile_by_username
 
-    # A blocked or hidden account answers as an unknown username, after the same statement (P280).
+    # A blocked or hidden account answers as an unknown username, after the same statement.
     invitee = find_profile_by_username(username, Profile.invitable_q(inviter))
     if invitee is None:
         raise PartnerNotFoundError(f'invite_checkin_partner: no user the inviter may name has username "{username}" (checkin {checkin.pk}, inviter {inviter.pk}).')
@@ -701,10 +704,10 @@ def accept_checkin_partner_invite(partner: SafetyCheckinPartner) -> None:
     Args:
         partner: The invite being accepted."""
     accepted_at = timezone.now()
-    # Conditional UPDATE, not read-then-write: only flips a row that is still INVITED at write time.
-    # Guards against a repeat accept (row already ACCEPTED) *and* against the owner removing this
-    # same invite concurrently (row no longer exists) - either way, `.update()` on a
-    # non-matching/absent row affects 0 rows and this is a clean no-op, instead of a save() into a
+    # Conditional UPDATE: only flips a row still INVITED at write time.
+    # Guards against repeat accept (row already ACCEPTED) and concurrent owner removal
+    # (row no longer exists) - `.update()` on non-matching/absent row affects 0 rows,
+    # a clean no-op instead of a save() into a
     updated = SafetyCheckinPartner.objects.filter(pk=partner.pk, status=SafetyCheckinPartnerStatus.INVITED).update(status=SafetyCheckinPartnerStatus.ACCEPTED, accepted_at=accepted_at, updated=accepted_at)
     if not updated:
         return
@@ -748,10 +751,9 @@ def remove_checkin_partner(partner: SafetyCheckinPartner) -> None:
     """
     checkin, profile_id = partner.checkin, partner.profile_id
     partner.delete()
-    # An accepted partner may already have a live WebSocket connection whose permission was only
-    # checked once, at connect() time (see SafetyCheckinChatConsumer._resolve) - without this,
-    # they'd keep receiving chat/location/status events (and could keep sending messages) until they
-    # happen to reload or disconnect on their own.
+    # An accepted partner may have a live WebSocket connection whose permission was only
+    # checked at connect() time - without this, they'd keep receiving events
+    # until they reload or disconnect on their own.
     _broadcast_partner_access_revoked(checkin, profile_id)
 
 
@@ -1908,6 +1910,10 @@ def mark_found_safe(contact: SafetyCheckinContact) -> None:
     Args:
         contact: The contact reporting the profile as safe.
     """
+    # Only post the system chat message if this call actually performed the resolution -
+    # otherwise a check-in already resolved (including already archived, or a duplicate
+    # report racing another contact/partner) would get a fresh, never-to-be-scrubbed
+    # plaintext message with nothing behind it.
     contact.found_safe_at = timezone.now()
     contact.save(update_fields=["found_safe_at", "updated"])
 

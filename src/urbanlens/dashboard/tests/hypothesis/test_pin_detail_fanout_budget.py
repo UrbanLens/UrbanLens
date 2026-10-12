@@ -15,39 +15,9 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.tests.hypothesis.redata_helpers import EveryPanelGateConfiguredMixin
 
 #: The most load-triggered HTMX requests the Private Pin page may fire.
-#:
-#: Raised to **46** on 2026-10-05 for four REData media-gallery loaders (aerial, nearby media, nearby photos,
-#: street level). Like the gallery's other fourteen they queue on the media lane; aerial, nearby media and street
-#: level share one REData read per point (``services.locations.redata_point_data``).
-#:
-#: Since 2026-10-04 the page leaves out panels already known to be empty (P53), so this is measured on a pin where
-#: none is: every gate passes and nothing is cached. Still 42 there.
-#:
-#: Lowered to **42**, the measured count, on 2026-10-03, when Site Conditions became a Location Data tab
-#: (P227): 43 with it as a card of its own.
-#:
-#: Raised to **49** on 2026-09-11 for one more REData enrichment panel
-#: (`redata_historical_features`), which queues against a lane like every other
-#: one - `test_every_enrichment_panel_queues_against_a_lane` is what holds the
-#: concurrency, and it stayed green. Raising this for a *laned* panel is the
-#: case the ratchet asks for; an unlaned one is a defect, not a budget request.
-#:
-#: Was 53 at the time of writing; lowered to **48** when the Visits/Photos/
-#: Article/Notes/Edit-History subnav tabs stopped using `hx-trigger="load"`.
-#: Those five panels sit inside a client-side-hidden `<section data-tab-panel>`
-#: that only the tab switch unhides; they wait for `intersect once`, since htmx
-#: fires both `load` and `revealed` for a hidden element at once
-#: (`test_hidden_tab_panels_defer.py`). This is still a ratchet, not an endorsement: the remaining 48 are
-#: already more than the dev deployment's Postgres could serve concurrently;
-#: the budget exists to stop it growing while the real fix - loading panels in
-#: waves, or behind one request - is decided.
-#:
-#: Not all 48 fire on every load: some carry a filter
-#: (`load[!window.ulSectionCollapsed(...)]`) and stay quiet for a collapsed
-#: section, which is why the deployment showed around thirty concurrent requests
-#: rather than the static count. The static count is still the right thing to
-#: bound, because it is the ceiling a user with everything expanded actually
-#: reaches.
+#: Measured on a pin where no panel's gate refuses and nothing is cached.
+#: Some panels carry a filter and stay quiet for collapsed sections.
+#: The static count bounds the ceiling a user with everything expanded reaches.
 MAX_LOAD_TRIGGERED_REQUESTS = 46
 
 #: An element that fetches as soon as the page loads. `load` may carry a filter
@@ -55,11 +25,9 @@ MAX_LOAD_TRIGGERED_REQUESTS = 46
 #: the match is on the word rather than the whole attribute.
 _LOAD_TRIGGER = re.compile(r'hx-trigger="[^"]*\bload\b[^"]*"')
 
-#: An element whose job is to enrich the page rather than to render it: an
-#: external-data panel, a collapsible section, or one of the media-gallery's
-#: per-provider loaders. These are the ones that must queue. The page's own
-#: content - the overview, the gallery frame, the boundary - is deliberately
-#: not laned, because delaying it delays the page itself.
+#: An enrichment element: external-data panel, collapsible section, or
+#: media-gallery provider loader. These must queue; page content (overview,
+#: gallery frame, boundary) is deliberately not laned.
 _ENRICHMENT_MARKERS = ("data-ext-panel-204", "data-collapse-section", "media-provider-loader")
 
 #: A queue lane, as `hx-sync` spells it.
@@ -73,8 +41,8 @@ class PinDetailFanoutBudgetTests(EveryPanelGateConfiguredMixin, TestCase):
     """
     The page's opening burst has a ceiling.
 
-    Measured on the worst case: a pin no panel's gate refuses and nothing is cached for, so no panel is known to be
-    empty and the page leaves none out (P53).
+    Measured on the worst case: a pin where no panel's gate refuses and
+    nothing is cached, so the page leaves none out.
     """
 
     def setUp(self) -> None:
