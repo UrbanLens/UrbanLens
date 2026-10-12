@@ -3,7 +3,7 @@
 # has (see docker-compose.yml's egress-proxy comment and docs/AI_PIPELINE.md),
 # so what runs it should be auditable from a single Dockerfile, not trusted
 # sight-unseen off Docker Hub.
-FROM alpine:3.20
+FROM alpine:3.24
 
 RUN apk add --no-cache tinyproxy
 

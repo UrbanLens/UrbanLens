@@ -1,5 +1,5 @@
 # Allow future upgrades by pinning the base image version here
-ARG PYTHON_BASE_IMAGE_VERSION=3.12-bookworm
+ARG PYTHON_BASE_IMAGE_VERSION=3.14-bookworm
 
 FROM python:${PYTHON_BASE_IMAGE_VERSION} AS base
 
@@ -45,7 +45,7 @@ ENV LANG=en_US.UTF-8 \
     LC_ALL=en_US.UTF-8 \
     LC_CTYPE=en_US.UTF-8
 
-COPY --from=oven/bun:1.3.14 /usr/local/bin/bun /usr/local/bin/bun
+COPY --from=oven/bun:1.4.3 /usr/local/bin/bun /usr/local/bin/bun
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 RUN groupadd --gid 1001 appuser && \
