@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 
 from django.utils import timezone
 from model_bakery import baker
@@ -54,8 +54,8 @@ class EscalationSurvivesLongWikiNameTests(TestCase):
             SafetyCheckin,
             profile=owner,
             title="Overdue hike",
-            checkin_by=timezone.now() - datetime.timedelta(hours=2),
-            grace_period=datetime.timedelta(hours=1),
+            checkin_by=timezone.now() - dt.timedelta(hours=2),
+            grace_period=dt.timedelta(hours=1),
             destination_latitude="40.0",
             destination_longitude="-74.0",
             status=SafetyCheckinStatus.AWAITING_CHECKIN,

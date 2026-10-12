@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from decimal import Decimal
 
 from django.utils import timezone
@@ -41,7 +41,7 @@ class MaybeSuggestPhotoVisitTests(TestCase):
         )
 
     def test_creates_suggestion_when_photo_is_near_pin(self):
-        taken_at = timezone.make_aware(datetime.datetime(2024, 6, 1, 12, 0, 0))
+        taken_at = timezone.make_aware(dt.datetime(2024, 6, 1, 12, 0, 0))
         photo = self._photo(_PIN_LAT + 0.0003, _PIN_LNG + 0.0003, taken_at)  # ~40m away
 
         suggestion = maybe_suggest_photo_visit(photo)
@@ -56,14 +56,14 @@ class MaybeSuggestPhotoVisitTests(TestCase):
         self.assertEqual(PinVisit.objects.filter(pin=self.pin).count(), 0)
 
     def test_no_suggestion_when_photo_is_far_from_pin(self):
-        taken_at = timezone.make_aware(datetime.datetime(2024, 6, 1, 12, 0, 0))
+        taken_at = timezone.make_aware(dt.datetime(2024, 6, 1, 12, 0, 0))
         photo = self._photo(_PIN_LAT + 1.0, _PIN_LNG + 1.0, taken_at)  # >100km away
 
         self.assertIsNone(maybe_suggest_photo_visit(photo))
         self.assertFalse(VisitSuggestion.objects.exists())
 
     def test_batch_upload_same_day_yields_one_suggestion(self):
-        taken_at = timezone.make_aware(datetime.datetime(2024, 6, 1, 12, 0, 0))
+        taken_at = timezone.make_aware(dt.datetime(2024, 6, 1, 12, 0, 0))
         p1 = self._photo(_PIN_LAT + 0.0003, _PIN_LNG + 0.0003, taken_at)
         p2 = self._photo(_PIN_LAT + 0.0004, _PIN_LNG + 0.0004, taken_at)
 
@@ -73,7 +73,7 @@ class MaybeSuggestPhotoVisitTests(TestCase):
         self.assertEqual(VisitSuggestion.objects.filter(suggested_to=self.profile).count(), 1)
 
     def test_no_suggestion_when_visit_already_exists_that_day(self):
-        taken_at = timezone.make_aware(datetime.datetime(2024, 6, 1, 12, 0, 0))
+        taken_at = timezone.make_aware(dt.datetime(2024, 6, 1, 12, 0, 0))
         PinVisit.objects.create(pin=self.pin, visited_at=taken_at, source=VisitSource.MANUAL)
         photo = self._photo(_PIN_LAT + 0.0003, _PIN_LNG + 0.0003, taken_at)
 
@@ -85,14 +85,14 @@ class MaybeSuggestPhotoVisitTests(TestCase):
         self.assertIsNone(maybe_suggest_photo_visit(photo))
 
     def test_no_suggestion_without_coordinates(self):
-        taken_at = timezone.make_aware(datetime.datetime(2024, 6, 1, 12, 0, 0))
+        taken_at = timezone.make_aware(dt.datetime(2024, 6, 1, 12, 0, 0))
         photo = self._photo(None, None, taken_at)
         self.assertIsNone(maybe_suggest_photo_visit(photo))
 
     def test_unfiled_photo_near_pin_still_suggests(self):
         # An unfiled Memories upload (no pin attached) whose GPS lands near one of
         # the user's pins is matched to that pin via the unfiled-photo path.
-        taken_at = timezone.make_aware(datetime.datetime(2024, 6, 1, 12, 0, 0))
+        taken_at = timezone.make_aware(dt.datetime(2024, 6, 1, 12, 0, 0))
         photo = self._photo(_PIN_LAT + 0.0003, _PIN_LNG + 0.0003, taken_at, pin=None)
 
         suggestion = maybe_suggest_photo_visit(photo)
@@ -102,7 +102,7 @@ class MaybeSuggestPhotoVisitTests(TestCase):
         self.assertEqual(suggestion.suggested_to_id, self.profile.pk)
 
     def test_no_suggestion_when_unfiled_photo_has_no_profile(self):
-        taken_at = timezone.make_aware(datetime.datetime(2024, 6, 1, 12, 0, 0))
+        taken_at = timezone.make_aware(dt.datetime(2024, 6, 1, 12, 0, 0))
         photo = baker.make(
             "dashboard.Image",
             pin=None,

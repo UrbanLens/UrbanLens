@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import json
 import logging
 import time
@@ -832,7 +832,7 @@ class TripActivityCompleteView(LoginRequiredMixin, View):
 
         completed_date_str = request.POST.get("completed_date", "")
         try:
-            completed_date = datetime.date.fromisoformat(completed_date_str) if completed_date_str else None
+            completed_date = dt.date.fromisoformat(completed_date_str) if completed_date_str else None
         except ValueError:
             completed_date = None
 
@@ -1157,7 +1157,7 @@ class TripActivityMoveView(LoginRequiredMixin, View):
             return HttpResponse("date is required.", status=400)
 
         try:
-            new_date = datetime.date.fromisoformat(date_str)
+            new_date = dt.date.fromisoformat(date_str)
         except ValueError:
             return HttpResponse("Invalid date format.", status=400)
 
@@ -1411,7 +1411,7 @@ class TripChildTripSearchView(LoginRequiredMixin, View):
         return JsonResponse({"results": results})
 
 
-def _forecast_gap_seconds(slot: ForecastSlot, target: datetime.datetime) -> float:
+def _forecast_gap_seconds(slot: ForecastSlot, target: dt.datetime) -> float:
     """
     Absolute gap in seconds between a forecast slot and a scheduled time.
 
@@ -1439,7 +1439,7 @@ def _forecast_gap_seconds(slot: ForecastSlot, target: datetime.datetime) -> floa
 
 #: How far ahead an activity can be and still be matched to a forecast: the longest forecast any provider here
 #: publishes (Open-Meteo's 16 days) plus the gap a slot may sit from its activity. Nothing later is fetched.
-FORECAST_HORIZON = datetime.timedelta(days=16, hours=36)
+FORECAST_HORIZON = dt.timedelta(days=16, hours=36)
 
 #: How long one place's forecast is reused.
 FORECAST_CACHE_TTL = 3600

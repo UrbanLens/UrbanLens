@@ -5,7 +5,7 @@ Unlike Immich, Flickr's ``flickr.photos.search`` filters by geo radius **server-
 from __future__ import annotations
 
 from dataclasses import dataclass
-import datetime
+import datetime as dt
 import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -163,7 +163,7 @@ class FlickrGateway(Gateway):
         """
         return self._search({"lat": f"{lat:.6f}", "lon": f"{lon:.6f}", "radius": f"{min(radius_km, 32):.3f}", "radius_units": "km"})
 
-    def search_by_dates(self, dates: Sequence[datetime.date]) -> list[FlickrPhoto]:
+    def search_by_dates(self, dates: Sequence[dt.date]) -> list[FlickrPhoto]:
         """
         Return the user's own photos taken on any of the given calendar dates.
 
@@ -178,7 +178,7 @@ class FlickrGateway(Gateway):
         """
         seen: dict[str, FlickrPhoto] = {}
         for day in dates:
-            next_day = day + datetime.timedelta(days=1)
+            next_day = day + dt.timedelta(days=1)
             for photo in self._search({"min_taken_date": day.isoformat(), "max_taken_date": next_day.isoformat()}):
                 seen.setdefault(photo.id, photo)
         return list(seen.values())

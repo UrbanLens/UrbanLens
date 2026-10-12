@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import datetime
+import datetime as dt
 import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -139,7 +139,7 @@ class PickedMediaItem:
     base_url: str
     mime_type: str
     filename: str
-    create_time: datetime.datetime | None
+    create_time: dt.datetime | None
 
 
 #: Longest edge asked of Google for a picker-grid tile.
@@ -194,7 +194,7 @@ class GooglePhotosGateway(Gateway):
         payload = google_oauth.refresh_access_token(client_id, client_secret, self.account.refresh_token)
         self.account.access_token = payload["access_token"]
         expires_in = int(payload.get("expires_in") or 3600)
-        self.account.token_expiry = timezone.now() + datetime.timedelta(seconds=expires_in)
+        self.account.token_expiry = timezone.now() + dt.timedelta(seconds=expires_in)
         if payload.get("refresh_token"):
             self.account.refresh_token = payload["refresh_token"]
         self.account.save(update_fields=["access_token", "refresh_token", "token_expiry", "updated"])
@@ -362,7 +362,7 @@ def media_item_web_url(media_item_id: str) -> str:
     return f"{GOOGLE_PHOTOS_URL_PREFIX}{media_item_id}"
 
 
-def _parse_timestamp(value: str | None) -> datetime.datetime | None:
+def _parse_timestamp(value: str | None) -> dt.datetime | None:
     """
     Parse an RFC3339 timestamp string from the API, if present.
 
@@ -375,6 +375,6 @@ def _parse_timestamp(value: str | None) -> datetime.datetime | None:
     if not value:
         return None
     try:
-        return datetime.datetime.fromisoformat(value)
+        return dt.datetime.fromisoformat(value)
     except ValueError:
         return None

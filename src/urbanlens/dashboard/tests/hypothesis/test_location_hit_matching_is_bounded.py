@@ -25,7 +25,7 @@ photo count, and the matching answers do not move.
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from decimal import Decimal
 
 from django.contrib.auth.models import User
@@ -44,7 +44,7 @@ def _hit(lat: float, lon: float) -> LocationHit:
     return LocationHit(
         latitude=lat,
         longitude=lon,
-        taken_at=datetime.datetime(2024, 1, 1, 12, 0, tzinfo=datetime.UTC),
+        taken_at=dt.datetime(2024, 1, 1, 12, 0, tzinfo=dt.UTC),
     )
 
 

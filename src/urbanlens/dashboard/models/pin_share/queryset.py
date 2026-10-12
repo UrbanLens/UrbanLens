@@ -10,7 +10,7 @@ from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
-    import datetime
+    import datetime as dt
 
     from django.db.models import QuerySet
 
@@ -147,7 +147,7 @@ class PinShareQuerySet(abstract.DashboardQuerySet["PinShare"]):
         """
         return self.filter(to_profile=profile)
 
-    def map_detected_candidates(self, profile_id: int, *, since: datetime.datetime):
+    def map_detected_candidates(self, profile_id: int, *, since: dt.datetime):
         """
         Recent map-detected shares to ``profile_id``, for source-share inference.
 

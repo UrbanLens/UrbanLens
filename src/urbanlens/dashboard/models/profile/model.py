@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import math
 from typing import TYPE_CHECKING, ClassVar
 
@@ -59,12 +59,12 @@ if TYPE_CHECKING:
 _CLUSTER_RADIUS_KM = 1_000.0
 
 # How long a queued map-centre recompute may go unfinished before a new pin or a page load queues it again.
-MAP_CENTRE_RECLAIM_AFTER = datetime.timedelta(hours=1)
+MAP_CENTRE_RECLAIM_AFTER = dt.timedelta(hours=1)
 
 # How long a soft-deleted account stays recoverable before the hard delete runs.
-ACCOUNT_DELETION_GRACE_PERIOD = datetime.timedelta(days=7)
+ACCOUNT_DELETION_GRACE_PERIOD = dt.timedelta(days=7)
 # How long before the hard delete the "1 day left" reminder goes out.
-ACCOUNT_DELETION_REMINDER_LEAD = datetime.timedelta(days=1)
+ACCOUNT_DELETION_REMINDER_LEAD = dt.timedelta(days=1)
 
 # Visibility fields forced to VisibilityChoice.NO_ONE while community_enabled is
 # False. Re-enabling community makes them editable again; their values are not
@@ -655,7 +655,7 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
         return self.deletion_requested_at is not None
 
     @property
-    def deletion_scheduled_for(self) -> datetime.datetime | None:
+    def deletion_scheduled_for(self) -> dt.datetime | None:
         """When the hard delete will run, or None if deletion isn't pending."""
         if self.deletion_requested_at is None:
             return None

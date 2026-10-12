@@ -13,7 +13,7 @@ from django.utils import timezone
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
-    import datetime
+    import datetime as dt
 
     from django.db.models import QuerySet
 
@@ -103,7 +103,7 @@ class TripQuerySet(abstract.PublicDashboardQuerySet["Trip"]):
         counts = self.with_timeline_status().aggregate(total=Count("pk"), **{status: Count("pk", filter=Q(timeline=status)) for status in TIMELINE_STATUSES})
         return {key: value or 0 for key, value in counts.items()}
 
-    def overlapping(self, start: datetime.date, end: datetime.date) -> TripQuerySet:
+    def overlapping(self, start: dt.date, end: dt.date) -> TripQuerySet:
         """
         Trips whose effective date range meets ``[start, end]``; undated trips never do.
 
@@ -259,7 +259,7 @@ class TripQuerySet(abstract.PublicDashboardQuerySet["Trip"]):
         """
         return self.filter(profiles=profile).select_related("creator__user").prefetch_related(_member_profiles()).with_effective_dates().order_by("-updated")[:limit]
 
-    def recently_active_past(self, profile: Profile, since: datetime.datetime, limit: int = 6) -> list[Trip]:
+    def recently_active_past(self, profile: Profile, since: dt.datetime, limit: int = 6) -> list[Trip]:
         """
         Return the viewer's past trips that have had a comment posted since ``since``.
 
@@ -279,7 +279,7 @@ class TripQuerySet(abstract.PublicDashboardQuerySet["Trip"]):
         from urbanlens.dashboard.models.trips.model import TripComment
 
         trip_ids = TripComment.objects.for_member(profile).filter(created__gte=since).values_list("trip_id", flat=True).distinct()
-        last_comment_by_trip: dict[int, datetime.datetime] = dict(
+        last_comment_by_trip: dict[int, dt.datetime] = dict(
             TripComment.objects.filter(trip_id__in=trip_ids, created__gte=since).values("trip_id").annotate(last=Max("created")).values_list("trip_id", "last"),
         )
         candidates: TripQuerySet = self.filter(pk__in=trip_ids).select_related("creator__user").prefetch_related("memberships", "activities")

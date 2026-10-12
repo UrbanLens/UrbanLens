@@ -43,14 +43,14 @@ def _mock_response(*, ok: bool = True, status_code: int = 200, json_data=None, c
 
 
 def _account(**kwargs) -> GooglePhotosAccount:
-    import datetime
+    import datetime as dt
 
     from django.utils import timezone
 
     defaults = {
         "access_token": "access",
         "refresh_token": "refresh",
-        "token_expiry": timezone.now() + datetime.timedelta(hours=1),
+        "token_expiry": timezone.now() + dt.timedelta(hours=1),
     }
     defaults.update(kwargs)
     user = baker.make(User)

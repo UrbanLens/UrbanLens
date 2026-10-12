@@ -72,9 +72,9 @@ class EmailVerificationLimitTests(TestCase):
 
     def test_resend_works_after_the_cooldown(self) -> None:
         self._add("second@example.test")
-        import datetime
+        import datetime as dt
 
-        stale = EmailSendLog.objects.get(sender=self.profile).created - datetime.timedelta(minutes=10)
+        stale = EmailSendLog.objects.get(sender=self.profile).created - dt.timedelta(minutes=10)
         EmailSendLog.objects.filter(sender=self.profile).update(created=stale)
         email_id = self.profile.secondary_emails.get().pk
         with mock.patch("urbanlens.dashboard.services.auth.email_claims.queue_confirmation") as send:
@@ -89,9 +89,9 @@ class EmailVerificationLimitTests(TestCase):
         The check reserves a slot until the send is logged; every other sender gives it back, and a resend that did
         not left the slot counted against the hourly limit for five minutes after the send was already in the ledger."""
         self._add("second@example.test")
-        import datetime
+        import datetime as dt
 
-        stale = EmailSendLog.objects.get(sender=self.profile).created - datetime.timedelta(minutes=10)
+        stale = EmailSendLog.objects.get(sender=self.profile).created - dt.timedelta(minutes=10)
         EmailSendLog.objects.filter(sender=self.profile).update(created=stale)
         cache.delete(_inflight_cache_key(self.profile.pk))
         email_id = self.profile.secondary_emails.get().pk

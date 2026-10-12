@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from unittest import mock
 
 from django.contrib.auth.models import User
@@ -70,7 +70,7 @@ class _CalendarTestCase(TestCase):
             google_email="exporter@example.com",
             access_token="access",  # noqa: S106 - fixture value, not a real credential
             refresh_token="refresh",  # noqa: S106 - fixture value, not a real credential
-            token_expiry=timezone.now() + datetime.timedelta(hours=1),
+            token_expiry=timezone.now() + dt.timedelta(hours=1),
         )
 
     def _patch_gateway(self) -> mock.MagicMock:
@@ -113,8 +113,8 @@ class _CalendarTestCase(TestCase):
         trip = Trip.objects.create(
             name="Shared trip",
             creator=self.mate,
-            start_date=datetime.date(2026, 10, 1),
-            end_date=datetime.date(2026, 10, 3),
+            start_date=dt.date(2026, 10, 1),
+            end_date=dt.date(2026, 10, 3),
         )
         TripMembership.objects.create(trip=trip, profile=self.mate, status=TripMembership.STATUS_JOINED, rsvp="yes")
         TripMembership.objects.create(trip=trip, profile=self.profile, status=TripMembership.STATUS_JOINED, rsvp="yes")
@@ -130,8 +130,8 @@ class _CalendarTestCase(TestCase):
         trip = Trip.objects.create(
             name="Own trip",
             creator=self.profile,
-            start_date=datetime.date(2026, 10, 1),
-            end_date=datetime.date(2026, 10, 3),
+            start_date=dt.date(2026, 10, 1),
+            end_date=dt.date(2026, 10, 3),
         )
         TripMembership.objects.create(trip=trip, profile=self.profile, status=TripMembership.STATUS_JOINED, rsvp="yes")
         return trip
@@ -176,7 +176,7 @@ class ExportRespectsAdderVisibilityTests(_CalendarTestCase):
         self._mate_activity(
             trip,
             VisibilityChoice.NO_ONE,
-            scheduled_at=datetime.datetime(2026, 10, 1, 9, 0, tzinfo=datetime.UTC),
+            scheduled_at=dt.datetime(2026, 10, 1, 9, 0, tzinfo=dt.UTC),
         )
 
         export_trip_to_calendar(self.account, trip)
@@ -206,7 +206,7 @@ class ExportRespectsAdderVisibilityTests(_CalendarTestCase):
             profile=self.mate,
             access_token="access",  # noqa: S106 - fixture value, not a real credential
             refresh_token="refresh",  # noqa: S106 - fixture value, not a real credential
-            token_expiry=timezone.now() + datetime.timedelta(hours=1),
+            token_expiry=timezone.now() + dt.timedelta(hours=1),
         )
 
         export_trip_to_calendar(mate_account, trip)
@@ -242,7 +242,7 @@ class TripCalendarExportEndpointTests(_CalendarTestCase):
             trip=trip,
             added_by=self.profile,
             title="Scheduled stop",
-            scheduled_at=datetime.datetime(2026, 10, 1, 9, 0, tzinfo=datetime.UTC),
+            scheduled_at=dt.datetime(2026, 10, 1, 9, 0, tzinfo=dt.UTC),
         )
 
         response = self._post(trip)
@@ -281,7 +281,7 @@ class TripCalendarExportEndpointTests(_CalendarTestCase):
             trip=trip,
             added_by=self.profile,
             title="Scheduled stop",
-            scheduled_at=datetime.datetime(2026, 10, 1, 9, 0, tzinfo=datetime.UTC),
+            scheduled_at=dt.datetime(2026, 10, 1, 9, 0, tzinfo=dt.UTC),
         )
         baseline = len(connection.savepoint_ids)
         depths: list[int] = []
@@ -365,7 +365,7 @@ class TripCalendarExportEndpointTests(_CalendarTestCase):
     def test_non_member_trip_is_404_not_403(self) -> None:
         """A trip the caller is not on must look exactly like one that never existed."""
         self._patch_gateway()
-        theirs = Trip.objects.create(name="Private", creator=self.mate, start_date=datetime.date(2026, 10, 1))
+        theirs = Trip.objects.create(name="Private", creator=self.mate, start_date=dt.date(2026, 10, 1))
         TripMembership.objects.create(trip=theirs, profile=self.mate, status=TripMembership.STATUS_JOINED)
 
         forbidden = self._post(theirs)

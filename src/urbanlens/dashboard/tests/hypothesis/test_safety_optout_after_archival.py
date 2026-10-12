@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import base64
 from contextlib import contextmanager
-import datetime
+import datetime as dt
 import hashlib
 import os
 from typing import TYPE_CHECKING
@@ -102,11 +102,11 @@ class _ArchivedContactTestCase(TestCase):
             SafetyCheckin,
             profile=owner,
             title="Tunnel walk",
-            checkin_by=timezone.now() - datetime.timedelta(hours=3),
-            grace_period=datetime.timedelta(hours=1),
+            checkin_by=timezone.now() - dt.timedelta(hours=3),
+            grace_period=dt.timedelta(hours=1),
             status=SafetyCheckinStatus.CHECKED_IN,
-            escalated_at=timezone.now() - datetime.timedelta(hours=1),
-            resolved_at=timezone.now() - datetime.timedelta(hours=1),
+            escalated_at=timezone.now() - dt.timedelta(hours=1),
+            resolved_at=timezone.now() - dt.timedelta(hours=1),
             notify_community_wiki=False,
         )
 

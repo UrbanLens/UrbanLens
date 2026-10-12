@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from unittest import mock
 
 from django.contrib.auth.models import User
@@ -22,7 +22,7 @@ class PatchPinFieldScopeTests(TestCase):
         self.client.force_login(self.user)
         self.location = baker.make(Location, latitude=41.0, longitude=-73.0)
         self.pin = baker.make(Pin, profile=self.profile, location=self.location, parent_pin=None, name="Old Mill")
-        self.visited = timezone.now() - datetime.timedelta(days=1)
+        self.visited = timezone.now() - dt.timedelta(days=1)
 
     def _quick_edit(self, **fields) -> None:
         """

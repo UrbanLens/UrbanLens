@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from typing import Any
 from uuid import uuid4
 
@@ -906,7 +906,7 @@ class PinUpdateEditMappingTests(SimpleTestCase):
         for name in fields:
             submitted = _SAMPLE_FIELD_VALUES[name]
             with self.subTest(field=name):
-                if isinstance(edits[name], datetime.date):
+                if isinstance(edits[name], dt.date):
                     self.assertEqual(edits[name].isoformat(), submitted)
                 else:
                     self.assertEqual(edits[name], submitted)

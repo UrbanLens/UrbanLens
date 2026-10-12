@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import datetime
+import datetime as dt
 import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 from urllib.parse import urlsplit
@@ -47,7 +47,7 @@ class SearchAsset:
     """One asset returned by ``POST /api/search/metadata``."""
 
     id: str
-    taken_at: datetime.datetime | None = None
+    taken_at: dt.datetime | None = None
     lat: float | None = None
     lon: float | None = None
     city: str | None = None
@@ -317,7 +317,7 @@ class ImmichGateway(Gateway):
                 return
             page = next_page
 
-    def search_by_dates(self, dates: Sequence[datetime.date]) -> list[SearchAsset]:
+    def search_by_dates(self, dates: Sequence[dt.date]) -> list[SearchAsset]:
         """
         Return the user's own assets taken on any of the given calendar dates.
 
@@ -332,11 +332,11 @@ class ImmichGateway(Gateway):
         """
         seen: dict[str, SearchAsset] = {}
         for day in dates:
-            start = datetime.datetime.combine(day, datetime.time.min, tzinfo=datetime.UTC)
-            end = start + datetime.timedelta(days=1)
+            start = dt.datetime.combine(day, dt.time.min, tzinfo=dt.UTC)
+            end = start + dt.timedelta(days=1)
             for asset in self._search_metadata({"takenAfter": start.isoformat(), "takenBefore": end.isoformat()}):
                 seen.setdefault(asset.id, asset)
-        return sorted(seen.values(), key=lambda asset: asset.taken_at or datetime.datetime.min.replace(tzinfo=datetime.UTC), reverse=True)
+        return sorted(seen.values(), key=lambda asset: asset.taken_at or dt.datetime.min.replace(tzinfo=dt.UTC), reverse=True)
 
     def list_recent(self, limit: int = _DEFAULT_RECENT_LIMIT) -> list[SearchAsset]:
         """
@@ -398,7 +398,7 @@ class ImmichGateway(Gateway):
         return content, filename, content_type
 
 
-def _parse_taken_at(item: dict[str, Any]) -> datetime.datetime | None:
+def _parse_taken_at(item: dict[str, Any]) -> dt.datetime | None:
     """
     Extract the capture timestamp from a ``/search/metadata`` result item.
 
@@ -411,7 +411,7 @@ def _parse_taken_at(item: dict[str, Any]) -> datetime.datetime | None:
     if not value:
         return None
     try:
-        return datetime.datetime.fromisoformat(value)
+        return dt.datetime.fromisoformat(value)
     except ValueError:
         return None
 

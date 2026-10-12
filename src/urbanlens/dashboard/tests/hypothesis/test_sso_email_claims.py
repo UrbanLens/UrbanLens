@@ -127,15 +127,13 @@ class SsoSquattingTests(TestCase):
 
     def test_an_abandoned_signup_does_not_hold_the_address(self) -> None:
         """The same rule complete_signup applies: an expired, never-verified signup never proved it."""
-        import datetime
+        import datetime as dt
 
         from django.utils import timezone
 
         abandoned = baker.make(User, email="late@example.com", is_active=False)
         verification = EmailVerification.objects.create(user=abandoned)
-        EmailVerification.objects.filter(pk=verification.pk).update(
-            created=timezone.now() - datetime.timedelta(days=30)
-        )
+        EmailVerification.objects.filter(pk=verification.pk).update(created=timezone.now() - dt.timedelta(days=30))
 
         user = _sign_in("discord", _discord("117", "late@example.com", verified=True))
 

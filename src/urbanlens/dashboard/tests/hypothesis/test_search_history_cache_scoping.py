@@ -87,7 +87,7 @@ class SafetyDestinationSearchHistoryScopingTests(TestCase):
         self.client.force_login(self.user)
 
     def _create_checkin_response_body(self) -> str:
-        import datetime
+        import datetime as dt
 
         from django.utils import timezone
 
@@ -97,8 +97,8 @@ class SafetyDestinationSearchHistoryScopingTests(TestCase):
         checkin = create_checkin(
             profile=self.profile,
             title="Test checkin",
-            checkin_by=timezone.now() + datetime.timedelta(hours=2),
-            grace_period=datetime.timedelta(hours=1),
+            checkin_by=timezone.now() + dt.timedelta(hours=2),
+            grace_period=dt.timedelta(hours=1),
         )
         # pages/safety/detail.html reverses several markup_map.* URLs off
         # checkin.markup_map.uuid unconditionally, so a real one is required

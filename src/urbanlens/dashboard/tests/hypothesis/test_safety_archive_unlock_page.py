@@ -8,7 +8,7 @@ called ``init()``, so it did nothing.
 from __future__ import annotations
 
 import base64
-import datetime
+import datetime as dt
 import os
 
 from django.urls import reverse
@@ -38,8 +38,8 @@ class ArchivedCheckinUnlockPageTests(TestCase):
             "dashboard.SafetyCheckin",
             profile=self.owner,
             title="Night walk",
-            checkin_by=timezone.now() - datetime.timedelta(hours=1),
-            grace_period=datetime.timedelta(hours=1),
+            checkin_by=timezone.now() - dt.timedelta(hours=1),
+            grace_period=dt.timedelta(hours=1),
             status=SafetyCheckinStatus.FOUND_SAFE,
             resolved_at=timezone.now(),
             resolved_by_label="you",

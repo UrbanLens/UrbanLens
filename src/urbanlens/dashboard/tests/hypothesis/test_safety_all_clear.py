@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from unittest import mock
 
 from django.contrib.auth.models import User
@@ -50,8 +50,8 @@ class _AllClearTestCase(TestCase):
             plan_details=_PLAN,
             destination_latitude="42.123456",
             destination_longitude="-73.654321",
-            checkin_by=timezone.now() - datetime.timedelta(hours=2),
-            grace_period=datetime.timedelta(hours=1),
+            checkin_by=timezone.now() - dt.timedelta(hours=2),
+            grace_period=dt.timedelta(hours=1),
             status=SafetyCheckinStatus.AWAITING_CHECKIN,
             notify_community_wiki=False,
         )

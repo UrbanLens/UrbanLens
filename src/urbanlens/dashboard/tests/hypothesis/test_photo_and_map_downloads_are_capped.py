@@ -8,7 +8,7 @@ has a size the request fixes, so its ceiling is small.
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from unittest import mock
 
 from django.contrib.auth.models import User
@@ -61,7 +61,7 @@ class PhotoOriginalsAreBoundedByTheUploadLimitTests(TestCase):
             profile=profile,
             access_token="a",
             refresh_token="r",
-            token_expiry=timezone.now() + datetime.timedelta(hours=1),
+            token_expiry=timezone.now() + dt.timedelta(hours=1),
         )
         self.google = GooglePhotosGateway(account=account, session=mock.MagicMock())
 
@@ -167,7 +167,7 @@ class PickerListingIsBoundedTests(TestCase):
             profile=profile,
             access_token="a",
             refresh_token="r",
-            token_expiry=timezone.now() + datetime.timedelta(hours=1),
+            token_expiry=timezone.now() + dt.timedelta(hours=1),
         )
         gateway = GooglePhotosGateway(account=account, session=mock.MagicMock())
         page = {
@@ -195,7 +195,7 @@ class PickerListingIsBoundedTests(TestCase):
             profile=profile,
             access_token="a",
             refresh_token="r",
-            token_expiry=timezone.now() + datetime.timedelta(hours=1),
+            token_expiry=timezone.now() + dt.timedelta(hours=1),
         )
         gateway = GooglePhotosGateway(account=account, session=mock.MagicMock())
         last = _json_response({"mediaItems": [{"id": "z", "mediaFile": {"baseUrl": "https://x/z"}}]})

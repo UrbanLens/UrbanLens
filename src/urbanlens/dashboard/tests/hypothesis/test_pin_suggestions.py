@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from decimal import Decimal
 import json
 from unittest import mock
@@ -80,7 +80,7 @@ def _hit(
     return LocationHit(
         latitude=lat,
         longitude=lon,
-        taken_at=datetime.datetime.combine(datetime.date.fromisoformat(day), datetime.time(12, 0), tzinfo=datetime.UTC),
+        taken_at=dt.datetime.combine(dt.date.fromisoformat(day), dt.time(12, 0), tzinfo=dt.UTC),
         label=label,
         asset_id=asset_id,
         source_key=source_key,
@@ -273,8 +273,8 @@ class HitCountRaceConditionTests(TestCase):
         self.assertEqual(suggestion.hit_count, 1 + 100 + 1)
 
 
-def _dt(day: str) -> datetime.datetime:
-    return datetime.datetime.combine(datetime.date.fromisoformat(day), datetime.time(12, 0), tzinfo=datetime.UTC)
+def _dt(day: str) -> dt.datetime:
+    return dt.datetime.combine(dt.date.fromisoformat(day), dt.time(12, 0), tzinfo=dt.UTC)
 
 
 class IngestLocationHitsTrackingDisabledTests(TestCase):
@@ -429,9 +429,7 @@ class AcceptPinSuggestionTests(TestCase):
         self.assertEqual(suggestion.status, PinSuggestionStatus.ACCEPTED)
 
     def test_accept_matched_suggestion_skips_dates_already_visited(self) -> None:
-        baker.make_recipe(
-            "dashboard.pin_visit", pin=self.pin, visited_at=datetime.datetime(2024, 1, 1, 9, 0, tzinfo=datetime.UTC)
-        )
+        baker.make_recipe("dashboard.pin_visit", pin=self.pin, visited_at=dt.datetime(2024, 1, 1, 9, 0, tzinfo=dt.UTC))
         suggestion = self._matched_suggestion(["2024-01-01", "2024-01-02"])
 
         result = accept_pin_suggestion(suggestion, self.profile)
@@ -600,7 +598,7 @@ class AcceptPinSuggestionPhotoTests(TestCase):
             profile=self.profile,
             pin=None,
             pin_suggestion=suggestion,
-            taken_at=datetime.datetime(2024, 1, 2, 10, 0, tzinfo=datetime.UTC),
+            taken_at=dt.datetime(2024, 1, 2, 10, 0, tzinfo=dt.UTC),
         )
 
         result = accept_pin_suggestion(suggestion, self.profile, image_ids=[image.pk])
@@ -644,7 +642,7 @@ class AcceptPinSuggestionPhotoTests(TestCase):
 
     def test_already_logged_date_still_resolves_to_the_existing_visit(self) -> None:
         existing_visit = baker.make_recipe(
-            "dashboard.pin_visit", pin=self.pin, visited_at=datetime.datetime(2024, 1, 1, 9, 0, tzinfo=datetime.UTC)
+            "dashboard.pin_visit", pin=self.pin, visited_at=dt.datetime(2024, 1, 1, 9, 0, tzinfo=dt.UTC)
         )
         suggestion = self._matched_suggestion(["2024-01-01"])
         image = baker.make(
@@ -652,7 +650,7 @@ class AcceptPinSuggestionPhotoTests(TestCase):
             profile=self.profile,
             pin=None,
             pin_suggestion=suggestion,
-            taken_at=datetime.datetime(2024, 1, 1, 10, 0, tzinfo=datetime.UTC),
+            taken_at=dt.datetime(2024, 1, 1, 10, 0, tzinfo=dt.UTC),
         )
 
         result = accept_pin_suggestion(suggestion, self.profile, image_ids=[image.pk])

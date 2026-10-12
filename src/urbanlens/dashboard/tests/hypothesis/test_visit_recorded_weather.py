@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
@@ -39,32 +39,32 @@ class ClusterTests(SimpleTestCase):
     """Which days get merged into one request, and which do not."""
 
     def test_consecutive_days_are_one_range(self) -> None:
-        days = [datetime.date(2024, 5, day) for day in (1, 2, 3)]
+        days = [dt.date(2024, 5, day) for day in (1, 2, 3)]
 
-        self.assertEqual(_clusters(days), [(datetime.date(2024, 5, 1), datetime.date(2024, 5, 3))])
+        self.assertEqual(_clusters(days), [(dt.date(2024, 5, 1), dt.date(2024, 5, 3))])
 
     def test_a_nearby_gap_is_bridged(self) -> None:
         """A range is one request however wide, so merging a fortnight is free."""
-        days = [datetime.date(2024, 5, 1), datetime.date(2024, 5, 15)]
+        days = [dt.date(2024, 5, 1), dt.date(2024, 5, 15)]
 
-        self.assertEqual(_clusters(days), [(datetime.date(2024, 5, 1), datetime.date(2024, 5, 15))])
+        self.assertEqual(_clusters(days), [(dt.date(2024, 5, 1), dt.date(2024, 5, 15))])
 
     def test_years_apart_are_separate_requests(self) -> None:
         """The case the range form gets wrong: 7,000 days fetched to show two."""
-        days = [datetime.date(2005, 5, 1), datetime.date(2024, 5, 1)]
+        days = [dt.date(2005, 5, 1), dt.date(2024, 5, 1)]
 
         self.assertEqual(
             _clusters(days),
             [
-                (datetime.date(2005, 5, 1), datetime.date(2005, 5, 1)),
-                (datetime.date(2024, 5, 1), datetime.date(2024, 5, 1)),
+                (dt.date(2005, 5, 1), dt.date(2005, 5, 1)),
+                (dt.date(2024, 5, 1), dt.date(2024, 5, 1)),
             ],
         )
 
     def test_order_and_duplicates_do_not_matter(self) -> None:
-        days = [datetime.date(2024, 5, 3), datetime.date(2024, 5, 1), datetime.date(2024, 5, 3)]
+        days = [dt.date(2024, 5, 3), dt.date(2024, 5, 1), dt.date(2024, 5, 3)]
 
-        self.assertEqual(_clusters(days), [(datetime.date(2024, 5, 1), datetime.date(2024, 5, 3))])
+        self.assertEqual(_clusters(days), [(dt.date(2024, 5, 1), dt.date(2024, 5, 3))])
 
     def test_no_days_is_no_requests(self) -> None:
         self.assertEqual(_clusters([]), [])
@@ -77,7 +77,7 @@ class RecordedDaysTests(TestCase):
         self.location = baker.make(Location, latitude=41.73, longitude=-73.92)
 
     def test_two_visits_decades_apart_are_two_bounded_requests(self) -> None:
-        days = [datetime.date(2005, 5, 1), datetime.date(2024, 5, 1)]
+        days = [dt.date(2005, 5, 1), dt.date(2024, 5, 1)]
 
         with patch(
             _FETCH, side_effect=lambda _lat, _lng, start, _end: {start.isoformat(): _row(start.isoformat())}
@@ -91,7 +91,7 @@ class RecordedDaysTests(TestCase):
         self.assertEqual(sorted(recorded), ["2005-05-01", "2024-05-01"])
 
     def test_a_run_of_visits_costs_one_request(self) -> None:
-        days = [datetime.date(2024, 5, day) for day in (1, 2, 3)]
+        days = [dt.date(2024, 5, day) for day in (1, 2, 3)]
 
         with patch(_FETCH, return_value={day.isoformat(): _row(day.isoformat()) for day in days}) as fetch:
             recorded = recorded_days(self.location, days)
@@ -100,7 +100,7 @@ class RecordedDaysTests(TestCase):
         self.assertEqual(len(recorded), 3)
 
     def test_a_cached_day_is_not_re_fetched(self) -> None:
-        day = datetime.date(2024, 5, 1)
+        day = dt.date(2024, 5, 1)
         with patch(_FETCH, return_value={day.isoformat(): _row(day.isoformat())}):
             recorded_days(self.location, [day])
 
@@ -119,7 +119,7 @@ class RecordedDaysTests(TestCase):
 
     def test_an_unavailable_source_answers_nothing_rather_than_raising(self) -> None:
         with patch(_FETCH, return_value={}):
-            self.assertEqual(recorded_days(self.location, [datetime.date(2024, 5, 1)]), {})
+            self.assertEqual(recorded_days(self.location, [dt.date(2024, 5, 1)]), {})
 
 
 class FetchTaskTests(TestCase):
@@ -138,7 +138,7 @@ class FetchTaskTests(TestCase):
 
         self.assertEqual(stored, 1)
         with patch(_FETCH) as fetch:
-            self.assertEqual(len(recorded_days(self.location, [datetime.date(2024, 5, 1)], allow_fetch=False)), 1)
+            self.assertEqual(len(recorded_days(self.location, [dt.date(2024, 5, 1)], allow_fetch=False)), 1)
         fetch.assert_not_called()
 
     def test_a_deleted_location_is_not_an_error(self) -> None:
@@ -166,39 +166,37 @@ class SummaryTests(SimpleTestCase):
     """The one-line description a visit row shows."""
 
     def test_a_full_day_reads_as_a_sentence(self) -> None:
-        day = RecordedDay(
-            day=datetime.date(2024, 5, 1), high_f=72.0, low_f=54.0, precipitation_in=0.3, gust_max_mph=31.0
-        )
+        day = RecordedDay(day=dt.date(2024, 5, 1), high_f=72.0, low_f=54.0, precipitation_in=0.3, gust_max_mph=31.0)
 
         self.assertEqual(day.summary, "72° / 54°F · 0.30 in rain · gusts 31 mph")
 
     def test_a_dry_day_says_nothing_about_rain(self) -> None:
         """0.00 in rain is what every dry day looks like; it is not information."""
-        day = RecordedDay(day=datetime.date(2024, 5, 1), high_f=72.0, low_f=54.0, precipitation_in=0.0, snowfall_in=0.0)
+        day = RecordedDay(day=dt.date(2024, 5, 1), high_f=72.0, low_f=54.0, precipitation_in=0.0, snowfall_in=0.0)
 
         self.assertEqual(day.summary, "72° / 54°F")
 
     def test_a_freezing_high_is_still_reported(self) -> None:
         """Zero degrees is a reading, unlike zero rain - the falsy-value trap."""
-        day = RecordedDay(day=datetime.date(2024, 1, 1), high_f=0.0, low_f=-11.0)
+        day = RecordedDay(day=dt.date(2024, 1, 1), high_f=0.0, low_f=-11.0)
 
         self.assertEqual(day.summary, "0° / -11°F")
 
     def test_a_partial_reading_says_which_half_it_has(self) -> None:
-        self.assertEqual(RecordedDay(day=datetime.date(2024, 5, 1), high_f=72.0).summary, "high 72°F")
-        self.assertEqual(RecordedDay(day=datetime.date(2024, 5, 1), low_f=54.0).summary, "low 54°F")
-        self.assertEqual(RecordedDay(day=datetime.date(2024, 5, 1), mean_f=60.0).summary, "60°F")
+        self.assertEqual(RecordedDay(day=dt.date(2024, 5, 1), high_f=72.0).summary, "high 72°F")
+        self.assertEqual(RecordedDay(day=dt.date(2024, 5, 1), low_f=54.0).summary, "low 54°F")
+        self.assertEqual(RecordedDay(day=dt.date(2024, 5, 1), mean_f=60.0).summary, "60°F")
 
     def test_wind_is_only_reported_when_there_are_no_gusts(self) -> None:
         """Two numbers for the same thing reads as noise; the gust is the one that matters."""
-        both = RecordedDay(day=datetime.date(2024, 5, 1), wind_max_mph=20.0, gust_max_mph=31.0)
-        wind_only = RecordedDay(day=datetime.date(2024, 5, 1), wind_max_mph=20.0)
+        both = RecordedDay(day=dt.date(2024, 5, 1), wind_max_mph=20.0, gust_max_mph=31.0)
+        wind_only = RecordedDay(day=dt.date(2024, 5, 1), wind_max_mph=20.0)
 
         self.assertEqual(both.summary, "gusts 31 mph")
         self.assertEqual(wind_only.summary, "wind 20 mph")
 
     def test_an_empty_day_has_no_summary(self) -> None:
-        self.assertEqual(RecordedDay(day=datetime.date(2024, 5, 1)).summary, "")
+        self.assertEqual(RecordedDay(day=dt.date(2024, 5, 1)).summary, "")
 
 
 class VisitHistoryPanelTests(TestCase):
@@ -219,20 +217,20 @@ class VisitHistoryPanelTests(TestCase):
         self.location = baker.make(Location, latitude=41.73, longitude=-73.92)
         self.pin = baker.make(Pin, profile=self.profile, location=self.location, parent_pin=None)
 
-    def _visit(self, when: datetime.date) -> PinVisit:
+    def _visit(self, when: dt.date) -> PinVisit:
         return baker.make(
             PinVisit,
             pin=self.pin,
-            visited_at=timezone.make_aware(datetime.datetime(when.year, when.month, when.day, 12, 0)),
+            visited_at=timezone.make_aware(dt.datetime(when.year, when.month, when.day, 12, 0)),
         )
 
     def _url(self) -> str:
         return reverse("pin.visits", args=[self.pin.slug])
 
     def test_a_cached_day_is_shown_in_the_row(self) -> None:
-        visit = self._visit(datetime.date(2024, 5, 1))
+        visit = self._visit(dt.date(2024, 5, 1))
         with patch(_FETCH, return_value={"2024-05-01": _row("2024-05-01")}):
-            recorded_days(self.location, [datetime.date(2024, 5, 1)])
+            recorded_days(self.location, [dt.date(2024, 5, 1)])
 
         with patch(_FETCH) as fetch:
             response = self.client_.get(self._url())
@@ -244,7 +242,7 @@ class VisitHistoryPanelTests(TestCase):
 
     def test_the_render_never_fetches_and_queues_instead(self) -> None:
         """The property two unrelated tests discovered by tripping the network guard."""
-        self._visit(datetime.date(2024, 5, 1))
+        self._visit(dt.date(2024, 5, 1))
 
         with patch(_FETCH) as fetch, patch(_ENQUEUE) as enqueue:
             response = self.client_.get(self._url())
@@ -257,9 +255,9 @@ class VisitHistoryPanelTests(TestCase):
 
     def test_nothing_is_queued_once_everything_is_cached(self) -> None:
         """Otherwise every render of every visit list re-queues the same days."""
-        self._visit(datetime.date(2024, 5, 1))
+        self._visit(dt.date(2024, 5, 1))
         with patch(_FETCH, return_value={"2024-05-01": _row("2024-05-01")}):
-            recorded_days(self.location, [datetime.date(2024, 5, 1)])
+            recorded_days(self.location, [dt.date(2024, 5, 1)])
 
         with patch(_ENQUEUE) as enqueue:
             self.client_.get(self._url())
@@ -277,10 +275,10 @@ class VisitHistoryPanelTests(TestCase):
 
     def test_visits_at_different_places_are_queued_separately(self) -> None:
         """`?children=1` lists a whole subtree, and those are different places."""
-        self._visit(datetime.date(2024, 5, 1))
+        self._visit(dt.date(2024, 5, 1))
         elsewhere = baker.make(Location, latitude=42.65, longitude=-73.75)
         child = baker.make(Pin, profile=self.profile, location=elsewhere, parent_pin=self.pin)
-        baker.make(PinVisit, pin=child, visited_at=timezone.make_aware(datetime.datetime(2024, 5, 1, 12, 0)))
+        baker.make(PinVisit, pin=child, visited_at=timezone.make_aware(dt.datetime(2024, 5, 1, 12, 0)))
 
         with patch(_ENQUEUE) as enqueue:
             response = self.client_.get(f"{self._url()}?children=1")

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 
 from django.contrib.auth.models import User
 from django.test import RequestFactory
@@ -31,8 +31,8 @@ class SafetyCheckinViewerScopeTests(TestCase):
         self.checkin = create_checkin(
             profile=self.owner,
             title="Quarry trip",
-            checkin_by=timezone.now() + datetime.timedelta(hours=6),
-            grace_period=datetime.timedelta(hours=1),
+            checkin_by=timezone.now() + dt.timedelta(hours=6),
+            grace_period=dt.timedelta(hours=1),
             plan_details="North rim, back by dark",
             contact_message="Please call me",
             contacts=[(None, "friend@example.com", "Friend")],
@@ -114,8 +114,8 @@ class SafetyCheckinViewerScopeTests(TestCase):
         other_checkin = create_checkin(
             profile=self.stranger,
             title="Different trip",
-            checkin_by=timezone.now() + datetime.timedelta(hours=3),
-            grace_period=datetime.timedelta(hours=1),
+            checkin_by=timezone.now() + dt.timedelta(hours=3),
+            grace_period=dt.timedelta(hours=1),
             plan_details="Somewhere else",
             contact_message="Call me",
             contacts=[(None, "other@example.com", "Other")],

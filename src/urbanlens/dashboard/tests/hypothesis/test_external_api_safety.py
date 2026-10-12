@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 
 from django.contrib.auth.models import User
 from django.urls import reverse
@@ -47,8 +47,8 @@ class _SafetyApiTestCase(TestCase):
         self.checkin = create_checkin(
             profile=self.profile,
             title="Quarry trip",
-            checkin_by=timezone.now() + datetime.timedelta(hours=6),
-            grace_period=datetime.timedelta(hours=1),
+            checkin_by=timezone.now() + dt.timedelta(hours=6),
+            grace_period=dt.timedelta(hours=1),
             plan_details="North rim, back by dark",
             contact_message="Please call me",
             contacts=[(None, "friend@example.com", "Friend")],
@@ -114,8 +114,8 @@ class SafetyOwnerIsolationTests(_SafetyApiTestCase):
         self.other_checkin = create_checkin(
             profile=self.other_profile,
             title="Someone else's trip",
-            checkin_by=timezone.now() + datetime.timedelta(hours=3),
-            grace_period=datetime.timedelta(hours=1),
+            checkin_by=timezone.now() + dt.timedelta(hours=3),
+            grace_period=dt.timedelta(hours=1),
         )
         self.other_url = reverse(
             "external_api:safety.checkins.detail", kwargs={"checkin_slug": self.other_checkin.slug}
@@ -231,7 +231,7 @@ class SafetyCreateTests(_SafetyApiTestCase):
     """POST semantics: contact defaults, conflicts, and validation."""
 
     def _future(self, hours: int = 8) -> str:
-        return (timezone.now() + datetime.timedelta(hours=hours)).isoformat()
+        return (timezone.now() + dt.timedelta(hours=hours)).isoformat()
 
     def test_creating_while_one_is_active_is_409(self) -> None:
         """A state conflict, not a malformed request - the client must tell them apart."""
@@ -248,7 +248,7 @@ class SafetyCreateTests(_SafetyApiTestCase):
         self._resolve_existing()
         response = self.client.post(
             self.list_url,
-            {"checkin_by": (timezone.now() - datetime.timedelta(hours=1)).isoformat()},
+            {"checkin_by": (timezone.now() - dt.timedelta(hours=1)).isoformat()},
             content_type="application/json",
             **_bearer(self.raw_key),
         )

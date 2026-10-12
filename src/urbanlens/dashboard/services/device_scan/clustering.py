@@ -11,7 +11,7 @@ from django.utils import timezone
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
-    import datetime
+    import datetime as dt
 
     from django.contrib.gis.geos import Point
     from django.db.models import Q
@@ -118,12 +118,12 @@ class _WeightedEntry:
 
     point: Point
     weight: float
-    observed_at: datetime.datetime
+    observed_at: dt.datetime
     avg_signal_strength: float | None
     reporter: str
 
 
-def _weight_entry(entry: DeviceScanEntry, now: datetime.datetime) -> _WeightedEntry:
+def _weight_entry(entry: DeviceScanEntry, now: dt.datetime) -> _WeightedEntry:
     """
     Build a :class:`_WeightedEntry` from a persisted scan entry.
 

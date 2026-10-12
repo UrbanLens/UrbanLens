@@ -4,7 +4,7 @@ Shapefiles are always distributed as a set of same-stem sidecar files rather tha
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import logging
 from pathlib import Path
 import shutil
@@ -159,6 +159,6 @@ def iter_shapefile_pins(shp_path: Path, stem: str, user_profile: Profile) -> Ite
 
 
 def _attribute(value: object) -> object:
-    if type(value) is datetime.date:
-        return datetime.datetime.combine(value, datetime.time())
+    if type(value) is dt.date:
+        return dt.datetime.combine(value, dt.time())
     return value

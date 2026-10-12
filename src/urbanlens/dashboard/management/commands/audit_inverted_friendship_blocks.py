@@ -11,7 +11,7 @@ inverted - that signal is gone.
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 
 from django.core.management.base import BaseCommand, CommandError
 from django.utils.dateparse import parse_date
@@ -22,7 +22,7 @@ from urbanlens.dashboard.models.friendship.model import Friendship
 #: Below this gap between `created` and `updated`, a row is treated as having gone straight from nonexistent to
 #: BLOCKED in one `Friendship.objects.create` call - the always-correct path - rather than through the reuse
 #: path the bug lived in.
-_FRESH_CREATE_TOLERANCE = datetime.timedelta(minutes=5)
+_FRESH_CREATE_TOLERANCE = dt.timedelta(minutes=5)
 
 
 class Command(BaseCommand):

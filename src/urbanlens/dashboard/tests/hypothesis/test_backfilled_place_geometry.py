@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from datetime import timedelta
 from unittest.mock import patch
 
@@ -16,7 +16,7 @@ from urbanlens.dashboard.models.place.model import Place, PlaceKind
 from urbanlens.dashboard.services.places.provisioning import geometry_stale
 
 #: Frozen so the exact-boundary tests below pin the comparison instead of racing wall-clock time.
-_INSTANT = datetime.datetime(2026, 1, 1, tzinfo=datetime.UTC)
+_INSTANT = dt.datetime(2026, 1, 1, tzinfo=dt.UTC)
 
 _hyp = hyp_settings(max_examples=30, deadline=None)
 

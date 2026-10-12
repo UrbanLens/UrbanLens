@@ -8,7 +8,7 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    import datetime
+    import datetime as dt
 
     from urbanlens.dashboard.models.subscriptions.model import SubscriptionRole
 
@@ -49,7 +49,7 @@ def cents_to_dollars(cents: int) -> Decimal:
     return Decimal(cents) / 100
 
 
-def role_pwyw_threshold_cents(role: SubscriptionRole, as_of: datetime.datetime | None = None) -> int | None:
+def role_pwyw_threshold_cents(role: SubscriptionRole, as_of: dt.datetime | None = None) -> int | None:
     """
     The pledge amount (cents) required for *role* to grant its features right now.
 
@@ -69,7 +69,7 @@ def role_pwyw_threshold_cents(role: SubscriptionRole, as_of: datetime.datetime |
     return role.pwyw_minimum_cents or 0
 
 
-def pledge_meets_threshold(role: SubscriptionRole, pledged_amount_cents: int, as_of: datetime.datetime | None = None) -> bool:
+def pledge_meets_threshold(role: SubscriptionRole, pledged_amount_cents: int, as_of: dt.datetime | None = None) -> bool:
     """Whether a pledge currently clears *role*'s access threshold."""
     threshold = role_pwyw_threshold_cents(role, as_of)
     return threshold is None or pledged_amount_cents >= threshold

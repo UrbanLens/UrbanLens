@@ -8,7 +8,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    import datetime
+    import datetime as dt
 
     from urbanlens.dashboard.models.floorplans.model import Floorplan
     from urbanlens.dashboard.models.place.model import Place
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def resolve_document(place: Place, *, profile: Profile | None = None, on_date: datetime.date | None = None) -> dict[str, Any] | None:
+def resolve_document(place: Place, *, profile: Profile | None = None, on_date: dt.date | None = None) -> dict[str, Any] | None:
     """
     The floorplan document for a building, resolved by date.
     So local lookup is profile-scoped, and REData's aggregated plans - external, non-personal by construction - are what a user without their own plan sees.
@@ -43,7 +43,7 @@ def resolve_document(place: Place, *, profile: Profile | None = None, on_date: d
     return _redata_document(place, on_date)
 
 
-def resolve_floorplan_row(place: Place, *, profile: Profile | None = None, on_date: datetime.date | None = None) -> Floorplan | None:
+def resolve_floorplan_row(place: Place, *, profile: Profile | None = None, on_date: dt.date | None = None) -> Floorplan | None:
     """
     The floorplan *row* (not a serialized document) a building shows, resolved by date.
     Same local-then-community fallback as :func:`resolve_document`, for a caller that needs the actual row to query its geometry - the GeoJSON features endpoint - rather than the pre-serialized document dict.
@@ -65,7 +65,7 @@ def resolve_floorplan_row(place: Place, *, profile: Profile | None = None, on_da
     return _community_plan(place, profile, on_date)
 
 
-def _community_plan(place: Place, profile: Profile | None, on_date: datetime.date | None):
+def _community_plan(place: Place, profile: Profile | None, on_date: dt.date | None):
     """
     The published plan for this building, when the user can see its wiki.
     Community plans follow the wiki's own visibility rule rather than inventing a second one: a user sees the wiki (and so its floorplan) once they have discovered the place - see ``services.wiki.wiki_access``."""
@@ -77,7 +77,7 @@ def _community_plan(place: Place, profile: Profile | None, on_date: datetime.dat
     return Floorplan.objects.at(place, on_date, community=True)
 
 
-def _redata_document(place: Place, on_date: datetime.date | None) -> dict[str, Any] | None:
+def _redata_document(place: Place, on_date: dt.date | None) -> dict[str, Any] | None:
     """
     REData's plan for this building, or None for any form of absence.
     The parcel uuid comes from the building place's parent parcel when that was provisioned from REData; without one there is nothing to ask."""
@@ -180,7 +180,7 @@ def floorplan_for_editing(
     *,
     pin=None,
     version_uuid: str = "",
-    on_date: datetime.date | None = None,
+    on_date: dt.date | None = None,
     allow_community: bool = False,
 ):
     """

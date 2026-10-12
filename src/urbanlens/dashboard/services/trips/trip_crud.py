@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from typing import TYPE_CHECKING, Any
 
 from django.db import IntegrityError, transaction
@@ -68,7 +68,7 @@ def _trip_description(value: object) -> str | None:
     return description
 
 
-def _trip_date(value: object, label: str) -> datetime.date | None:
+def _trip_date(value: object, label: str) -> dt.date | None:
     """
     A submitted date: a ``date``, a ``YYYY-MM-DD`` string, or blank for none.
 
@@ -77,11 +77,11 @@ def _trip_date(value: object, label: str) -> datetime.date | None:
     """
     if value is None or (isinstance(value, str) and not value.strip()):
         return None
-    if isinstance(value, datetime.date) and not isinstance(value, datetime.datetime):
+    if isinstance(value, dt.date) and not isinstance(value, dt.datetime):
         return value
     if isinstance(value, str):
         try:
-            return datetime.date.fromisoformat(value.strip())
+            return dt.date.fromisoformat(value.strip())
         except ValueError:
             pass
     raise TripValidationError(f"{label} must be a date, written YYYY-MM-DD.")
@@ -109,8 +109,8 @@ def create_trip(
     *,
     name: str | None = None,
     description: str | None = None,
-    start_date: datetime.date | str | None = None,
-    end_date: datetime.date | str | None = None,
+    start_date: dt.date | str | None = None,
+    end_date: dt.date | str | None = None,
     invite_profile_ids: Sequence[Any] = (),
     client_uuid: UUID | None = None,
 ) -> tuple[Trip, bool]:

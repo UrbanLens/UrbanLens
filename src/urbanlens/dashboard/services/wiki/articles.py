@@ -22,7 +22,7 @@ import nh3
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Iterator
-    import datetime
+    import datetime as dt
 
     from markdown_it.token import Token
 
@@ -775,7 +775,7 @@ class AnnotatedRevision(Protocol):
     editor_id: int | None
     editor: Profile | None
     restored_from_id: int | None
-    created: datetime.datetime
+    created: dt.datetime
     #: LENGTH(content) for this revision.
     content_length: int
     #: The same for the revision before it, or 0 for the first.

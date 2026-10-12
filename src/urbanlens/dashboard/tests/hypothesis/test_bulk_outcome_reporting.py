@@ -8,7 +8,7 @@ processed`` lumped a crashed row in with an id that was simply already handled, 
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import json
 from unittest import mock
 
@@ -120,9 +120,7 @@ class UnloggedVisitBulkTests(TestCase):
     def test_a_row_that_crashes_halfway_keeps_none_of_its_writes(self) -> None:
         from urbanlens.dashboard.services.visits import visits
 
-        pins = baker.make(
-            Pin, profile=self.profile, last_visited=datetime.datetime(2024, 6, 1, tzinfo=datetime.UTC), _quantity=2
-        )
+        pins = baker.make(Pin, profile=self.profile, last_visited=dt.datetime(2024, 6, 1, tzinfo=dt.UTC), _quantity=2)
         failing = pins[0]
         real_add = visits.add_visited_status
 

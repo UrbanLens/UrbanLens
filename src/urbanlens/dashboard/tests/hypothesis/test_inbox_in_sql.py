@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import re
 
 from django.db import connection
@@ -44,12 +44,12 @@ class _InboxCase(TestCase):
         super().setUp()
         baker.make("auth.User")
         self.me = _profile()
-        self.base = timezone.now() - datetime.timedelta(days=1)
+        self.base = timezone.now() - dt.timedelta(days=1)
         self.tick = 0
 
-    def _at(self) -> datetime.datetime:
+    def _at(self) -> dt.datetime:
         self.tick += 1
-        return self.base + datetime.timedelta(minutes=self.tick)
+        return self.base + dt.timedelta(minutes=self.tick)
 
     def dm_from(self, partner: Profile, *, read: bool = False) -> DirectMessage:
         message = baker.make(

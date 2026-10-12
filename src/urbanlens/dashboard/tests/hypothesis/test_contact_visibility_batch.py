@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 
 from django.contrib.auth.models import User
 from django.utils import timezone
@@ -102,7 +102,7 @@ class VisibleContactInfoPksAgreementTests(TestCase):
         DirectMessageTemporaryAccess.objects.create(
             profile=granted,
             granted_to=self.viewer,
-            expires_at=timezone.now() + datetime.timedelta(days=1),
+            expires_at=timezone.now() + dt.timedelta(days=1),
         )
 
         self.assertFalse(granted.can_view_contact_info(self.viewer))
@@ -292,7 +292,7 @@ class RelatedProfileIdsSupersetTests(TestCase):
         DirectMessageTemporaryAccess.objects.create(
             profile=granted,
             granted_to=self.viewer,
-            expires_at=timezone.now() + datetime.timedelta(days=1),
+            expires_at=timezone.now() + dt.timedelta(days=1),
         )
 
         self.assertIn(granted.pk, Profile.related_profile_ids(self.viewer))
@@ -327,7 +327,7 @@ class RelatedProfileIdsSupersetTests(TestCase):
             DirectMessageTemporaryAccess.objects.create(
                 profile=granted,
                 granted_to=self.viewer,
-                expires_at=timezone.now() + datetime.timedelta(days=1),
+                expires_at=timezone.now() + dt.timedelta(days=1),
             )
             asker = _profile(profile_visibility=value, contact_visibility=value)
             Friendship.objects.create(

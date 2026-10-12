@@ -9,7 +9,7 @@ malformed request is a 4xx rather than a 500 or a silent wrong write.
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from decimal import Decimal
 import json
 from typing import TYPE_CHECKING
@@ -67,7 +67,7 @@ class ExternalVisitSuggestionActionRouteTests(ExternalApiRouteCase):
         self.location = Location.objects.create(latitude=42.5, longitude=-73.5)
         self.pin = baker.make(Pin, profile=self.owner, location=self.location, parent_pin=None)
         self.image = baker.make(Image, profile=self.owner, pin=self.pin, location=self.location)
-        self.visited_at = timezone.now() - datetime.timedelta(days=3)
+        self.visited_at = timezone.now() - dt.timedelta(days=3)
         self.suggestion = VisitSuggestion.objects.create(
             suggested_to=self.owner,
             origin_image=self.image,

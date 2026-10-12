@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from pathlib import Path
 
 from django.utils import timezone
@@ -132,11 +132,11 @@ class DetectDwellsAndCreateVisitsTests(TestCase):
         return route
 
     def test_creates_geolocation_visit_for_qualifying_dwell(self):
-        base = timezone.make_aware(datetime.datetime(2024, 6, 1, 12, 0, 0))
+        base = timezone.make_aware(dt.datetime(2024, 6, 1, 12, 0, 0))
         raw_points = [
             RawTrackPoint(_PIN_LAT + 0.0001, _PIN_LNG + 0.0001, base),
-            RawTrackPoint(_PIN_LAT + 0.0001, _PIN_LNG + 0.0001, base + datetime.timedelta(minutes=5)),
-            RawTrackPoint(_PIN_LAT + 0.0001, _PIN_LNG + 0.0001, base + datetime.timedelta(minutes=12)),
+            RawTrackPoint(_PIN_LAT + 0.0001, _PIN_LNG + 0.0001, base + dt.timedelta(minutes=5)),
+            RawTrackPoint(_PIN_LAT + 0.0001, _PIN_LNG + 0.0001, base + dt.timedelta(minutes=12)),
         ]
         route = self._saved_route(raw_points)
 
@@ -156,11 +156,11 @@ class DetectDwellsAndCreateVisitsTests(TestCase):
         self.profile.track_pin_visits = False
         self.profile.save(update_fields=["track_pin_visits", "updated"])
 
-        base = timezone.make_aware(datetime.datetime(2024, 6, 1, 12, 0, 0))
+        base = timezone.make_aware(dt.datetime(2024, 6, 1, 12, 0, 0))
         raw_points = [
             RawTrackPoint(_PIN_LAT + 0.0001, _PIN_LNG + 0.0001, base),
-            RawTrackPoint(_PIN_LAT + 0.0001, _PIN_LNG + 0.0001, base + datetime.timedelta(minutes=5)),
-            RawTrackPoint(_PIN_LAT + 0.0001, _PIN_LNG + 0.0001, base + datetime.timedelta(minutes=12)),
+            RawTrackPoint(_PIN_LAT + 0.0001, _PIN_LNG + 0.0001, base + dt.timedelta(minutes=5)),
+            RawTrackPoint(_PIN_LAT + 0.0001, _PIN_LNG + 0.0001, base + dt.timedelta(minutes=12)),
         ]
         route = self._saved_route(raw_points)
 
@@ -171,10 +171,10 @@ class DetectDwellsAndCreateVisitsTests(TestCase):
         self.assertTrue(Route.objects.filter(pk=route.pk).exists())
 
     def test_no_visit_for_dwell_shorter_than_minimum(self):
-        base = timezone.make_aware(datetime.datetime(2024, 6, 1, 12, 0, 0))
+        base = timezone.make_aware(dt.datetime(2024, 6, 1, 12, 0, 0))
         raw_points = [
             RawTrackPoint(_PIN_LAT + 0.0001, _PIN_LNG + 0.0001, base),
-            RawTrackPoint(_PIN_LAT + 0.0001, _PIN_LNG + 0.0001, base + datetime.timedelta(minutes=3)),
+            RawTrackPoint(_PIN_LAT + 0.0001, _PIN_LNG + 0.0001, base + dt.timedelta(minutes=3)),
         ]
         route = self._saved_route(raw_points)
 
@@ -199,10 +199,10 @@ class DetectDwellsAndCreateVisitsTests(TestCase):
         from django.db import connection
         from django.test.utils import CaptureQueriesContext
 
-        base = timezone.make_aware(datetime.datetime(2024, 6, 1, 12, 0, 0))
+        base = timezone.make_aware(dt.datetime(2024, 6, 1, 12, 0, 0))
         raw_points = [
             RawTrackPoint(_PIN_LAT + 0.0001, _PIN_LNG + 0.0001, base),
-            RawTrackPoint(_PIN_LAT + 0.0001, _PIN_LNG + 0.0001, base + datetime.timedelta(minutes=12)),
+            RawTrackPoint(_PIN_LAT + 0.0001, _PIN_LNG + 0.0001, base + dt.timedelta(minutes=12)),
         ]
         route = self._saved_route(raw_points)
 
@@ -221,10 +221,10 @@ class DwellVisitProvenanceTests(DetectDwellsAndCreateVisitsTests):
     what ``record_geolocation_visits`` writes, gated by ``track_geolocation``."""
 
     def test_dwell_visits_are_recorded_as_imported(self):
-        base = timezone.make_aware(datetime.datetime(2024, 6, 1, 12, 0, 0))
+        base = timezone.make_aware(dt.datetime(2024, 6, 1, 12, 0, 0))
         raw_points = [
             RawTrackPoint(_PIN_LAT + 0.0001, _PIN_LNG + 0.0001, base),
-            RawTrackPoint(_PIN_LAT + 0.0001, _PIN_LNG + 0.0001, base + datetime.timedelta(minutes=12)),
+            RawTrackPoint(_PIN_LAT + 0.0001, _PIN_LNG + 0.0001, base + dt.timedelta(minutes=12)),
         ]
         route = self._saved_route(raw_points)
 
@@ -233,10 +233,10 @@ class DwellVisitProvenanceTests(DetectDwellsAndCreateVisitsTests):
         self.assertEqual(PinVisit.objects.get(pin=self.pin).source, VisitSource.HISTORY)
 
     def test_no_dwell_visit_claims_the_live_geolocation_source(self):
-        base = timezone.make_aware(datetime.datetime(2024, 6, 1, 12, 0, 0))
+        base = timezone.make_aware(dt.datetime(2024, 6, 1, 12, 0, 0))
         raw_points = [
             RawTrackPoint(_PIN_LAT + 0.0001, _PIN_LNG + 0.0001, base),
-            RawTrackPoint(_PIN_LAT + 0.0001, _PIN_LNG + 0.0001, base + datetime.timedelta(minutes=12)),
+            RawTrackPoint(_PIN_LAT + 0.0001, _PIN_LNG + 0.0001, base + dt.timedelta(minutes=12)),
         ]
         route = self._saved_route(raw_points)
 

@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import ast
 import contextlib
-import datetime
+import datetime as dt
 import hashlib
 import importlib.util
 import os
@@ -127,7 +127,7 @@ def _exists(cursor: Any, name: str) -> bool:
 
 def _record_use(cursor: Any, quoted_name: str) -> None:
     """Stamp the template's comment with the time and run; COMMENT takes no bind parameters, and this text needs no escaping."""
-    stamp = datetime.datetime.now(tz=datetime.UTC).isoformat(timespec="seconds")
+    stamp = dt.datetime.now(tz=dt.UTC).isoformat(timespec="seconds")
     cursor.execute(f"COMMENT ON DATABASE {quoted_name} IS '{COMMENT}{stamp} by run {RUN_ID}'")
 
 

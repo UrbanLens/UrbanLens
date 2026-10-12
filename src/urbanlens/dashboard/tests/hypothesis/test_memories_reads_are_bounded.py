@@ -8,7 +8,7 @@ in the requested range.
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import re
 
 from django.contrib.auth.models import User
@@ -40,13 +40,13 @@ class _Case(TestCase):
     def seed_visits(self, count: int) -> None:
         for _ in range(count):
             self.seeded += 1
-            baker.make(PinVisit, pin=self.pin, visited_at=timezone.now() - datetime.timedelta(hours=self.seeded))
+            baker.make(PinVisit, pin=self.pin, visited_at=timezone.now() - dt.timedelta(hours=self.seeded))
 
 
 class SourceReadsAreBoundedTests(_Case):
     def _visit_reads(self, limit: int) -> list[str]:
         with CaptureQueriesContext(connection) as ctx:
-            get_memory_events(self.profile, self.today - datetime.timedelta(days=30), self.today, limit=limit)
+            get_memory_events(self.profile, self.today - dt.timedelta(days=30), self.today, limit=limit)
         return [
             q["sql"]
             for q in ctx.captured_queries
@@ -64,10 +64,10 @@ class SourceReadsAreBoundedTests(_Case):
     def test_query_count_does_not_grow_with_rows_in_range(self) -> None:
         self.seed_visits(3)
         with CaptureQueriesContext(connection) as small:
-            get_memory_events(self.profile, self.today - datetime.timedelta(days=30), self.today, limit=5)
+            get_memory_events(self.profile, self.today - dt.timedelta(days=30), self.today, limit=5)
         self.seed_visits(40)
         with CaptureQueriesContext(connection) as large:
-            events = get_memory_events(self.profile, self.today - datetime.timedelta(days=30), self.today, limit=5)
+            events = get_memory_events(self.profile, self.today - dt.timedelta(days=30), self.today, limit=5)
 
         self.assertEqual(len(events), 5)
         self.assertEqual(len(large.captured_queries), len(small.captured_queries))

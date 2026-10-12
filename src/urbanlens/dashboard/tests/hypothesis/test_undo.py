@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 
 from django.contrib.auth.models import User
 from django.urls import reverse
@@ -36,9 +36,7 @@ def _expire(undo_action: UndoAction) -> None:
     ``.update()`` bypasses the instance, so the caller's in-memory ``created`` (and therefore ``is_expired``)
     would still read fresh without the refresh - production callers always re-fetch the row, so the staleness is
     a test-fixture artifact, not something restore() needs to guard."""
-    UndoAction.objects.filter(pk=undo_action.pk).update(
-        created=timezone.now() - UNDO_RETENTION - datetime.timedelta(days=1)
-    )
+    UndoAction.objects.filter(pk=undo_action.pk).update(created=timezone.now() - UNDO_RETENTION - dt.timedelta(days=1))
     undo_action.refresh_from_db()
 
 
@@ -51,8 +49,8 @@ def _make_checkin(profile, **kwargs) -> SafetyCheckin:
     defaults = {
         "profile": profile,
         "title": "Test hike",
-        "checkin_by": timezone.now() - datetime.timedelta(hours=2),
-        "grace_period": datetime.timedelta(hours=1),
+        "checkin_by": timezone.now() - dt.timedelta(hours=2),
+        "grace_period": dt.timedelta(hours=1),
     }
     defaults.update(kwargs)
     return baker.make(SafetyCheckin, **defaults)

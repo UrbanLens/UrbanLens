@@ -11,7 +11,7 @@ read every 403 as a revoked grant, and the callers deleted the connection.
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import json
 import string
 from typing import Any
@@ -177,7 +177,7 @@ class _TripWithAMateCase(_CalendarExportCase):
             trip=self.trip,
             added_by=added_by,
             location=location,
-            scheduled_at=datetime.datetime(2026, 11, 6, 9, 0, tzinfo=datetime.UTC),
+            scheduled_at=dt.datetime(2026, 11, 6, 9, 0, tzinfo=dt.UTC),
         )
 
     def _set_mate_visibility(self, visibility: str) -> None:
@@ -271,7 +271,7 @@ class AWithheldLocationIsRemovedFromTheEventTests(_TripWithAMateCase):
             self.trip,
             self.mate,
             place={"geocoded_lat": "42.380", "geocoded_lng": "-83.035", "geocoded_name": _PLACE_NAME},
-            scheduled_at=datetime.datetime(2026, 11, 6, 9, 0, tzinfo=datetime.UTC),
+            scheduled_at=dt.datetime(2026, 11, 6, 9, 0, tzinfo=dt.UTC),
         )
         self.assertEqual(activity.title, _PLACE_NAME)
 
@@ -368,7 +368,7 @@ class AHiddenActivityBodyNamesNothingOfThePlaceTests(SimpleTestCase):
             location_hidden=True,
             lat_override=latitude if overridden else None,
             lng_override=longitude if overridden else None,
-            scheduled_at=datetime.datetime(2026, 10, 1, 9, 0, tzinfo=datetime.UTC),
+            scheduled_at=dt.datetime(2026, 10, 1, 9, 0, tzinfo=dt.UTC),
         )
 
         body = activity_to_event_body(activity)
@@ -387,7 +387,7 @@ class AHiddenActivityBodyNamesNothingOfThePlaceTests(SimpleTestCase):
             location=Location(latitude=42.38, longitude=-83.03, official_name=_PLACE_NAME),
             title="Meet at the gate",
             location_hidden=True,
-            scheduled_at=datetime.datetime(2026, 10, 1, 9, 0, tzinfo=datetime.UTC),
+            scheduled_at=dt.datetime(2026, 10, 1, 9, 0, tzinfo=dt.UTC),
         )
 
         body = activity_to_event_body(activity)
@@ -399,7 +399,7 @@ class AHiddenActivityBodyNamesNothingOfThePlaceTests(SimpleTestCase):
         activity = TripActivity(
             trip=Trip(name="Mill weekend"),
             title="Meet up",
-            scheduled_at=datetime.datetime(2026, 10, 1, 9, 0, tzinfo=datetime.UTC),
+            scheduled_at=dt.datetime(2026, 10, 1, 9, 0, tzinfo=dt.UTC),
         )
 
         made = activity_to_event_body(activity)
@@ -477,7 +477,7 @@ class GoogleRateLimitIsNotADeadGrantTests(_TripWithAMateCase):
                 trip=self.trip,
                 added_by=self.profile,
                 title=f"Stop {minute}",
-                scheduled_at=datetime.datetime(2026, 11, 6, 9, minute, tzinfo=datetime.UTC),
+                scheduled_at=dt.datetime(2026, 11, 6, 9, minute, tzinfo=dt.UTC),
             )
         self._refuse_from(2, 403, USER_RATE_LIMIT)
 

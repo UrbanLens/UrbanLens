@@ -4,7 +4,7 @@ Coordinates are plan-local metres throughout (see ``models.floorplans.model``), 
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import logging
 import math
 from typing import TYPE_CHECKING, Any
@@ -253,7 +253,7 @@ def _required_float_in(raw, field: str) -> float:
     return value
 
 
-def _date_in(raw) -> datetime.date | None:
+def _date_in(raw) -> dt.date | None:
     """
     Parse an ISO date or None.
 
@@ -262,7 +262,7 @@ def _date_in(raw) -> datetime.date | None:
     if not raw:
         return None
     try:
-        return datetime.date.fromisoformat(str(raw))
+        return dt.date.fromisoformat(str(raw))
     except ValueError as exc:
         raise FloorplanValidationError("must be a date in YYYY-MM-DD form") from exc
 

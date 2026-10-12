@@ -6,7 +6,7 @@ Each user connects *their own* Google account via OAuth; the tokens stored here 
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from typing import TYPE_CHECKING
 
 from django.db.models import (
@@ -88,7 +88,7 @@ class GoogleCalendarAccount(abstract.DashboardModel):
         """
         if self.token_expiry is None:
             return True
-        return self.token_expiry <= timezone.now() + datetime.timedelta(seconds=60)
+        return self.token_expiry <= timezone.now() + dt.timedelta(seconds=60)
 
     def __str__(self) -> str:
         return f"Google Calendar for {self.profile} ({self.google_email or 'unknown email'})"

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 
 from django.contrib.auth.models import User
 from django.db import connection
@@ -37,7 +37,7 @@ class TripSqlTestCase(TestCase):
 
 class TimelineCountsTests(TripSqlTestCase):
     def test_counts_match_each_trips_own_status_in_one_query(self) -> None:
-        day = datetime.timedelta(days=1)
+        day = dt.timedelta(days=1)
         _trip(self.profile, "Planning")
         _trip(self.profile, "Upcoming", start_date=self.today + 5 * day)
         _trip(self.profile, "Active", start_date=self.today - day, end_date=self.today + day)
@@ -75,7 +75,7 @@ class TripListPagingTests(TripSqlTestCase):
 
     def test_soonest_first_pages_do_not_repeat_or_drop_a_trip(self) -> None:
         for index in range(TRIP_LIST_PAGE_SIZE + 3):
-            _trip(self.profile, f"Trip {index:03d}", start_date=self.today + datetime.timedelta(days=index % 4))
+            _trip(self.profile, f"Trip {index:03d}", start_date=self.today + dt.timedelta(days=index % 4))
 
         seen = []
         for page in (1, 2):
@@ -89,13 +89,13 @@ class TripListPagingTests(TripSqlTestCase):
 class TripMonthTests(TripSqlTestCase):
     def test_only_trips_meeting_the_month_are_read(self) -> None:
         month = self.today.replace(day=1)
-        inside = _trip(self.profile, "Inside", start_date=month + datetime.timedelta(days=2))
-        spanning = _trip(self.profile, "Spanning", start_date=month - datetime.timedelta(days=3), end_date=month)
+        inside = _trip(self.profile, "Inside", start_date=month + dt.timedelta(days=2))
+        spanning = _trip(self.profile, "Spanning", start_date=month - dt.timedelta(days=3), end_date=month)
         _trip(
             self.profile,
             "Earlier",
-            start_date=month - datetime.timedelta(days=60),
-            end_date=month - datetime.timedelta(days=40),
+            start_date=month - dt.timedelta(days=60),
+            end_date=month - dt.timedelta(days=40),
         )
         _trip(self.profile, "Undated")
 
@@ -116,12 +116,12 @@ class TripMonthTests(TripSqlTestCase):
 
         before = cost()
         for index in range(15):
-            _trip(self.profile, f"Old {index}", start_date=month - datetime.timedelta(days=100 + index))
+            _trip(self.profile, f"Old {index}", start_date=month - dt.timedelta(days=100 + index))
         self.assertEqual(cost(), before)
 
     def test_month_endpoint_and_malformed_month(self) -> None:
         self.assertEqual(parse_month("not-a-month", self.today), self.today.replace(day=1))
-        self.assertEqual(parse_month("2024-02", self.today), datetime.date(2024, 2, 1))
+        self.assertEqual(parse_month("2024-02", self.today), dt.date(2024, 2, 1))
 
         response = self.client.get(reverse("trips.calendar.month"), {"month": "2024-02"})
 
@@ -171,12 +171,12 @@ class ExternalTripsListTests(TripSqlTestCase):
 
     def test_soonest_first_is_paged_in_sql(self) -> None:
         for index in range(3):
-            _trip(self.profile, f"Trip {index}", start_date=self.today + datetime.timedelta(days=index))
+            _trip(self.profile, f"Trip {index}", start_date=self.today + dt.timedelta(days=index))
         self._get()  # first-request bookkeeping (key last-used, login activity) is not what is measured
         small, small_queries = self._get(sort="start_date", dir="asc", page_size=2)
 
         for index in range(3, 15):
-            _trip(self.profile, f"Trip {index}", start_date=self.today + datetime.timedelta(days=index))
+            _trip(self.profile, f"Trip {index}", start_date=self.today + dt.timedelta(days=index))
         large, large_queries = self._get(sort="start_date", dir="asc", page_size=2)
 
         self.assertEqual(large["count"], 15)

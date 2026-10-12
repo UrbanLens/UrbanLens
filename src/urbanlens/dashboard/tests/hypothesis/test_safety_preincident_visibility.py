@@ -7,7 +7,7 @@ The safety check-in goal: contacts get the trip plan "only if the user fails to 
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from pathlib import Path
 import shutil
 import tempfile
@@ -49,8 +49,8 @@ class _VisibilityTestCase(TestCase):
             SafetyCheckin,
             profile=self.owner,
             title="Secret tunnel walk",
-            checkin_by=timezone.now() + datetime.timedelta(hours=3),
-            grace_period=datetime.timedelta(hours=1),
+            checkin_by=timezone.now() + dt.timedelta(hours=3),
+            grace_period=dt.timedelta(hours=1),
             status=SafetyCheckinStatus.SCHEDULED,
             notify_community_wiki=False,
         )

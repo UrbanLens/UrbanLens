@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 
 from django.contrib.auth.models import User
 from django.contrib.gis.geos import Point
@@ -18,7 +18,7 @@ from urbanlens.dashboard.models.device_scan.model import (
 )
 from urbanlens.dashboard.services.profile.account_deletion import hard_delete_profile
 
-_WHEN = datetime.datetime(2026, 5, 1, 12, tzinfo=datetime.UTC)
+_WHEN = dt.datetime(2026, 5, 1, 12, tzinfo=dt.UTC)
 
 
 def _trail(profile, device: ScannedDevice) -> DeviceScanUpload:

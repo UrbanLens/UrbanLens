@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 
 from urbanlens.dashboard.models.abstract.choices import TextChoices
 
@@ -21,15 +21,15 @@ class MessageRetentionChoice(TextChoices):
 
 # Delay applied after `read_at` before a message becomes expired for the
 # recipient. WHEN_READ and NEVER are handled as special cases by the caller.
-RETENTION_DELTAS: dict[str, datetime.timedelta] = {
-    MessageRetentionChoice.ONE_DAY: datetime.timedelta(days=1),
-    MessageRetentionChoice.THIRTY_DAYS: datetime.timedelta(days=30),
-    MessageRetentionChoice.NINETY_DAYS: datetime.timedelta(days=90),
-    MessageRetentionChoice.ONE_YEAR: datetime.timedelta(days=365),
+RETENTION_DELTAS: dict[str, dt.timedelta] = {
+    MessageRetentionChoice.ONE_DAY: dt.timedelta(days=1),
+    MessageRetentionChoice.THIRTY_DAYS: dt.timedelta(days=30),
+    MessageRetentionChoice.NINETY_DAYS: dt.timedelta(days=90),
+    MessageRetentionChoice.ONE_YEAR: dt.timedelta(days=365),
 }
 
 #: A self-destructing message nobody reads is deleted this long after it was sent.
-UNREAD_SELF_DESTRUCT_TIMEOUT = datetime.timedelta(days=180)
+UNREAD_SELF_DESTRUCT_TIMEOUT = dt.timedelta(days=180)
 
 
 class DirectMessageShareKind(TextChoices):

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import logging
 import math
 from typing import TYPE_CHECKING
@@ -379,7 +379,7 @@ def _parse_destination(data: QueryDict) -> tuple[float, float] | tuple[None, Non
     return latitude, longitude
 
 
-def _parse_grace_period(request: HttpRequest) -> datetime.timedelta:
+def _parse_grace_period(request: HttpRequest) -> dt.timedelta:
     """
     Parse the submitted grace period, in hours, into a timedelta.
 
@@ -395,7 +395,7 @@ def _parse_grace_period(request: HttpRequest) -> datetime.timedelta:
         hours = 1.0
     if not math.isfinite(hours):
         hours = 1.0
-    return datetime.timedelta(hours=min(max(hours, 0.25), MAX_GRACE_PERIOD_HOURS))
+    return dt.timedelta(hours=min(max(hours, 0.25), MAX_GRACE_PERIOD_HOURS))
 
 
 def _parse_auto_delete_days(request: HttpRequest) -> int | None:
@@ -616,11 +616,11 @@ class SafetyCheckinCreateView(LoginRequiredMixin, View):
         if not raw_checkin_by:
             return render(request, "dashboard/pages/safety/create.html", {**error_context, "error": "Expected check-in time is required."}, status=400)
         try:
-            checkin_by = datetime.datetime.fromisoformat(raw_checkin_by)
+            checkin_by = dt.datetime.fromisoformat(raw_checkin_by)
         except ValueError:
             return render(request, "dashboard/pages/safety/create.html", {**error_context, "error": "Invalid check-in time."}, status=400)
         if checkin_by.tzinfo is None:
-            checkin_by = checkin_by.replace(tzinfo=datetime.UTC)
+            checkin_by = checkin_by.replace(tzinfo=dt.UTC)
         if checkin_by <= timezone.now():
             return render(request, "dashboard/pages/safety/create.html", {**error_context, "error": "Expected check-in time must be in the future."}, status=400)
 

@@ -5,7 +5,7 @@ USGS Historical Topo Maps is a different kind of feature entirely (a gallery of 
 from __future__ import annotations
 
 import base64
-import datetime
+import datetime as dt
 import logging
 import math
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -174,7 +174,7 @@ def _composed_zoom(result: dict[str, Any], latitude: float) -> int | None:
     return wanted if wanted < default else None
 
 
-def _most_recent_interval_end(attributes: dict[str, Any]) -> datetime.date | None:
+def _most_recent_interval_end(attributes: dict[str, Any]) -> dt.date | None:
     """
     The latest date covered by a ``time_series`` result's own ``attributes.intervals``.
 
@@ -183,7 +183,7 @@ def _most_recent_interval_end(attributes: dict[str, Any]) -> datetime.date | Non
 
     Returns:
         The latest parseable ``end`` across every interval, or None when ``intervals`` is missing or none of it parses as a date."""
-    latest: datetime.date | None = None
+    latest: dt.date | None = None
     for interval in attributes.get("intervals") or []:
         if not isinstance(interval, dict):
             continue
@@ -191,7 +191,7 @@ def _most_recent_interval_end(attributes: dict[str, Any]) -> datetime.date | Non
         if not isinstance(end, str):
             continue
         try:
-            parsed = datetime.date.fromisoformat(end[:10])
+            parsed = dt.date.fromisoformat(end[:10])
         except ValueError:
             continue
         if latest is None or parsed > latest:

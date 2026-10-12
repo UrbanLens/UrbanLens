@@ -10,7 +10,7 @@ attributes), the external API (``title`` and ``effective_title``), the Google Ca
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import importlib
 import json
 import string
@@ -48,7 +48,7 @@ _PLACE_NAME = "Packard Plant"
 _TYPED = "Meet at the gate"
 _IMPORTED_LOCATION = "123 Factory Rd, Utica, NY"
 _IMPORT_NOTE = "Location from the imported Google Calendar event."
-_WHEN = datetime.datetime(2026, 11, 6, 9, 0, tzinfo=datetime.UTC)
+_WHEN = dt.datetime(2026, 11, 6, 9, 0, tzinfo=dt.UTC)
 _MIGRATION = importlib.import_module("urbanlens.dashboard.migrations.0069_calendar_privacy_followups")
 
 
@@ -68,8 +68,8 @@ class _HiddenStopCase(TestCase):
         self.trip = Trip.objects.create(
             name="Long weekend",
             creator=self.viewer,
-            start_date=datetime.date(2026, 11, 6),
-            end_date=datetime.date(2026, 11, 8),
+            start_date=dt.date(2026, 11, 6),
+            end_date=dt.date(2026, 11, 8),
         )
         for profile in (self.viewer, self.mate):
             TripMembership.objects.create(
@@ -77,7 +77,7 @@ class _HiddenStopCase(TestCase):
             )
 
     def _searched_stop(
-        self, *, title: str | None = None, by: Profile | None = None, when: datetime.datetime = _WHEN
+        self, *, title: str | None = None, by: Profile | None = None, when: dt.datetime = _WHEN
     ) -> TripActivity:
         """A stop added the way the place-search picker adds one."""
         return create_activity(
@@ -253,7 +253,7 @@ class EverySurfaceMasksAPlaceSearchNameTests(_HiddenStopCase):
         self.assertEqual(body["summary"], f"Long weekend: {HIDDEN_ACTIVITY_TITLE}")
 
     def test_the_weather_panel_leaves_the_stop_out(self) -> None:
-        tomorrow = timezone.now() + datetime.timedelta(days=1)
+        tomorrow = timezone.now() + dt.timedelta(days=1)
         hidden = self._searched_stop(when=tomorrow)
         shown = self._searched_stop(by=self.viewer, when=tomorrow)
         self.client.force_login(self.viewer_user)
@@ -361,7 +361,7 @@ class CompletingAHiddenStopTests(_HiddenStopCase):
 
         activity = self._searched_stop()
 
-        complete_activity(self.trip, self.mate, activity.pk, completed_date=datetime.date(2026, 10, 1))
+        complete_activity(self.trip, self.mate, activity.pk, completed_date=dt.date(2026, 10, 1))
 
         self.assertFalse(VisitSuggestion.objects.filter(suggested_to=self.viewer).exists())
 
@@ -373,7 +373,7 @@ class CompletingAHiddenStopTests(_HiddenStopCase):
         Profile.objects.filter(pk=self.mate.pk).update(trip_pin_location_visibility=VisibilityChoice.ANYONE)
         activity = self._searched_stop()
 
-        complete_activity(self.trip, self.mate, activity.pk, completed_date=datetime.date(2026, 10, 1))
+        complete_activity(self.trip, self.mate, activity.pk, completed_date=dt.date(2026, 10, 1))
 
         self.assertTrue(VisitSuggestion.objects.filter(suggested_to=self.viewer).exists())
 
@@ -384,7 +384,7 @@ class TheMemoriesTimelineDoesNotPlaceATripAtAHiddenStopTests(_HiddenStopCase):
     def _trip_event(self, **kwargs: Any) -> Any:
         from urbanlens.dashboard.services.memories.aggregator import get_memory_events
 
-        events = get_memory_events(self.viewer, datetime.date(2026, 11, 1), datetime.date(2026, 11, 30), **kwargs)
+        events = get_memory_events(self.viewer, dt.date(2026, 11, 1), dt.date(2026, 11, 30), **kwargs)
         return next((event for event in events if event.type == "trip"), None)
 
     def test_a_hidden_stop_does_not_place_the_trip(self) -> None:
@@ -416,9 +416,7 @@ class TheMemoriesTimelineDoesNotPlaceATripAtAHiddenStopTests(_HiddenStopCase):
         def queries() -> int:
             with CaptureQueriesContext(connection) as captured:
                 events = list(
-                    _trips_for_range(
-                        self.viewer, datetime.date(2026, 11, 1), datetime.date(2026, 11, 30), None, limit=50
-                    )
+                    _trips_for_range(self.viewer, dt.date(2026, 11, 1), dt.date(2026, 11, 30), None, limit=50)
                 )
             self.assertTrue(all(event.latitude is None for event in events))
             return len(captured)
@@ -427,7 +425,7 @@ class TheMemoriesTimelineDoesNotPlaceATripAtAHiddenStopTests(_HiddenStopCase):
         one_trip = queries()
         for number in range(9):
             self.trip = Trip.objects.create(
-                name=f"Weekend {number}", creator=self.viewer, start_date=datetime.date(2026, 11, 6)
+                name=f"Weekend {number}", creator=self.viewer, start_date=dt.date(2026, 11, 6)
             )
             for profile in (self.viewer, self.mate):
                 TripMembership.objects.create(trip=self.trip, profile=profile, status=TripMembership.STATUS_JOINED)

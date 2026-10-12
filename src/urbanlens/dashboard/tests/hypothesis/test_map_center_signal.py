@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import decimal
 from unittest import mock
 
@@ -115,7 +115,7 @@ class NewPinQueuesARecomputeTests(TestCase):
         from urbanlens.dashboard.tasks import refresh_profile_map_center
 
         baker.make(Pin, profile=self.profile)
-        abandoned = timezone.now() - MAP_CENTRE_RECLAIM_AFTER - datetime.timedelta(minutes=1)
+        abandoned = timezone.now() - MAP_CENTRE_RECLAIM_AFTER - dt.timedelta(minutes=1)
         Profile.objects.filter(pk=self.profile.pk).update(map_center_stale_since=abandoned)
 
         with mock.patch(_ENQUEUE) as enqueue, self.captureOnCommitCallbacks(execute=True):
@@ -147,7 +147,7 @@ class RecomputingReleasesTheClaimTests(TestCase):
         """
         A pin created while the coordinates are being read has to leave a claim behind for another pass.
         Releasing afterwards would overwrite it, and that pin would never reach the stored centre."""
-        seen: list[datetime.datetime | None] = []
+        seen: list[dt.datetime | None] = []
         real_compute = Profile.compute_map_center
 
         def recording(instance: Profile) -> tuple[float, float] | None:
@@ -219,7 +219,7 @@ class AStaleCentreIsServedWhileItRecomputesTests(TestCase):
         super().setUp()
         self.profile = baker.make(User).profile
         _set_cached_centroid(self.profile)
-        stale = timezone.now() - MAP_CENTRE_RECLAIM_AFTER - datetime.timedelta(hours=1)
+        stale = timezone.now() - MAP_CENTRE_RECLAIM_AFTER - dt.timedelta(hours=1)
         Profile.objects.filter(pk=self.profile.pk).update(
             map_center_stale_since=stale, map_center_mode=MapCenterMode.AUTO
         )
@@ -240,4 +240,4 @@ class AStaleCentreIsServedWhileItRecomputesTests(TestCase):
 
         self.assertIn(refresh_profile_map_center, _queued(enqueue))
         self.profile.refresh_from_db()
-        self.assertGreater(self.profile.map_center_stale_since, timezone.now() - datetime.timedelta(minutes=1))
+        self.assertGreater(self.profile.map_center_stale_since, timezone.now() - dt.timedelta(minutes=1))

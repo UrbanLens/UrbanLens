@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from http import HTTPStatus
 from typing import TYPE_CHECKING
 from unittest import mock
@@ -57,8 +57,8 @@ class MemoriesTimelineTests(TestCase):
     def test_default_window_includes_recent_visit_and_excludes_old_one(self) -> None:
         """With no start/end given, only the trailing-90-day visit is returned."""
         today = timezone.now()
-        PinVisit.objects.create(pin=self.pin, visited_at=today - datetime.timedelta(days=5))
-        PinVisit.objects.create(pin=self.pin, visited_at=today - datetime.timedelta(days=200))
+        PinVisit.objects.create(pin=self.pin, visited_at=today - dt.timedelta(days=5))
+        PinVisit.objects.create(pin=self.pin, visited_at=today - dt.timedelta(days=200))
 
         response = self.client.get(reverse("external_api:memories.timeline"), **_bearer(self.raw_key))
 
@@ -68,14 +68,14 @@ class MemoriesTimelineTests(TestCase):
 
     def test_explicit_date_range_is_honored(self) -> None:
         """start/end query params override the default 90-day window."""
-        far_past = timezone.now() - datetime.timedelta(days=400)
+        far_past = timezone.now() - dt.timedelta(days=400)
         PinVisit.objects.create(pin=self.pin, visited_at=far_past)
 
         response = self.client.get(
             reverse("external_api:memories.timeline"),
             {
-                "start": (far_past - datetime.timedelta(days=1)).date().isoformat(),
-                "end": (far_past + datetime.timedelta(days=1)).date().isoformat(),
+                "start": (far_past - dt.timedelta(days=1)).date().isoformat(),
+                "end": (far_past + dt.timedelta(days=1)).date().isoformat(),
             },
             **_bearer(self.raw_key),
         )
@@ -124,7 +124,7 @@ class MemoriesOnThisDayTests(TestCase):
 
     def test_different_month_day_is_excluded(self) -> None:
         """A visit from a different day entirely never appears."""
-        different_day = timezone.now().replace(year=timezone.now().year - 1) - datetime.timedelta(days=90)
+        different_day = timezone.now().replace(year=timezone.now().year - 1) - dt.timedelta(days=90)
         PinVisit.objects.create(pin=self.pin, visited_at=different_day)
 
         response = self.client.get(reverse("external_api:memories.on_this_day"), **_bearer(self.raw_key))

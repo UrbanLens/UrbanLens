@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 
 from django.contrib.auth.models import User
 from django.utils import timezone
@@ -47,7 +47,7 @@ class MemoriesJournalQueryScalingTests(QueryScalingMixin, TestCase):
             baker.make(
                 PinVisit,
                 pin=pin,
-                visited_at=timezone.now() - datetime.timedelta(days=self.seeded),
+                visited_at=timezone.now() - dt.timedelta(days=self.seeded),
                 notes=f"note {self.seeded}",
             )
 

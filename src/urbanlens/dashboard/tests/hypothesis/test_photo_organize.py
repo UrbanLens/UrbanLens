@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from decimal import Decimal
 from unittest import mock
 
@@ -76,7 +76,7 @@ class CreatePinAndLogVisitTests(TestCase):
     def setUp(self):
         super().setUp()
         self.profile = baker.make("auth.User").profile
-        self.taken_at = timezone.make_aware(datetime.datetime(2024, 5, 4, 9, 0, 0))
+        self.taken_at = timezone.make_aware(dt.datetime(2024, 5, 4, 9, 0, 0))
         self.photo = baker.make(
             "dashboard.Image",
             profile=self.profile,
@@ -170,7 +170,7 @@ class CreatePinAndLogVisitTests(TestCase):
         # A photo at the same spot but from an earlier trip - not obviously the
         # same visit, so it should get a normal confirmable suggestion instead
         # of being silently filed.
-        older_taken_at = self.taken_at - datetime.timedelta(days=30)
+        older_taken_at = self.taken_at - dt.timedelta(days=30)
         older_photo = baker.make(
             "dashboard.Image",
             profile=self.profile,
@@ -282,7 +282,7 @@ class PhotoPinConfirmViewTests(TestCase):
             wiki=None,
             latitude=Decimal(str(_LAT)),
             longitude=Decimal(str(_LNG)),
-            taken_at=timezone.make_aware(datetime.datetime(2024, 5, 4, 9, 0, 0)),
+            taken_at=timezone.make_aware(dt.datetime(2024, 5, 4, 9, 0, 0)),
             image=SimpleUploadedFile("photo.jpg", b"photo-bytes", content_type="image/jpeg"),
         )
 

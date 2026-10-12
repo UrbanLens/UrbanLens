@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import json
 from typing import TYPE_CHECKING
 
@@ -186,7 +186,7 @@ class MaxUpcomingTripsPerUserTests(TestCase):
 
     def _make_upcoming_trip(self) -> Trip:
         trip = Trip.objects.create(
-            name="Existing Trip", creator=self.profile, start_date=datetime.date.today() + datetime.timedelta(days=3)
+            name="Existing Trip", creator=self.profile, start_date=dt.date.today() + dt.timedelta(days=3)
         )
         TripMembership.objects.get_or_create(trip=trip, profile=self.profile, defaults={"rsvp": "yes"})
         return trip

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from unittest import mock
 
 from django.contrib.auth.models import User
@@ -31,8 +31,8 @@ class _CheckinTestCase(TestCase):
         self.checkin = create_checkin(
             profile=self.profile,
             title="Original title",
-            checkin_by=timezone.now() + datetime.timedelta(hours=4),
-            grace_period=datetime.timedelta(hours=1),
+            checkin_by=timezone.now() + dt.timedelta(hours=4),
+            grace_period=dt.timedelta(hours=1),
             plan_details="Original plan",
             contact_message="Original message",
         )

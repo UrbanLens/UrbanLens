@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 
 from django.contrib.auth.models import User
 from django.core import mail
@@ -211,7 +211,7 @@ class VisitSuggestedEmailTests(TestCase):
         self.suggester = _profile()
         self.recipient = _profile("recipient@example.com")
         self.location = baker.make(Location, latitude="40.0", longitude="-74.0", official_name="Old Mill")
-        self.visited_at = timezone.make_aware(datetime.datetime(2026, 6, 1, 14, 0))
+        self.visited_at = timezone.make_aware(dt.datetime(2026, 6, 1, 14, 0))
         origin_pin = baker.make(Pin, profile=self.suggester, location=self.location)
         self.origin_visit = baker.make(PinVisit, pin=origin_pin, visited_at=self.visited_at, source=VisitSource.MANUAL)
         _set_pref(self.recipient, "visit_suggested", DeliveryPreference.EMAIL)

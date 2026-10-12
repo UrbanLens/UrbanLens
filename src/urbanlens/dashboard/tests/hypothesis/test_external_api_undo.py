@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 
 from django.contrib.auth.models import User
 from django.test import TestCase
@@ -99,9 +99,7 @@ class UndoListTests(_UndoApiTestCase):
     def test_expired_entries_are_excluded(self) -> None:
         """An entry past UNDO_RETENTION doesn't appear in the active list."""
         entry = baker.make(UndoAction, profile=self.profile, model_label="pin", object_repr="Old pin", payload={})
-        UndoAction.objects.filter(pk=entry.pk).update(
-            created=timezone.now() - UNDO_RETENTION - datetime.timedelta(days=1)
-        )
+        UndoAction.objects.filter(pk=entry.pk).update(created=timezone.now() - UNDO_RETENTION - dt.timedelta(days=1))
         raw_key = self._key_with_scopes([ApiKeyScope.UNDO_READ.value, ApiKeyScope.PINS_READ.value])
         response = self.client.get(reverse("external_api:undo"), **_bearer(raw_key))
         self.assertEqual(response.json()["entries"], [])
@@ -148,9 +146,7 @@ class UndoRestoreTests(_UndoApiTestCase):
     def test_expired_entry_returns_410_and_is_deleted(self) -> None:
         """An entry past retention answers 410 (not 404) and is cleaned up on the attempt."""
         entry = baker.make(UndoAction, profile=self.profile, model_label="pin", object_repr="Old pin", payload={})
-        UndoAction.objects.filter(pk=entry.pk).update(
-            created=timezone.now() - UNDO_RETENTION - datetime.timedelta(days=1)
-        )
+        UndoAction.objects.filter(pk=entry.pk).update(created=timezone.now() - UNDO_RETENTION - dt.timedelta(days=1))
         raw_key = self._key_with_scopes([ApiKeyScope.UNDO_WRITE.value, ApiKeyScope.PINS_WRITE.value])
         url = reverse("external_api:undo.restore", kwargs={"undo_uuid": entry.uuid})
         response = self.client.post(url, **_bearer(raw_key))

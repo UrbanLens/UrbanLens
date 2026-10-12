@@ -5,7 +5,7 @@ A separate model from ``GoogleCalendarAccount`` even though both are Google OAut
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from typing import TYPE_CHECKING
 
 from django.db.models import CASCADE, DateTimeField, OneToOneField
@@ -49,7 +49,7 @@ class GooglePhotosAccount(abstract.DashboardModel):
         """
         if self.token_expiry is None:
             return True
-        return self.token_expiry <= timezone.now() + datetime.timedelta(seconds=60)
+        return self.token_expiry <= timezone.now() + dt.timedelta(seconds=60)
 
     def __str__(self) -> str:
         return f"Google Photos for {self.profile} ({self.google_email or 'unknown email'})"

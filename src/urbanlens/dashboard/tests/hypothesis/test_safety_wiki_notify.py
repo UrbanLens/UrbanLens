@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 
 from django.core import mail
 from django.urls import reverse
@@ -31,8 +31,8 @@ def _checkin(profile, **kwargs) -> SafetyCheckin:
     defaults = {
         "profile": profile,
         "title": "Test hike",
-        "checkin_by": timezone.now() - datetime.timedelta(hours=2),
-        "grace_period": datetime.timedelta(hours=1),
+        "checkin_by": timezone.now() - dt.timedelta(hours=2),
+        "grace_period": dt.timedelta(hours=1),
         "destination_latitude": str(WIKI_LAT),
         "destination_longitude": str(WIKI_LNG),
         "status": SafetyCheckinStatus.AWAITING_CHECKIN,
@@ -266,7 +266,7 @@ class CreateCheckinFlagTests(TestCase):
         baker.make("dashboard.Pin", profile=self.user.profile, location=location, parent_pin=None)
 
     def _post(self, extra: dict) -> None:
-        checkin_by = (timezone.now() + datetime.timedelta(hours=3)).isoformat()
+        checkin_by = (timezone.now() + dt.timedelta(hours=3)).isoformat()
         data = {
             "checkin_by": checkin_by,
             "title": "Trip",

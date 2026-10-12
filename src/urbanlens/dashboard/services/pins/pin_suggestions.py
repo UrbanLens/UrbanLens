@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-import datetime
+import datetime as dt
 import logging
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
@@ -66,7 +66,7 @@ class LocationHit:
 
     latitude: float
     longitude: float
-    taken_at: datetime.datetime
+    taken_at: dt.datetime
     label: str | None = None
     asset_id: str | None = None
     source_key: str | None = None
@@ -728,19 +728,19 @@ def _apply_suggested_enrichment(pin: Pin, suggestion: PinSuggestion) -> None:
             existing_urls.add(url)
 
 
-def _resolve_visit(visit_by_date: dict[datetime.date, PinVisit], day: datetime.date | None, fallback: PinVisit | None) -> PinVisit | None:
+def _resolve_visit(visit_by_date: dict[dt.date, PinVisit], day: dt.date | None, fallback: PinVisit | None) -> PinVisit | None:
     """Return the visit for ``day`` if one exists, else ``fallback``."""
     if day is not None and day in visit_by_date:
         return visit_by_date[day]
     return fallback
 
 
-def _visit_by_date(pin: Pin, suggestion: PinSuggestion, new_visits: list[PinVisit]) -> dict[datetime.date, PinVisit]:
+def _visit_by_date(pin: Pin, suggestion: PinSuggestion, new_visits: list[PinVisit]) -> dict[dt.date, PinVisit]:
     """
     Map every date in ``suggestion.visit_dates`` to its PinVisit, new or pre-existing.
     A selected photo taken on a date that was already logged before this accept call (see the skip branch in ``accept_pin_suggestion``) must still resolve to that real existing visit rather than being dropped."""
-    days = [datetime.date.fromisoformat(date_str) for date_str in suggestion.visit_dates]
-    by_date: dict[datetime.date, PinVisit] = {visit.visited_at.date(): visit for visit in pin.visit_history.filter(visited_at__date__in=days)}
+    days = [dt.date.fromisoformat(date_str) for date_str in suggestion.visit_dates]
+    by_date: dict[dt.date, PinVisit] = {visit.visited_at.date(): visit for visit in pin.visit_history.filter(visited_at__date__in=days)}
     for visit in new_visits:
         by_date[visit.visited_at.date()] = visit
     return by_date
@@ -801,12 +801,12 @@ def accept_pin_suggestion(
         # One query for every date at once, rather than one per date. The set is
         # updated as visits are created so a date repeated within suggestion.visit_dates
         # is still skipped the second time - which the per-date .exists() got for free.
-        wanted_days = [datetime.date.fromisoformat(date_str) for date_str in suggestion.visit_dates]
+        wanted_days = [dt.date.fromisoformat(date_str) for date_str in suggestion.visit_dates]
         existing_days = {visit.visited_at.date() for visit in pin.visit_history.filter(visited_at__date__in=wanted_days)}
         for day in wanted_days:
             if day in existing_days:
                 continue
-            visited_at = datetime.datetime.combine(day, datetime.time(12, 0), tzinfo=datetime.UTC)
+            visited_at = dt.datetime.combine(day, dt.time(12, 0), tzinfo=dt.UTC)
             visits.append(PinVisit.objects.create(pin=pin, visited_at=visited_at, source=VisitSource.HISTORY))
             existing_days.add(day)
         if visits:
@@ -835,7 +835,7 @@ def accept_pin_suggestion(
         sample = sample_by_id.get(asset_id)
         if sample is None:
             continue
-        asset_day = datetime.date.fromisoformat(sample["taken_at"])
+        asset_day = dt.date.fromisoformat(sample["taken_at"])
         target = _resolve_visit(visit_by_date, asset_day, fallback_visit)
         if target is not None:
             immich_import_visits[asset_id] = target.pk

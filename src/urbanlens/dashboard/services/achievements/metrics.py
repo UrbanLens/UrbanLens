@@ -18,7 +18,7 @@ from urbanlens.dashboard.models.achievements.meta import ActivityKind, streak_me
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Sequence
-    import datetime
+    import datetime as dt
 
     from django.db.models import QuerySet
 
@@ -311,7 +311,7 @@ def _trips_planned_bulk(profile_ids: Sequence[int]) -> dict[int, int]:
     return _grouped_count(Trip.objects.filter(creator_id__in=profile_ids), "creator_id")
 
 
-def _finished_trip_q(today: datetime.date) -> Q:
+def _finished_trip_q(today: dt.date) -> Q:
     """
     Match trip memberships whose trip has ended as of *today*.
     end_date is optional, so a trip with none falls back to its start_date."""
@@ -627,7 +627,7 @@ def compute_values_bulk(profiles: Sequence[Profile], keys: Iterable[str] | None 
     return values
 
 
-def streak_summary(profile: Profile, today: datetime.date | None = None) -> list[StreakSummaryRow]:
+def streak_summary(profile: Profile, today: dt.date | None = None) -> list[StreakSummaryRow]:
     """
     Return per-kind streak state for a profile, for display on the profile page.
 

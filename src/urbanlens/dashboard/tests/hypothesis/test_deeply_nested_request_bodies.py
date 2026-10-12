@@ -8,7 +8,7 @@ decode let it through as a 500. Each route here is reached as its owner, so the 
 from __future__ import annotations
 
 import ast
-import datetime
+import datetime as dt
 import importlib
 import json
 from pathlib import Path
@@ -317,8 +317,8 @@ class SafetyRouteTests(_OwnerCase):
             SafetyCheckin,
             profile=self.profile,
             title="Hike",
-            checkin_by=timezone.now() + datetime.timedelta(hours=2),
-            grace_period=datetime.timedelta(hours=1),
+            checkin_by=timezone.now() + dt.timedelta(hours=2),
+            grace_period=dt.timedelta(hours=1),
         )
         image = baker.make(Image, profile=self.profile, safety_checkin=checkin, latitude=1, longitude=1)
 

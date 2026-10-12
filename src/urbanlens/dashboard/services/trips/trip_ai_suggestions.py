@@ -16,7 +16,7 @@ from urbanlens.dashboard.services.trips.trip_legs import TripLeg, activity_coord
 from urbanlens.dashboard.services.trips.trip_visibility import viewer_hidden_activity_ids
 
 if TYPE_CHECKING:
-    import datetime
+    import datetime as dt
 
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
@@ -63,7 +63,7 @@ class ExistingActivity:
     activity_id: int
     title: str
     status: str
-    scheduled_at: datetime.datetime | None
+    scheduled_at: dt.datetime | None
     votes_up: int
     votes_down: int
 
@@ -73,8 +73,8 @@ class TripAiContext:
     """Everything privacy-cleared to send to the model for one (trip, requester) pair."""
 
     trip_name: str
-    start_date: datetime.date | None
-    end_date: datetime.date | None
+    start_date: dt.date | None
+    end_date: dt.date | None
     duration_days: int | None
     participant_count: int
     candidates: list[CandidatePin] = field(default_factory=list)
@@ -238,7 +238,7 @@ def _weather_summary(activities: list[TripActivity], requester: Profile) -> tupl
 
     start = min(scheduled_at.date() for _activity, scheduled_at in dated)
     end = max(scheduled_at.date() for _activity, scheduled_at in dated)
-    by_day: dict[datetime.date, list[ForecastSlot]] = {}
+    by_day: dict[dt.date, list[ForecastSlot]] = {}
     for slot in slots:
         # `start`/`end` come from aware-UTC `scheduled_at` values, so bucket by the UTC calendar day
         # when the slot is UTC-anchored (see the `ForecastSlot` contract) - grouping by the

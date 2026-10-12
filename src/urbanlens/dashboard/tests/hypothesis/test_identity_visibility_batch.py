@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 
 from django.contrib.auth.models import User
 from django.utils import timezone
@@ -171,11 +171,11 @@ class VisibleProfilePksAgreementTests(TestCase):
 
         granted = _profile(profile_visibility=VisibilityChoice.NO_ONE)
         DirectMessageTemporaryAccess.objects.create(
-            profile=granted, granted_to=self.viewer, expires_at=timezone.now() + datetime.timedelta(days=1)
+            profile=granted, granted_to=self.viewer, expires_at=timezone.now() + dt.timedelta(days=1)
         )
         blocked = _profile(profile_visibility=VisibilityChoice.NO_ONE)
         DirectMessageTemporaryAccess.objects.create(
-            profile=blocked, granted_to=self.viewer, expires_at=timezone.now() + datetime.timedelta(days=1)
+            profile=blocked, granted_to=self.viewer, expires_at=timezone.now() + dt.timedelta(days=1)
         )
         Friendship.objects.create(
             from_profile=blocked,
@@ -185,7 +185,7 @@ class VisibleProfilePksAgreementTests(TestCase):
         )
         expired = _profile(profile_visibility=VisibilityChoice.NO_ONE)
         DirectMessageTemporaryAccess.objects.create(
-            profile=expired, granted_to=self.viewer, expires_at=timezone.now() - datetime.timedelta(days=1)
+            profile=expired, granted_to=self.viewer, expires_at=timezone.now() - dt.timedelta(days=1)
         )
 
         self._assert_agrees([granted, blocked, expired])
@@ -397,11 +397,11 @@ class ViewersWhoCanSeeAgreementTests(TestCase):
         self._set_visibility(VisibilityChoice.NO_ONE)
         granted = _profile()
         DirectMessageTemporaryAccess.objects.create(
-            profile=self.subject, granted_to=granted, expires_at=timezone.now() + datetime.timedelta(days=1)
+            profile=self.subject, granted_to=granted, expires_at=timezone.now() + dt.timedelta(days=1)
         )
         blocked = _profile()
         DirectMessageTemporaryAccess.objects.create(
-            profile=self.subject, granted_to=blocked, expires_at=timezone.now() + datetime.timedelta(days=1)
+            profile=self.subject, granted_to=blocked, expires_at=timezone.now() + dt.timedelta(days=1)
         )
         Friendship.objects.create(
             from_profile=self.subject,
@@ -411,7 +411,7 @@ class ViewersWhoCanSeeAgreementTests(TestCase):
         )
         expired = _profile()
         DirectMessageTemporaryAccess.objects.create(
-            profile=self.subject, granted_to=expired, expires_at=timezone.now() - datetime.timedelta(days=1)
+            profile=self.subject, granted_to=expired, expires_at=timezone.now() - dt.timedelta(days=1)
         )
 
         self._assert_agrees([granted, blocked, expired])

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 
 from django.contrib.auth.models import User
 from django.core import mail
@@ -42,8 +42,8 @@ class _NoticeTestCase(TestCase):
             SafetyCheckin,
             profile=self.owner,
             title="Tunnel walk",
-            checkin_by=timezone.now() - datetime.timedelta(hours=2),
-            grace_period=datetime.timedelta(hours=1),
+            checkin_by=timezone.now() - dt.timedelta(hours=2),
+            grace_period=dt.timedelta(hours=1),
             status=SafetyCheckinStatus.AWAITING_CHECKIN,
             notify_community_wiki=False,
         )

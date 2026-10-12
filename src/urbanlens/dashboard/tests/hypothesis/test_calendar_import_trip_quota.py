@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from unittest import mock
 
 from django.contrib.auth.models import User
@@ -18,12 +18,12 @@ from urbanlens.dashboard.services.trips.calendar_sync import import_events_as_tr
 
 
 def _event(event_id: str, summary: str, days_ahead: int) -> dict:
-    start = timezone.now().date() + datetime.timedelta(days=days_ahead)
+    start = timezone.now().date() + dt.timedelta(days=days_ahead)
     return {
         "id": event_id,
         "summary": summary,
         "start": {"date": start.isoformat()},
-        "end": {"date": (start + datetime.timedelta(days=1)).isoformat()},
+        "end": {"date": (start + dt.timedelta(days=1)).isoformat()},
     }
 
 
@@ -36,7 +36,7 @@ class CalendarImportTripQuotaTests(TestCase):
             profile=self.profile,
             access_token="access",  # noqa: S106
             refresh_token="refresh",  # noqa: S106
-            token_expiry=timezone.now() + datetime.timedelta(hours=1),
+            token_expiry=timezone.now() + dt.timedelta(hours=1),
         )
         patcher = mock.patch("urbanlens.dashboard.services.trips.calendar_sync.GoogleCalendarGateway")
         self.gateway = patcher.start().return_value
@@ -49,7 +49,7 @@ class CalendarImportTripQuotaTests(TestCase):
 
     def _make_upcoming_trip(self) -> None:
         trip = Trip.objects.create(
-            name="Existing", creator=self.profile, start_date=timezone.now().date() + datetime.timedelta(days=3)
+            name="Existing", creator=self.profile, start_date=timezone.now().date() + dt.timedelta(days=3)
         )
         TripMembership.objects.get_or_create(trip=trip, profile=self.profile, defaults={"rsvp": "yes"})
 

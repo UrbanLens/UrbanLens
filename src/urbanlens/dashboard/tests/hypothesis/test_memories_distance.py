@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from decimal import Decimal
 
 from django.contrib.gis.geos import LineString
@@ -32,7 +32,7 @@ class InterVisitDistanceTests(TestCase):
         super().setUp()
         self.profile = baker.make("auth.User").profile
 
-    def _visit_at(self, coord: tuple[float, float], when: datetime.datetime) -> PinVisit:
+    def _visit_at(self, coord: tuple[float, float], when: dt.datetime) -> PinVisit:
         location = baker.make(
             "dashboard.Location",
             latitude=Decimal(str(coord[0])),
@@ -45,22 +45,22 @@ class InterVisitDistanceTests(TestCase):
         self.assertEqual(inter_visit_distance_km(self.profile), 0.0)
 
     def test_single_visit_is_zero(self) -> None:
-        self._visit_at(_NY, timezone.make_aware(datetime.datetime(2024, 1, 1)))
+        self._visit_at(_NY, timezone.make_aware(dt.datetime(2024, 1, 1)))
         self.assertEqual(inter_visit_distance_km(self.profile), 0.0)
 
     def test_three_visits_sum_consecutive_legs(self) -> None:
-        self._visit_at(_NY, timezone.make_aware(datetime.datetime(2024, 1, 1)))
-        self._visit_at(_CA, timezone.make_aware(datetime.datetime(2024, 2, 1)))
-        self._visit_at(_OR, timezone.make_aware(datetime.datetime(2024, 3, 1)))
+        self._visit_at(_NY, timezone.make_aware(dt.datetime(2024, 1, 1)))
+        self._visit_at(_CA, timezone.make_aware(dt.datetime(2024, 2, 1)))
+        self._visit_at(_OR, timezone.make_aware(dt.datetime(2024, 3, 1)))
 
         expected = _haversine_km(_NY, _CA) + _haversine_km(_CA, _OR)
         self.assertAlmostEqual(inter_visit_distance_km(self.profile), expected, places=3)
 
     def test_ordering_is_by_time_not_insertion(self) -> None:
         # Insert out of chronological order; legs must follow visited_at order.
-        self._visit_at(_OR, timezone.make_aware(datetime.datetime(2024, 3, 1)))
-        self._visit_at(_NY, timezone.make_aware(datetime.datetime(2024, 1, 1)))
-        self._visit_at(_CA, timezone.make_aware(datetime.datetime(2024, 2, 1)))
+        self._visit_at(_OR, timezone.make_aware(dt.datetime(2024, 3, 1)))
+        self._visit_at(_NY, timezone.make_aware(dt.datetime(2024, 1, 1)))
+        self._visit_at(_CA, timezone.make_aware(dt.datetime(2024, 2, 1)))
 
         expected = _haversine_km(_NY, _CA) + _haversine_km(_CA, _OR)
         self.assertAlmostEqual(inter_visit_distance_km(self.profile), expected, places=3)
@@ -112,7 +112,7 @@ class TotalTravelDistanceTests(TestCase):
             )
             pin = baker.make("dashboard.Pin", profile=self.profile, location=location)
             PinVisit.objects.create(
-                pin=pin, visited_at=timezone.make_aware(datetime.datetime(2024, 1, day)), source=VisitSource.MANUAL
+                pin=pin, visited_at=timezone.make_aware(dt.datetime(2024, 1, day)), source=VisitSource.MANUAL
             )
 
         expected = 10.0 + _haversine_km(_NY, _CA)
