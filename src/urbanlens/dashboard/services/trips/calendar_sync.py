@@ -5,7 +5,7 @@ Pure mapping helpers (:func:`trip_to_event_body`, :func:`event_to_trip_kwargs`) 
 from __future__ import annotations
 
 from dataclasses import dataclass
-import datetime
+import datetime as dt
 import hashlib
 import json
 import logging
@@ -121,8 +121,8 @@ def normalize_event_ids(raw: Sequence[str]) -> list[str]:
 def _import_window(gateway: GoogleCalendarGateway) -> EventListing:
     now = timezone.now()
     return gateway.list_events(
-        time_min=now - datetime.timedelta(days=1),
-        time_max=now + datetime.timedelta(days=IMPORT_WINDOW_DAYS),
+        time_min=now - dt.timedelta(days=1),
+        time_max=now + dt.timedelta(days=IMPORT_WINDOW_DAYS),
         limit=MAX_IMPORTABLE_EVENTS,
     )
 
@@ -147,7 +147,7 @@ _MAX_TRIP_NAME_LENGTH = 255
 
 # Length of the calendar event created for an activity that has a start time
 # but no explicit end time.
-DEFAULT_ACTIVITY_EVENT_DURATION = datetime.timedelta(hours=2)
+DEFAULT_ACTIVITY_EVENT_DURATION = dt.timedelta(hours=2)
 
 
 def trip_to_event_body(
@@ -192,7 +192,7 @@ def trip_to_event_body(
         "summary": trip.name,
         "description": description,
         "start": {"date": start.isoformat()},
-        "end": {"date": (end + datetime.timedelta(days=1)).isoformat()},
+        "end": {"date": (end + dt.timedelta(days=1)).isoformat()},
         "extendedProperties": {"private": {TRIP_UUID_EVENT_PROPERTY: str(trip.uuid)}},
     }
     _set_location(body, _trip_location_string(trip, hidden_activity_ids=hidden_activity_ids, activities=activities), owns_event=owns_event)
@@ -318,7 +318,7 @@ def activity_to_event_body(
     return body
 
 
-def _parse_event_date(part: dict[str, Any] | None) -> tuple[datetime.date | None, bool]:
+def _parse_event_date(part: dict[str, Any] | None) -> tuple[dt.date | None, bool]:
     """
     Parse the date from one side of an event's start/end structure.
 
@@ -332,13 +332,13 @@ def _parse_event_date(part: dict[str, Any] | None) -> tuple[datetime.date | None
     raw_date = part.get("date")
     if raw_date:
         try:
-            return datetime.date.fromisoformat(raw_date), True
+            return dt.date.fromisoformat(raw_date), True
         except ValueError:
             return None, True
     raw_datetime = part.get("dateTime")
     if raw_datetime:
         try:
-            return datetime.datetime.fromisoformat(raw_datetime).date(), False
+            return dt.datetime.fromisoformat(raw_datetime).date(), False
         except ValueError:
             return None, False
     return None, False
@@ -364,7 +364,7 @@ def event_to_trip_kwargs(event: dict[str, Any]) -> dict[str, Any] | None:
     end_date, end_is_all_day = _parse_event_date(event.get("end"))
     if end_date is not None and end_is_all_day:
         # Exclusive all-day end -> inclusive trip end.
-        end_date -= datetime.timedelta(days=1)
+        end_date -= dt.timedelta(days=1)
     if end_date is not None and end_date < start_date:
         end_date = start_date
 
@@ -379,7 +379,7 @@ def event_to_trip_kwargs(event: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
-def _parse_event_datetime(part: dict[str, Any] | None) -> datetime.datetime | None:
+def _parse_event_datetime(part: dict[str, Any] | None) -> dt.datetime | None:
     """
     Parse the timestamp from one side of a *timed* event's start/end structure.
 
@@ -394,7 +394,7 @@ def _parse_event_datetime(part: dict[str, Any] | None) -> datetime.datetime | No
     if not raw:
         return None
     try:
-        parsed = datetime.datetime.fromisoformat(raw)
+        parsed = dt.datetime.fromisoformat(raw)
     except ValueError:
         return None
     return parsed if within_activity_schedule(parsed) else None
@@ -1703,6 +1703,6 @@ def _count_push_attempt(link: TripCalendarLink, *, made_progress: bool, counts: 
         TripCalendarLink.objects.filter(pk=link.pk).update(push_attempts=F("push_attempts") + 1)
 
 
-def _settle_push_request(link: TripCalendarLink, requested: datetime.datetime | None) -> None:
+def _settle_push_request(link: TripCalendarLink, requested: dt.datetime | None) -> None:
     if requested is not None:
         TripCalendarLink.objects.filter(pk=link.pk, push_requested_at=requested).update(push_requested_at=None, push_attempts=0)

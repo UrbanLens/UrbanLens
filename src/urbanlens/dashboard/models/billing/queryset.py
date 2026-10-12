@@ -10,7 +10,7 @@ from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.subscriptions.access_state import AccessBearingQuerySet
 
 if TYPE_CHECKING:
-    import datetime
+    import datetime as dt
 
     from django.contrib.auth.models import User
 
@@ -44,7 +44,7 @@ class RoleSubscriptionQuerySet(AccessBearingQuerySet, abstract.DashboardQuerySet
         """
         return self.filter(user=user).currently_granting()
 
-    def currently_granting(self, as_of: datetime.datetime | None = None) -> Self:
+    def currently_granting(self, as_of: dt.datetime | None = None) -> Self:
         """
         Rows currently entitling whichever user they belong to, without a per-user filter.
         Same criteria as ``granting_access_for``, minus the ``user=`` filter - meant for sitewide aggregates (e.g. counting distinct paying supporters) rather than looking up one user's own access.
@@ -98,7 +98,7 @@ class RoleSubscriptionQuerySet(AccessBearingQuerySet, abstract.DashboardQuerySet
         """
         return self.select_for_update(of=("self",)).select_related("role").get(pk=pk)
 
-    def unsynced_since(self, since: datetime.datetime) -> Self:
+    def unsynced_since(self, since: dt.datetime) -> Self:
         """
         Live rows no Stripe state newer than *since* has reached.
 
@@ -110,7 +110,7 @@ class RoleSubscriptionQuerySet(AccessBearingQuerySet, abstract.DashboardQuerySet
         """
         return self.not_terminal().filter(Q(stripe_state_at__isnull=True) | Q(stripe_state_at__lt=since))
 
-    def ledger_advance_due(self, as_of: datetime.datetime | None = None) -> Self:
+    def ledger_advance_due(self, as_of: dt.datetime | None = None) -> Self:
         """
         Pay-what-you-want rows whose usage ledger ``banking.advance_usage_ledger`` could move as of *as_of*.
 

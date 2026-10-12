@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 
 from django.test import Client
 from django.urls import reverse
@@ -218,7 +218,7 @@ class SuggesterIdentityMaskingTests(TestCase):
         self.suggester = baker.make("auth.User", username="hidden_suggester").profile
         self.recipient = baker.make("auth.User", username="recipient").profile
         self.location = baker.make(Location, latitude="40.0", longitude="-74.0", official_name="Old Mill")
-        self.visited_at = timezone.make_aware(datetime.datetime(2026, 6, 1, 14, 0))
+        self.visited_at = timezone.make_aware(dt.datetime(2026, 6, 1, 14, 0))
 
     def _suggest(self) -> VisitSuggestion | None:
         origin_pin = baker.make(Pin, profile=self.suggester, location=self.location)
@@ -327,7 +327,7 @@ class CreateVisitSuggestionTests(TestCase):
         self.suggester = baker.make("auth.User").profile
         self.recipient = baker.make("auth.User").profile
         self.location = baker.make(Location, latitude="40.0", longitude="-74.0", official_name="Old Mill")
-        self.visited_at = timezone.make_aware(datetime.datetime(2026, 6, 1, 14, 0))
+        self.visited_at = timezone.make_aware(dt.datetime(2026, 6, 1, 14, 0))
 
     def test_creates_suggestion_and_notification_when_no_existing_visit(self) -> None:
         origin_pin = baker.make(Pin, profile=self.suggester, location=self.location)
@@ -496,7 +496,7 @@ class AcceptVisitSuggestionTests(TestCase):
         self.suggester = baker.make("auth.User").profile
         self.recipient = baker.make("auth.User").profile
         self.location = baker.make(Location, latitude="40.0", longitude="-74.0")
-        self.visited_at = timezone.make_aware(datetime.datetime(2026, 6, 1, 14, 0))
+        self.visited_at = timezone.make_aware(dt.datetime(2026, 6, 1, 14, 0))
 
     def _make_suggestion(self, **overrides) -> VisitSuggestion:
         origin_pin = baker.make(Pin, profile=self.suggester, location=self.location)
@@ -586,7 +586,7 @@ class MergeVisitSuggestionTests(TestCase):
         self.suggester = baker.make("auth.User").profile
         self.recipient = baker.make("auth.User").profile
         self.location = baker.make(Location, latitude="40.0", longitude="-74.0")
-        self.visited_at = timezone.make_aware(datetime.datetime(2026, 6, 1, 14, 0))
+        self.visited_at = timezone.make_aware(dt.datetime(2026, 6, 1, 14, 0))
         _make_accepted_friendship(self.recipient, self.suggester)
 
         self.recipient_pin = baker.make(Pin, profile=self.recipient, location=self.location)
@@ -644,7 +644,7 @@ class VisitSuggestionOriginCascadeTests(TestCase):
         self.suggester = baker.make("auth.User").profile
         self.recipient = baker.make("auth.User").profile
         self.location = baker.make(Location, latitude="40.0", longitude="-74.0")
-        self.visited_at = timezone.make_aware(datetime.datetime(2026, 6, 1, 14, 0))
+        self.visited_at = timezone.make_aware(dt.datetime(2026, 6, 1, 14, 0))
 
     def _make_suggestion(self, **overrides) -> VisitSuggestion:
         defaults = {
@@ -724,7 +724,7 @@ class TripActivityCompletionTests(TestCase):
             location=self.location,
             title="Explore Site",
             status=TripActivity.STATUS_PROPOSED,
-            scheduled_at=timezone.make_aware(datetime.datetime(2026, 6, 1, 12, 0)),
+            scheduled_at=timezone.make_aware(dt.datetime(2026, 6, 1, 12, 0)),
         )
         self.client = Client()
         self.client.force_login(self.completer.user)

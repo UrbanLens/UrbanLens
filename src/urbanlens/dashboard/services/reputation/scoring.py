@@ -15,7 +15,7 @@ from urbanlens.dashboard.services.reputation import coefficients
 from urbanlens.dashboard.services.reputation.rules import get_rule, resolve_target, score_with
 
 if TYPE_CHECKING:
-    import datetime
+    import datetime as dt
 
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.reputation.model import ReputationEvent
@@ -30,7 +30,7 @@ def record_event(
     *,
     target: Any | None = None,
     wiki: Wiki | int | None = None,
-    occurred_at: datetime.datetime | None = None,
+    occurred_at: dt.datetime | None = None,
 ) -> ReputationEvent | None:
     """
     Write an unscored ledger row for a contribution that just happened.

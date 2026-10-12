@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import itertools
 import json
 
@@ -23,8 +23,8 @@ from urbanlens.dashboard.services.memories.unlogged import unlogged_visited_pins
 _COORDS = itertools.count()
 
 
-def _aware(year: int, month: int, day: int) -> datetime.datetime:
-    return timezone.make_aware(datetime.datetime(year, month, day, 12, 0, 0))
+def _aware(year: int, month: int, day: int) -> dt.datetime:
+    return timezone.make_aware(dt.datetime(year, month, day, 12, 0, 0))
 
 
 def _make_pin(profile, *, last_visited=None, name=None, parent_pin=None) -> Pin:
@@ -125,7 +125,7 @@ class MemoriesVisitViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         visit = PinVisit.objects.get(pin=self.pin)
-        self.assertEqual(visit.visited_at.date(), datetime.date(2024, 6, 15))
+        self.assertEqual(visit.visited_at.date(), dt.date(2024, 6, 15))
         self.assertEqual(visit.source, VisitSource.MANUAL)
         self.assertNotIn(self.pin, response.context["unlogged_visits"])
         self.assertIn("memoriesFeedRefresh", response["HX-Trigger"])
@@ -145,7 +145,7 @@ class MemoriesVisitViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         visit.refresh_from_db()
-        self.assertEqual(visit.visited_at.date(), datetime.date(2024, 7, 4))
+        self.assertEqual(visit.visited_at.date(), dt.date(2024, 7, 4))
         self.assertEqual(visit.notes, "Great light")
 
     def test_cannot_log_visit_on_another_users_pin(self) -> None:
@@ -370,8 +370,8 @@ class MemoriesVisitsBulkActionViewTests(TestCase):
         second = _make_pin(self.profile, last_visited=_aware(2024, 6, 2))
         response = self._post("log", [first.slug, second.slug], visited_date="2024-03-15")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(PinVisit.objects.get(pin=first).visited_at.date(), datetime.date(2024, 3, 15))
-        self.assertEqual(PinVisit.objects.get(pin=second).visited_at.date(), datetime.date(2024, 3, 15))
+        self.assertEqual(PinVisit.objects.get(pin=first).visited_at.date(), dt.date(2024, 3, 15))
+        self.assertEqual(PinVisit.objects.get(pin=second).visited_at.date(), dt.date(2024, 3, 15))
 
     def test_log_rejects_a_malformed_date(self) -> None:
         pin = _make_pin(self.profile, last_visited=_aware(2024, 6, 1))

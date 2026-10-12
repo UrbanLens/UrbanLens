@@ -8,7 +8,7 @@ from urllib.parse import quote
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import RedataLocationContextGateway
 
 if TYPE_CHECKING:
-    import datetime
+    import datetime as dt
 
 _STREET_VIEW_TIMELINE_PATH = "/api/v1/street-view/timeline/"
 
@@ -24,8 +24,8 @@ class RedataStreetViewGateway(RedataLocationContextGateway):
         longitude: float,
         *,
         provider: str | None = None,
-        since: datetime.date | None = None,
-        until: datetime.date | None = None,
+        since: dt.date | None = None,
+        until: dt.date | None = None,
     ) -> dict[str, Any]:
         """
         Fetch the capture-date timeline for a point.

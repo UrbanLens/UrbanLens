@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from unittest import mock
 
 from django.utils import timezone
@@ -25,8 +25,8 @@ def _checkin(profile: Profile):
         "dashboard.SafetyCheckin",
         profile=profile,
         title="Test hike",
-        checkin_by=timezone.now() + datetime.timedelta(hours=2),
-        grace_period=datetime.timedelta(hours=1),
+        checkin_by=timezone.now() + dt.timedelta(hours=2),
+        grace_period=dt.timedelta(hours=1),
     )
 
 

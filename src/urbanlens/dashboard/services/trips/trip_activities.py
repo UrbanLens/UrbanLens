@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from typing import TYPE_CHECKING, Any
 
 from django.db import transaction
@@ -145,7 +145,7 @@ def compute_activity_index_map(activities: Iterable[TripActivity]) -> dict[int, 
     return index_map
 
 
-def expand_trip_dates(trip: Trip, activity_date: datetime.date) -> None:
+def expand_trip_dates(trip: Trip, activity_date: dt.date) -> None:
     """
     Widen the trip's persisted date range to include *activity_date*.
 
@@ -164,7 +164,7 @@ def expand_trip_dates(trip: Trip, activity_date: datetime.date) -> None:
         trip.save(update_fields=["start_date", "end_date", "updated"])
 
 
-def _checked_schedule(value: datetime.datetime | None, label: str) -> datetime.datetime | None:
+def _checked_schedule(value: dt.datetime | None, label: str) -> dt.datetime | None:
     """
     Refuse a schedule outside the span an activity may occupy.
 
@@ -185,7 +185,7 @@ def _checked_schedule(value: datetime.datetime | None, label: str) -> datetime.d
     return value
 
 
-def parse_scheduled_at(date_str: str | None, time_str: str | None) -> datetime.datetime | None:
+def parse_scheduled_at(date_str: str | None, time_str: str | None) -> dt.datetime | None:
     """
     Combine separate date and time strings into an aware datetime.
     If only a date is provided, midnight is used so the caller can distinguish "date only" from "date + time" by inspecting the time component.
@@ -199,17 +199,17 @@ def parse_scheduled_at(date_str: str | None, time_str: str | None) -> datetime.d
     if not date_str:
         return None
     try:
-        parsed_date = datetime.date.fromisoformat(date_str)
+        parsed_date = dt.date.fromisoformat(date_str)
     except ValueError:
         return None
     if time_str:
         try:
-            parsed_time = datetime.time.fromisoformat(time_str)
+            parsed_time = dt.time.fromisoformat(time_str)
         except ValueError:
-            parsed_time = datetime.time(0, 0)
+            parsed_time = dt.time(0, 0)
     else:
-        parsed_time = datetime.time(0, 0)
-    return timezone.make_aware(datetime.datetime.combine(parsed_date, parsed_time))
+        parsed_time = dt.time(0, 0)
+    return timezone.make_aware(dt.datetime.combine(parsed_date, parsed_time))
 
 
 def resolve_activity_place(body: Mapping[str, Any], profile: Profile, *, trip: Trip | None = None) -> tuple[Location | None, Pin | None]:
@@ -483,8 +483,8 @@ def create_activity(
     *,
     title: Any = None,
     notes: Any = None,
-    scheduled_at: datetime.datetime | None = None,
-    scheduled_end: datetime.datetime | None = None,
+    scheduled_at: dt.datetime | None = None,
+    scheduled_end: dt.datetime | None = None,
     place: Mapping[str, Any] | None = None,
     child_trip_uuid: Any = None,
     status: Any = TripActivity.STATUS_PROPOSED,
@@ -765,7 +765,7 @@ def set_activity_position(trip: Trip, actor: Profile, activity_id: int, *, lat: 
     return lat_value, lng_value
 
 
-def move_activity(trip: Trip, actor: Profile, activity_id: int, *, date: datetime.date) -> TripActivity:
+def move_activity(trip: Trip, actor: Profile, activity_id: int, *, date: dt.date) -> TripActivity:
     """
     Reschedule an activity to a new date (calendar drag-and-drop).
     Only the date changes - an existing time-of-day component is preserved.
@@ -787,9 +787,9 @@ def move_activity(trip: Trip, actor: Profile, activity_id: int, *, date: datetim
     activity = get_activity(trip, activity_id)
 
     if activity.scheduled_at:
-        moved = timezone.make_aware(datetime.datetime.combine(date, activity.scheduled_at.time()))
+        moved = timezone.make_aware(dt.datetime.combine(date, activity.scheduled_at.time()))
     else:
-        moved = timezone.make_aware(datetime.datetime.combine(date, datetime.time(0, 0)))
+        moved = timezone.make_aware(dt.datetime.combine(date, dt.time(0, 0)))
     if moved == activity.scheduled_at:
         return activity
     activity.scheduled_at = _checked_schedule(moved, "The new date")
@@ -910,7 +910,7 @@ def set_activity_rsvp(trip: Trip, actor: Profile, activity_id: int, *, rsvp: str
         TripActivityRSVP.objects.filter(activity=activity, membership=membership).delete()
 
 
-def complete_activity(trip: Trip, actor: Profile, activity_id: int, *, completed_date: datetime.date | None = None) -> TripActivity:
+def complete_activity(trip: Trip, actor: Profile, activity_id: int, *, completed_date: dt.date | None = None) -> TripActivity:
     """
     Mark an activity completed, snapping a future date back to today.
     Completing implies the activity was confirmed to have happened, so it expands the trip's date range the same way confirming it would - even if it was only ever "proposed" beforehand.
@@ -943,9 +943,9 @@ def complete_activity(trip: Trip, actor: Profile, activity_id: int, *, completed
 
     activity.scheduled_at = _checked_schedule(
         timezone.make_aware(
-            datetime.datetime.combine(
+            dt.datetime.combine(
                 effective_date,
-                activity.scheduled_at.time() if activity.scheduled_at else datetime.time(0, 0),
+                activity.scheduled_at.time() if activity.scheduled_at else dt.time(0, 0),
             ),
         ),
         "The completion date",

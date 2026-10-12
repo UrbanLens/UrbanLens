@@ -16,7 +16,7 @@ from django.utils import timezone
 from urbanlens.dashboard.models.achievements.meta import ActivityKind
 
 if TYPE_CHECKING:
-    import datetime
+    import datetime as dt
 
     from urbanlens.dashboard.models.achievements.model import ProfileStreak
     from urbanlens.dashboard.models.profile import Profile
@@ -31,7 +31,7 @@ def _owner_filter(profile: Profile | int) -> dict[str, Any]:
     return {"profile_id": profile} if isinstance(profile, int) else {"profile": profile}
 
 
-def record_activity(profile: Profile | int, kind: str, day: datetime.date | None = None) -> bool:
+def record_activity(profile: Profile | int, kind: str, day: dt.date | None = None) -> bool:
     """
     Record that *profile* performed *kind* on *day*, advancing their streak.
     Safe to call on every single write - the per-day uniqueness constraint makes repeats within a day a no-op, and only the first call of the day touches the streak counters.
@@ -59,7 +59,7 @@ def record_activity(profile: Profile | int, kind: str, day: datetime.date | None
     return True
 
 
-def _advance_streak(profile: Profile | int, kind: str, day: datetime.date) -> ProfileStreak:
+def _advance_streak(profile: Profile | int, kind: str, day: dt.date) -> ProfileStreak:
     """
     Move the cached streak for (*profile*, *kind*) forward to include *day*.
 
@@ -108,7 +108,7 @@ def rebuild_streak(profile: Profile | int, kind: str) -> ProfileStreak:
 
     longest = 0
     current = 0
-    previous: datetime.date | None = None
+    previous: dt.date | None = None
     for day in days:
         current = current + 1 if previous is not None and (day - previous).days == 1 else 1
         longest = max(longest, current)

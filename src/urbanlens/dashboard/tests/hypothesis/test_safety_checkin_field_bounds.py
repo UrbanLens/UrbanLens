@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 
 from django.contrib.auth.models import User
 from django.urls import reverse
@@ -86,7 +86,7 @@ class ContactEmailShapeTests(TestCase):
             reverse("safety.checkin.create"),
             {
                 "title": "t" * (CHECKIN_TITLE_MAX_LENGTH + 1),
-                "checkin_by": (timezone.now() + datetime.timedelta(hours=2)).isoformat(),
+                "checkin_by": (timezone.now() + dt.timedelta(hours=2)).isoformat(),
             },
         )
 

@@ -7,7 +7,7 @@ accept any spelling of the primary address, of each verified secondary, and of t
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
@@ -522,7 +522,7 @@ class VisitTagMatchesAnySpellingTests(_InviteeTestCase):
         location = baker.make(Location, latitude="42.200000", longitude="-73.800000", official_name="Grain Elevator")
         pin = Pin.objects.create(profile=self.inviter, location=location)
         visit = PinVisit.objects.create(
-            pin=pin, visited_at=datetime.datetime(2026, 7, 1, 12, tzinfo=datetime.UTC), source=VisitSource.MANUAL
+            pin=pin, visited_at=dt.datetime(2026, 7, 1, 12, tzinfo=dt.UTC), source=VisitSource.MANUAL
         )
         newcomer = baker.make(User, username="tagged", email="tag.ged+visits@gmail.com", is_active=True)
         for spelling in ("taggedd@gmail.com", "t.a.g.g.e.d@googlemail.com", "tagged+x@gmail.com"):
@@ -540,8 +540,8 @@ class UsernameInvitesAndSearchTests(_InviteeTestCase):
                     "dashboard.SafetyCheckin",
                     profile=self.inviter,
                     title="Test hike",
-                    checkin_by=timezone.now() + datetime.timedelta(hours=2),
-                    grace_period=datetime.timedelta(hours=1),
+                    checkin_by=timezone.now() + dt.timedelta(hours=2),
+                    grace_period=dt.timedelta(hours=1),
                 )
                 partner = invite_checkin_partner(checkin, inviter=self.inviter, username=spelling)
                 self.assertEqual(partner.profile, self.invitee)

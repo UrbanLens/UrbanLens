@@ -10,7 +10,7 @@ from production's options and answered in-process by a fake Garage, so nothing l
 from __future__ import annotations
 
 from collections.abc import Callable
-import datetime
+import datetime as dt
 import io
 import json
 from pathlib import Path
@@ -367,7 +367,7 @@ class GooglePhotosImportStorageTests(_LibraryImportTests):
         every retry the task has made, the storage waits included.
         """
         GooglePhotosAccount.objects.filter(profile=self.profile).update(
-            token_expiry=timezone.now() + datetime.timedelta(hours=1)
+            token_expiry=timezone.now() + dt.timedelta(hours=1)
         )
         self.garage.down_after = 1
 

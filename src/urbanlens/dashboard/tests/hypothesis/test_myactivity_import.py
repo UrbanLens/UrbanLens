@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from decimal import Decimal
 from unittest import mock
 
@@ -106,7 +106,7 @@ class ParseMyActivityEntriesTests(SimpleTestCase):
         self.assertAlmostEqual(entry["longitude"], -84.5693664, places=6)
         self.assertEqual(
             entry["visited_at"],
-            datetime.datetime(2026, 7, 3, 13, 18, 25, tzinfo=datetime.timezone(datetime.timedelta(hours=-4))),
+            dt.datetime(2026, 7, 3, 13, 18, 25, tzinfo=dt.timezone(dt.timedelta(hours=-4))),
         )
 
     def test_searched_for_entry_skipped(self):
@@ -198,15 +198,11 @@ class ParseTimestampTests(SimpleTestCase):
 
     def test_edt_fast_path(self):
         parsed = _parse_timestamp("Jul 3, 2026, 1:18:25 PM EDT")
-        self.assertEqual(
-            parsed, datetime.datetime(2026, 7, 3, 13, 18, 25, tzinfo=datetime.timezone(datetime.timedelta(hours=-4)))
-        )
+        self.assertEqual(parsed, dt.datetime(2026, 7, 3, 13, 18, 25, tzinfo=dt.timezone(dt.timedelta(hours=-4))))
 
     def test_pst_fast_path(self):
         parsed = _parse_timestamp("Jan 15, 2026, 9:05:00 AM PST")
-        self.assertEqual(
-            parsed, datetime.datetime(2026, 1, 15, 9, 5, 0, tzinfo=datetime.timezone(datetime.timedelta(hours=-8)))
-        )
+        self.assertEqual(parsed, dt.datetime(2026, 1, 15, 9, 5, 0, tzinfo=dt.timezone(dt.timedelta(hours=-8))))
 
     def test_dateparser_fallback_for_unrecognised_format(self):
         # A format the fast strptime path doesn't match (ISO-style date), exercising

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from typing import TYPE_CHECKING
 
 from django.test import Client
@@ -41,12 +41,12 @@ class TripOverviewViewTests(TestCase):
 
     def test_stats_count_by_timeline_status(self) -> None:
         today = timezone.now().date()
-        _make_trip(self.profile, name="Upcoming", start_date=today + datetime.timedelta(days=5))
+        _make_trip(self.profile, name="Upcoming", start_date=today + dt.timedelta(days=5))
         _make_trip(
             self.profile,
             name="Past",
-            start_date=today - datetime.timedelta(days=10),
-            end_date=today - datetime.timedelta(days=8),
+            start_date=today - dt.timedelta(days=10),
+            end_date=today - dt.timedelta(days=8),
         )
         _make_trip(self.profile, name="Planning")
 
@@ -61,8 +61,8 @@ class TripOverviewViewTests(TestCase):
     def test_recently_updated_ordered_by_updated_descending(self) -> None:
         older = _make_trip(self.profile, name="Older")
         newer = _make_trip(self.profile, name="Newer")
-        Trip.objects.filter(pk=older.pk).update(updated=datetime.datetime(2020, 1, 1, tzinfo=datetime.UTC))
-        Trip.objects.filter(pk=newer.pk).update(updated=datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC))
+        Trip.objects.filter(pk=older.pk).update(updated=dt.datetime(2020, 1, 1, tzinfo=dt.UTC))
+        Trip.objects.filter(pk=newer.pk).update(updated=dt.datetime(2024, 1, 1, tzinfo=dt.UTC))
 
         resp = self.client_.get(self._url())
 

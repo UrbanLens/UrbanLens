@@ -21,7 +21,7 @@ page ending there.
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import json
 
 from django.contrib.auth.models import User
@@ -49,11 +49,11 @@ class _FeedCase(TestCase):
         )
         self.today = timezone.now().date()
 
-    def seed_visits(self, count: int) -> list[datetime.date]:
+    def seed_visits(self, count: int) -> list[dt.date]:
         """One visit a day, going backwards from today. Returns their dates."""
         dates = []
         for day in range(count):
-            when = timezone.now() - datetime.timedelta(days=day)
+            when = timezone.now() - dt.timedelta(days=day)
             baker.make(PinVisit, pin=self.pin, visited_at=when)
             dates.append(when.date())
         return dates
@@ -64,7 +64,7 @@ class TheSourcesYieldNewestFirstTests(_FeedCase):
 
     def test_visits_come_back_newest_first(self) -> None:
         self.seed_visits(8)
-        events = get_memory_events(self.profile, self.today - datetime.timedelta(days=30), self.today)
+        events = get_memory_events(self.profile, self.today - dt.timedelta(days=30), self.today)
         visits = [event for event in events if event.type == "visit"]
 
         self.assertEqual(len(visits), 8)
@@ -75,23 +75,21 @@ class TheSourcesYieldNewestFirstTests(_FeedCase):
 class TheAggregatorRespectsALimitTests(_FeedCase):
     def test_no_more_than_the_limit_comes_back(self) -> None:
         self.seed_visits(12)
-        events = get_memory_events(self.profile, self.today - datetime.timedelta(days=30), self.today, limit=5)
+        events = get_memory_events(self.profile, self.today - dt.timedelta(days=30), self.today, limit=5)
         self.assertEqual(len(events), 5)
 
     def test_the_events_kept_are_the_newest_ones(self) -> None:
         """The property a cap over unordered sources would silently break."""
         self.seed_visits(12)
-        events = get_memory_events(self.profile, self.today - datetime.timedelta(days=30), self.today, limit=3)
+        events = get_memory_events(self.profile, self.today - dt.timedelta(days=30), self.today, limit=3)
 
         returned = {event.occurred_at.date() for event in events}
-        self.assertEqual(
-            returned, {self.today, self.today - datetime.timedelta(days=1), self.today - datetime.timedelta(days=2)}
-        )
+        self.assertEqual(returned, {self.today, self.today - dt.timedelta(days=1), self.today - dt.timedelta(days=2)})
 
     def test_without_a_limit_everything_in_range_comes_back(self) -> None:
         """Non-vacuity: the limit is doing the bounding, not the range."""
         self.seed_visits(12)
-        events = get_memory_events(self.profile, self.today - datetime.timedelta(days=30), self.today)
+        events = get_memory_events(self.profile, self.today - dt.timedelta(days=30), self.today)
         self.assertEqual(len([e for e in events if e.type == "visit"]), 12)
 
 
@@ -142,7 +140,7 @@ class TheFeedEndpointIsBoundedTests(_FeedCase):
         # Exactly-equal timestamps are a different, documented limitation.
         midday = timezone.now().replace(hour=12, minute=0, second=0, microsecond=0)
         for minute in range(9):
-            baker.make(PinVisit, pin=self.pin, visited_at=midday - datetime.timedelta(minutes=minute))
+            baker.make(PinVisit, pin=self.pin, visited_at=midday - dt.timedelta(minutes=minute))
 
         with mock.patch.object(memories, "MAX_FEED_EVENTS", 3):
             first = self._feed(start="0001-01-01", end="9999-12-31")

@@ -10,7 +10,7 @@ every export (P334).
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import importlib
 from typing import Any
 
@@ -89,7 +89,7 @@ class CalendarMinuteLimitMigrationTests(TestCase):
 class StrandedPushMarkTests(TestCase):
     def test_a_mark_on_a_link_without_auto_sync_is_cleared_and_one_with_it_is_kept(self) -> None:
         profile = User.objects.create_user(username="stranded-mark").profile
-        marked = timezone.now() - datetime.timedelta(days=3)
+        marked = timezone.now() - dt.timedelta(days=3)
         links = {}
         for auto_sync in (False, True):
             trip = Trip.objects.create(name=f"auto_sync={auto_sync}", creator=profile)

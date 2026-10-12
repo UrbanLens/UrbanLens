@@ -8,7 +8,7 @@ and that a malformed body is a 4xx rather than a 500 or a silent wrong write.
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 
 from django.urls import reverse
 from django.utils import timezone
@@ -298,7 +298,7 @@ class ExternalPinLinkDetailRouteTests(_PinFixture):
 class ExternalPinVisitDetailRouteTests(_PinFixture):
     def setUp(self) -> None:
         super().setUp()
-        self.when = timezone.now() - datetime.timedelta(days=3)
+        self.when = timezone.now() - dt.timedelta(days=3)
         self.visit = baker.make(PinVisit, pin=self.pin, visited_at=self.when, notes="Muddy")
         self.url = reverse("external_api:pins.visits.detail", args=[self.slug, self.visit.pk])
 
@@ -333,7 +333,7 @@ class ExternalPinVisitDetailRouteTests(_PinFixture):
 
     def test_a_future_garbled_or_malformed_edit_is_400(self) -> None:
         self.assert_malformed_bodies_are_4xx("patch", self.url)
-        future = (timezone.now() + datetime.timedelta(days=30)).isoformat()
+        future = (timezone.now() + dt.timedelta(days=30)).isoformat()
         for body in ({"visited_at": future}, {"visited_at": "yesterday"}, {"notes": "x" * 100_000}, {"notes": ["x"]}):
             with self.subTest(body=body):
                 self.assertEqual(self.send("patch", self.url, body).status_code, 400)

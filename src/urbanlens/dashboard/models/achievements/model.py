@@ -37,7 +37,7 @@ from urbanlens.dashboard.models.achievements.queryset import (
 
 if TYPE_CHECKING:
     from collections.abc import Collection
-    import datetime
+    import datetime as dt
 
     from django.db.models.fetch_modes import FetchMode
 
@@ -356,7 +356,7 @@ class ProfileStreak(abstract.DashboardModel):
     def __str__(self) -> str:
         return f"{self.profile_id} {self.kind}: {self.current_length} (best {self.longest_length})"
 
-    def current_length_as_of(self, today: datetime.date | None = None) -> int:
+    def current_length_as_of(self, today: dt.date | None = None) -> int:
         """
         Return the live current streak, treating a missed day as a reset.
 

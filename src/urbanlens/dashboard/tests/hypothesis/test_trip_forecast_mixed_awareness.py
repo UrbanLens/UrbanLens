@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from unittest.mock import Mock, patch
 
 from django.utils import timezone
@@ -18,7 +18,7 @@ _COORDS = (42.6526, -73.7562)
 class MixedAwarenessForecastTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
-        self.scheduled = timezone.make_aware(datetime.datetime(2026, 6, 1, 12, 0))
+        self.scheduled = timezone.make_aware(dt.datetime(2026, 6, 1, 12, 0))
         trip = baker.make("dashboard.Trip")
         self.activity = baker.make("dashboard.TripActivity", trip=trip, scheduled_at=self.scheduled)
 
@@ -34,7 +34,7 @@ class MixedAwarenessForecastTests(TestCase):
 
     def test_an_offset_carrying_slot_does_not_raise(self) -> None:
         """The REData-shaped case: fromisoformat preserved a +00:00 offset."""
-        aware_slot = {"date": datetime.datetime(2026, 6, 1, 12, 0, tzinfo=datetime.UTC), "temp": 20}
+        aware_slot = {"date": dt.datetime(2026, 6, 1, 12, 0, tzinfo=dt.UTC), "temp": 20}
 
         results = self._forecasts([aware_slot])
 
@@ -43,7 +43,7 @@ class MixedAwarenessForecastTests(TestCase):
 
     def test_naive_slots_still_match(self) -> None:
         """The ordinary path must be unaffected."""
-        naive_slot = {"date": datetime.datetime(2026, 6, 1, 13, 0), "temp": 20}
+        naive_slot = {"date": dt.datetime(2026, 6, 1, 13, 0), "temp": 20}
 
         results = self._forecasts([naive_slot])
 
@@ -52,8 +52,8 @@ class MixedAwarenessForecastTests(TestCase):
     def test_a_mix_of_aware_and_naive_slots_does_not_raise(self) -> None:
         """Providers can change shape between cache entries; the min() must survive it."""
         slots = [
-            {"date": datetime.datetime(2026, 6, 3, 12, 0, tzinfo=datetime.UTC), "temp": 1},
-            {"date": datetime.datetime(2026, 6, 1, 13, 0), "temp": 2},
+            {"date": dt.datetime(2026, 6, 3, 12, 0, tzinfo=dt.UTC), "temp": 1},
+            {"date": dt.datetime(2026, 6, 1, 13, 0), "temp": 2},
         ]
 
         results = self._forecasts(slots)
@@ -62,7 +62,7 @@ class MixedAwarenessForecastTests(TestCase):
 
     def test_an_aware_slot_far_outside_the_window_is_still_flagged(self) -> None:
         """The out-of-range test has to survive the same subtraction."""
-        far = {"date": datetime.datetime(2026, 6, 20, 12, 0, tzinfo=datetime.UTC), "temp": 20}
+        far = {"date": dt.datetime(2026, 6, 20, 12, 0, tzinfo=dt.UTC), "temp": 20}
 
         results = self._forecasts([far])
 
@@ -73,7 +73,7 @@ class MixedAwarenessForecastTests(TestCase):
 class UtcAnchoredSlotMatchingTests(TestCase):
     """Slots carrying `date_utc` are matched by UTC instant, not wall clock."""
 
-    def _forecasts_for(self, scheduled_at: datetime.datetime, slots: list[dict]) -> list[dict]:
+    def _forecasts_for(self, scheduled_at: dt.datetime, slots: list[dict]) -> list[dict]:
         trip = baker.make("dashboard.Trip")
         activity = baker.make("dashboard.TripActivity", trip=trip, scheduled_at=scheduled_at)
         with (
@@ -106,16 +106,16 @@ class UtcAnchoredSlotMatchingTests(TestCase):
         slots = OpenMeteoGateway(session=session).get_weather_forecast(*_COORDS)
         assert slots is not None
 
-        results = self._forecasts_for(datetime.datetime(2026, 6, 1, 15, 0, tzinfo=datetime.UTC), list(slots))
+        results = self._forecasts_for(dt.datetime(2026, 6, 1, 15, 0, tzinfo=dt.UTC), list(slots))
 
         slot = results[0]["slot"]
         self.assertIsNotNone(slot)
         self.assertEqual(
             slot["date"],
-            datetime.datetime(2026, 6, 1, 9, 0),
+            dt.datetime(2026, 6, 1, 9, 0),
             "the 13:00 UTC slot wins, displayed as its local wall clock",
         )
-        self.assertEqual(slot["date_utc"], datetime.datetime(2026, 6, 1, 13, 0, tzinfo=datetime.UTC))
+        self.assertEqual(slot["date_utc"], dt.datetime(2026, 6, 1, 13, 0, tzinfo=dt.UTC))
 
     def test_gap_hours_uses_the_utc_instant_for_the_out_of_range_test(self) -> None:
         """
@@ -123,12 +123,12 @@ class UtcAnchoredSlotMatchingTests(TestCase):
         matched, not flagged out of range by the local wall-clock gap.
         """
         slot = {
-            "date": datetime.datetime(2026, 6, 3, 9, 0),
-            "date_utc": datetime.datetime(2026, 6, 2, 20, 0, tzinfo=datetime.UTC),
+            "date": dt.datetime(2026, 6, 3, 9, 0),
+            "date_utc": dt.datetime(2026, 6, 2, 20, 0, tzinfo=dt.UTC),
             "temp": 20,
         }
 
-        results = self._forecasts_for(datetime.datetime(2026, 6, 1, 12, 0, tzinfo=datetime.UTC), [slot])
+        results = self._forecasts_for(dt.datetime(2026, 6, 1, 12, 0, tzinfo=dt.UTC), [slot])
 
         self.assertFalse(results[0]["out_of_range"])
         self.assertIs(results[0]["slot"], slot)
@@ -138,13 +138,13 @@ class UtcAnchoredSlotMatchingTests(TestCase):
         An anchored slot competes on its UTC gap while an unanchored one
         keeps the naive wall-clock gap, in the same `min()`.
         """
-        unanchored = {"date": datetime.datetime(2026, 6, 1, 11, 0), "temp": 1}  # 1h naive gap
+        unanchored = {"date": dt.datetime(2026, 6, 1, 11, 0), "temp": 1}  # 1h naive gap
         anchored = {
-            "date": datetime.datetime(2026, 6, 1, 8, 30),  # 3.5h naive gap - would lose under wall clock
-            "date_utc": datetime.datetime(2026, 6, 1, 12, 30, tzinfo=datetime.UTC),  # 0.5h UTC gap
+            "date": dt.datetime(2026, 6, 1, 8, 30),  # 3.5h naive gap - would lose under wall clock
+            "date_utc": dt.datetime(2026, 6, 1, 12, 30, tzinfo=dt.UTC),  # 0.5h UTC gap
             "temp": 2,
         }
 
-        results = self._forecasts_for(datetime.datetime(2026, 6, 1, 12, 0, tzinfo=datetime.UTC), [unanchored, anchored])
+        results = self._forecasts_for(dt.datetime(2026, 6, 1, 12, 0, tzinfo=dt.UTC), [unanchored, anchored])
 
         self.assertIs(results[0]["slot"], anchored)

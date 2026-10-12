@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from io import StringIO
 
 from django.contrib.auth.models import User
@@ -23,14 +23,14 @@ class AuditInvertedFriendshipBlocksTests(TestCase):
         baker.make(User)  # absorbs the bootstrap site-admin promotion
         self.alice = baker.make(User, username="alice").profile
         self.bob = baker.make(User, username="bob").profile
-        self.cutoff = (timezone.now() - datetime.timedelta(days=30)).date().isoformat()
+        self.cutoff = (timezone.now() - dt.timedelta(days=30)).date().isoformat()
 
     def _run(self, *args) -> str:
         out = StringIO()
         call_command(_COMMAND, *args, stdout=out, stderr=StringIO())
         return out.getvalue()
 
-    def _stamp(self, friendship: Friendship, *, created: datetime.datetime, updated: datetime.datetime) -> None:
+    def _stamp(self, friendship: Friendship, *, created: dt.datetime, updated: dt.datetime) -> None:
         Friendship.objects.filter(pk=friendship.pk).update(created=created, updated=updated)
 
     def test_requires_before(self) -> None:
@@ -53,7 +53,7 @@ class AuditInvertedFriendshipBlocksTests(TestCase):
         friendship = Friendship.objects.create(
             from_profile=self.alice, to_profile=self.bob, status=FriendshipStatus.BLOCKED
         )
-        old = timezone.now() - datetime.timedelta(days=60)
+        old = timezone.now() - dt.timedelta(days=60)
         self._stamp(friendship, created=old, updated=old)
 
         output = self._run(f"--before={self.cutoff}")
@@ -73,8 +73,8 @@ class AuditInvertedFriendshipBlocksTests(TestCase):
             status=FriendshipStatus.BLOCKED,
             relationship_type=FriendshipType.FRIEND,
         )
-        created = timezone.now() - datetime.timedelta(days=90)
-        updated = timezone.now() - datetime.timedelta(days=60)
+        created = timezone.now() - dt.timedelta(days=90)
+        updated = timezone.now() - dt.timedelta(days=60)
         self._stamp(friendship, created=created, updated=updated)
 
         output = self._run(f"--before={self.cutoff}")
@@ -97,7 +97,7 @@ class AuditInvertedFriendshipBlocksTests(TestCase):
             relationship_type=FriendshipType.FRIEND,
             request_message="hey, let's connect",
         )
-        old = timezone.now() - datetime.timedelta(days=60)
+        old = timezone.now() - dt.timedelta(days=60)
         self._stamp(friendship, created=old, updated=old)
 
         output = self._run(f"--before={self.cutoff}")
@@ -123,14 +123,14 @@ class AuditInvertedFriendshipBlocksTests(TestCase):
         on_cutoff = Friendship.objects.create(
             from_profile=self.alice, to_profile=self.bob, status=FriendshipStatus.BLOCKED
         )
-        cutoff_dt = datetime.datetime(2026, 7, 30, 23, 59, tzinfo=datetime.UTC)
+        cutoff_dt = dt.datetime(2026, 7, 30, 23, 59, tzinfo=dt.UTC)
         self._stamp(on_cutoff, created=cutoff_dt, updated=cutoff_dt)
 
         carol = baker.make(User, username="carol").profile
         day_before = Friendship.objects.create(
             from_profile=self.alice, to_profile=carol, status=FriendshipStatus.BLOCKED
         )
-        before_dt = datetime.datetime(2026, 7, 29, 0, 1, tzinfo=datetime.UTC)
+        before_dt = dt.datetime(2026, 7, 29, 0, 1, tzinfo=dt.UTC)
         self._stamp(day_before, created=before_dt, updated=before_dt)
 
         output = self._run("--before=2026-07-30")
@@ -142,7 +142,7 @@ class AuditInvertedFriendshipBlocksTests(TestCase):
         friendship = Friendship.objects.create(
             from_profile=self.alice, to_profile=self.bob, status=FriendshipStatus.ACCEPTED
         )
-        old = timezone.now() - datetime.timedelta(days=90)
+        old = timezone.now() - dt.timedelta(days=90)
         self._stamp(friendship, created=old, updated=old)
 
         output = self._run(f"--before={self.cutoff}")
@@ -156,8 +156,8 @@ class AuditInvertedFriendshipBlocksTests(TestCase):
             status=FriendshipStatus.BLOCKED,
             relationship_type=FriendshipType.FRIEND,
         )
-        created = timezone.now() - datetime.timedelta(days=90)
-        updated = timezone.now() - datetime.timedelta(days=60)
+        created = timezone.now() - dt.timedelta(days=90)
+        updated = timezone.now() - dt.timedelta(days=60)
         self._stamp(friendship, created=created, updated=updated)
 
         self._run(f"--before={self.cutoff}")

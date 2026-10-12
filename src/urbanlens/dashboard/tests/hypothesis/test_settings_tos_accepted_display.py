@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 
 from django.contrib.auth.models import User
 from django.urls import reverse
@@ -18,7 +18,7 @@ class SettingsTosAcceptedDisplayTests(TestCase):
         self.client.force_login(self.user)
 
     def test_shows_the_acceptance_date_when_recorded(self) -> None:
-        accepted_at = timezone.make_aware(datetime.datetime(2025, 3, 4, 12, 0, 0))
+        accepted_at = timezone.make_aware(dt.datetime(2025, 3, 4, 12, 0, 0))
         self.user.profile.tos_accepted_at = accepted_at
         self.user.profile.save(update_fields=["tos_accepted_at"])
 

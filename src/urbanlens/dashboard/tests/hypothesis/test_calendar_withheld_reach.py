@@ -11,7 +11,7 @@ UrbanLens#301 ("hidden location stays on an unreached calendar").
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from io import StringIO
 import json
 import os
@@ -259,7 +259,7 @@ class ADeletedStopTakesItsEventWithItTests(_ExportedStopCase):
             trip=self.trip,
             added_by=self.profile,
             title="Dentist",
-            scheduled_at=datetime.datetime(2026, 11, 7, 9, 0, tzinfo=datetime.UTC),
+            scheduled_at=dt.datetime(2026, 11, 7, 9, 0, tzinfo=dt.UTC),
         )
         TripCalendarLink.objects.create(
             trip=self.trip,
@@ -300,7 +300,7 @@ class ADeletedStopTakesItsEventWithItTests(_ExportedStopCase):
         self.assertEqual(CalendarEventDeletion.objects.get().attempts, 0)
         self.assertTrue(GoogleCalendarAccount.objects.filter(pk=self.account.pk).exists())
 
-        CalendarEventDeletion.objects.update(created=timezone.now() - datetime.timedelta(hours=1))
+        CalendarEventDeletion.objects.update(created=timezone.now() - dt.timedelta(hours=1))
         self.enqueue.reset_mock()
         requeue_pending_calendar_pushes()
         self.assertEqual(self._deletions_queued(), [self.profile.pk])
@@ -321,7 +321,7 @@ class ADeletedStopTakesItsEventWithItTests(_ExportedStopCase):
                 self.google.fail_after, self.google.failure = 0, failure
                 for _sweep in range(MAX_CALENDAR_PUSH_ATTEMPTS + 2):
                     self.assertEqual(delete_orphaned_calendar_events(self.profile.pk), 0)
-                    CalendarEventDeletion.objects.update(created=timezone.now() - datetime.timedelta(hours=1))
+                    CalendarEventDeletion.objects.update(created=timezone.now() - dt.timedelta(hours=1))
                     requeue_pending_calendar_pushes()
 
                 self.assertEqual(CalendarEventDeletion.objects.get().attempts, 0)
@@ -353,7 +353,7 @@ class ADeletedStopTakesItsEventWithItTests(_ExportedStopCase):
             profile=self.profile,
             access_token="a",
             refresh_token="r",
-            token_expiry=timezone.now() + datetime.timedelta(hours=1),
+            token_expiry=timezone.now() + dt.timedelta(hours=1),
         )  # noqa: S106 - fixture value
         self.assertEqual(delete_orphaned_calendar_events(self.profile.pk), 1)
         self.assertEqual(self.google.events[event_id]["status"], "cancelled")
@@ -394,7 +394,7 @@ class ClearWithheldCalendarLocationsTests(_ExportedStopCase):
             trip=self.trip,
             added_by=self.profile,
             title="Lunch",
-            scheduled_at=datetime.datetime(2026, 11, 6, 12, 0, tzinfo=datetime.UTC),
+            scheduled_at=dt.datetime(2026, 11, 6, 12, 0, tzinfo=dt.UTC),
         )
         export_trip_to_calendar(self.account, self.trip)
         self._set_mate_visibility(VisibilityChoice.NO_ONE)

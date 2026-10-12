@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from unittest import mock
 
 from django.conf import settings
@@ -181,15 +181,15 @@ class _ExternalSafetyFixture(_Users):
             SafetyCheckin,
             profile=self.profile,
             title="Hike",
-            checkin_by=timezone.now() + datetime.timedelta(hours=2),
-            grace_period=datetime.timedelta(hours=1),
+            checkin_by=timezone.now() + dt.timedelta(hours=2),
+            grace_period=dt.timedelta(hours=1),
         )
         self.foreign_checkin = baker.make(
             SafetyCheckin,
             profile=self.stranger,
             title="Theirs",
-            checkin_by=timezone.now() + datetime.timedelta(hours=2),
-            grace_period=datetime.timedelta(hours=1),
+            checkin_by=timezone.now() + dt.timedelta(hours=2),
+            grace_period=dt.timedelta(hours=1),
         )
         _key, raw = generate_api_key(self.user, "safety client")
         ApiKey.objects.filter(user=self.user).update(
@@ -235,8 +235,8 @@ class ExternalSafetyPhotoAttachRouteTests(_ExternalSafetyFixture):
             SafetyCheckin,
             profile=self.profile,
             title="Earlier",
-            checkin_by=timezone.now() + datetime.timedelta(hours=2),
-            grace_period=datetime.timedelta(hours=1),
+            checkin_by=timezone.now() + dt.timedelta(hours=2),
+            grace_period=dt.timedelta(hours=1),
         )
         image = baker.make(Image, profile=self.profile, safety_checkin=other_own_checkin)
 

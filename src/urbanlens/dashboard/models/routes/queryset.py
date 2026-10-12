@@ -9,7 +9,7 @@ from django.contrib.gis.geos import Polygon
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
-    import datetime
+    import datetime as dt
 
     from django.contrib.gis.geos import Point
     from django.contrib.gis.measure import Distance
@@ -33,7 +33,7 @@ class RouteQuerySet(abstract.FrontendDashboardQuerySet["Route"]):
         """
         return self.filter(profile=profile)
 
-    def in_date_range(self, start: datetime.date, end: datetime.date) -> Self:
+    def in_date_range(self, start: dt.date, end: dt.date) -> Self:
         """
         Filter to routes that started within an inclusive date range.
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from decimal import Decimal
 import hashlib
 import socket
@@ -204,7 +204,7 @@ class ImmichGatewayTests(TestCase):
                 },
             ),
         ]
-        results = gw.search_by_dates([datetime.date(2024, 1, 1), datetime.date(2024, 1, 2)])
+        results = gw.search_by_dates([dt.date(2024, 1, 1), dt.date(2024, 1, 2)])
         self.assertEqual(gw.session.post.call_count, 2)
         self.assertEqual({asset.id for asset in results}, {"a1", "a2"})
 
@@ -239,7 +239,7 @@ class ImmichGatewayTests(TestCase):
         self.assertEqual(asset.lat, 40.5)
         self.assertEqual(asset.lon, -74.5)
         self.assertEqual(asset.city, "Newark")
-        self.assertEqual(asset.taken_at, datetime.datetime(2024, 1, 1, 12, 0, tzinfo=datetime.UTC))
+        self.assertEqual(asset.taken_at, dt.datetime(2024, 1, 1, 12, 0, tzinfo=dt.UTC))
 
     def test_search_metadata_handles_assets_with_no_gps(self) -> None:
         gw = ImmichGateway(account=_account(), session=mock.MagicMock())
@@ -644,14 +644,14 @@ class PinImmichSearchViewTests(TestCase):
         search_by_dates.assert_not_called()
 
     def test_visits_mode_searches_by_recorded_visit_dates(self) -> None:
-        baker.make(PinVisit, pin=self.pin, visited_at=timezone.make_aware(datetime.datetime(2024, 1, 5)))
+        baker.make(PinVisit, pin=self.pin, visited_at=timezone.make_aware(dt.datetime(2024, 1, 5)))
         asset = SearchAsset(id="v1")
         with mock.patch.object(ImmichGateway, "search_by_dates", return_value=[asset]) as search_by_dates:
             response = self.client.get(reverse("pin.immich.search", args=[self.pin.slug]), {"mode": "visits"})
         asset_ids = [a["id"] for a in response.context["assets"]]
         self.assertEqual(asset_ids, ["v1"])
         (dates_arg,), _kwargs = search_by_dates.call_args
-        self.assertEqual(list(dates_arg), [datetime.date(2024, 1, 5)])
+        self.assertEqual(list(dates_arg), [dt.date(2024, 1, 5)])
 
     def test_all_mode_calls_list_recent(self) -> None:
         asset = SearchAsset(id="r1")
@@ -797,9 +797,7 @@ class SweepImmichLibraryLocationsTaskTests(TestCase):
     def test_sweep_matches_a_geotagged_asset_against_an_existing_pin(self) -> None:
         from urbanlens.dashboard.models.pin_suggestions.model import PinSuggestion
 
-        asset = SearchAsset(
-            id="a1", taken_at=datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC), lat=40.0001, lon=-74.0
-        )
+        asset = SearchAsset(id="a1", taken_at=dt.datetime(2024, 1, 1, tzinfo=dt.UTC), lat=40.0001, lon=-74.0)
         result = self._run([([asset], 1)])
         self.assertEqual(result, {"scanned": 1, "matched_suggestions": 1, "new_pin_suggestions": 0})
         suggestion = PinSuggestion.objects.get()
@@ -821,9 +819,7 @@ class SweepImmichLibraryLocationsTaskTests(TestCase):
         self._run([([], 0)])
         self.assertFalse(NotificationLog.objects.filter(profile=self.profile).exists())
 
-        asset = SearchAsset(
-            id="a1", taken_at=datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC), lat=40.0001, lon=-74.0
-        )
+        asset = SearchAsset(id="a1", taken_at=dt.datetime(2024, 1, 1, tzinfo=dt.UTC), lat=40.0001, lon=-74.0)
         self._run([([asset], 1)])
         self.assertTrue(NotificationLog.objects.filter(profile=self.profile).exists())
 
@@ -862,9 +858,7 @@ class SweepImmichLibraryLocationsTaskTests(TestCase):
 
     def test_progress_message_uses_the_real_total_not_the_deprecated_page_total(self) -> None:
         """Regression test: Immich's per-page 'total' field mirrors the page size (a deprecated field), so a naive "Scanned N of <page total>" message goes stale and nonsensical once scanned outgrows a single page (e.g. "Scanned 194000 of 1000")."""
-        asset = SearchAsset(
-            id="a1", taken_at=datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC), lat=40.0001, lon=-74.0
-        )
+        asset = SearchAsset(id="a1", taken_at=dt.datetime(2024, 1, 1, tzinfo=dt.UTC), lat=40.0001, lon=-74.0)
         with (
             mock.patch.object(ImmichGateway, "iter_library_assets", return_value=iter([([asset], 1000)])),
             mock.patch.object(ImmichGateway, "library_asset_count", return_value=194000),
@@ -876,9 +870,7 @@ class SweepImmichLibraryLocationsTaskTests(TestCase):
         self.assertFalse(any("of 1000" in message for message in messages))
 
     def test_progress_message_falls_back_gracefully_when_statistics_endpoint_fails(self) -> None:
-        asset = SearchAsset(
-            id="a1", taken_at=datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC), lat=40.0001, lon=-74.0
-        )
+        asset = SearchAsset(id="a1", taken_at=dt.datetime(2024, 1, 1, tzinfo=dt.UTC), lat=40.0001, lon=-74.0)
         with (
             mock.patch.object(ImmichGateway, "iter_library_assets", return_value=iter([([asset], 1000)])),
             mock.patch.object(ImmichGateway, "library_asset_count", side_effect=GatewayRequestError("boom")),

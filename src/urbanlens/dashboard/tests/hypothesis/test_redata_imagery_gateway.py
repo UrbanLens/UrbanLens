@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import io
 from unittest import mock
 
@@ -191,7 +191,7 @@ class CaptureTimeSeriesTests(SimpleTestCase):
         session = mock.Mock()
         session.post.return_value = _response(200, {"uuid": "child-uuid", "provider": "nasa_gibs", "delivery": "wms"})
 
-        _gateway(session).capture_time_series("parent-uuid", datetime.date(2005, 6, 15), width=512, height=384)
+        _gateway(session).capture_time_series("parent-uuid", dt.date(2005, 6, 15), width=512, height=384)
 
         url = session.post.call_args.args[0]
         self.assertEqual(url, "https://redata.example.test/api/v1/imagery/capture/")
@@ -202,7 +202,7 @@ class CaptureTimeSeriesTests(SimpleTestCase):
         session = mock.Mock()
         session.post.return_value = _response(200, {"uuid": "child-uuid"})
 
-        _gateway(session).capture_time_series("parent-uuid", datetime.date(2005, 6, 15))
+        _gateway(session).capture_time_series("parent-uuid", dt.date(2005, 6, 15))
 
         body = session.post.call_args.kwargs["json"]
         self.assertEqual(body["width"], 1024)
@@ -212,7 +212,7 @@ class CaptureTimeSeriesTests(SimpleTestCase):
         session = mock.Mock()
         session.post.return_value = _response(200, {"uuid": "child-uuid", "captured_on": "2005-06-15"})
 
-        result = _gateway(session).capture_time_series("parent-uuid", datetime.date(2005, 6, 15))
+        result = _gateway(session).capture_time_series("parent-uuid", dt.date(2005, 6, 15))
 
         self.assertEqual(result, {"uuid": "child-uuid", "captured_on": "2005-06-15"})
 
@@ -220,7 +220,7 @@ class CaptureTimeSeriesTests(SimpleTestCase):
         session = mock.Mock()
         session.post.return_value = _response(400, {"error": "date_unavailable", "message": "outside coverage"})
 
-        result = _gateway(session).capture_time_series("parent-uuid", datetime.date(2005, 6, 15))
+        result = _gateway(session).capture_time_series("parent-uuid", dt.date(2005, 6, 15))
 
         self.assertIsNone(result)
 
@@ -228,7 +228,7 @@ class CaptureTimeSeriesTests(SimpleTestCase):
         session = mock.Mock()
         session.post.return_value = _response(404, {"error": "no_imagery", "message": "nothing that day"})
 
-        result = _gateway(session).capture_time_series("parent-uuid", datetime.date(2005, 6, 15))
+        result = _gateway(session).capture_time_series("parent-uuid", dt.date(2005, 6, 15))
 
         self.assertIsNone(result)
 
@@ -239,7 +239,7 @@ class CaptureTimeSeriesTests(SimpleTestCase):
                 session.post.return_value = _response(503, {"error": error, "message": "back off"})
 
                 with pytest.raises(LocationContextUnavailableError) as ctx:
-                    _gateway(session).capture_time_series("parent-uuid", datetime.date(2005, 6, 15))
+                    _gateway(session).capture_time_series("parent-uuid", dt.date(2005, 6, 15))
                 self.assertEqual(ctx.value.reason, error)
                 self.assertTrue(ctx.value.is_outage)
 
@@ -248,7 +248,7 @@ class CaptureTimeSeriesTests(SimpleTestCase):
         session.post.return_value = _response(503, {"error": "imagery_unavailable", "message": "source down"})
 
         with pytest.raises(LocationContextUnavailableError) as ctx:
-            _gateway(session).capture_time_series("parent-uuid", datetime.date(2005, 6, 15))
+            _gateway(session).capture_time_series("parent-uuid", dt.date(2005, 6, 15))
         self.assertEqual(ctx.value.reason, "imagery_unavailable")
 
     def test_a_400_for_an_undocumented_reason_still_raises(self) -> None:
@@ -257,7 +257,7 @@ class CaptureTimeSeriesTests(SimpleTestCase):
         session.post.return_value = _response(400, {"error": "invalid_parameter", "message": "bad asset_uuid"})
 
         with pytest.raises(LocationContextUnavailableError) as ctx:
-            _gateway(session).capture_time_series("parent-uuid", datetime.date(2005, 6, 15))
+            _gateway(session).capture_time_series("parent-uuid", dt.date(2005, 6, 15))
         self.assertEqual(ctx.value.reason, "invalid_parameter")
 
     def test_unexpected_status_code_raises_source_error(self) -> None:
@@ -265,7 +265,7 @@ class CaptureTimeSeriesTests(SimpleTestCase):
         session.post.return_value = _response(500, {})
 
         with pytest.raises(LocationContextUnavailableError) as ctx:
-            _gateway(session).capture_time_series("parent-uuid", datetime.date(2005, 6, 15))
+            _gateway(session).capture_time_series("parent-uuid", dt.date(2005, 6, 15))
         self.assertEqual(ctx.value.reason, "source_error")
 
     def test_network_error_raises_source_error(self) -> None:
@@ -273,5 +273,5 @@ class CaptureTimeSeriesTests(SimpleTestCase):
         session.post.side_effect = OSError("connection refused")
 
         with pytest.raises(LocationContextUnavailableError) as ctx:
-            _gateway(session).capture_time_series("parent-uuid", datetime.date(2005, 6, 15))
+            _gateway(session).capture_time_series("parent-uuid", dt.date(2005, 6, 15))
         self.assertEqual(ctx.value.reason, "source_error")

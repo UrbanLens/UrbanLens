@@ -527,7 +527,7 @@ class SafetyCheckinMediaGateTests(TestCase):
         self.image = baker.make(Image, image="pin_images/checkin.png", profile=self.owner, safety_checkin=self.checkin)
 
     def _make_checkin(self):
-        import datetime
+        import datetime as dt
 
         from django.utils import timezone
 
@@ -535,8 +535,8 @@ class SafetyCheckinMediaGateTests(TestCase):
             "dashboard.SafetyCheckin",
             profile=self.owner,
             title="Test hike",
-            checkin_by=timezone.now() + datetime.timedelta(hours=2),
-            grace_period=datetime.timedelta(hours=1),
+            checkin_by=timezone.now() + dt.timedelta(hours=2),
+            grace_period=dt.timedelta(hours=1),
         )
 
     def _fetch(self) -> int:
@@ -632,7 +632,7 @@ class SafetyContactTokenPhotoTests(TestCase):
     portal - so the login-gated media path can never serve them."""
 
     def setUp(self):
-        import datetime
+        import datetime as dt
 
         from django.utils import timezone
 
@@ -647,7 +647,7 @@ class SafetyContactTokenPhotoTests(TestCase):
 
         self.owner: Profile = _new_user().profile
         self._now = timezone.now
-        self._delta = datetime.timedelta
+        self._delta = dt.timedelta
 
         self.checkin = self._checkin()
         self.image = baker.make(Image, image="pin_images/tok.png", profile=self.owner, safety_checkin=self.checkin)

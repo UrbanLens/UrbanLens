@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from unittest import mock
 
 from django.contrib.auth.models import User
@@ -55,8 +55,8 @@ class _SafetyChatTestCase(TestCase):
         self.checkin = create_checkin(
             profile=self.owner,
             title="Quarry trip",
-            checkin_by=timezone.now() + datetime.timedelta(hours=6),
-            grace_period=datetime.timedelta(hours=1),
+            checkin_by=timezone.now() + dt.timedelta(hours=6),
+            grace_period=dt.timedelta(hours=1),
             plan_details="North rim, back by dark",
             contact_message="Please call me",
             contacts=[(None, "friend@example.com", "Friend")],
@@ -306,8 +306,8 @@ class SafetyChatReadTests(_SafetyChatTestCase):
         other = create_checkin(
             profile=self.partner,
             title="Different trip",
-            checkin_by=timezone.now() + datetime.timedelta(hours=4),
-            grace_period=datetime.timedelta(hours=1),
+            checkin_by=timezone.now() + dt.timedelta(hours=4),
+            grace_period=dt.timedelta(hours=1),
         )
         SafetyCheckinMessage.objects.create(checkin=other, sender_profile=self.partner, body="unrelated")
         SafetyCheckinMessage.objects.create(checkin=self.checkin, sender_profile=self.owner, body="mine")

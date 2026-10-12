@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 
 from django.contrib.auth.models import User
 from django.utils import timezone
@@ -69,8 +69,8 @@ class AddByUsernameHidesProfilesTests(TestCase):
                 "dashboard.SafetyCheckin",
                 profile=self.adder,
                 title="Hike",
-                checkin_by=timezone.now() + datetime.timedelta(hours=2),
-                grace_period=datetime.timedelta(hours=1),
+                checkin_by=timezone.now() + dt.timedelta(hours=2),
+                grace_period=dt.timedelta(hours=1),
             )
             return invite_checkin_partner(checkin, inviter=self.adder, username=username)
 

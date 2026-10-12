@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
 if TYPE_CHECKING:
-    import datetime
+    import datetime as dt
 
     from urbanlens.dashboard.models.billing import RoleSubscription
 
@@ -40,7 +40,7 @@ def _locked(role_subscription: RoleSubscription) -> Iterator[RoleSubscription]:
         setattr(role_subscription, field, getattr(locked, field))
 
 
-def advance_usage_ledger(role_subscription: RoleSubscription, as_of: datetime.datetime | None = None) -> None:
+def advance_usage_ledger(role_subscription: RoleSubscription, as_of: dt.datetime | None = None) -> None:
     """
     Advance a pay-what-you-want subscription's usage ledger as of *as_of*.
 
@@ -77,7 +77,7 @@ def advance_usage_ledger(role_subscription: RoleSubscription, as_of: datetime.da
         locked.save(update_fields=["amount_used_cents", "usage_covered_until", "updated"])
 
 
-def apply_payment(role_subscription: RoleSubscription, amount_paid_cents: int, as_of: datetime.datetime | None = None) -> None:
+def apply_payment(role_subscription: RoleSubscription, amount_paid_cents: int, as_of: dt.datetime | None = None) -> None:
     """
     Record a successful pay-what-you-want charge and advance its usage ledger.
 

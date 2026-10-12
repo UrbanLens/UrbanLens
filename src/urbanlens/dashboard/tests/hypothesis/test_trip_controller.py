@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import json
 import re
 from unittest.mock import patch
@@ -64,8 +64,8 @@ class TripListPartialTests(TestCase):
     def test_one_day_trip_shows_single_date_with_duration(self):
         trip = _make_trip(
             self.profile,
-            start_date=datetime.date(2026, 7, 4),
-            end_date=datetime.date(2026, 7, 4),
+            start_date=dt.date(2026, 7, 4),
+            end_date=dt.date(2026, 7, 4),
         )
 
         html = render_to_string(
@@ -80,8 +80,8 @@ class TripListPartialTests(TestCase):
     def test_multi_day_trip_shows_date_range(self):
         trip = _make_trip(
             self.profile,
-            start_date=datetime.date(2026, 7, 4),
-            end_date=datetime.date(2026, 7, 6),
+            start_date=dt.date(2026, 7, 4),
+            end_date=dt.date(2026, 7, 6),
         )
 
         html = render_to_string(
@@ -94,9 +94,7 @@ class TripListPartialTests(TestCase):
 
     def test_ongoing_multi_day_trip_shows_day_indicator(self):
         today = timezone.now().date()
-        trip = _make_trip(
-            self.profile, start_date=today - datetime.timedelta(days=2), end_date=today + datetime.timedelta(days=5)
-        )
+        trip = _make_trip(self.profile, start_date=today - dt.timedelta(days=2), end_date=today + dt.timedelta(days=5))
 
         html = render_to_string(
             "dashboard/partials/trips/trip_list_partial.html", {"trips": [trip], "profile": self.profile}
@@ -118,9 +116,7 @@ class TripListPartialTests(TestCase):
 
     def test_upcoming_multi_day_trip_does_not_show_day_indicator(self):
         today = timezone.now().date()
-        trip = _make_trip(
-            self.profile, start_date=today + datetime.timedelta(days=3), end_date=today + datetime.timedelta(days=10)
-        )
+        trip = _make_trip(self.profile, start_date=today + dt.timedelta(days=3), end_date=today + dt.timedelta(days=10))
 
         html = render_to_string(
             "dashboard/partials/trips/trip_list_partial.html", {"trips": [trip], "profile": self.profile}
@@ -518,8 +514,8 @@ class TripActivitiesViewTests(TestCase):
 
     def test_adding_a_confirmed_activity_outside_the_trip_range_widens_it(self):
         """Regression guard: create_activity used to never call expand_trip_dates (unlike update_activity/set_activity_status/ complete_activity), so a brand-new confirmed activity dated outside the trip's current range left start_date/end_date stale."""
-        self.trip.start_date = datetime.date(2026, 8, 1)
-        self.trip.end_date = datetime.date(2026, 8, 5)
+        self.trip.start_date = dt.date(2026, 8, 1)
+        self.trip.end_date = dt.date(2026, 8, 5)
         self.trip.save()
         client = Client()
         client.force_login(self.creator_user)
@@ -539,7 +535,7 @@ class TripActivitiesViewTests(TestCase):
 
         self.assertEqual(resp.status_code, 200)
         self.trip.refresh_from_db()
-        self.assertEqual(self.trip.end_date, datetime.date(2026, 8, 20))
+        self.assertEqual(self.trip.end_date, dt.date(2026, 8, 20))
 
     def test_activity_attribution_shows_full_name_not_username(self):
         """Regression guard: the "Added by" line used to show the raw username even when the adder has a real name set."""
@@ -734,11 +730,11 @@ class TripActivityCompleteViewTests(TestCase):
         self.assertEqual(self.activity.status, TripActivity.STATUS_COMPLETED)
 
     def test_future_date_capped_to_today(self):
-        future = (datetime.date.today() + datetime.timedelta(days=5)).isoformat()
+        future = (dt.date.today() + dt.timedelta(days=5)).isoformat()
         self.client.post(self._url(), data={"completed_date": future})
         self.activity.refresh_from_db()
         if self.activity.scheduled_at:
-            self.assertLessEqual(self.activity.scheduled_at.date(), datetime.date.today())
+            self.assertLessEqual(self.activity.scheduled_at.date(), dt.date.today())
 
     def test_invalid_date_defaults_to_today(self):
         self.client.post(self._url(), data={"completed_date": "not-a-date"})
@@ -753,9 +749,9 @@ class TripActivityCompleteViewTests(TestCase):
         At this fixed instant the configured zone (UTC+14) is already on Jan 2 while UTC is still on Jan 1, so a
         `date.today()`-based clamp would reject a legitimately "today" completion as a future date and cap it a
         day early."""
-        instant = datetime.datetime(2026, 1, 1, 20, 0, tzinfo=datetime.UTC)
+        instant = dt.datetime(2026, 1, 1, 20, 0, tzinfo=dt.UTC)
         local_today = timezone.localtime(instant).date()
-        self.assertEqual(local_today, datetime.date(2026, 1, 2))
+        self.assertEqual(local_today, dt.date(2026, 1, 2))
 
         with patch("django.utils.timezone.now", return_value=instant):
             self.client.post(self._url(), data={"completed_date": local_today.isoformat()})
@@ -1314,7 +1310,7 @@ class TripActivityMoveViewTests(TestCase):
         self.assertTrue(timezone.is_aware(self.activity.scheduled_at))
 
     def test_rescheduling_preserves_existing_time_and_stays_aware(self):
-        self.activity.scheduled_at = timezone.make_aware(datetime.datetime(2026, 8, 1, 14, 30))
+        self.activity.scheduled_at = timezone.make_aware(dt.datetime(2026, 8, 1, 14, 30))
         self.activity.save(update_fields=["scheduled_at"])
 
         resp = self.client.post(
@@ -1325,7 +1321,7 @@ class TripActivityMoveViewTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.activity.refresh_from_db()
         self.assertTrue(timezone.is_aware(self.activity.scheduled_at))
-        self.assertEqual(self.activity.scheduled_at.date(), datetime.date(2026, 8, 10))
+        self.assertEqual(self.activity.scheduled_at.date(), dt.date(2026, 8, 10))
 
     def test_member_blocked_when_edit_activities_is_organizers_only(self):
         """Regression guard: this endpoint used to check only trip membership (Trip.PERM_EVERYONE, hardcoded) rather than the trip's own configurable allow_edit_activities setting - see services.trips.trip_activities.move_activity, which now shares the same require_perform check as every other activity-editing path (set_activity_position, update_activity)."""
@@ -1359,15 +1355,15 @@ class TripActivityMoveViewTests(TestCase):
 
         self.assertEqual(resp.status_code, 200)
         self.activity.refresh_from_db()
-        self.assertEqual(self.activity.scheduled_at.date(), datetime.date(2026, 8, 10))
+        self.assertEqual(self.activity.scheduled_at.date(), dt.date(2026, 8, 10))
 
     def test_moving_a_confirmed_activity_outside_the_trip_range_widens_it(self):
         """Regression guard: moving an activity used to never call expand_trip_dates, so the trip's own start_date/end_date (and the header/calendar's date-range display) stayed stuck at the old range."""
-        self.trip.start_date = datetime.date(2026, 8, 1)
-        self.trip.end_date = datetime.date(2026, 8, 5)
+        self.trip.start_date = dt.date(2026, 8, 1)
+        self.trip.end_date = dt.date(2026, 8, 5)
         self.trip.save()
         self.activity.status = TripActivity.STATUS_CONFIRMED
-        self.activity.scheduled_at = timezone.make_aware(datetime.datetime(2026, 8, 2, 10, 0))
+        self.activity.scheduled_at = timezone.make_aware(dt.datetime(2026, 8, 2, 10, 0))
         self.activity.save()
 
         resp = self.client.post(
@@ -1378,4 +1374,4 @@ class TripActivityMoveViewTests(TestCase):
 
         self.assertEqual(resp.status_code, 200)
         self.trip.refresh_from_db()
-        self.assertEqual(self.trip.end_date, datetime.date(2026, 8, 20))
+        self.assertEqual(self.trip.end_date, dt.date(2026, 8, 20))

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
@@ -33,7 +33,7 @@ class PendingSuggestionsArePagedTests(TestCase):
                 location=self.location,
                 latitude="40.0",
                 longitude="-74.0",
-                visited_at=timezone.now() - datetime.timedelta(days=day),
+                visited_at=timezone.now() - dt.timedelta(days=day),
                 from_my_activity=True,
             )
 

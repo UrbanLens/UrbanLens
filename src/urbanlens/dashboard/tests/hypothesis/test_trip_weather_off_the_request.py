@@ -8,7 +8,7 @@ activity; ``scheduled_at`` had no minimum, and a place's recorded days were one 
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import importlib
 import threading
 from unittest.mock import patch
@@ -54,7 +54,7 @@ class _TripCase(TestCase):
         TripMembership.objects.get_or_create(trip=self.trip, profile=self.profile, defaults={"rsvp": "yes"})
         self.url = reverse("trips.weather", args=[self.trip.slug])
 
-    def _activity(self, when: datetime.datetime | None, lat: float = 41.73, lng: float = -73.92) -> TripActivity:
+    def _activity(self, when: dt.datetime | None, lat: float = 41.73, lng: float = -73.92) -> TripActivity:
         return baker.make(
             TripActivity,
             trip=self.trip,
@@ -77,7 +77,7 @@ class HistoryIsReadNotFetchedTests(_TripCase):
         self.addCleanup(configured.stop)
 
     def test_with_no_redata_nothing_is_queued_or_awaited(self) -> None:
-        self._activity(timezone.make_aware(datetime.datetime(2024, 5, 1, 12, 0)))
+        self._activity(timezone.make_aware(dt.datetime(2024, 5, 1, 12, 0)))
 
         with (
             patch(
@@ -92,7 +92,7 @@ class HistoryIsReadNotFetchedTests(_TripCase):
         self.assertEqual(resp.context["refresh_url"], "")
 
     def test_a_missing_day_is_queued_and_the_request_does_not_fetch(self) -> None:
-        self._activity(timezone.make_aware(datetime.datetime(2024, 5, 1, 12, 0)))
+        self._activity(timezone.make_aware(dt.datetime(2024, 5, 1, 12, 0)))
 
         with patch(_FETCH_DAYS) as fetch, patch(_ENQUEUE) as enqueue:
             resp = self.client_.get(self.url)
@@ -106,7 +106,7 @@ class HistoryIsReadNotFetchedTests(_TripCase):
         self.assertTrue(resp.context["refresh_url"], "the panel asks again once while the day is arriving")
 
     def test_the_retry_does_not_ask_again(self) -> None:
-        self._activity(timezone.make_aware(datetime.datetime(2024, 5, 1, 12, 0)))
+        self._activity(timezone.make_aware(dt.datetime(2024, 5, 1, 12, 0)))
 
         with patch(_ENQUEUE):
             resp = self.client_.get(self.url, {"retry": "1"})
@@ -114,7 +114,7 @@ class HistoryIsReadNotFetchedTests(_TripCase):
         self.assertEqual(resp.context["refresh_url"], "")
 
     def test_reloading_queues_the_same_fetch_once(self) -> None:
-        self._activity(timezone.make_aware(datetime.datetime(2024, 5, 1, 12, 0)))
+        self._activity(timezone.make_aware(dt.datetime(2024, 5, 1, 12, 0)))
 
         with patch(_ENQUEUE) as enqueue:
             self.client_.get(self.url)
@@ -126,8 +126,8 @@ class HistoryIsReadNotFetchedTests(_TripCase):
         """Activities decades apart must not become one request for every day between them."""
         from urbanlens.dashboard.tasks import fetch_recorded_weather_at
 
-        self._activity(timezone.make_aware(datetime.datetime(1941, 5, 1, 12, 0)))
-        self._activity(timezone.make_aware(datetime.datetime(2024, 5, 1, 12, 0)))
+        self._activity(timezone.make_aware(dt.datetime(1941, 5, 1, 12, 0)))
+        self._activity(timezone.make_aware(dt.datetime(2024, 5, 1, 12, 0)))
 
         with patch(_FETCH_DAYS, return_value={}) as fetch, tasks_run_inline(fetch_recorded_weather_at):
             self.client_.get(self.url)
@@ -138,9 +138,9 @@ class HistoryIsReadNotFetchedTests(_TripCase):
     def test_stored_days_are_shown_without_queuing_anything(self) -> None:
         cell = weather_cell(41.73, -73.92)
         RecordedWeatherDay.objects.create(
-            cell_lat=cell[0], cell_lng=cell[1], day=datetime.date(2024, 5, 1), data=_history_row("2024-05-01")
+            cell_lat=cell[0], cell_lng=cell[1], day=dt.date(2024, 5, 1), data=_history_row("2024-05-01")
         )
-        self._activity(timezone.make_aware(datetime.datetime(2024, 5, 1, 12, 0)))
+        self._activity(timezone.make_aware(dt.datetime(2024, 5, 1, 12, 0)))
 
         with patch(_ENQUEUE) as enqueue:
             resp = self.client_.get(self.url)
@@ -154,11 +154,11 @@ class RecordedDaysAreRowsTests(TestCase):
     def test_each_day_is_its_own_row_shared_by_nearby_places(self) -> None:
         days = {"2024-05-01": _history_row("2024-05-01"), "2024-05-02": _history_row("2024-05-02")}
         with patch(_FETCH_DAYS, return_value=days):
-            recorded_days_at(41.731, -73.921, [datetime.date(2024, 5, 1), datetime.date(2024, 5, 2)])
+            recorded_days_at(41.731, -73.921, [dt.date(2024, 5, 1), dt.date(2024, 5, 2)])
 
         self.assertEqual(RecordedWeatherDay.objects.count(), 2)
         with patch(_FETCH_DAYS) as fetch:
-            again = recorded_days_at(41.7312, -73.9208, [datetime.date(2024, 5, 1)])
+            again = recorded_days_at(41.7312, -73.9208, [dt.date(2024, 5, 1)])
         fetch.assert_not_called()
         self.assertEqual(list(again), ["2024-05-01"])
 
@@ -169,14 +169,14 @@ class RecordedDaysAreRowsTests(TestCase):
                 RecordedWeatherDay(
                     cell_lat=cell[0],
                     cell_lng=cell[1],
-                    day=datetime.date(2000, 1, 1) + datetime.timedelta(days=i),
+                    day=dt.date(2000, 1, 1) + dt.timedelta(days=i),
                     data={"n": i},
                 )
                 for i in range(200)
             ]
         )
 
-        found = cached_records({cell: [datetime.date(2000, 1, 5)]})
+        found = cached_records({cell: [dt.date(2000, 1, 5)]})
 
         self.assertEqual(list(found[cell]), ["2000-01-05"])
 
@@ -192,16 +192,16 @@ class RecordedDaysAreRowsTests(TestCase):
         migration._0091__move_to_day_rows(django_apps, None)
 
         row = RecordedWeatherDay.objects.get()
-        self.assertEqual((row.cell_lat, row.cell_lng, row.day), (4173, -7392, datetime.date(2024, 5, 1)))
+        self.assertEqual((row.cell_lat, row.cell_lng, row.day), (4173, -7392, dt.date(2024, 5, 1)))
         self.assertFalse(LocationCache.objects.filter(source="redata_weather_history").exists())
 
 
 class ForecastTests(_TripCase):
-    def _slot(self, when: datetime.datetime) -> dict:
+    def _slot(self, when: dt.datetime) -> dict:
         return {"date": when.replace(tzinfo=None), "temp": 20, "condition": "Clear", "icon": "wb_sunny"}
 
     def test_an_activity_past_every_forecast_is_not_fetched(self) -> None:
-        self._activity(timezone.now() + datetime.timedelta(days=40))
+        self._activity(timezone.now() + dt.timedelta(days=40))
 
         with patch(_FORECAST) as forecast:
             self.client_.get(self.url)
@@ -209,7 +209,7 @@ class ForecastTests(_TripCase):
         forecast.assert_not_called()
 
     def test_a_place_forecast_is_reused_across_requests(self) -> None:
-        when = timezone.now() + datetime.timedelta(days=1)
+        when = timezone.now() + dt.timedelta(days=1)
         self._activity(when)
 
         with patch(_FORECAST, return_value=[self._slot(when)]) as forecast:
@@ -223,7 +223,7 @@ class ForecastTests(_TripCase):
     def test_a_failed_forecast_is_not_cached(self) -> None:
         import requests
 
-        when = timezone.now() + datetime.timedelta(days=1)
+        when = timezone.now() + dt.timedelta(days=1)
         self._activity(when)
 
         with patch(_FORECAST, side_effect=[requests.ConnectionError("down"), [self._slot(when)]]) as forecast:
@@ -236,7 +236,7 @@ class ForecastTests(_TripCase):
     def test_a_hanging_forecast_costs_the_request_only_the_deadline(self) -> None:
         release = threading.Event()
         self.addCleanup(release.set)
-        self._activity(timezone.now() + datetime.timedelta(days=1))
+        self._activity(timezone.now() + dt.timedelta(days=1))
 
         def _hang(*_args):
             release.wait(timeout=10)
@@ -252,9 +252,9 @@ class ForecastTests(_TripCase):
         self.assertTrue(resp.context["refresh_url"])
 
     def test_query_count_does_not_grow_with_activities(self) -> None:
-        when = timezone.now() + datetime.timedelta(days=1)
+        when = timezone.now() + dt.timedelta(days=1)
         self._activity(when)
-        self._activity(timezone.make_aware(datetime.datetime(2024, 5, 1, 12, 0)))
+        self._activity(timezone.make_aware(dt.datetime(2024, 5, 1, 12, 0)))
         with (
             patch(_FORECAST, return_value=[self._slot(when)]),
             patch(_ENQUEUE),
@@ -264,7 +264,7 @@ class ForecastTests(_TripCase):
 
         for day in range(2, 12):
             self._activity(when, lat=40 + day, lng=-70 - day)
-            self._activity(timezone.make_aware(datetime.datetime(2024, 5, day, 12, 0)), lat=30 + day, lng=-80 - day)
+            self._activity(timezone.make_aware(dt.datetime(2024, 5, day, 12, 0)), lat=30 + day, lng=-80 - day)
         with (
             patch(_FORECAST, return_value=[self._slot(when)]),
             patch(_ENQUEUE),
@@ -281,7 +281,7 @@ class ScheduleSpanTests(_TripCase):
 
         with self.assertRaises(TripValidationError):
             create_activity(
-                self.trip, self.profile, title="x", scheduled_at=timezone.make_aware(datetime.datetime(1800, 1, 1))
+                self.trip, self.profile, title="x", scheduled_at=timezone.make_aware(dt.datetime(1800, 1, 1))
             )
 
     def test_editing_an_end_into_2300_is_refused(self) -> None:
@@ -293,7 +293,7 @@ class ScheduleSpanTests(_TripCase):
                 self.trip,
                 self.profile,
                 activity.pk,
-                changes={"scheduled_end": timezone.make_aware(datetime.datetime(2300, 1, 1))},
+                changes={"scheduled_end": timezone.make_aware(dt.datetime(2300, 1, 1))},
             )
 
     def test_dragging_to_year_one_is_refused(self) -> None:
@@ -301,16 +301,14 @@ class ScheduleSpanTests(_TripCase):
 
         activity = self._activity(None)
         with self.assertRaises(TripValidationError):
-            move_activity(self.trip, self.profile, activity.pk, date=datetime.date(1, 1, 2))
+            move_activity(self.trip, self.profile, activity.pk, date=dt.date(1, 1, 2))
 
     def test_the_database_refuses_what_the_services_would(self) -> None:
         activity = self._activity(None)
-        TripActivity.objects.filter(pk=activity.pk).update(
-            scheduled_at=timezone.make_aware(datetime.datetime(2024, 5, 1))
-        )
+        TripActivity.objects.filter(pk=activity.pk).update(scheduled_at=timezone.make_aware(dt.datetime(2024, 5, 1)))
         with self.assertRaises(IntegrityError), transaction.atomic():
             TripActivity.objects.filter(pk=activity.pk).update(
-                scheduled_at=timezone.make_aware(datetime.datetime(1850, 1, 1))
+                scheduled_at=timezone.make_aware(dt.datetime(1850, 1, 1))
             )
 
     def test_the_edit_endpoint_answers_400(self) -> None:

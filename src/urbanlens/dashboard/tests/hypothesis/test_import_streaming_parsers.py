@@ -9,7 +9,7 @@ Known, deliberate departures: ijson refuses JSON's non-standard ``NaN`` and ``In
 from __future__ import annotations
 
 import csv
-import datetime
+import datetime as dt
 import io
 import itertools
 import json
@@ -993,7 +993,7 @@ def _dbf_record(draw: Any, encoding: str) -> tuple[bool, list[bytes]]:
         str(draw(st.integers(-99999, 999999))).encode(),
         f"{draw(st.integers(-99999, 99999)) / 1000:.3f}".encode(),
         draw(st.sampled_from([b"T", b"F", b"Y", b"N"])),
-        draw(st.dates(datetime.date(1900, 1, 1), datetime.date(2100, 12, 31))).strftime("%Y%m%d").encode(),
+        draw(st.dates(dt.date(1900, 1, 1), dt.date(2100, 12, 31))).strftime("%Y%m%d").encode(),
     ]
 
 

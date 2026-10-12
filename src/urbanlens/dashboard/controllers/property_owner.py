@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import json
 import logging
 from typing import TYPE_CHECKING
@@ -134,7 +134,7 @@ def _parse_sale_owner_names(request: HttpRequest) -> tuple[list[str], list[str],
     return previous_names, new_names, None
 
 
-def _parse_sale_price_and_date(request: HttpRequest) -> tuple[Decimal | None, datetime.date | None, str | None]:
+def _parse_sale_price_and_date(request: HttpRequest) -> tuple[Decimal | None, dt.date | None, str | None]:
     """
     Parse and validate a sale form's price/date fields.
 
@@ -154,10 +154,10 @@ def _parse_sale_price_and_date(request: HttpRequest) -> tuple[Decimal | None, da
             return None, None, "Sale price can't be negative."
 
     raw_date = (request.POST.get("sale_date") or "").strip()
-    sale_date: datetime.date | None = None
+    sale_date: dt.date | None = None
     if raw_date:
         try:
-            sale_date = datetime.date.fromisoformat(raw_date)
+            sale_date = dt.date.fromisoformat(raw_date)
         except ValueError:
             return None, None, "Invalid sale date."
 
@@ -268,9 +268,9 @@ class PinOwnerRemoveView(LoginRequiredMixin, View):
         return _show_toast(response, f"Removed “{owner_name}”.")
 
 
-def _newest_first(sale: PinPropertySale | WikiPropertySale) -> tuple[bool, datetime.date, datetime.datetime]:
+def _newest_first(sale: PinPropertySale | WikiPropertySale) -> tuple[bool, dt.date, dt.datetime]:
     """Sort key putting dated sales newest first and undated ones last."""
-    return sale.sale_date is not None, sale.sale_date or datetime.date.min, sale.created
+    return sale.sale_date is not None, sale.sale_date or dt.date.min, sale.created
 
 
 def _render_pin_sale_tab(request: HttpRequest, pin: Pin, error: str | None = None) -> HttpResponse:

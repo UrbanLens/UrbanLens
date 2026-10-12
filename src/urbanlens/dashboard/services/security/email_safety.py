@@ -5,7 +5,7 @@ Safety controls for user-triggered outbound email.
 from __future__ import annotations
 
 import contextlib
-import datetime
+import datetime as dt
 import hashlib
 from typing import TYPE_CHECKING
 
@@ -22,9 +22,9 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
 # The rolling windows each limit applies to.
-_HOUR = datetime.timedelta(hours=1)
-_DAY = datetime.timedelta(days=1)
-_MONTH = datetime.timedelta(days=30)
+_HOUR = dt.timedelta(hours=1)
+_DAY = dt.timedelta(days=1)
+_MONTH = dt.timedelta(days=30)
 
 # How long an in-flight "attempt" reservation (see `email_rate_limit_error`) stays claimed before it
 # self-expires.
@@ -203,7 +203,7 @@ def verification_recently_sent(profile: Profile, email: str) -> bool:
     Returns:
         True when a resend should be refused for now.
     """
-    cutoff = timezone.now() - datetime.timedelta(seconds=VERIFICATION_RESEND_COOLDOWN_SECONDS)
+    cutoff = timezone.now() - dt.timedelta(seconds=VERIFICATION_RESEND_COOLDOWN_SECONDS)
     return EmailSendLog.objects.filter(
         sender=profile,
         recipient_hash=hash_email(email),

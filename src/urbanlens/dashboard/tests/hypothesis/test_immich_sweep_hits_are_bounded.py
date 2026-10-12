@@ -26,7 +26,7 @@ cannot change which cluster they land in.
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from unittest import mock
 
 from django.contrib.auth.models import User
@@ -46,7 +46,7 @@ INGEST = "urbanlens.dashboard.services.pins.pin_suggestions.ingest_location_hits
 def _asset(index: int, lat: float, lon: float) -> SearchAsset:
     return SearchAsset(
         id=f"asset-{index}",
-        taken_at=datetime.datetime(2024, 1, 1, 12, 0, tzinfo=datetime.UTC) + datetime.timedelta(days=index % 7),
+        taken_at=dt.datetime(2024, 1, 1, 12, 0, tzinfo=dt.UTC) + dt.timedelta(days=index % 7),
         lat=lat,
         lon=lon,
         city="Somewhere",
@@ -135,6 +135,6 @@ class NoPhotoIsLostTests(_SweepCase):
 
 class UngeotaggedPhotosAreStillSkippedTests(_SweepCase):
     def test_an_asset_with_no_gps_contributes_nothing(self) -> None:
-        assets = [SearchAsset(id="no-gps", taken_at=datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC))]
+        assets = [SearchAsset(id="no-gps", taken_at=dt.datetime(2024, 1, 1, tzinfo=dt.UTC))]
 
         self.assertEqual(self._run_sweep(assets), [])

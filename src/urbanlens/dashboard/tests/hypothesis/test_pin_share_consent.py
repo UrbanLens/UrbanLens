@@ -11,7 +11,7 @@ including whatever the sender adds or changes between sharing and acceptance.
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 
 from django.contrib.auth.models import User
 from django.template.loader import render_to_string
@@ -234,7 +234,7 @@ class AcceptedCopyHoldsOnlyWhatWasConsentedTests(_ShareFixture):
             pin_type="building",
             pin_type_is_user_provided=True,
             indoor_outdoor="indoor",
-            date_abandoned=datetime.date(1994, 6, 15),
+            date_abandoned=dt.date(1994, 6, 15),
         )
 
         new_pin = self._accept(share)
@@ -242,7 +242,7 @@ class AcceptedCopyHoldsOnlyWhatWasConsentedTests(_ShareFixture):
         self.assertEqual((new_pin.cameras, new_pin.fences), (SecurityLevel.EVERYWHERE, SecurityLevel.SOME))
         self.assertEqual((new_pin.pin_type, new_pin.pin_type_is_user_provided), ("building", True))
         self.assertEqual(new_pin.indoor_outdoor, "indoor")
-        self.assertEqual(new_pin.date_abandoned, datetime.date(1994, 6, 15))
+        self.assertEqual(new_pin.date_abandoned, dt.date(1994, 6, 15))
 
     def test_what_the_sender_adds_or_changes_after_sharing_in_unshared_categories_does_not_travel(self) -> None:
         share = self._share()

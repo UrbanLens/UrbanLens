@@ -13,7 +13,7 @@ from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.costs.queryset import CostComponentManager, OperatingCostManager
 
 if TYPE_CHECKING:
-    import datetime
+    import datetime as dt
 
 
 class CostComponent(abstract.DashboardModel):
@@ -72,7 +72,7 @@ class CostComponent(abstract.DashboardModel):
         """This component's replacement cost spread evenly across its deprecation life."""
         return self.replacement_cost / (self.deprecation_years * 12)
 
-    def elapsed_months(self, as_of: datetime.datetime) -> Decimal:
+    def elapsed_months(self, as_of: dt.datetime) -> Decimal:
         """
         Months this component has counted toward costs, from creation to retirement (or *as_of*).
 
@@ -132,7 +132,7 @@ class OperatingCost(abstract.DashboardModel):
         """Whether this cost is still being charged (not retired)."""
         return self.retired_at is None
 
-    def elapsed_months(self, as_of: datetime.datetime) -> Decimal:
+    def elapsed_months(self, as_of: dt.datetime) -> Decimal:
         """
         Months this cost has been charged, from creation to retirement (or *as_of*).
 

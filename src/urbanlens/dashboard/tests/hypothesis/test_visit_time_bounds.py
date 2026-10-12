@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 
 from django.contrib.auth.models import User
 from django.urls import reverse
@@ -28,16 +28,12 @@ class VisitTimeSerializerTests(TestCase):
 
     def test_a_past_visit_is_accepted(self) -> None:
         """The check must not be satisfiable by rejecting everything."""
-        serializer = PinVisitCreateSerializer(
-            data={"visited_at": (timezone.now() - datetime.timedelta(days=3)).isoformat()}
-        )
+        serializer = PinVisitCreateSerializer(data={"visited_at": (timezone.now() - dt.timedelta(days=3)).isoformat()})
 
         self.assertTrue(serializer.is_valid(), serializer.errors)
 
     def test_a_visit_a_week_from_now_is_refused(self) -> None:
-        serializer = PinVisitCreateSerializer(
-            data={"visited_at": (timezone.now() + datetime.timedelta(days=7)).isoformat()}
-        )
+        serializer = PinVisitCreateSerializer(data={"visited_at": (timezone.now() + dt.timedelta(days=7)).isoformat()})
 
         self.assertFalse(serializer.is_valid())
         self.assertIn("visited_at", serializer.errors)
@@ -68,12 +64,12 @@ class VisitTimeServiceTests(TestCase):
     def test_the_service_refuses_a_future_visit(self) -> None:
         """The API serializer is not the only road to this function."""
         with self.assertRaises(VisitInFutureError):
-            create_manual_visit(self.pin, visited_at=timezone.now() + datetime.timedelta(days=7))
+            create_manual_visit(self.pin, visited_at=timezone.now() + dt.timedelta(days=7))
 
         self.assertFalse(PinVisit.objects.filter(pin=self.pin).exists(), "a refused visit was still written")
 
     def test_the_service_accepts_a_past_visit(self) -> None:
-        visit = create_manual_visit(self.pin, visited_at=timezone.now() - datetime.timedelta(hours=2))
+        visit = create_manual_visit(self.pin, visited_at=timezone.now() - dt.timedelta(hours=2))
 
         self.assertIsNotNone(visit.pk)
 
@@ -82,12 +78,12 @@ class VisitTimeServiceTests(TestCase):
         The reason this matters at all.
 
         `last_visited` is what the pin list sorts on and what the detail page shows."""
-        create_manual_visit(self.pin, visited_at=timezone.now() - datetime.timedelta(days=1))
+        create_manual_visit(self.pin, visited_at=timezone.now() - dt.timedelta(days=1))
         self.pin.refresh_from_db()
         before = self.pin.last_visited
 
         with self.assertRaises(VisitInFutureError):
-            create_manual_visit(self.pin, visited_at=timezone.now() + datetime.timedelta(days=365))
+            create_manual_visit(self.pin, visited_at=timezone.now() + dt.timedelta(days=365))
 
         self.pin.refresh_from_db()
         self.assertEqual(self.pin.last_visited, before, "a refused future visit still moved last_visited")
@@ -107,7 +103,7 @@ class VisitTimeEndpointTests(TestCase):
         api_key.save()
         self.pin = baker.make(Pin, profile=self.profile, location=baker.make(Location), parent_pin=None)
 
-    def _post(self, when: datetime.datetime):
+    def _post(self, when: dt.datetime):
         return self.client.post(
             reverse("external_api:pins.visits", kwargs={"pin_slug": self.pin.slug}),
             data={"visited_at": when.isoformat()},
@@ -116,12 +112,12 @@ class VisitTimeEndpointTests(TestCase):
         )
 
     def test_a_future_visit_is_refused_with_the_standard_envelope(self) -> None:
-        response = self._post(timezone.now() + datetime.timedelta(days=7))
+        response = self._post(timezone.now() + dt.timedelta(days=7))
 
         self.assertEqual(response.status_code, 400, response.content)
         self.assertIn("error", response.json())
 
     def test_a_past_visit_still_succeeds(self) -> None:
-        response = self._post(timezone.now() - datetime.timedelta(days=1))
+        response = self._post(timezone.now() - dt.timedelta(days=1))
 
         self.assertLess(response.status_code, 300, response.content)

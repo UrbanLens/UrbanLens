@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import re
 
 from django.contrib.auth.models import User
@@ -34,7 +34,7 @@ class AdditionalDetailsSectionTests(TestCase):
         return self.client.get(reverse("profile.view"))
 
     def test_birth_date_shown_when_set(self) -> None:
-        self.profile.birth_date = datetime.date(1990, 6, 15)
+        self.profile.birth_date = dt.date(1990, 6, 15)
         self.profile.save(update_fields=["birth_date"])
         response = self._get()
         self.assertContains(response, "Birthday: June 15, 1990")
@@ -65,7 +65,7 @@ class AdditionalDetailsSectionTests(TestCase):
         self.assertNotIn(">Additional Details<", content)
 
     def test_other_viewer_never_sees_section(self) -> None:
-        self.profile.birth_date = datetime.date(1990, 6, 15)
+        self.profile.birth_date = dt.date(1990, 6, 15)
         self.profile.profile_visibility = VisibilityChoice.ANYONE
         self.profile.save(update_fields=["birth_date", "profile_visibility"])
         other = baker.make(User)

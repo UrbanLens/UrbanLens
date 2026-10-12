@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from unittest import mock
 from uuid import uuid4
 
@@ -124,7 +124,7 @@ class TripCrudTests(_TripApiTestCase):
         activities is not "upcoming" (see ``TripQuerySet.upcoming``), so it consumes no quota."""
         settings_row = SiteSettings.get_current()
         SiteSettings.objects.filter(pk=settings_row.pk).update(max_upcoming_trips_per_user=1)
-        self._make_trip(name="Already planning", start_date=datetime.date.today() + datetime.timedelta(days=7))
+        self._make_trip(name="Already planning", start_date=dt.date.today() + dt.timedelta(days=7))
         response = self.client.post(
             reverse("external_api:trips"),
             {"name": "One too many"},

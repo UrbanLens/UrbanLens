@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from unittest import mock
 
 from django.contrib.auth.models import User
@@ -101,7 +101,7 @@ class PasswordResetApiKeyRevocationTests(TestCase):
     def test_an_already_revoked_key_keeps_its_original_timestamp(self) -> None:
         """``revoked_at`` records when a key stopped working, not when this ran."""
         key = ApiKey.objects.get(user=self.user)
-        earlier = timezone.now() - datetime.timedelta(days=3)
+        earlier = timezone.now() - dt.timedelta(days=3)
         ApiKey.objects.filter(pk=key.pk).update(revoked_at=earlier)
 
         self._submit(self._start_reset(), revoke_api_keys="1")

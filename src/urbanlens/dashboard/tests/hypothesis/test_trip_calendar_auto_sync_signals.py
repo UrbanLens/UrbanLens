@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from unittest import mock
 
 from django.contrib.auth.models import User
@@ -30,13 +30,13 @@ class TripCalendarAutoSyncSignalTests(TestCase):
             profile=self.profile,
             access_token="access",  # noqa: S106
             refresh_token="refresh",  # noqa: S106
-            token_expiry=timezone.now() + datetime.timedelta(hours=1),
+            token_expiry=timezone.now() + dt.timedelta(hours=1),
         )
         self.trip = Trip.objects.create(
             name="Signal trip",
             creator=self.profile,
-            start_date=datetime.date(2026, 11, 1),
-            end_date=datetime.date(2026, 11, 2),
+            start_date=dt.date(2026, 11, 1),
+            end_date=dt.date(2026, 11, 2),
         )
 
     def _enqueue_for_trip_save(self):
@@ -128,13 +128,13 @@ class CalendarPushRequestTests(TestCase):
             profile=self.profile,
             access_token="access",  # noqa: S106
             refresh_token="refresh",  # noqa: S106
-            token_expiry=timezone.now() + datetime.timedelta(hours=1),
+            token_expiry=timezone.now() + dt.timedelta(hours=1),
         )
         self.trip = Trip.objects.create(
             name="Request trip",
             creator=self.profile,
-            start_date=datetime.date(2026, 11, 1),
-            end_date=datetime.date(2026, 11, 2),
+            start_date=dt.date(2026, 11, 1),
+            end_date=dt.date(2026, 11, 2),
         )
         self.link = TripCalendarLink.objects.create(
             trip=self.trip,
@@ -184,7 +184,7 @@ class CalendarPushRequestTests(TestCase):
 
     def test_a_change_made_during_the_push_stays_owed(self):
         self._request()
-        later = timezone.now() + datetime.timedelta(seconds=5)
+        later = timezone.now() + dt.timedelta(seconds=5)
 
         def change_meanwhile(*_args, **_kwargs):
             TripCalendarLink.objects.filter(pk=self.link.pk).update(push_requested_at=later)
@@ -206,7 +206,7 @@ class CalendarPushRequestTests(TestCase):
         self.assertIsNone(self.link.push_requested_at)
 
     def _age_request(self, *, attempts=0):
-        stale = timezone.now() - datetime.timedelta(hours=1)
+        stale = timezone.now() - dt.timedelta(hours=1)
         TripCalendarLink.objects.filter(pk=self.link.pk).update(push_requested_at=stale, push_attempts=attempts)
 
     def test_the_sweep_queues_a_stale_request(self):

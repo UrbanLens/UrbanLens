@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 
 from django.contrib.auth.models import User
 from django.utils import timezone
@@ -44,7 +44,7 @@ class UserSubscriptionNotRevokedTests(TestCase):
             role=self.role,
             granted_by=self.admin,
             revoked_at=None,
-            expires_at=timezone.now() - datetime.timedelta(days=1),
+            expires_at=timezone.now() - dt.timedelta(days=1),
         )
         self.assertEqual(list(UserSubscription.objects.not_revoked()), [expired])
 
@@ -68,7 +68,7 @@ class UserSubscriptionActiveTests(TestCase):
             role=self.role,
             granted_by=self.admin,
             revoked_at=None,
-            expires_at=timezone.now() - datetime.timedelta(days=1),
+            expires_at=timezone.now() - dt.timedelta(days=1),
         )
         self.assertEqual(list(UserSubscription.objects.active()), [])
 
@@ -79,7 +79,7 @@ class UserSubscriptionActiveTests(TestCase):
             role=self.role,
             granted_by=self.admin,
             revoked_at=timezone.now(),
-            expires_at=timezone.now() + datetime.timedelta(days=30),
+            expires_at=timezone.now() + dt.timedelta(days=30),
         )
         self.assertEqual(list(UserSubscription.objects.active()), [])
 

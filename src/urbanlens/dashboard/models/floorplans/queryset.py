@@ -9,7 +9,7 @@ from django.db.models import Q
 from urbanlens.dashboard.models.abstract.queryset import FrontendDashboardManager, FrontendDashboardQuerySet
 
 if TYPE_CHECKING:
-    import datetime
+    import datetime as dt
 
     from urbanlens.dashboard.models.floorplans.model import Floorplan
     from urbanlens.dashboard.models.place.model import Place
@@ -41,7 +41,7 @@ class FloorplanQuerySet(FrontendDashboardQuerySet["Floorplan"]):
             raise ValueError("for_place() requires a place; a placeless plan has no such list - scope by pin instead.")
         return self.filter(place=place).order_by(F("valid_from").asc(nulls_first=True))
 
-    def at(self, place: Place, on_date: datetime.date | None = None, *, profile=None, community: bool = False) -> Floorplan | None:
+    def at(self, place: Place, on_date: dt.date | None = None, *, profile=None, community: bool = False) -> Floorplan | None:
         """
         The plan in force on a date, or the most current when no date given.
         A version applies from its ``valid_from`` until the next dated version; the undated original applies from the beginning of time.

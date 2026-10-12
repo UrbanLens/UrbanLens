@@ -15,7 +15,7 @@ disabled-API body is Google's ``accessNotConfigured`` / ``SERVICE_DISABLED`` env
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import json
 from typing import Any
 from unittest import mock
@@ -161,13 +161,13 @@ class _ExpiredTokenCase(_TripWithAMateCase):
 
     def _expire_token(self) -> None:
         GoogleCalendarAccount.objects.filter(pk=self.account.pk).update(
-            token_expiry=timezone.now() - datetime.timedelta(minutes=5)
+            token_expiry=timezone.now() - dt.timedelta(minutes=5)
         )
         self.account.refresh_from_db()
 
     def _fresh_token(self) -> None:
         GoogleCalendarAccount.objects.filter(pk=self.account.pk).update(
-            token_expiry=timezone.now() + datetime.timedelta(hours=1)
+            token_expiry=timezone.now() + dt.timedelta(hours=1)
         )
         self.account.refresh_from_db()
 
@@ -408,7 +408,7 @@ class APushGoogleCannotTakeNowIsNeverGivenUpTests(_ExpiredTokenCase):
         for _round in range(rounds):
             push_auto_synced_trip_changes(self.trip)
             TripCalendarLink.objects.filter(pk=self.link.pk, push_requested_at__isnull=False).update(
-                push_requested_at=timezone.now() - datetime.timedelta(hours=1)
+                push_requested_at=timezone.now() - dt.timedelta(hours=1)
             )
             requeue_pending_calendar_pushes()
 
@@ -444,7 +444,7 @@ class APushGoogleCannotTakeNowIsNeverGivenUpTests(_ExpiredTokenCase):
 
     def test_the_sweep_drops_a_push_owed_longer_than_the_age_cap(self) -> None:
         TripCalendarLink.objects.filter(pk=self.link.pk).update(
-            push_requested_at=timezone.now() - MAX_OWED_CALENDAR_WRITE_AGE - datetime.timedelta(minutes=1)
+            push_requested_at=timezone.now() - MAX_OWED_CALENDAR_WRITE_AGE - dt.timedelta(minutes=1)
         )
 
         requeue_pending_calendar_pushes()

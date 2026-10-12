@@ -8,7 +8,7 @@ and who may read it, the expired-grant and gateway-failure outcomes, and the toa
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import json
 from unittest import mock
 
@@ -44,7 +44,7 @@ class _ImportViewTestCase(TestCase):
             profile=self.profile,
             access_token="access",  # noqa: S106
             refresh_token="refresh",  # noqa: S106
-            token_expiry=timezone.now() + datetime.timedelta(hours=1),
+            token_expiry=timezone.now() + dt.timedelta(hours=1),
         )
         self.client.force_login(self.user)
         self.url = reverse("trips.calendar.import")

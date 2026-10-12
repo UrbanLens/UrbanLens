@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 
 from django.contrib.auth.models import User
 from django.db import connection
@@ -45,7 +45,7 @@ class DueForHardDeleteQuerySetTests(TestCase):
             self.sender,
             self.recipient,
             sender_delete_after=MessageRetentionChoice.NEVER,
-            read_at=timezone.now() - datetime.timedelta(days=1000),
+            read_at=timezone.now() - dt.timedelta(days=1000),
         )
         self.assertNotIn(message, DirectMessage.objects.due_for_hard_delete())
 
@@ -57,7 +57,7 @@ class DueForHardDeleteQuerySetTests(TestCase):
 
     def _sent_days_ago(self, days: int, sender_delete_after: str) -> DirectMessage:
         message = _make_message(self.sender, self.recipient, sender_delete_after=sender_delete_after, read_at=None)
-        DirectMessage.objects.filter(pk=message.pk).update(created=timezone.now() - datetime.timedelta(days=days))
+        DirectMessage.objects.filter(pk=message.pk).update(created=timezone.now() - dt.timedelta(days=days))
         message.refresh_from_db()
         return message
 
@@ -88,7 +88,7 @@ class DueForHardDeleteQuerySetTests(TestCase):
             self.sender,
             self.recipient,
             sender_delete_after=MessageRetentionChoice.ONE_DAY,
-            read_at=timezone.now() - datetime.timedelta(hours=1),
+            read_at=timezone.now() - dt.timedelta(hours=1),
         )
         self.assertNotIn(message, DirectMessage.objects.due_for_hard_delete())
 
@@ -97,7 +97,7 @@ class DueForHardDeleteQuerySetTests(TestCase):
             self.sender,
             self.recipient,
             sender_delete_after=MessageRetentionChoice.ONE_DAY,
-            read_at=timezone.now() - datetime.timedelta(days=2),
+            read_at=timezone.now() - dt.timedelta(days=2),
         )
         self.assertIn(message, DirectMessage.objects.due_for_hard_delete())
 
@@ -113,7 +113,7 @@ class HardDeleteExpiredDirectMessagesTaskTests(TestCase):
             self.sender,
             self.recipient,
             sender_delete_after=MessageRetentionChoice.ONE_DAY,
-            read_at=timezone.now() - datetime.timedelta(days=2),
+            read_at=timezone.now() - dt.timedelta(days=2),
         )
         count = hard_delete_expired_direct_messages()
         self.assertEqual(count, 1)
@@ -145,7 +145,7 @@ class HardDeleteExpiredDirectMessagesTaskTests(TestCase):
             self.sender,
             self.recipient,
             sender_delete_after=MessageRetentionChoice.NEVER,
-            read_at=timezone.now() - datetime.timedelta(days=1000),
+            read_at=timezone.now() - dt.timedelta(days=1000),
         )
         hard_delete_expired_direct_messages()
         self.assertTrue(DirectMessage.objects.filter(pk=message.pk).exists())
@@ -302,7 +302,7 @@ class SidebarPreviewTombstoneTests(TestCase):
             self.sender,
             self.recipient,
             sender_delete_after=MessageRetentionChoice.WHEN_READ,
-            read_at=timezone.now() - datetime.timedelta(minutes=1),
+            read_at=timezone.now() - dt.timedelta(minutes=1),
             body=self.SECRET,
         )
         self.client.force_login(self.recipient.user)
