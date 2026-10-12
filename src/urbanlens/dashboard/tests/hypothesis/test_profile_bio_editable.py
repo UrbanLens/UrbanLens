@@ -47,11 +47,7 @@ class ProfileBioEditableRenderingTests(TestCase):
             reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()})
         )
         self.assertContains(response, "Urban explorer since 2015.")
-        # The wiring script's `querySelector('.profile-bio-full--editable')`
-        # legitimately contains this class name as inert text on every render
-        # (it just no-ops when the element isn't there) - check the actual
-        # rendered element's class list, not just "does this string appear
-        # anywhere in the page source".
+        # The wiring script includes this class as inert text on every render; check the actual element's class list.
         self.assertNotContains(response, 'profile-bio-full profile-bio-full--editable"')
 
     def test_about_section_omitted_for_other_viewer_with_no_bio(self) -> None:
@@ -63,9 +59,7 @@ class ProfileBioEditableRenderingTests(TestCase):
         response = self.client.get(
             reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()})
         )
-        # Same caveat: the wiring script hardcodes 'Add a bio...' as its
-        # revert-to-placeholder fallback string, present in every render
-        # regardless of viewer - check for the text as actual element content.
+        # The wiring script hardcodes 'Add a bio...' as fallback text on every render; check actual element content.
         self.assertNotContains(response, ">Add a bio...<")
 
 

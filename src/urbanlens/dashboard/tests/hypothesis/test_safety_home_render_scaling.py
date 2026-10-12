@@ -1,4 +1,4 @@
-"""Render-time cost of one more check-in on the safety overview page (P69 - deliberately unpaginated, never measured)."""
+"""Render-time cost of one more check-in on the safety overview page."""
 
 from __future__ import annotations
 
@@ -16,9 +16,8 @@ class SafetyHomeRowCostTests(RenderTimeScalingMixin, TestCase):
     """
     The safety overview page lists every check-in the profile owns with no cap or slice.
 
-    P69 left it that way on the theory that ``SafetyPreference.auto_delete_after_days`` bounds it
-    (it's nullable and defaults to "never", so in practice it often doesn't), not because a row was
-    measured and found cheap.
+    ``SafetyPreference.auto_delete_after_days`` is nullable and defaults to "never", so in practice
+    it often does not bound the list.
     """
 
     def setUp(self) -> None:

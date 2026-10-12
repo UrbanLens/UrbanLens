@@ -812,12 +812,8 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
             return tmap;
         };
 
-        // -- Render thumbnail map inside .comment-map-thumb --------------------
-        // Runs on DOMContentLoaded and after HTMX swaps. Exposed on window for raw innerHTML swaps.
-        // -- Thumbnail budget -------------------------------------------------
-        // Chrome limits WebGL contexts to 16; older thumbnails go blank silently.
-        // Build thumbnails only when near viewport, keep at most ThumbMapBudget's limit alive.
-        // Evicted thumbnails rebuild on scroll back. See thumb-map-budget.ts.
+        // Render thumbnail map inside .comment-map-thumb; runs on DOMContentLoaded and after HTMX swaps.
+        // Thumbnail budget: Chrome limits WebGL contexts to 16; build only near viewport, evict on scroll.
         var _observer = null;
         function _thumbObserver() {
             if (_observer) return _observer;

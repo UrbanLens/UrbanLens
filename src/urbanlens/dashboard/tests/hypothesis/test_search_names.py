@@ -1,4 +1,4 @@
-"""Which of a pin's names are its owner's own, and which cached search each set of them reads (P188)."""
+"""Which of a pin's names are its owner's own, and which cached search each set of them reads."""
 
 from __future__ import annotations
 
@@ -94,7 +94,7 @@ class SearchNamesForPinTests(TestCase):
         self.assertEqual(search_names(self.pin()).shared, (OFFICIAL, "HRSH Campus", "Kirkbride"))
 
     def test_an_official_name_of_unknown_origin_is_not_shared(self) -> None:
-        """P186: a legacy name no provider is recorded for may be a person's own text, e.g. a pin name."""
+        """A legacy name with no recorded provider may be a person's own text, e.g. a pin name."""
         Location.objects.filter(pk=self.location.pk).update(official_name_source="")
         self.location.refresh_from_db()
 

@@ -1,13 +1,13 @@
 """
-A pin change re-evaluates its owner's smart lists on the queue, never on the request (N30, Batch 1).
+A pin change re-evaluates its owner's smart lists on the queue, never on the request.
 
-Below ``MAX_SMART_LISTS_PER_SYNC`` the old sync ran in the request's commit hook, once per pin per signal. Measured
-on 2026-10-06 against 25 smart lists over 2,000 pins: one pin save cost 116 queries and 145-180 ms; a bulk edit of
-50 pins cost 8,420 queries and 16 s; one of 500 pins (``MAX_BULK_PINS``) cost about 84,000 queries and 174 s.
+Below ``MAX_SMART_LISTS_PER_SYNC`` the sync ran in the request's commit hook, once per pin per signal.
+One pin save cost 116 queries and 145-180 ms; a bulk edit of 50 pins cost 8,420 queries and 16 s;
+one of 500 pins (``MAX_BULK_PINS``) cost about 84,000 queries and 174 s.
 
-A change now records a ``SmartListSyncRequest`` in its own transaction and, once it commits, queues one sync per
-account. The sync evaluates every requested pin against each list in one query per rule. While requests are
-outstanding, the account's smart lists say they are catching up.
+A change now records a ``SmartListSyncRequest`` in its own transaction and, once it commits,
+queues one sync per account. The sync evaluates every requested pin against each list in one query per rule.
+While requests are outstanding, the account's smart lists say they are catching up.
 """
 
 from __future__ import annotations
@@ -276,7 +276,7 @@ class TheSyncAppliesEveryRequestTests(_SmartListCase):
         self.assertFalse(SmartListSyncRequest.objects.exists())
 
     def test_a_queued_message_from_before_the_change_still_applies(self) -> None:
-        """``sync_pin_against_smart_lists_task`` messages queued by the old code must not be dropped."""
+        """``sync_pin_against_smart_lists_task`` messages queued previously must not be dropped."""
         pin_list = self._smart_lists(1)[0]
         pin = self._pins(1)[0]
 

@@ -151,11 +151,7 @@ class ConnectionHeadroomTests(_FreshProbesTestCase):
     url = "/health/ready"
 
     def test_it_reports_backends_in_use_and_the_ceiling(self) -> None:
-        """
-        The number P104's postmortem needed and nothing exposed.
-
-        The outage read 97 of 100 connections in use, and the first anyone knew of it was the site being down; a
-        count turns that into something a scrape can watch climb."""
+        """Connection usage and ceiling are exposed so a scrape can watch pool pressure climb."""
         report = json.loads(Client().get(self.url).content)
 
         connections = report["connections"]
@@ -314,7 +310,7 @@ class TheDeadlineEndsWithTheProbeTests(_FreshProbesTestCase):
 
 
 class TheProbesReuseTheirCostlyAnswersTests(_FreshProbesTestCase):
-    """G4-9: an unauthenticated poll built the migration graph and counted pg_stat_activity every time."""
+    """An unauthenticated poll built the migration graph and counted pg_stat_activity every time."""
 
     url = "/health/ready"
 

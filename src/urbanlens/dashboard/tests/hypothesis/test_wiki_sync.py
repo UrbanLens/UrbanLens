@@ -266,9 +266,9 @@ class PinAliasToWikiSyncTests(TestCase):
         pin = baker.make(Pin, profile=profile, location=location)
         with self.captureOnCommitCallbacks(execute=True):
             PinAlias.objects.create(pin=pin, name="No Wiki Yet")
-        # setUp's _make_pin_with_wiki already creates a WikiAlias for the
-        # wiki's own name (Wiki.save()'s pre-existing invariant) - assert
-        # against that specific alias name, not table-wide existence.
+        # setUp's _make_pin_with_wiki creates a WikiAlias for the wiki's
+        # own name (Wiki.save()'s invariant) - assert against that specific
+        # alias name, not table-wide existence.
         self.assertFalse(WikiAlias.objects.filter(name="No Wiki Yet").exists())
 
 
@@ -426,9 +426,10 @@ class SettingsViewWikiSyncSectionTests(TestCase):
 
 class MediaCacheInvalidationOnNewAliasTests(TestCase):
     """
-    A new wiki alias is a new name everyone knows the place by, so the shared Wikimedia search, and a Wikipedia
-    lookup that missed, run again with it. A pin's own aliases are searched only in its own audience's row (P188), so
-    they leave every shared row alone."""
+    A new wiki alias is a new name everyone knows the place by, so the shared
+    Wikimedia search, and a Wikipedia lookup that missed, run again with it.
+    A pin's own aliases are searched only in its own audience's row, so they
+    leave every shared row alone."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)

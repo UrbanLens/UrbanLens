@@ -1,4 +1,4 @@
-"""P110: a lookup the STAC index cannot narrow is refused, never widened to the whole theme."""
+"""A lookup the STAC index cannot narrow is refused, never widened to the whole theme."""
 
 from __future__ import annotations
 
@@ -211,7 +211,7 @@ def _reset_breaker() -> None:
 
 def _patch_rate_limit_gate(test_case: SimpleTestCase) -> None:
     """
-    Make the P110 call-budget gate a no-op, so these `SimpleTestCase`s never touch the DB.
+    Make the call-budget gate a no-op, so these `SimpleTestCase`s never touch the DB.
 
     Both halves are stubbed: `_reserve_call_budget` (so no `ApiCallLog` row is reserved) and
     `_finalize_call` (so `_fetch` has nothing to update afterwards). The gate's own behaviour

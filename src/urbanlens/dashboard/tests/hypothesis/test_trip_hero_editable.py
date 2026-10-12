@@ -131,10 +131,8 @@ class TripHeroEditableRenderingTests(TestCase):
         response = self._get()
         self.assertContains(response, self.trip.name)
         self.assertContains(response, "A weekend in the mountains.")
-        # The wiring script's `.closest('.trip-title-editable')` legitimately
-        # contains this class name as inert text on every render - check the
-        # actual rendered element's class list, not just "does this string
-        # appear anywhere in the page source" (same caveat as the bio/pin-list
-        # precedents for this exact false-positive).
+        # The wiring script's `.closest('.trip-title-editable')` contains this
+        # class name as inert text on every render; check the actual element's
+        # class list, not string presence in page source.
         self.assertNotContains(response, 'trip-title-editable"')
         self.assertNotContains(response, 'trip-description-editable"')

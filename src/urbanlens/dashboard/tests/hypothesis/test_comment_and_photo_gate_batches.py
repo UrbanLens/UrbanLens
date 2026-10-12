@@ -175,10 +175,9 @@ class PhotoUploaderBatchTests(GateAgreementMixin, TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        # The inherited scenarios vary the *uploader's* half, so the viewer's
-        # own filter is opened first - left at its ANYTHING_IN_COMMON default
-        # it refuses every stranger and the uploader's setting stops mattering,
-        # which would make those scenarios agree on False and prove nothing.
+        # The inherited scenarios vary the uploader's half, so the viewer's
+        # filter is opened first - left at its ANYTHING_IN_COMMON default
+        # it refuses every stranger and the uploader's setting stops mattering.
         # The viewer's half has its own cases below.
         self._set_viewer_filter(VisibilityChoice.ANYONE)
 

@@ -189,10 +189,8 @@ def _visible_given_pins(location: Location, pins, profile: Profile | None, *, ex
     if pins.filter(location=location).exists():
         return True
 
-    # A previewed move that lands on this Location's own coordinates keeps the exact-match grant
-    # above, which *pins* alone can't show because the pin being moved is deliberately excluded from
-    # it.
-    # Checked before the place lookup: a coordinate no provider knows has no place at all, so exact
+    # Previewed move onto this location's coordinates keeps the exact-match grant
+    # (the moving pin is excluded from *pins*).
     if extra_point is not None and _point_is_at(extra_point, location):
         return True
 

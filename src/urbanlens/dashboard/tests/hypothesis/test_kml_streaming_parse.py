@@ -1,5 +1,5 @@
 """
-The KML import streams placemarks, and reads exactly what the fastkml tree walk it replaced read (P95).
+The KML import streams placemarks, and reads exactly what the fastkml tree walk it replaced read.
 
 fastkml built a full lxml-backed tree before reading one placemark: about fifteen times the file in memory.
 """
@@ -187,7 +187,7 @@ class StreamingKmlMemoryTests(SimpleTestCase):
 
 
 class CoordinateTuplesTests(SimpleTestCase):
-    """P95: the tuples of a ``coordinates`` text are found without a substitution over the whole text."""
+    """The tuples of a ``coordinates`` text are found without a substitution over the whole text."""
 
     @given(st.lists(st.sampled_from(["1", "2.5", "-3", ",", ",,", " ", "  ", "\n", "\t", "\xa0", " ", "x"])))
     def test_the_tuples_are_those_of_collapsing_the_spaces_around_each_comma(self, pieces: list[str]) -> None:

@@ -247,10 +247,9 @@ class RegistrationTests(TestCase):
             register(ToolSpec(name="search_pins", description="dup", args_model=_NoArgs, handler=_noop))
 
     def test_a_write_tool_must_declare_that_it_needs_confirmation(self) -> None:
-        # execute() gates writes on read_only alone, so a spec that set
-        # read_only=False without requires_confirmation would describe itself
-        # as running unconfirmed while actually being proposal-gated. Reject
-        # it at registration rather than let the two fields disagree.
+        # execute() gates writes on read_only; a spec with read_only=False but
+        # no requires_confirmation would claim to run unconfirmed while being
+        # proposal-gated. Reject at registration.
         def _noop(context: ToolContext, args: _NoArgs) -> dict[str, Any]:
             return {}
 
@@ -285,8 +284,8 @@ class RegistrationTests(TestCase):
         self.assertEqual(stale, set(), f"NEGATIVE_CASES names tools that are no longer registered: {sorted(stale)}")
 
     def test_every_named_negative_access_test_exists(self) -> None:
-        # Without this, NEGATIVE_CASES decays into a list of names that used to mean something - a renamed or
-        # deleted test would leave the completeness check above passing while the coverage it claims is gone.
+        # Without this, NEGATIVE_CASES decays into stale names; a renamed or
+        # deleted test would leave the completeness check passing while coverage is gone.
         import importlib
 
         for tool, cases in sorted(NEGATIVE_CASES.items()):

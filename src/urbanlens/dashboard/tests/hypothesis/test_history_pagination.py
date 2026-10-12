@@ -1,4 +1,4 @@
-"""Both revision-history lists render one page at a time (P69)."""
+"""Both revision-history lists render one page at a time."""
 
 from __future__ import annotations
 
@@ -91,7 +91,7 @@ class ArticleHistoryPaginationTests(TestCase):
         self.assertContains(response, f"{reverse('pin.article.history', args=[self.pin.slug])}?page=2")
 
     def test_the_list_reads_revision_lengths_not_revision_texts(self) -> None:
-        """Sizing a delta needs a length; each revision can hold 200,000 characters (G5-24)."""
+        """Sizing a delta needs a length; each revision can hold 200,000 characters."""
         from django.db import connection
         from django.test.utils import CaptureQueriesContext
 

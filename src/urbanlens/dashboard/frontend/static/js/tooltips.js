@@ -99,11 +99,7 @@
         if (activeTrigger && usesFloat(activeTrigger)) scheduleHide();
     });
 
-    // -- Touch / coarse pointer: tap to toggle ---------------------------------
-    // Click-to-toggle only applies on touch/coarse-pointer devices - on a
-    // mouse, hover/focus (above) already shows the tooltip, so a click on the
-    // trigger itself should behave normally (e.g. actually follow an <a href>
-    // instead of having the tooltip logic call preventDefault() on it).
+    // Click-to-toggle only on touch/coarse pointers; on mouse, hover/focus already shows tooltip.
     document.addEventListener('click', e => {
         const trigger = e.target.closest('[data-tooltip]');
 

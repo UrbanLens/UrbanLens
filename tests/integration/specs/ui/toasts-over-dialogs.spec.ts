@@ -1,8 +1,6 @@
 /**
- * A toast shown while a modal dialog is open is drawn above it and takes the pointer (P194).
- *
- * A modal dialog sits in the top layer with a backdrop over the rest of the page and makes everything outside it inert.
- * The toast stack is lifted into the top layer above the dialog, and moved inside it while it is open, so it can be
+ * A toast shown while a modal dialog is open is drawn above it and takes the pointer.
+ * The toast stack is lifted into the top layer above the dialog, so it can be
  * clicked and hovered as it can with no dialog.
  */
 
@@ -93,7 +91,7 @@ test("a toast raised over an open modal dialog is as bright as one with no dialo
 test("the comparison sees a toast left under the backdrop", async ({ page }) => {
     const alone = await toastWithoutDialog(page);
     await page.evaluate(() => {
-        // What the page did before P194: nothing lifts the stack.
+        // Before the fix: nothing lifts the stack.
         Object.defineProperty(HTMLElement.prototype, "showPopover", { value: undefined });
         document.querySelector<HTMLDialogElement>("#p194-dialog")?.showModal();
         window.toastr?.info("A toast");

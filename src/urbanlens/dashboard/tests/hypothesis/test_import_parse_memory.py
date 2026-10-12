@@ -1,5 +1,5 @@
 """
-What reading one import preview file costs in memory, per format (P95).
+What reading one import preview file costs in memory, per format.
 
 A preview entry may be up to 1 GB, and media-worker parses two at once in 3 GB, so no parse may hold a structure
 built from the whole file. Each test reads a 12 MiB file and holds the parse's tracemalloc peak under an eighth of
@@ -395,7 +395,7 @@ class PinFormatsAreReadInPiecesTests(_MemoryCase):
 
 
 class OneLargeElementTests(_MemoryCase):
-    """P95: a file that is one element is read with no per-coordinate objects, only the element's own text."""
+    """A file that is one element is read with no per-coordinate objects, only the element's own text."""
 
     def assert_held_near_its_text(self, name: str, upload: bytes) -> None:
         peak, state = self._peak(name, upload)

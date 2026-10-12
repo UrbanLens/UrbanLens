@@ -1,4 +1,4 @@
-"""P226: Property Records' Overview summarises the card's other tabs, and a tab still fetching is never blank."""
+"""Property Records' Overview summarises the card's other tabs, and a tab still fetching is never blank."""
 
 from __future__ import annotations
 
@@ -190,7 +190,6 @@ class PropertyRecordsOverviewTests(_Base):
         self.assertContains(response, "Eligible")
 
     def test_crises_record_of_another_building_is_not_this_ones(self) -> None:
-        """CRIS's nearest record within 200 m can be a neighbour's (P255)."""
         record = {"USNName": "BLDG 166/OLD POLICE STATION (1932)", "EligibilityDesc": "Not Eligible"}
         record |= {"source_latitude": float(_HRSH[0]) + 0.001, "source_longitude": float(_HRSH[1])}
         self._settle(cris_building=record)

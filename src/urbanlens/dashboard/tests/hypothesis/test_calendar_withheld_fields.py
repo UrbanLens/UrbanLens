@@ -1,5 +1,5 @@
 """
-What a calendar export withholds is removed from the Google event (P335), and a Google rate limit is not a dead grant.
+What a calendar export withholds is removed from the Google event, and a Google rate limit is not a dead grant.
 
 An update is a PATCH, and Google keeps every field a PATCH leaves out. A location the export stopped sending - hidden
 after export, or restricted by the trip-mate who added it - stayed on the event. These tests run the export against
@@ -265,7 +265,7 @@ class AWithheldLocationIsRemovedFromTheEventTests(_TripWithAMateCase):
         self.assertEqual(self._event(None)["location"], "")
 
     def test_a_stop_picked_from_a_place_search_is_not_named_by_the_title_it_was_given(self) -> None:
-        """An untitled stop added from a place search stores the place's name as its title (P186, UrbanLens#303)."""
+        """An untitled stop added from a place search stores the place's name as its title."""
         self._set_mate_visibility(VisibilityChoice.NO_ONE)
         activity = create_activity(
             self.trip,

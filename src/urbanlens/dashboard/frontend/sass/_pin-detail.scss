@@ -4255,7 +4255,7 @@ body.page-location-details .pin-detail-grid {
             background: var(--ul-surface-raised-border);
         }
 
-        // The whole tile used to be an <a>; the thumbnail is now a plain button (click opens the lightbox) so it must reset every default button.
+        // Thumbnail is a button (click opens lightbox), not a link; reset all button defaults.
         .media-item-thumb-btn {
             display: flex;
             flex-direction: column;

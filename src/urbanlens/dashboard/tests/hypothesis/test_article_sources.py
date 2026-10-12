@@ -102,7 +102,7 @@ class _SourcesTestBase(RedataConfiguredMixin, TestCase):
 
         CRIS, Commons and the nearby Wikipedia/Wikidata listing are the document sources Sources fetches itself. The
         REData archives are document sources too, but list only what their gallery cached, so with no archive row here
-        nothing waits for them (P260).
+        nothing waits for them.
         """
         for scope in search_names(self.pin).scopes:
             LocationCache.set(self.location, "wikimedia", {"items": []}, query_key="q", audience=scope.audience)
@@ -499,7 +499,7 @@ class WikiSourcesTests(_SourcesTestBase):
 
 
 class NestedSourcesTests(_SourcesTestBase):
-    """With child pin details on, a campus page lists its nested buildings' own documents too (P234)."""
+    """With child pin details on, a campus page lists its nested buildings' own documents too."""
 
     def setUp(self) -> None:
         super().setUp()

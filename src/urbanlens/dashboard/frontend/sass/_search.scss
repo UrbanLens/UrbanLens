@@ -36,11 +36,7 @@
         animation: gs-fade-in .14s ease-out;
     }
 
-    // display must only apply while [open] - the native UA rule that hides a
-    // closed <dialog> (dialog:not([open]) { display: none }) is lowest-precedence
-    // by *origin*, so any author rule for `display` on the element beats it
-    // regardless of selector specificity. An unscoped `display: flex` here
-    // previously made the dialog visible on every page load.
+    // display only while [open]; UA rule dialog:not([open]) { display: none } is lowest precedence by origin.
     &[open] {
         display: flex;
         flex-direction: column;

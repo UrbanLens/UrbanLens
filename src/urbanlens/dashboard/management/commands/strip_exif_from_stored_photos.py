@@ -3,12 +3,12 @@ One-off backfill: re-encode photos, comment images, label icons and avatars stor
 
 TEMPORARY - delete this command once it has been run against production. Run it once: each run re-encodes again.
 
-A photo used to be stored as uploaded unless it was resized, converted or carried EXIF, so older files can still hold
+A photo was stored as uploaded unless it was resized, converted or carried EXIF, so older files can still hold
 XMP (which can carry GPS), IPTC, a comment or PNG text. Each photo's EXIF and embedded keywords are recorded on its row
 when they never were, then the file is re-encoded under the uploader's format policy, and an existing analysis copy is
 rewritten from the clean file.
 
-Comment and trip comment images, label, pin and achievement icons and avatars were always stored as uploaded (P119). They go through the
+Comment and trip comment images, label, pin and achievement icons and avatars were always stored as uploaded. They go through the
 same re-encode as new uploads of them; an undecodable one is removed, and a published comment keeps its text.
 
 Photo and comment image dimensions are kept. Shrinking cannot be undone, and this pass cleans files rather than

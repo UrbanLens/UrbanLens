@@ -1,5 +1,5 @@
 """
-A keyword source that did not answer leaves a photo's keywords as they were (P322).
+A keyword source that did not answer leaves a photo's keywords as they were.
 
 Ollama returned ``[]`` for a refused connection, a timeout, a 5xx or an error body, and
 ``generate_keywords_for_image`` stored that as the photo's answer: it deleted the Ollama keywords the
@@ -306,7 +306,7 @@ class UnreadableCopyKeepsKeywordsTests(TestCase):
 
 
 class EveryImageProviderRaisesTests(SimpleTestCase):
-    """No built-in image provider turns "no answer" into ``[]`` (P322)."""
+    """No built-in image provider turns "no answer" into ``[]``."""
 
     def test_no_image_provider_returns_empty_for_a_missing_copy(self) -> None:
         import ast

@@ -1,7 +1,7 @@
 """
-The public-media sweep removes cached results no one is shown, and nothing else (P233).
+The public-media sweep removes cached results no one is shown, and nothing else.
 
-Built on P196's Hudson River State Hospital row: two photos and a report are about the place; a photo geolocated in
+Test data: two photos and a report are about the place; a photo geolocated in
 Binghamton, one across the river with no caption, and two books that only mention the words are not.
 """
 

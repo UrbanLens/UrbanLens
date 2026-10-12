@@ -1,11 +1,11 @@
 """
 A Valkey outage must cost one timeout per request, not one per cache call.
 
-Measured with Valkey paused on a staging-model environment (P105): every
+Measured with Valkey paused on a staging-model environment: every
 request 500s after **32 seconds**, `/health/ready` included. The 500 came from
 the paths Django leaves unwrapped in `cached_db` - `exists()` and `delete()`,
 so logging in and out raise while browsing survives. The 32 seconds came from
-somewhere else entirely: `socket_timeout` is 2s and a request makes roughly
+`socket_timeout` is 2s and a request makes roughly
 sixteen cache calls, each waiting its own timeout in turn.
 
 So the status code and the duration are two defects, and only the second

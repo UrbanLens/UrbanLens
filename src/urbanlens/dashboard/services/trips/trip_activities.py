@@ -224,9 +224,6 @@ def resolve_activity_place(body: Mapping[str, Any], profile: Profile, *, trip: T
         profile: The submitting profile; pin lookups are scoped to their own pins.
         trip: The trip the activity belongs to.
 
-    Returns:
-        The resolved ``(location, pin)`` pair - either or both may be None.
-
     Raises:
         TripValidationError: A ``pin_uuid``/``pin_slug`` was submitted but does not resolve to one of *profile*'s own pins."""
     from urbanlens.dashboard.models.location.model import Location

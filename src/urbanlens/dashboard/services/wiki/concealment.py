@@ -198,27 +198,19 @@ def conceal_rows[QuerySetT: QuerySet[Any]](queryset: QuerySetT, viewer: Profile 
     allowed = visible_actor_ids(viewer)
 
     if queryset.model is Image:
-        # Provider rows stay: they are what a fresh wiki shows.
-        # A photo the profile actually contributed stays only when that profile is the viewer or a
-        # friend.
+        # Provider rows stay (fresh wiki content). User photos stay only for viewer or friends.
         from urbanlens.dashboard.models.images.queryset import _own_contribution_q
 
         return queryset.filter(~_own_contribution_q() | Q(profile_id__in=allowed))
 
     if model_name == "WikiAlias":
-        # `created_by` is the intuitive discriminator here and it is wrong: it is NULL for the
-        # geocoder backfill *and* for the alias Wiki.save() auto-creates on every rename, so
-        # filtering on it would re-expose a name concealed as a field, as an alias row.
-        # The durable answer is the alias's own source.
+        # created_by is NULL for geocoder backfill and auto-rename; filter by source instead.
         from urbanlens.dashboard.models.aliases.model import AliasSource
 
         return queryset.filter(~Q(source=AliasSource.USER) | Q(created_by_id__in=allowed))
 
     if model_name == "ArticleRevision":
-        # A null `editor` means one of two things and the generic null-is-automatic rule gets one of
-        # them badly wrong: a system seed from Wikipedia, which a fresh wiki would carry, and an
-        # account that has since been deleted, whose prose is a stranger's.
-        # The model's own `editor_display_name` distinguishes them by edit summary; so does this.
+        # Null editor = Wikipedia seed (allowed) or deleted account (blocked). Distinguish by edit summary.
         from urbanlens.dashboard.models.article.model import SYSTEM_EDIT_SUMMARIES
 
         return queryset.filter(Q(editor_id__in=allowed) | Q(editor_id__isnull=True, edit_summary__in=SYSTEM_EDIT_SUMMARIES))
@@ -265,7 +257,6 @@ def _refuse_write(*_args: Any, **_kwargs: Any) -> NoReturn:
 def conceal_wiki(wiki: Wiki, viewer: Profile | None) -> Wiki:
     """
     Return *wiki* itself, or a concealed projection of it.
-    It also could not be used as a foreign key value, so every write path had to be taught about it.
 
     Args:
         wiki: The real row.
@@ -275,30 +266,23 @@ def conceal_wiki(wiki: Wiki, viewer: Profile | None) -> Wiki:
         The real wiki, or a write-refusing projection of it."""
     viewer_key = viewer.pk if viewer else None
     if is_concealed(wiki):
-        # Idempotent, and cheaply so: several surfaces still call this on a wiki
-        # that resolve_visible_wiki already concealed, and re-resolving the
+        # Idempotent: multiple surfaces call this on already-concealed wikis.
         if wiki._ul_concealed_for == viewer_key:  # noqa: SLF001
             return wiki
-        # Built for somebody else. One viewer's projection must never be handed
-        # to another, and it must not be re-concealed either - it no longer
-        # carries the values a rebuild needs. Go back to the row.
+        # Projection built for another viewer; must re-fetch the real row.
         wiki = _real_row(wiki)
 
     if not concealment_active(wiki, viewer):
         return wiki
 
     projection = copy.copy(wiki)
-    # A shallow copy shares ``_state`` with the row it came from, and ``_state`` is where Django
-    # caches fetched relations.
-    # Every versioned field is scalar today, so nothing would notice - but the day one becomes a
-    # foreign key, assigning it below would reach through and overwrite the *real* row's cached
+    # Shallow copy shares _state; copy it to avoid mutating the real row's cached relations.
     projection._state = copy.copy(wiki._state)  # noqa: SLF001
     projection._state.fields_cache = dict(wiki._state.fields_cache)  # noqa: SLF001
     for name, value in concealed_field_values(wiki, viewer).items():
         setattr(projection, name, value)
 
-    # Marked so a reader can assert on it, and so tests can tell a projection
-    # from the row it came from.
+    # Mark for assertions and tests to distinguish projection from real row.
     projection._ul_concealed = True  # noqa: SLF001
     projection._ul_concealed_for = viewer_key  # noqa: SLF001
     projection.save = _refuse_write  # type: ignore[method-assign]

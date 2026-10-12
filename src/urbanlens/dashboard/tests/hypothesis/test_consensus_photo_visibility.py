@@ -26,11 +26,9 @@ class ConsensusPhotoVisibilityTests(TestCase):
         self.wiki = baker.make(Wiki, location=self.location)
         # Eligibility is "a visited pin at the place" - the container gate.
         baker.make(Pin, profile=self.player, location=self.location, parent_pin=None, last_visited=timezone.now())
-        # The uploader has one too. Not decoration: wiki access is what let them
-        # contribute in the first place, and it is also what gives the pair a
-        # common pin, so the player's own viewer_photo_filter (courtesy-only,
-        # defaulting to ANYTHING_IN_COMMON) does not quietly do the excluding and
-        # make these tests pass for the wrong reason.
+        # The uploader has one too. Wiki access let them contribute and gives
+        # the pair a common pin, so the player's viewer_photo_filter (default
+        # ANYTHING_IN_COMMON) doesn't quietly do the excluding.
         baker.make(Pin, profile=self.uploader, location=self.location, parent_pin=None)
 
     def _photo(self, uploader_visibility: str) -> Image:

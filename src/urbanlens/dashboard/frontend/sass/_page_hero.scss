@@ -1,11 +1,7 @@
 @use 'variables' as *;
 
-// Shared gradient hero banner for page tops (safety pages, Organize, Thanks &
-// Credits, ...). See partials/ui/_page_hero.html.
-//
-// The default variant assumes it sits at the top of a `.page-content`-padded container and bleeds out to the edges to match.
-//
-// The default/--top box uses a fixed `height` (not `min-height`) with the inner content vertically centered, so every page built.
+// Shared gradient hero banner for page tops. See partials/ui/_page_hero.html.
+// Default variant bleeds out of a .page-content container; fixed height with centered content.
 .ul-page-hero {
     position: relative; // positioning context for a page's own corner-docked overlays (e.g. wiki's actions/notice)
     display: flex;

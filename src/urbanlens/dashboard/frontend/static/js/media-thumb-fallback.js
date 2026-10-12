@@ -1,6 +1,4 @@
-// Served as a file so the browser keeps it, instead of re-downloading it inline on every
-// navigation (P133). In <head>, and not deferred: an image that 404s fails during parsing, as
-// soon as the response comes back, so the listener below has to be up before the body is.
+// Served as a file so the browser caches it; in <head> and not deferred so the listener is ready before body parses.
 // Templates mark an image with `data-thumb-fallback="<icon>"` and, optionally,
 // `data-thumb-fallback-class`; scripts that build an <img> can call the function directly.
 //

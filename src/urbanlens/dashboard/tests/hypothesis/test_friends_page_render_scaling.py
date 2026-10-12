@@ -1,4 +1,4 @@
-"""Render-time cost of one more friend row on the full friends page (P69 - deliberately unpaginated, never measured)."""
+"""Render-time cost of one more friend row on the full friends page (deliberately unpaginated)."""
 
 from __future__ import annotations
 
@@ -14,10 +14,8 @@ from urbanlens.dashboard.models.profile.model import Profile
 class FriendsPageRowCostTests(RenderTimeScalingMixin, TestCase):
     """
     The full friends page renders every accepted connection with no cap or slice.
-
-    P69 left it that way on the theory that friend count bounds it regardless of account age, not
-    because a row was measured and found cheap - and each row's ``area`` field is an
-    ``EncryptedTextField``, so decrypting it is real per-row work a query-count test would never see.
+    Each row's ``area`` field is an ``EncryptedTextField``, so decrypting it is
+    real per-row work a query-count test would never see.
     """
 
     def setUp(self) -> None:

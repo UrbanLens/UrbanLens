@@ -208,9 +208,8 @@ def add_member_by_username(trip: Trip, actor: Profile, username: str) -> tuple[T
     if not clean_username:
         raise TripValidationError("Username is required.")
 
-    # Checked before the username is even looked up: if this ran after resolving the user, "trip
-    # full" would only ever fire for a real, unblocked account, turning trip capacity into a free
-    # username-existence oracle for anyone who can fill their own trip with known accounts once.
+    # Quota checked first: otherwise a full trip would only reject real, unblocked accounts,
+    # turning capacity into a username-existence oracle.
     max_members = SiteSettings.get_current().max_trip_members
     current_count = trip.profiles.count()
     if current_count >= max_members:
@@ -218,10 +217,8 @@ def add_member_by_username(trip: Trip, actor: Profile, username: str) -> tuple[T
 
     from urbanlens.dashboard.services.auth.username import find_profile_by_username
 
-    # A block or a hidden profile answers exactly like a nonexistent username, after the same statement (P280):
-    # telling a caller "this account exists and is blocking you" is the same enumeration leak as confirming any
-    # other account's existence. The raw username is carried on the exception rather than escaped into the
-    # message - the HTML caller escapes it, the JSON caller must not.
+    # A block or hidden profile answers like a nonexistent username: confirming either leaks
+    # account existence. The raw username is on the exception; HTML escapes it, JSON must not.
     new_profile = find_profile_by_username(clean_username, Profile.invitable_q(actor))
     if new_profile is None:
         raise TripMemberNotFoundError(f'No user found with username "{clean_username}".', clean_username)

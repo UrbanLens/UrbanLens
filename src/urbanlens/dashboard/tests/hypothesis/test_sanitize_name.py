@@ -51,10 +51,7 @@ class SanitizeNameTests(SimpleTestCase):
         self.assertEqual(result, "Curly 'quotes' and \"dashes-here\"")
 
     def test_control_and_zero_width_characters_are_dropped(self) -> None:
-        # "Evil" + zero-width space (U+200B) + "Name" + " " + "Here" + RTL
-        # override (U+202E), built via chr() rather than a literal escape so
-        # the source file itself doesn't embed a raw bidi-control character
-        # (ruff PLE2502).
+        # Built via chr() so the source file doesn't embed raw bidi-control characters.
         raw = "Evil" + chr(0x200B) + "Name Here" + chr(0x202E)
         result = sanitize_name(raw)
         self.assertEqual(result, "EvilName Here")
@@ -98,10 +95,8 @@ class SanitizeNamePropertyTests(SimpleTestCase):
     @given(text=st.text(alphabet=st.characters(whitelist_categories=("Lu", "Ll", "Lo", "Nd")), min_size=1, max_size=50))
     @_hyp
     def test_letters_and_digits_from_any_script_never_produce_empty_output(self, text: str) -> None:
-        # NFKC normalization can change the exact codepoints (e.g. fullwidth ->
-        # ASCII, ligatures -> multi-char), so this only asserts nothing is lost
-        # outright - every character is a keeper category, so the result must
-        # be non-empty whenever the input is.
+        # NFKC normalization may change codepoints; every input char is a keeper category,
+        # so the result must be non-empty.
         result = sanitize_name(text)
         self.assertTrue(result)
 

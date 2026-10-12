@@ -1,10 +1,5 @@
 """
-Google Open Buildings is read one S2 cell's shard at a time, and a real shard runs to gigabytes (P301, P319).
-
-Its level-4 shards are Lagos's 1.9 GB compressed, Sao Paulo's 2.4 GB, Dhaka's 3.4 GB, and 200 of the 333 run past the
-cap a lookup will read. The same v3 release is published as 3,330 level-6 shards with no header row, a median of
-8.8 MiB, of which 2,704 fit. The dataset covers 333 level-4 cells, none of them in the US, where dev asked for the same
-missing shard 1,210 times.
+Google Open Buildings is read one S2 cell's shard at a time; a real shard runs to gigabytes.
 """
 
 from __future__ import annotations
@@ -29,7 +24,7 @@ _PALACE = (19.8921, 102.1356)
 _BBOX = (102.1346, 19.8911, 102.1366, 19.8931)
 #: Poughkeepsie, NY: outside the dataset.
 _US_BBOX = (-73.94, 41.72, -73.92, 41.74)
-#: The palace's own row from ``v3/polygons_s2_level_6_gzip_no_header/312f_buildings.csv.gz``, fetched 2026-10-05.
+#: The palace's own row from ``v3/polygons_s2_level_6_gzip_no_header/312f_buildings.csv.gz``.
 _PALACE_ROW = (
     "19.89225351,102.13550544,2382.1336,0.8942,"
     '"POLYGON((102.135598968091 19.891987405097, 102.135748973252 19.8920969683974, 102.135725489704 19.8921257378274, '

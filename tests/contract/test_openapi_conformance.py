@@ -28,13 +28,10 @@ def test_operation_matches_its_schema(case, contract_headers: dict[str, str]) ->
     """
     Every generated request produces a response the schema describes.
 
-    Schemathesis's default checks cover the failures that actually reach client authors: a 500, a status code
-    the operation never declared, a content type it never declared, and a body that does not validate against
-    the declared response schema.
-
-    Args:
-        case: One generated request, supplied by ``schema.parametrize``.
-        contract_headers: Bearer credentials for the account under test."""
+    Schemathesis's default checks cover failures that reach client authors:
+    a 500, an undeclared status code, an undeclared content type, and a body
+    that does not validate against the declared response schema.
+    """
     # Assigned onto the case rather than passed to `call_and_validate`, because
     # the operations declare a security scheme and schemathesis generates a
     # value for it - which wins over anything handed to the call. The generated

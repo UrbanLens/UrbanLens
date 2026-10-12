@@ -391,7 +391,7 @@ class ArticleSearchTests(TestCase):
 
 
 class ArticleImagesAreLocalTests(TestCase):
-    """An image written into an article is shown from this site's copy, never its host (P165; Jess, 2026-09-29)."""
+    """An image written into an article is shown from this site's copy, never its host."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -673,8 +673,7 @@ class StoredSourceShowsWhatTheAuthorWroteTests(TestCase):
 class ArticleImageScanIsLinearTests(SimpleTestCase):
     """
     Every save runs the image scan in the request, so text built to make its patterns backtrack must not hold a
-    worker. Before the fix 1,000 backticks took thirteen seconds, 2,000 four minutes, 20,000 ``<img `` fifty, and
-    50,000 ``![`` ten."""
+    worker."""
 
     # A two-second wall-clock bound, which a loaded pytest-xdist neighbour pushed to 2.4 s.
     pytestmark = pytest.mark.serial

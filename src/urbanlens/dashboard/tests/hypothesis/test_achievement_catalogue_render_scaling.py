@@ -1,4 +1,4 @@
-"""Render-time cost of one more award in the full achievement catalogue (P69 - deliberately unpaginated, never measured)."""
+"""Render-time cost of one more award in the full achievement catalogue (deliberately unpaginated, never measured)."""
 
 from __future__ import annotations
 
@@ -21,8 +21,8 @@ class AchievementCatalogueRowCostTests(RenderTimeScalingMixin, TestCase):
     """
     The full award catalogue lists every active achievement with no cap or slice.
 
-    P69 left it that way on the theory that the number of awards the site defines (not account
-    age) bounds it, not because a row was measured and found cheap.
+    It remains unbounded because the number of site-defined awards bounds it, not because a row
+    was measured and found cheap.
     """
 
     def setUp(self) -> None:

@@ -351,9 +351,7 @@ class AutocompleteUsesConcealedValuesTests(TestCase):
             results = search_local("haunted", self.viewer)
 
         # The live name doesn't survive concealment for this viewer, so the
-        # substring match against it must not produce a "location" result -
-        # and if the gate were somehow bypassed, its title must never be the
-        # live name either.
+        # substring match against it must not produce a "location" result.
         wiki_results = [r for r in results if r.type == "location"]
         self.assertTrue(all("Haunted Steel Mill" not in (r.title or "") for r in wiki_results))
 
@@ -379,7 +377,7 @@ class AutocompleteUsesConcealedValuesTests(TestCase):
 
 
 class ConcealedWikiTextBatchTests(TestCase):
-    """The concealed re-check reads alias and tag text once per batch, not once per candidate (G1-19)."""
+    """The concealed re-check reads alias and tag text once per batch, not once per candidate."""
 
     def test_a_batch_of_wikis_costs_one_alias_read_and_one_tag_read(self) -> None:
         from django.db import connection

@@ -1,9 +1,8 @@
 """
-A Location is never created off the globe, whichever caller asks (P285).
+A Location is never created off the globe, whichever caller asks.
 
 ``Location.latitude``/``longitude`` are ``numeric(9, 6)``, which hold up to ±999.999999, and nothing in the database
-stops a latitude of 95. P282-P284 checked each route that posts or imports a coordinate; these two methods are where
-every one of them ends, so a caller that forgets is refused here.
+stops a latitude of 95. These two methods are where every route that posts or imports a coordinate ends, so a caller that forgets is refused here.
 """
 
 from __future__ import annotations

@@ -40,12 +40,9 @@ def takes_wikipedia_article(wiki: Wiki) -> bool:
     """
     Whether a Wikipedia match at the wiki's point may describe the wiki.
 
-    Not for a campus building's wiki, nor anything else nested under another wiki without a property's place of its
-    own (``name_tiers.wiki_scope``): the article found at its point is its campus's or a neighbour's
-    (``name_tiers.describes_scope``).
-
-    Args:
-        wiki: The wiki.
+    Not for a campus building's wiki, nor anything nested under another wiki without its own
+    property place (``name_tiers.wiki_scope``): the article at its point describes the campus or a
+    neighbour (``name_tiers.describes_scope``).
 
     Returns:
         True when the wiki may carry the article and its link.
@@ -89,11 +86,8 @@ def is_untouched_wikipedia_seed(article: Article) -> bool:
     """
     Whether an article is still exactly what Wikipedia seeded, so nobody's writing is lost by removing it.
 
-    Its first revision is the seed, and every later one is ``localize_article_images`` changing nothing but image
-    addresses; no revision has an editor, and the article holds the last revision's text.
-
-    Args:
-        article: The article.
+    Its first revision is the seed; later ones are only ``localize_article_images`` changing image
+    addresses. No revision has an editor; the article holds the last revision's text.
 
     Returns:
         True for an untouched seed.

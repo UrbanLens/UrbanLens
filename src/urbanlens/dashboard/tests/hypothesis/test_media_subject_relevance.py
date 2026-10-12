@@ -1,9 +1,9 @@
 """
-Which external media items are about the place they were found for (P196).
+Which external media items are about the place they were found for.
 
-Jess's ruling, 2026-10-02: keep an item geolocated inside the place's bounding box, or one naming the place with a
+Keep an item geolocated inside the place's bounding box, or one naming the place with a
 geographic indicator consistent with it; a distinctive name alone is enough when nothing geographic contradicts it,
-and a generic name never is. Her examples are the first two test classes, verbatim.
+and a generic name never is. The first two test classes are examples, verbatim.
 """
 
 from __future__ import annotations

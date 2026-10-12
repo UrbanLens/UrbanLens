@@ -1340,16 +1340,9 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
     });
 
     test("undo takes back a typed name in one press, and the drag before it in the next", async () => {
-        // "Undo sometimes undoes one thing, sometimes a group" is the report.
-        // Both are right, and the rule is what has to be predictable: a run of
-        // keystrokes in one field is one step, and anything else is its own.
+        // Undo rule: a run of keystrokes in one field is one step; anything else is its own.
         await openEditor({ width: 1200, height: 800 }, false, "island");
-        // Waited for, not read: renaming rebuilds the room layer, and Leaflet
-        // fades a tooltip out over 200ms rather than removing it, so for that
-        // long the outgoing label is still in the pane beside the incoming one
-        // and whichever is read first is a coin toss. Nobody sees two labels -
-        // the outgoing one is at opacity 0 throughout - but a test reading the
-        // DOM does.
+        // Wait for rename: Leaflet fades the old label out over 200ms; the test must wait for the new one.
         const expectRoomNamed = async (want: string): Promise<void> => {
             await page.waitForFunction(
                 (expected) => {

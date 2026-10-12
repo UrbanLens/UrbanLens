@@ -307,9 +307,8 @@ class AdditionalGamingScenarioTests(_ProvenanceTestCase):
         self.assertEqual(onward.parent_share_id, share.pk)
 
     def test_second_move_of_never_shared_nearby_pin_still_chains(self):
-        # A pin near (not on) an exposed location, never shared from there,
-        # gets moved a second time. The move-propagation step must find the
-        # exposure by radius, not exact Location-row match, or the chain breaks.
+        # A pin near an exposed location, never shared from there, gets moved a second time.
+        # Move-propagation must find the exposure by radius, not exact Location-row match.
         share = self._share(self.sarah_pin, "sarah", "john")
         nearby_location = baker.make(Location, latitude="42.100900", longitude="-73.900000")
         self.assertNotEqual(nearby_location.pk, self.location.pk)
@@ -338,9 +337,8 @@ class AdditionalGamingScenarioTests(_ProvenanceTestCase):
         self.assertIsNone(onward.parent_share_id)
 
     def test_pins_own_lineage_wins_over_environmental_exposure_after_move(self):
-        # John has two lineages: accepted pin from Sarah (share_a) and from Kim
-        # (share_b). Moving the share_b pin into share_a's radius must not
-        # overwrite its own lineage - source_share_id wins over proximity.
+        # John has two lineages (share_a from Sarah, share_b from Kim). Moving the share_b pin
+        # into share_a's radius must not overwrite its own lineage - source_share_id wins.
         share_a = self._share(self.sarah_pin, "sarah", "john")
         kim_original_pin = Pin.objects.create(profile=self.profiles["kim"], location=self.far_location)
         share_b = self._share(kim_original_pin, "kim", "john")

@@ -38,11 +38,8 @@ class PinWikiSyncApiTests(TestCase):
         self.user = baker.make(User, username="owner")
         self.profile = Profile.objects.get(user=self.user)
         key, self.raw_key = generate_api_key(self.user, "Sync client")
-        # A newly issued PAT carries only the four default scopes (profile:read,
-        # pins:*, push:manage) - no wiki access at all - so the fixture key has
-        # to be widened explicitly. The scope-denial tests below narrow it again
-        # on purpose-built keys rather than relying on that default, which would
-        # silently stop testing anything the day a scope picker ships.
+        # Default PAT lacks wiki scopes; widen the fixture key explicitly so
+        # scope-denial tests can narrow purpose-built keys instead.
         ApiKey.objects.filter(pk=key.pk).update(scopes=_SYNC_SCOPES)
         self.other_profile = Profile.objects.get(user=baker.make(User, username="bystander"))
 

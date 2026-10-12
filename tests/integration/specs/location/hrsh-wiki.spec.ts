@@ -75,16 +75,10 @@ test.describe("Hudson River State Hospital - the community wiki", () => {
         expect(await ensureCampusWiki(campus)).toBe(true);
         await page.goto(hrshRoutes.wiki(campus.pin.location_slug));
 
-        // Asserted on the *value* element rather than on the card's whole text,
-        // and that distinction is the entire test. An earlier version searched
-        // the joined text for `\d+ users have this pinned`, which matches the
-        // "3" inside "Fewer than 3 users have this pinned" - so it reported a
-        // privacy leak against a page doing exactly the right thing. A privacy
-        // check that cries wolf is worse than none, because it is the one people
-        // learn to wave through.
-        //
-        // `services.wiki.community_counts` produces exactly two shapes, so the
-        // value must be one of them and nothing else.
+        // Asserted on the value element, not the card's whole text.
+        // Earlier version matched the "3" inside "Fewer than 3 users..."
+        // and falsely reported a privacy leak. community_counts produces only
+        // two shapes: masked "Fewer than N" or fuzzed "about N".
         const value = (await page.locator(".wiki-stat").first().locator(".wiki-stat-value").first().textContent()) ?? "";
         const shown = value.replace(/\s+/g, " ").trim();
 
@@ -159,11 +153,9 @@ test.describe("Hudson River State Hospital - the community wiki", () => {
         const aliases = (Array.isArray(body) ? body : (body.results ?? [])).map((alias) => (alias.name ?? "").toLowerCase());
         test.skip(aliases.length === 0, "no aliases to check the name against - see the previous test.");
 
-        // The invariant the alias list claims: it is the set of names this place
-        // is known by, and the displayed name is one of them. `enrich_wiki_location`
-        // renames with a queryset `update()`, which bypasses `Wiki.save()` and
-        // therefore the save-time alias write - so an enrichment-chosen name can
-        // end up absent from its own alias list.
+        // The alias list should contain the displayed name. enrich_wiki_location
+        // renames via queryset update(), bypassing Wiki.save() and the alias write,
+        // so an enrichment-chosen name can be absent from its own alias list.
         expect(
             aliases,
             `the wiki is called ${JSON.stringify(wiki.name)}, which is not among its aliases ${JSON.stringify(aliases)}. The rename in ` +

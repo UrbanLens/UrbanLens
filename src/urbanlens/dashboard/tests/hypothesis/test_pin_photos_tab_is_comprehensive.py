@@ -52,7 +52,7 @@ class PinPhotosTabTestCase(RedataConfiguredMixin, TestCase):
     def setUp(self) -> None:
         super().setUp()
         baker.make(User)
-        # The place's public name, so the pin reads the shared rows the tests seed (P188).
+        # The place's public name, so the pin reads the shared rows the tests seed.
         location = baker.make_recipe(
             "dashboard.location", official_name="Hudson River State Hospital", official_name_source="google_places"
         )
@@ -224,7 +224,7 @@ class ExternalPhotosTests(PinPhotosTabTestCase):
         self.assertEqual([entry["url"] for entry in self._all("external")], [kept["url"]])
 
     def test_a_book_scan_is_not_listed_among_the_photos(self) -> None:
-        """A book about the place belongs on Article > Sources (P196)."""
+        """A book about the place belongs on Article > Sources."""
         scan = _wikimedia_item(
             1,
             url="https://upload.wikimedia.org/wikipedia/commons/2/28/American_Ancestry_4.djvu",

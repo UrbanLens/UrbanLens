@@ -33,9 +33,9 @@ def environment_from_env(environ: Mapping[str, str] | None = None) -> Environmen
     """
     Resolve ``UL_ENVIRONMENT``, refusing a process that does not say which environment it is.
 
-    Unset or blank used to mean production, so a deployment that lost the variable spent production's budgets and
-    sent real mail. Since Jess's ruling of 2026-10-07 it refuses to start instead, as an unknown name always has.
-    A test run that names none is the exception, and ``settings.base`` decides it before calling this.
+    Unset or blank used to mean production; a deployment that lost the variable would spend production budgets.
+    Now it refuses to start, as with an unknown name. A test run without a name is the exception;
+    ``settings.base`` decides it before calling this.
 
     Args:
         environ: Environment to read; defaults to this process's own.

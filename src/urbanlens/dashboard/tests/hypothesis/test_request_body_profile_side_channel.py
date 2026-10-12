@@ -1,7 +1,7 @@
 """
-P280: a profile a request body names costs the same, and answers the same, whether it is hidden or missing.
+A profile a request body names costs the same, and answers the same, whether it is hidden or missing.
 
-P269 made every route whose URL names a profile ask who may see it in the query that finds it. A slug, username or id
+Routes whose URL names a profile check visibility in the query that finds it. A slug, username or id
 sent in a form or JSON body was still found first and refused afterwards, so a timed request, or in places the answer
 itself, told the sender that the account exists. An id is a sequential integer, so walking ids told the sender which
 accounts are hidden from it, and in the group and game routes which of them exist at all.

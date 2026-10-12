@@ -149,9 +149,6 @@ class LocationManager(_LocationManagerBase["Location"]):
             longitude: WGS-84 longitude.
             defaults: Field values applied only when a row is created.
 
-        Returns:
-            Tuple of (Location, whether it was created).
-
         Raises:
             CoordinateOffTheGlobeError: The coordinates are not a place on the globe.
         """
@@ -179,17 +176,14 @@ class LocationManager(_LocationManagerBase["Location"]):
 
     def get_nearby_or_create(self, latitude, longitude, threshold_meters=0, defaults=None):
         """
-        Get or create a Location instance, optionally treating nearby coordinates as the same.
+        Get or create a Location, optionally treating nearby coordinates as the same.
         Threshold defaults to exact match.
 
         Args:
-            latitude (float): Latitude of the location.
-            longitude (float): Longitude of the location.
-            threshold_meters (float): Distance threshold in meters for considering locations as the same.
-            defaults (dict, optional): Defaults to use for object creation.
-
-        Returns:
-            (Location, bool): Tuple of (Location instance, created boolean)
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            threshold_meters: Distance threshold in meters for considering locations as the same.
+            defaults: Field values applied only when a row is created.
 
         Raises:
             CoordinateOffTheGlobeError: The coordinates are not a place on the globe.

@@ -10,8 +10,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 
-#: P92 moved this from an inline <script> into a bundled TS entry (P124) - the handler
-#: wiring is static code, so it is checked against the source file, not a response body.
+# The handler wiring is static code, so it is checked against the source file, not a response body.
 _SCRIPT_SOURCE = (Path(__file__).resolve().parents[3] / "dashboard/frontend/ts/entries/map-page.ts").read_text()
 
 

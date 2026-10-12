@@ -57,14 +57,8 @@ $inputs: (
 
 // -- Touch targets -------------------------------------------------------------
 
-// Expands a control's *hit* area to at least $min without changing how big it looks.
-//
-// Only applies on coarse pointers - a mouse can already hit a 14px target, and
-// unconditionally inflating hit areas would make neighbouring desktop controls
-// steal each other's clicks.
-//
-// The element needs a non-static position for the ::before to anchor to; pass
-// $position: null when the caller already sets one it cares about.
+// Expands a control's hit area to at least $min without changing its visual size.
+// Applies only on coarse pointers; pass $position: null if caller sets position.
 @mixin touch-target($min: 44px, $position: relative) {
 	@media (pointer: coarse) {
 		@if $position {

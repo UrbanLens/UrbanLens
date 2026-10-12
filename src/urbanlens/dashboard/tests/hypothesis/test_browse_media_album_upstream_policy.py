@@ -1,9 +1,5 @@
 """
 Historical-map browse, the REData media proxies and Flickr album lookup run under the request-path policy.
-
-N29 G5-34 (browse waited up to 30 s on REData with no cache; the POST re-queried it), G6-3 (the REData media
-proxies had no concurrency slot, unlike the tile proxies) and G6-8 (album lookup made three sequential
-30 s calls with no overall deadline).
 """
 
 from __future__ import annotations

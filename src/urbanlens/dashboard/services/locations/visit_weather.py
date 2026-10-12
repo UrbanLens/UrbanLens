@@ -57,9 +57,6 @@ def weather_cell(latitude: float, longitude: float) -> Cell:
     Args:
         latitude: WGS-84 latitude.
         longitude: WGS-84 longitude.
-
-    Returns:
-        The cell.
     """
     return round(float(latitude) * 100), round(float(longitude) * 100)
 
@@ -70,9 +67,6 @@ def location_cell(location: Location) -> Cell:
 
     Args:
         location: The shared Location.
-
-    Returns:
-        The cell.
     """
     return weather_cell(float(location.latitude), float(location.longitude))
 

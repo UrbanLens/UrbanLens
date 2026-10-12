@@ -47,10 +47,9 @@ class VaultGalleryBulkViewTests(TestCase):
 
     def test_it_deletes_the_way_the_per_photo_vault_delete_does(self) -> None:
         # The pin endpoint unlinks a wiki-linked row from its pin instead of
-        # destroying it. Borrowing that here was wrong twice over: the vault's
-        # own per-photo delete (`PhotoActionView.delete_photo`) destroys
-        # unconditionally, and the same button one photo at a time must not mean
-        # something else in bulk.
+        # destroying it. The vault's per-photo delete destroys unconditionally,
+        # and the same button one photo at a time must not mean something
+        # else in bulk.
         wiki = baker.make("dashboard.Wiki", location=baker.make("dashboard.Location"))
         contributed = baker.make(Image, profile=self.profile, wiki=wiki)
 

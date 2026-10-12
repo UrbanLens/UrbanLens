@@ -1,10 +1,5 @@
 """
 A geolocation ping resolves every nearby pin's boundary in a fixed number of queries.
-
-N29 G5-2/G5-5: each ping resolved a property polygon per nearby pin (a boundary query, a wiki lookup, a
-wiki-boundary query, and a distance query when none applied), then updated each visited pin and its
-Visited label one at a time. The batch resolver has to answer exactly what the per-pin resolver does, or
-the query count is bought with wrong visits.
 """
 
 from __future__ import annotations
@@ -51,10 +46,9 @@ class _Case(TestCase):
 
     def _unbounded_pin(self, lat: float, lng: float) -> Pin:
         """
-        A pin with no property boundary at all: its marker stands on one building of a multi-building parcel.
-
-        ``scope.outline_applies`` rules the property outline out there. A lone building with no footprint does not:
-        its outline falls through to its wiki's and then to the default circle (P264).
+        A pin with no property boundary: its marker stands on one building of a multi-building parcel.
+        ``scope.outline_applies`` rules the property outline out; a lone building falls
+        through to its wiki and then to the default circle.
         """
         parcel = make_place(PlaceKind.PARCEL, _square(lng, lat, 0.0005))
         building = make_place(PlaceKind.BUILDING, None, parent=parcel)

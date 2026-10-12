@@ -61,14 +61,13 @@ test.describe.serial("notifications", () => {
     });
 
     test("marking one notification read reduces the unread count", async ({ api }) => {
-        // Deliberately does *not* manufacture a notification. Every cross-account
-        // action that would produce one - a friend request, a message - writes to
-        // state shared with `api/social.spec.ts`, and files run in parallel, so
-        // two specs racing over the one friendship between the suite's two fixed
+        // Does not manufacture a notification. Cross-account actions that
+        // produce one write to state shared with `api/social.spec.ts`; files
+        // run in parallel, so two specs racing over the suite's two fixed
         // accounts produced failures that read as endpoint faults. The
         // *arrival* of a notification is asserted in social.spec.ts, which owns
-        // that relationship and is serial; what is left here is the mechanics,
-        // which need any unread notification rather than a particular one.
+        // that relationship and is serial; here we only need any unread
+        // notification for the mechanics.
         const feed = await api.json<NotificationFeed>("get", "notifications/");
         const unread = feed.results.find((entry) => !isRead(entry) && entry.uuid);
         test.skip(!unread, "This account has nothing unread, so there is no read transition to observe.");
@@ -92,15 +91,13 @@ test.describe.serial("notifications", () => {
     });
 
     test("marking a notification that does not exist answers exactly as marking a real one", async ({ api }) => {
-        // 204, not 404, and deliberately so: a 404 for "no such notification"
-        // would double as an oracle, letting a caller learn whether a uuid
-        // belongs to somebody by whether the acknowledgement succeeded. The
-        // operation is idempotent and returns nothing either way, so one status
-        // covers both.
+        // 204, not 404: a 404 for "no such notification" would be an oracle,
+        // letting a caller learn whether a uuid belongs to somebody by whether
+        // the acknowledgement succeeded. The operation is idempotent and returns
+        // nothing either way, so one status covers both.
         //
-        // The corollary is worth knowing when writing tests here: a 204 is *not*
-        // evidence that anything was marked. The only way to observe the effect
-        // is to read the entry back, which is what the test above does.
+        // A 204 is *not* evidence that anything was marked. The only way to
+        // observe the effect is to read the entry back, which the test above does.
         const response = await api.post("notifications/00000000-0000-4000-8000-000000000000/", {});
         expect(
             response.status(),

@@ -139,11 +139,8 @@ class CreatePinAndLogVisitTests(TestCase):
     )
     @mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task")
     def test_files_same_day_sibling_photos_directly(self, _mock_enqueue, _mock_resolve_name):
-        # A second photo from the same drop, close enough to match the pin the
-        # first photo is about to create, taken the same day. create_visit_suggestion
-        # would silently no-op here (a visit already exists for that day/place and
-        # no new participants would be added), so it must be filed directly instead
-        # of left stuck offering "create a pin" for a place that already has one.
+        # Sibling photo from same day/place: create_visit_suggestion would no-op,
+        # so file directly instead of offering "create a pin" for a place that already has one.
         sibling = baker.make(
             "dashboard.Image",
             profile=self.profile,

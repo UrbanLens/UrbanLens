@@ -6,7 +6,7 @@ lookups may fill in what a pin reads from them. The pin's own row, and every row
 owner alone: each test here takes a snapshot of user B's pin, has user A do something that reaches B's pin
 through shared data, and compares.
 
-P181 is the reported case: A's campus sweep put a building's wiki on B's coordinate, pointed B's Location at a
+A's campus sweep put a building's wiki on B's coordinate, pointed B's Location at a
 building place that has no footprint, and retyped B's pin as a building.
 """
 
@@ -107,7 +107,7 @@ class SharedPlaceDataNeverRetypesAnotherAccountsPinTests(_TwoAccountsOnOneCampus
 
 
 class AnotherAccountsCampusSweepTests(_TwoAccountsOnOneCampus):
-    """A's sweep mirrors a building whose point is B's coordinate (P181)."""
+    """A's sweep mirrors a building whose point is B's coordinate."""
 
     def setUp(self) -> None:
         super().setUp()

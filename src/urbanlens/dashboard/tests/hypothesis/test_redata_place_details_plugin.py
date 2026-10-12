@@ -284,7 +284,7 @@ class RedataPlaceDetailsEnrichmentSourceTests(TestCase):
         self.assertFalse(_fresh_after(location, UNKNOWN_CID_STALE_AFTER + timedelta(minutes=1)))
 
     def test_fetch_raises_a_gateway_failure_rather_than_answering_nothing_found(self) -> None:
-        """Returning None here is cached as "no details" for the whole cache term (P187)."""
+        """Returning None here is cached as "no details" for the whole cache term."""
         location = _location_with_cid(123456789012345678)
         with mock.patch(_GATEWAY_PATH) as mock_gateway_cls:
             mock_gateway_cls.return_value.get_place_detail.side_effect = GatewayRequestError("REData unreachable")
@@ -318,7 +318,7 @@ class RedataPlaceDetailsEnrichmentSourceTests(TestCase):
 
 class RedataPlaceDetailsRequiredFeatureTests(TestCase):
     def test_gated_behind_the_places_feature(self) -> None:
-        """Decided 2026-09-08: reuses the flag that already gates the map's Places layer for this same Google Places provider - see the module docstring."""
+        """Reuses the flag that already gates the map's Places layer for this same Google Places provider - see the module docstring."""
         from urbanlens.dashboard.models.subscriptions import SiteFeature
 
         self.assertEqual(RedataPlaceDetailsPanelSource().required_feature, SiteFeature.PLACES)

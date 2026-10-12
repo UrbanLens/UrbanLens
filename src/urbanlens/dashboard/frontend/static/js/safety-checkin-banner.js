@@ -1,6 +1,4 @@
-// The active-checkin banner's close button (partials/safety/_active_checkin_banner.html). Served
-// as a file so the browser caches it across navigations instead of re-downloading it inline on
-// every page (P133).
+// The active-checkin banner's close button. Served as a file so the browser caches it across navigations.
 (function () {
     // Delegated on document so this keeps working no matter how many banners
     // render (0-N) and survives this partial being reloaded/swapped by HTMX

@@ -1,5 +1,5 @@
 """
-Every way an overlay is created obeys the same rules as the live form (N29 G3-1, G3-11, G6-22).
+Every way an overlay is created obeys the same rules as the live form.
 
 The archive importer kept a pasted ``image_url`` and handed it to every viewer's browser, and never looked at the
 per-map cap, while the form downloads the image and refuses a thirteenth overlay.
@@ -172,7 +172,7 @@ class TheOverlayModelTests(TestCase):
 
 
 class UrlOnlyOverlayMigrationTests(TestCase):
-    """Migration 0033_v0_8_0_indexes never deletes an overlay: a pasted image is downloaded, not dropped (Jess, 2026-09-29)."""
+    """Migration 0033_v0_8_0_indexes never deletes an overlay: a pasted image is downloaded, not dropped."""
 
     @staticmethod
     def _migrate(registry) -> None:

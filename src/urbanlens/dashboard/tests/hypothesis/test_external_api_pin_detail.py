@@ -163,11 +163,8 @@ class PinDetailGetTests(TestCase):
         self.assertEqual(body["zipcode"], "12180")
 
     def test_child_pin_reports_its_parent_uuid(self) -> None:
-        # A child pin is exempt from db_pin_unique_location_per_profile once
-        # parent_pin is set at creation - build it directly rather than via
-        # create_pin_for_profile, whose fuzzy Location dedup would otherwise
-        # resolve this nearby point onto the parent's own Location and reject
-        # the create as a duplicate top-level pin.
+        # Child pins share the parent's Location; create_pin_for_profile would dedup
+        # and reject a second top-level create. Build directly with parent_pin set.
         child = baker.make(
             "dashboard.Pin", profile=self.profile, location=self.pin.location, parent_pin=self.pin, name="Entrance"
         )

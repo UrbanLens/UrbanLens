@@ -1,5 +1,5 @@
 """
-`CalendarImportView`: the calendar import dialog and the import action (P57).
+`CalendarImportView`: the calendar import dialog and the import action.
 
 The import service is tested in `test_calendar_sync.py`; these cover what only the view and the background import
 do - the no-account responses, turning the POST's per-event fields into a queued task's selections, the progress poll
@@ -200,7 +200,7 @@ class RunCalendarImportTests(_ImportViewTestCase):
         self.assertEqual(outcome, {"level": "success", "message": "Imported 1 event as trips.", "created": 1})
 
     def test_the_calendar_is_read_once_however_many_events_are_named(self) -> None:
-        """One paged listing, not a 30-second request per posted id (G4-6)."""
+        """One paged listing, not a 30-second request per posted id."""
         events = [
             {
                 "id": f"evt-{index}",

@@ -1,5 +1,5 @@
 """
-REData media rows and street-view captures whose source image is gone never reach a gallery, carousel or copy (P325).
+REData media rows and street-view captures whose source image is gone never reach a gallery, carousel or copy.
 
 REData marks such a row ``attributes.mirror_gone`` (``{"status", "reason", "at"}``, REData
 ``parcels/services/mirror_state.py``): its ``thumbnail_url`` does not load, REData never mirrors it, and its download
@@ -262,7 +262,6 @@ class GoneMediaLeftOutTests(SimpleTestCase):
         self.assertNotIn(_UUIDS[2], [row["uuid"] for row in shared[0].results])
 
     def test_the_unfiltered_retry_after_an_unknown_provider_leaves_gone_rows_out_under_both_keys(self) -> None:
-        """#242's retry with no provider filter is shared under its own key as well; neither copy may hold a gone row."""
         refused = LocationContextUnavailableError(REASON_UNKNOWN_PROVIDER, "Unknown provider(s): vimeo.", rejected=True)
         with (
             _redata_on(),

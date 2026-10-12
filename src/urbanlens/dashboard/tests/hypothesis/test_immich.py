@@ -342,7 +342,7 @@ class ImmichSettingsViewTests(TestCase):
         self.assertFalse(ImmichAccount.objects.filter(profile=self.user.profile).exists())
 
     def test_a_rate_limit_refusal_during_ping_is_a_failed_check_not_a_500(self) -> None:
-        """P122: `post` has no handler of its own around `ping()` - it relies on `ping()` degrading to False."""
+        """`post` has no handler of its own around `ping()` - it relies on `ping()` degrading to False."""
         from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
 
         with mock.patch.object(ImmichGateway, "_get", side_effect=RateLimitExceededError("immich")):
@@ -697,10 +697,8 @@ class ImportImmichPhotosTaskTests(TestCase):
         self.assertTrue(PinVisit.objects.filter(pin=self.pin, source=VisitSource.PHOTO).exists())
 
     def test_imported_rows_are_labelled_immich_not_upload(self) -> None:
-        # Omitting source= defaults the row to UPLOAD, which is indistinguishable
-        # from the upload form to every source-keyed consumer: the Media gallery's
-        # per-source tabs, achievements' UPLOAD-filtered counts, and the
-        # UPLOAD-gated reputation rules all silently miscount these.
+        # Omitting source= defaults to UPLOAD, indistinguishable from the upload form
+        # to source-keyed consumers (Media gallery tabs, achievements, reputation rules).
         self._run(["a1"], {"a1": (b"jpeg-bytes", "photo.jpg", "image/jpeg")})
         self.assertEqual(Image.objects.get(pin=self.pin, profile=self.profile).source, ImageSource.IMMICH)
 

@@ -50,10 +50,8 @@ class AlbumAddRaceTests(TestCase):
         self.assertEqual(added, 0)
 
     def test_the_membership_is_not_duplicated(self):
-        # Attribute the pre-existing row to a different profile than the one racing
-        # in, so an ignore_conflicts regression that overwrites instead of skipping
-        # (e.g. an accidental update_conflicts=True, or update_or_create) shows up as
-        # a changed owner/order rather than passing on row count alone.
+        # Pre-existing row owned by a different profile: an ignore_conflicts
+        # regression that overwrites would change owner/order, not just pass on count.
         original_adder, _ = Profile.objects.get_or_create(user=User.objects.create_user(username="original-adder"))
         original = AlbumItem.objects.create(album=self.album, image=self.image, added_by=original_adder, order=3)
 
@@ -71,9 +69,8 @@ class AlbumAddRaceTests(TestCase):
         added = self._add_with_stale_read([self.image, self.other])
 
         self.assertEqual(added, 1)
-        # Not just presence: the row the race-safe insert actually wrote must still
-        # carry attribution, so a "simplify the bulk_create" edit that drops added_by
-        # doesn't slip past an exists()-only check.
+        # The inserted row must carry attribution; dropping added_by in bulk_create
+        # would not slip past an exists()-only check.
         new_item = AlbumItem.objects.get(album=self.album, image=self.other)
         self.assertEqual(new_item.added_by_id, self.profile.pk)
 

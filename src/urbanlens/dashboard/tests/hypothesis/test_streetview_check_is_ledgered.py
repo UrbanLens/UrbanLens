@@ -1,10 +1,8 @@
 """
-The map's right-click Street View probe is an ordinary gateway call (P135).
+The map's right-click Street View probe is an ordinary gateway call.
 
-It used to reach Google with a bare ``urlopen``, so it wrote no ``ApiCallLog`` row, sat under no
-rate limit and ignored ``UL_ALLOW_OUTBOUND_APIS``. The wire is ``requests.Session.request``, which
-the rate-limited session's inner session resolves at call time; ``urlopen`` is patched too so a
-regression to it cannot reach the network from the suite.
+The wire is ``requests.Session.request``, which the rate-limited session's inner session resolves
+at call time; ``urlopen`` is patched too so a regression cannot reach the network from the suite.
 """
 
 from __future__ import annotations
