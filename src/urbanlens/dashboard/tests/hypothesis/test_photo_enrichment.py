@@ -205,7 +205,7 @@ class PlacePhotoEnrichmentSourceTests(TestCase):
         self.assertEqual(Image.objects.filter(location=location).count(), 1)
 
     def test_a_spent_budget_mid_backfill_writes_no_marker(self) -> None:
-        """The marker takes the location out of the backfill for good, so a refused download must not write it (P317)."""
+        """The marker takes the location out of the backfill for good, so a refused download must not write it."""
         location = _make_location()
         with (
             mock.patch(f"{_PLACES_MODULE}.find_nearest_place_photos", return_value=("place1", ["a", "b"])),
@@ -302,7 +302,7 @@ class StreetViewEnrichmentSourceTests(TestCase):
         self.assertFalse(marker.data["found"])
 
     def test_an_outage_writes_no_marker(self) -> None:
-        """The marker is never revisited, so writing it now would mean no Street View for this place, ever (P187)."""
+        """The marker is never revisited, so writing it now would mean no Street View for this place, ever."""
         location = _make_location()
         with (
             mock.patch(f"{_GATEWAY_MODULE}.get_street_view_single", side_effect=requests.ConnectionError("refused")),
@@ -381,7 +381,7 @@ class GetSatelliteImageBytesTests(SimpleTestCase):
         session.get.assert_not_called()
 
     def test_a_failed_request_raises_for_the_backfill(self) -> None:
-        """None would be written down as "no imagery here" by a marker the batch never revisits (P187)."""
+        """None would be written down as "no imagery here" by a marker the batch never revisits."""
         gateway = GoogleMapsGateway(
             api_key="key", session=mock.Mock(get=mock.Mock(side_effect=requests.ConnectionError()))
         )

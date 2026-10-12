@@ -67,11 +67,9 @@ _NOT_A_DESCRIPTION: frozenset[str] = frozenset({"archaeological_buffer_area"})
 #: a hundred structures; the panel is a summary, not the inventory.
 _MAX_ROWS = 10
 
-#: Fields kept from each row.
-#: The rest of ``CulturalResourceSerializer`` - ``attributes``, ``detail_payload``, ``geometry``, the searched-from
-#: coordinate - is either per-provider, large, or both. ``external_id`` is NPS's reference number on a National
-#: Register row, and the resource's own point says which building it is. A National Register row also keeps its
-#: ``attributes.NARA_URL`` as ``nara_url`` (see :meth:`HistoricRegisterPanelSource.transform_rows`).
+#: Fields kept from each row. The rest of ``CulturalResourceSerializer`` is per-provider, large, or both.
+#: ``external_id`` is NPS's reference number; resource's point identifies the building.
+#: National Register rows keep ``attributes.NARA_URL`` as ``nara_url`` (see :meth:`HistoricRegisterPanelSource.transform_rows`).
 _KEPT_FIELDS = ("provider", "resource_type", "scope", "name", "status", "year_built", "architectural_style", "use_type", "contains_point", "external_id", "source_latitude", "source_longitude")
 
 
@@ -237,15 +235,12 @@ class HistoricRegisterPanelSource(RedataInfoPanelSource):
     inspects_content: ClassVar[bool] = True
 
     def fetch_envelope(self, latitude: float, longitude: float) -> LocationContextEnvelope:
-        """Ask every register covering this point except the ones with their own panel."""
+        """Ask every register covering this point except those with their own panel."""
         from urbanlens.dashboard.services.apis.locations.redata_cultural_resources_gateway import RedataCulturalResourcesGateway, applicable_provider_tags
 
         wanted = [tag for tag in applicable_provider_tags(latitude, longitude) if tag not in _SHOWN_ELSEWHERE]
         if not wanted:
-            # Nothing covers this point.
-            # An empty envelope rather than an unfiltered request: naming no provider runs every
-            # register in the registry, which is the one outcome the capability lookup exists to
-            # avoid.
+            # Nothing covers this point; empty envelope avoids running every register.
             from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope as Envelope
 
             return Envelope(count=0, complete=True, results=[], providers=[])

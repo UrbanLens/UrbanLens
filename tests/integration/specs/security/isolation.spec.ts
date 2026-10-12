@@ -312,20 +312,11 @@ test.describe("profile contact details stay off a stranger's payload", () => {
 
 // -- Trip membership and photo bytes -----------------------------------------
 //
-// Both blocks below exercise the same underlying rule from two different
-// angles: a pin's contents belong to its owner, and putting the pin somewhere
-// else visible (an itinerary, a share notification) is not itself consent to
-// hand the contents over. Regression coverage for two fixes:
-//
-// - The media gate used to authorize a `pin_images/` file by matching only the
-//   `image` column. `services.media.access.authorize_image` is the
-//   consolidated policy now; this asserts the byte-serving endpoint the app
-//   itself uses (`photo.url`), not just the metadata JSON.
-// - `Image.objects.visible_to` used to admit every photo on any pin that
-//   appeared as an activity on a trip the viewer belonged to - a live grant
-//   that grew on its own as new photos were added to the pin, with no per-item
-//   consent and no trip surface ever rendering the result. Membership now
-//   grants nothing beyond the itinerary entry itself.
+// Both blocks exercise the same rule: a pin's contents belong to its owner.
+// Putting the pin somewhere visible (itinerary, share notification) is not
+// consent to hand over the contents. Covers two regressions:
+// - Media gate authorization now uses consolidated policy, not just the `image` column.
+// - Membership no longer grants access to all photos on an activity's pin.
 
 /** Uploads a tiny, marker-tagged photo onto `pinSlug` and returns its media-gate url. */
 async function uploadPrivatePhoto(
@@ -408,9 +399,7 @@ test.describe("a pin on a shared trip does not hand the trip its gallery or its 
             const roster = await secondaryApi.get(`trips/${trip.slug}/members/`);
             expect(roster.status(), "a joined member could not read the trip roster").toBe(200);
 
-            // The regression: membership used to be enough on its own to
-            // reach every photo on the activity's pin, with no further
-            // per-photo consent.
+            // Regression: membership alone granted access to all photos on the pin.
             const photoRead = await secondaryApi.get(`photos/${photo.uuid}/`);
             await expectIndistinguishableFromMissing(photoRead, await secondaryApi.get(`photos/${MISSING_UUID}/`), "a trip member reading an itinerary pin's photo");
 
@@ -418,12 +407,9 @@ test.describe("a pin on a shared trip does not hand the trip its gallery or its 
             await expectNotServerError(bytes, "a trip member fetching an itinerary pin's photo bytes");
             expect(bytes.status(), `a trip member fetched an itinerary pin's photo bytes (${bytes.status()})`).toBe(404);
 
-            // The second regression from the same fix: joining auto-records a
-            // provenance share of the place (PinShareStatus.DETECTED) that
-            // the recipient never explicitly accepted, and it must not read
-            // through to the sender's live, named pin anywhere secondary can
-            // see it - most directly the Sharing page, which lists every
-            // incoming share.
+            // Second regression: joining auto-records a DETECTED share the recipient
+            // never accepted. It must not expose the sender's live pin on the
+            // Sharing page.
             await secondaryPage.goto("/dashboard/memories/sharing/");
             const sharingHtml = await secondaryPage.content();
             expect(containsMarker(sharingHtml, marker), "the Sharing page names a pin from an auto-detected trip share the recipient never accepted").toBeFalsy();

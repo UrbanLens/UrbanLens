@@ -75,12 +75,7 @@ def probe_video(path: str) -> dict[str, Any] | None:
         return None
 
 
-#: Tags a phone writes the capture coordinates into. ffmpeg copies the file's and each stream's metadata across both a
-#: re-encode and a stream copy, so these are cleared explicitly at both levels; assigning an empty value is how ffmpeg
-#: deletes a tag. The rewrite is always MP4, whose muxer writes no tag it has no atom for, so a location under any
-#: other name (a Matroska track's ``GPS``, Apple's accuracy and place-name keys) does not survive it either.
-#: Only the location tags are cleared, never the whole metadata block - this mirrors the photo path, which drops the GPS
-#: IFD and leaves the rest of the EXIF alone. Rotation is a display matrix, not a tag, so it is kept either way.
+#: Location tags cleared on rewrite: ffmpeg copies them across re-encode/stream-copy; empty value deletes. MP4 muxer drops unknown atoms, so other location names (Matroska GPS, Apple keys) don't survive. Only location tags cleared, not whole metadata (mirrors photo path dropping GPS IFD). Rotation is a display matrix, kept.
 _LOCATION_TAGS = ("location", "location-eng", "com.apple.quicktime.location.ISO6709")
 
 #: A tag name that says where: any of :data:`_LOCATION_TAGS` and every other spelling of one. Compared case-folded.
@@ -159,11 +154,7 @@ def extract_video_metadata(path: str) -> dict[str, Any]:
             parsed = datetime.fromisoformat(creation_time)
             metadata["taken_at"] = parsed if timezone.is_aware(parsed) else timezone.make_aware(parsed)
 
-    # `has_location_tag` is reported separately from the parsed coordinates: a scrub has to key off
-    # the tag being *present*, not off it being readable.
-    # A tag in a notation _parse_iso6709 doesn't handle still discloses where the video was taken,
-    # and gating the strip on successful parsing would leave exactly those behind.
-    # A stream can carry one as well as the file: Matroska tags a track as readily as the file.
+    # has_location_tag keys off tag presence, not readability: unparsable tags still disclose location, and streams can carry them too (Matroska tracks).
     tag_sets = [fmt_tags, *({str(k).lower(): v for k, v in (stream.get("tags") or {}).items()} for stream in probed.get("streams") or [])]
     locations = [str(value) for tags in tag_sets for value in _location_values(tags)]
     if locations:

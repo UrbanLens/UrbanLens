@@ -1,6 +1,6 @@
 // The global search dialog (partials/search/_dialog.html), included once for authenticated
 // users. Served as a file so the browser caches it across navigations instead of re-downloading
-// it inline on every page (P133).
+// it inline on every page.
 (function () {
     var dialog   = document.getElementById('global-search-dialog');
     var input    = document.getElementById('gs-input');
@@ -78,13 +78,10 @@
             if (!q) return;
             commitQuery();
             // #gs-panel is a shared swap target for three independent,
-            // uncoordinated triggers - the dialog's own initial (empty-query)
-            // load, the debounced 250ms live search, and this - so its DOM
-            // state at any given instant is inherently racy: whichever
-            // response lands last wins, not whichever request was newest.
-            // Fetching this exact query directly and reading the first
-            // result out of *that* response (never out of the shared panel)
-            // sidesteps the race entirely rather than trying to out-time it.
+            // uncoordinated triggers. Its DOM state is inherently racy:
+            // whichever response lands last wins. Fetching this exact query
+            // directly and reading the first result from that response
+            // sidesteps the race entirely.
             fetch(panelUrl + '?q=' + encodeURIComponent(q), { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
                 .then(function (r) { return r.text(); })
                 .then(function (html) {

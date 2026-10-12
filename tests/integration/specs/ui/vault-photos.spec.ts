@@ -63,11 +63,8 @@ async function expectPlaceholderThenPhoto(page: Page, id: number, { placeholderF
     return seen;
 }
 
-// Serialized rather than left to the suite's default parallel workers: every
-// test here mutates the same account's photo library (uploads, sort changes
-// reading "the first tile"), and running them concurrently against shared
-// server-side state produced exactly the cross-test interference this
-// verification was meant to catch real bugs under, not create false ones.
+// Serialized: every test mutates the same account's photo library.
+// Concurrent runs against shared server state cause cross-test interference.
 test.describe.configure({ mode: "serial" });
 
 test.describe("vault photos grid", () => {
@@ -88,11 +85,9 @@ test.describe("vault photos grid", () => {
     });
 
     test("scrolling loads further pages and prunes off-screen thumbnails", async ({ page }) => {
-        // Narrow rather than default-wide: the grid is `repeat(auto-fill,
-        // minmax(96px, 1fr))`, so a wide viewport packs the same 100+ seeded
-        // photos into few, short rows - not tall enough, even scrolled to the
-        // page's true bottom, to push the first tile 1200px (the pruning
-        // buffer) past the viewport. A narrow one guarantees enough rows.
+        // Narrow viewport: the grid is `repeat(auto-fill, minmax(96px, 1fr))`.
+        // A wide viewport packs 100+ photos into few rows, too short to push
+        // the first tile past the 1200px pruning buffer. Narrow guarantees rows.
         await page.setViewportSize({ width: 380, height: 700 });
         await page.goto(appRoutes.vaultPhotos);
 
@@ -137,8 +132,8 @@ test.describe("vault photos grid", () => {
         const prunedCount = diagnostics.tiles.filter((t) => !t.hasSrc && t.hasDataSrc).length;
         expect(prunedCount, `expected at least one early tile pruned after scrolling to the bottom. Diagnostics: ${JSON.stringify(diagnostics)}`).toBeGreaterThan(0);
 
-        // Scroll the first tile back into view; its image should be restored. Not the page top: the album list
-        // above the grid can leave the first tile more than the buffer below it at a phone's width (P59).
+        // Scroll the first tile back into view; its image should be restored.
+        // The album list above the grid can leave the first tile below the buffer at phone width.
         await firstImg.evaluate((img) => img.closest(".photo-tile")?.scrollIntoView({ block: "center" }));
         await expect(firstImg).toHaveAttribute("src", /.+/);
     });

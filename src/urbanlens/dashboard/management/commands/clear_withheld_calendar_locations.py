@@ -46,12 +46,6 @@ class Command(BaseCommand):
     help = "Rewrite UrbanLens-made Google Calendar events that may hold a location or title now withheld. Dry-run unless --apply."
 
     def add_arguments(self, parser: ArgumentParser) -> None:
-        """
-        Register the command's flags.
-
-        Args:
-            parser: The argument parser.
-        """
         parser.add_argument("--apply", action="store_true", help="Rewrite the events; without it, only count them.")
         parser.add_argument("--no-wait", action="store_true", help="Stop when the calendar budget runs out instead of waiting for it.")
 

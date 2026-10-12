@@ -6,7 +6,7 @@
  * mirror, and that style's `protomaps` source keeps naming our own tiles (`tiles.urbanlens.org/basemap/{z}/{x}/{y}`).
  * Where `{% hosted_basemap_tiles %}` embedded a hosted template (production and staging), this module points that
  * one source at it, and points it back at the style's own tiles when the hosted ones fail. Both serve the
- * Protomaps v4 schema - the same layers and attributes, compared tile by tile on 2026-10-06 - so the style draws
+ * Protomaps v4 schema - the same layers and attributes - so the style draws
  * either. Without the embed (development, local, no key) nothing here does anything.
  *
  * Failure means a tile answered 401 or 403 (a wrong key or origin), at once; otherwise {@link ERROR_THRESHOLD}

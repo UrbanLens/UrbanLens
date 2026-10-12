@@ -11,7 +11,7 @@ different driving model, and nothing in ``Label.name``'s migration-0049 GIN trig
 ``PinAlias.name`` - it was never indexed the same way - so both the matching and non-matching variant
 reproduced, matching the Article/Trip/Safety precedent for every relation the index does not cover.
 
-**Fixed 2026-09-17.** ``aliases`` crosses at *path*'s own first segment, so ``_semijoin`` now bounds
+``aliases`` crosses at *path*'s own first segment, so ``_semijoin`` now bounds
 its filter by the outer queryset's own candidate primary keys, materialised as a concrete list first
 rather than left as a nested subquery. See
 ``test_search_does_not_read_another_accounts_labels.py``'s module docstring for the measured
@@ -137,11 +137,9 @@ class SearchDoesNotReadAnotherAccountsPinOwnAliasesTests(_PinOwnAliasCase):
     """One account's pin aliases must not be read to answer a different account's pin search."""
 
     def test_it_does_not_read_a_strangers_matching_aliases(self) -> None:
-        """Fixed 2026-09-17 by the bounded semi-join - see the module docstring."""
         self.assertDoesNotGrow(SECOND_BATCH, matching=True)
 
     def test_it_does_not_read_a_strangers_unrelated_aliases(self) -> None:
-        """Fixed 2026-09-17 by the bounded semi-join - see the module docstring."""
         self.assertDoesNotGrow(SECOND_BATCH, matching=False)
 
 

@@ -89,7 +89,7 @@ class ImportPreviewDescriptionLengthTests(TestCase):
 
     The confirm/save step (iter_confirmed_import_events) re-uses the exact dict
     _preview_pins() built for the client-facing preview - it never re-parses the
-    original file. A tight, display-oriented cutoff there used to permanently
+    original file. A tight, display-oriented cutoff would permanently
     truncate every imported pin's description to 500 characters, even though the
     preview UI never actually displays the description at all.
     """
@@ -273,13 +273,8 @@ class ImportPreviewDescriptionExtrasTests(TestCase):
         )
 
     def test_html_is_stripped_from_the_saved_description(self) -> None:
-        # The <img> makes the importer try to materialize the photo, which fetches
-        # the URL. Unmocked, that reaches the real internet: the suite's network
-        # guard raises, `iter_confirmed_import_events` catches RuntimeError and yields
-        # "Import failed unexpectedly", and this test still passed because the pin
-        # was already created by then - so it was asserting against a *failed*
-        # import. Mocked the same way test_img_src_becomes_a_pin_photo_not_a_link
-        # already does.
+        # The <img> triggers materialization which fetches the URL. Mocked to avoid
+        # network access during test.
         with mock.patch(
             "urbanlens.dashboard.services.media.media_materialize.materialize_media_item",
             return_value=mock.Mock(pin_id=None),

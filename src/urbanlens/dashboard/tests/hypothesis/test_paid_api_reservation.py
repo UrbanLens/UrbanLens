@@ -1,4 +1,4 @@
-"""The paid-API limiter reserves before the call and refuses when it cannot count (G2-24, G2-25)."""
+"""The paid-API limiter reserves before the call and refuses when it cannot count."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from urbanlens.dashboard.services.core.rate_limiter import (
 
 
 class ACountThatCannotBeReadTests(TestCase):
-    """G2-24: the config read failed closed for billable services; the count query beside it failed open."""
+    """The config read fails closed for billable services; the count query beside it fails open."""
 
     def _unreadable_counts(self):  # noqa: ANN202
         return mock.patch.object(ApiCallLog.objects, "for_service", side_effect=DatabaseError("connection lost"))
@@ -40,7 +40,7 @@ class ACountThatCannotBeReadTests(TestCase):
 
 
 class TheCheckIsAReservationTests(TestCase):
-    """G2-25: a second caller arriving while the first call was in flight passed the same check."""
+    """A second caller arriving while the first call is in flight passes the same check."""
 
     def setUp(self) -> None:
         super().setUp()

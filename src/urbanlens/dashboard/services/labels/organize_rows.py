@@ -1,5 +1,5 @@
 """
-The Organize page's label rows, a page at a time (P66).
+The Organize page's label rows, a page at a time.
 
 Pages are keyed on the last row's sort key rather than an offset, so a label created or deleted between two
 page loads - REData's sync adds global tags in the background - neither repeats a row nor skips one.
@@ -170,9 +170,6 @@ def organize_rows_page(kind: str, profile: Profile, *, after: RowsCursor | None 
         profile: The viewer.
         after: Start after this row; None starts at the top.
         limit: At most this many rows; None for every remaining row.
-
-    Returns:
-        The page.
 
     Raises:
         ValueError: *limit* is not positive.

@@ -452,7 +452,7 @@ _MAX_SITE_DETAIL_FETCHES = 12
 #: for one more request's timeout.
 _SITE_DETAIL_BUDGET_SECONDS = 50.0
 #: How long each later pass waits for REData's bulk queue to detail a campus; each stays under RabbitMQ's default
-#: 30-minute consumer timeout, which a broker not yet configured for P290 still applies.
+#: 30-minute consumer timeout.
 CAMPUS_FILL_DELAYS_SECONDS = (10 * 60, 20 * 60, 25 * 60)
 #: How long a caller waits on its site's fetch in flight: the panel-fetch task's soft time limit. The requests
 #: before the detail budget is checked are unbudgeted, so the limit, not the budget, is what stops a slow fetch;
@@ -1013,7 +1013,7 @@ class CrisBuildingPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSource
 
     def seed_descendants(self, site: Pin) -> int:
         """
-        Fill the card of each building child under ``site`` from the site's cached site-scope answer, asking REData nothing.
+        Fill each building child's card from the site's cached site-scope answer, asking REData nothing.
 
         Args:
             site: The site pin.

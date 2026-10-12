@@ -1,5 +1,5 @@
 """
-P110: inside the US, Overture's buildings and places come from REData's mirror and the public release is never read.
+Inside the US, Overture's buildings and places come from REData's mirror and the public release is never read.
 
 REData's own HTTP is answered at the transport, below every gateway and its rate limiter. The fixtures are REData
 ``release/0.3.0``'s wire shapes: ``BuildingRecord.to_dict()`` for an ``OvertureBuilding`` row
@@ -517,7 +517,7 @@ class PanelInsideTheUsTests(RedataConfiguredMixin, TestCase):
         self.assertIn("Capitol Visitor Center (closed)", " ".join(fact["text"] for fact in context["facts"]))
 
     def test_a_building_outage_caches_nothing(self) -> None:
-        """P187: a row marks the source fetched for the whole cache term."""
+        """A row marks the source fetched for the whole cache term."""
         with (
             _public_release_refused() as touched,
             _redata_answers({_BUILDINGS: (503, _OUTAGE)}),
@@ -671,7 +671,7 @@ def _square_around(latitude: float, longitude: float) -> dict[str, Any]:
 
 
 class OutsideEveryShardTests(RedataConfiguredMixin, TestCase):
-    """Where REData syncs no Overture shard it holds nothing, so the public release answers, as it did before P110."""
+    """Where REData syncs no Overture shard it holds nothing, so the public release answers."""
 
     def setUp(self) -> None:
         super().setUp()

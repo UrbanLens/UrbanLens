@@ -398,10 +398,8 @@ class RunEnrichmentCycleTests(TestCase):
         )
 
     def _run(self, source: EnrichmentSource, **kwargs):
-        # The cycle only ever actually runs in production (see
-        # ProductionGateTests below) - everything else in this class is
-        # testing budget/window/cap logic, not the environment gate itself,
-        # so pin the effective environment to PRODUCTION here.
+        # Pin environment to PRODUCTION; the cycle only runs there in production.
+        # This class tests budget/window/cap logic, not the environment gate.
         with (
             patch("urbanlens.dashboard.services.locations.enrichment.enrichment_sources", return_value=[source]),
             patch.object(SiteSettings, "get_effective_environment_type", return_value=EnvironmentTypes.PRODUCTION),
@@ -497,11 +495,8 @@ class RunEnrichmentCycleTests(TestCase):
         self.assertEqual(summary["sources"]["recording"]["enriched"], 1)
 
     def test_upstream_gateway_rate_limit_mid_run_stops_source_gracefully(self) -> None:
-        # A source's own gateway (e.g. REData) reporting its request budget is
-        # exhausted must be treated the same as this codebase's own
-        # RateLimitExceededError: stop this source, don't retry every
-        # remaining candidate against a budget that won't refill mid-run, and
-        # don't log a traceback for a known, expected condition.
+        # A gateway reporting its budget exhausted must stop the source,
+        # not retry candidates against a budget that won't refill mid-run.
         for index in range(3):
             baker.make(Pin, profile=_make_profile(), location=_make_location(lat=f"40.{index:06d}"))
         source = _RecordingSource(fail_after=1, fail_with=GatewayRateLimitedError("REData budget exhausted"))

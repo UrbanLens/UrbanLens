@@ -280,19 +280,15 @@ def seed_bulk_labels(profile: Profile, *, count: int, analyze: bool = True, batc
     }
 
 
-#: Name prefix shared by every row `seed_bulk_search_relations` creates. Each relation is attached
-#: to one dedicated host row (a pin, a wiki, a trip, a check-in) rather than left unattached like
-#: `BULK_LABEL_PREFIX` - a NOT NULL foreign key requires a host - but the host is otherwise
-#: irrelevant: like the labels semi-join, `_semijoin` scans the whole relation table
-#: before any join to the search account's own rows narrows it, so which host the rows are attached
-#: to has no bearing on the cost.
+#: Name prefix shared by every row `seed_bulk_search_relations` creates. Each relation is
+#: attached to one dedicated host row (pin, wiki, trip, check-in) because a NOT NULL foreign key
+#: requires a host. The host is otherwise irrelevant: like the labels semi-join, `_semijoin` scans
+#: the whole relation table before joining to the search account's rows, so host choice doesn't affect cost.
 BULK_RELATIONS_PREFIX = "Perf Bulk Relation"
 
-#: Host object names/titles - deliberately a different string from `BULK_RELATIONS_PREFIX`. A pin's
-#: own name is auto-aliased on save (`Pin.save`'s alias-history sync), so naming the host pin with
-#: the bulk prefix itself would make `_top_up`'s `name__startswith` count that one alias as already
-#: present on every fresh run - harmless (one more row in a table measured by total size)
-#: but a confusing off-by-one in the report.
+#: Host object names/titles - deliberately different from `BULK_RELATIONS_PREFIX`. A pin's
+#: name is auto-aliased on save, so using the bulk prefix would make `_top_up`'s `name__startswith`
+#: count that alias as already present on every fresh run - harmless but a confusing off-by-one.
 _HOST_NAME_PREFIX = "Perf Search Relations Host"
 
 #: (host attribute on the seeded account, db_table) pairs `seed_bulk_search_relations` grows -

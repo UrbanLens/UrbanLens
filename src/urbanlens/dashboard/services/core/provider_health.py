@@ -3,7 +3,7 @@ Notice when an external provider is refusing or failing this deployment, back of
 
 The rate limiter caps how often a provider is asked, and ``upstream_breaker`` honours a wait a provider names. Neither
 judges a provider by what it has *done*: a provider answering 500, timing out or refusing every call is called at the
-full budget until someone goes looking. On 2026-10-05 REData was answering 503 to a quarter of the calls the dev
+full budget until someone goes looking. REData was answering 503 to a quarter of the calls the dev
 deployment made to it, and nothing had said so.
 This is the UrbanLens half of REData's provider health (REData's PL13; this repository's PL10).
 
@@ -839,8 +839,6 @@ def refusal_for(service: str, *, background: bool | None = None) -> Refusal | No
         service: The rate-limiter service key.
         background: Whether the call is background work; read from ``background_work`` when omitted.
 
-    Returns:
-        The refusal, or None.
     """
     entry = _snapshot().get(service)
     if entry is None or entry.state in (ProviderState.HEALTHY, ProviderState.DEGRADED):

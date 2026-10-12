@@ -1,5 +1,5 @@
 """
-Cloudflare's classifier refusing an image is an answer, and a classifier that did not answer stores nothing (P320).
+Cloudflare's classifier refusing an image is an answer, and a classifier that did not answer stores nothing.
 
 Every failed ``cloudflare_image_classifier`` call in dev's ApiCallLog (237, 2026-09-13 to 2026-09-30) was a tiny test
 upload. Cloudflare answered 400 with ``code 3011, "AiError: AiError: image too small, expected image at least 4x4"``;
@@ -40,7 +40,7 @@ from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
 _ACCOUNT = "0123456789abcdef0123456789abcdef"
 _ENDPOINT = f"https://gateway.ai.cloudflare.com/v1/{_ACCOUNT}/urban-lens/workers-ai"
 _JPEG = b"\xff\xd8\xff\xe0fake-jpeg-bytes"
-#: Cloudflare's answer to a 1x1 JPEG, captured from the AI Gateway on 2026-10-05.
+#: Cloudflare's answer to a 1x1 JPEG, captured from the AI Gateway.
 _TOO_SMALL = {
     "errors": [
         {

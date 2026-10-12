@@ -211,10 +211,8 @@ def _pins_created_bulk(profile_ids: Sequence[int]) -> dict[int, int]:
 def _photos_uploaded(profile: Profile) -> int:
     from urbanlens.dashboard.models.images.model import Image
 
-    # Only the profile's own photos: rows materialised from Yelp/Wikimedia/etc. are someone else's
-    # photo that this profile merely attached.
-    # A photo picked out of their own Immich or Google Photos library is theirs and counts.
-    # .photos() excludes documents/videos - the label is "Photos uploaded".
+    # Only the profile's own photos; attached Yelp/Wikimedia rows are excluded.
+    # Immich/Google Photos picks count as own. .photos() excludes documents/videos.
     return Image.objects.filter(profile=profile).own_contributions().photos().count()
 
 
@@ -291,10 +289,8 @@ def _friends(profile: Profile) -> int:
 def _friends_bulk(profile_ids: Sequence[int]) -> dict[int, int]:
     from urbanlens.dashboard.models.friendship.model import Friendship
 
-    # A profile can sit on either end of the pair's single shared row, so this groups each side
-    # separately and sums.
-    # A row joining two profiles in the same chunk credits both, exactly as the per-profile count
-    # does; the self-referencing exclusion mirrors ``Q(from=p) | Q(to=p)`` counting such a row once,
+    # A profile can sit on either end of the shared row; group each side and sum.
+    # Row joining two profiles in the chunk credits both; self-referencing exclusion mirrors per-profile count.
     accepted = Friendship.objects.is_friend()
     counts = _grouped_count(accepted.filter(from_profile_id__in=profile_ids), "from_profile_id")
     to_side = accepted.filter(to_profile_id__in=profile_ids).exclude(from_profile=F("to_profile"))

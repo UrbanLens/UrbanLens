@@ -1349,20 +1349,15 @@ def collect_satellite_slides(lat: float, lng: float) -> tuple[list[SatelliteSlid
             slides.extend(fetched.slides)
             results.append(ProviderFetchResult(service, from_cache=fetched.from_cache, count=len(fetched.slides), ok=not fetched.degraded))
         except RateLimitExceededError as rle:
-            # Recorded as a failed provider, not skipped silently: it contributed nothing *and* may
-            # well succeed shortly, which is the difference between "this location has no imagery"
-            # and "we did not get to ask".
-            # SlidesPanelSource.fetch reads these to decide how long to trust an empty result.
+            # Recorded as failed (not skipped) so SlidesPanelSource.fetch knows we didn't get to ask.
             logger.debug("Satellite view provider %s rate-limited -> %s", service, rle)
             results.append(ProviderFetchResult(service, from_cache=False, count=0, ok=False))
         except RequestCancelledError as rce:
-            # A disabled service is settled, not a reason to re-warm the panel every few minutes;
-            # an unreadable limiter is transient and must not mark the carousel ready for 12 hours.
+            # Disabled service = settled; transient = don't mark carousel ready for 12h.
             logger.debug("Satellite view provider %s request cancelled -> %s", service, rce)
             if rce.transient:
                 results.append(ProviderFetchResult(service, from_cache=False, count=0, ok=False))
         except Exception as e:
-            # TODO: Catch specific exceptions
             logger.warning("Satellite view provider %s failed -> %s", service, e)
             results.append(ProviderFetchResult(service, from_cache=False, count=0, ok=False))
     return slides, results
@@ -1863,10 +1858,7 @@ def schedule_panel_fetch(source_key: str, pin: Pin) -> bool:
         return False
     if fetch_blocked(source, pin):
         return False
-    # The marker's TTL covers queue wait *and* execution, so on a backed-up panel_fetch queue it can
-    # lapse before the task even starts.
-    # The worker therefore releases by token: without one, a fetch that outlived its marker deletes
-    # the *next* schedule's marker on the way out, and the poll after that dispatches a third fetch
+    # TTL covers queue wait + execution; token release prevents a late fetch from deleting the next schedule's marker.
     flight_token = acquire_lock(source.flight_key(pin), FLIGHT_TTL_SECONDS)
     if flight_token is not None:
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task
@@ -1874,9 +1866,7 @@ def schedule_panel_fetch(source_key: str, pin: Pin) -> bool:
 
         logger.debug("schedule_panel_fetch: dispatching %s for pin %s to queue '%s'", source_key, pin.pk, source.queue)
         if safely_enqueue_task(fetch_panel_source, source_key, pin.pk, flight_token, queue=source.queue, durable=False) is None:
-            # Broker down: a raised error here would 500 every panel on the pin detail page at once.
-            # Release the just-claimed single-flight marker so the next poll retries the enqueue
-            # instead of waiting out FLIGHT_TTL_SECONDS behind a task that was never queued.
+            # Broker down: release marker so next poll retries instead of waiting out TTL.
             release_lock(source.flight_key(pin), flight_token)
             return False
     return True

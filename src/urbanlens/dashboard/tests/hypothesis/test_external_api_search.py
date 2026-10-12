@@ -59,10 +59,7 @@ class _SearchApiTestCase(TestCase):
         self.other_user = baker.make(User, username="bystander")
         self.other_profile = Profile.objects.get(user=self.other_user)
         self.raw_key = self._key_with_scopes(_ALL_PAT_SEARCH_SCOPES)
-        # Location carries a unique constraint on (latitude, longitude) - a
-        # coordinate pair *is* a place, and two rows for one pair would split the
-        # community wiki attached to it. Every baked location therefore needs its
-        # own coordinates; this counter supplies them.
+        # Unique (lat, lon) constraint means every location needs distinct coords.
         self._location_seq = 0
 
     def _key_with_scopes(self, scopes: list[str]) -> str:
@@ -327,10 +324,7 @@ class GlobalSearchIdentifierTests(_SearchApiTestCase):
         """Every wiki route - web and API - keys off the location, not Wiki.slug."""
         location = self._location()
         wiki = baker.make("dashboard.Wiki", location=location, name="Anchor Mill", created_by=self.profile)
-        # A pin, because creating a wiki is not one of wiki_access's four clauses
-        # and no longer stands in for access here. This test is about how a wiki
-        # result is addressed, so it just needs one the searcher can legitimately
-        # see; without the pin the page would 404 and search rightly omits it.
+        # Wiki access requires a pin; this test just needs a visible wiki.
         baker.make("dashboard.Pin", profile=self.profile, location=location, parent_pin=None)
         location.refresh_from_db()
         group = self._group(self._search(q="anchor mill", types="wikis").json(), "wikis")
@@ -541,10 +535,7 @@ class GlobalSearchDirectMessageScopeTests(_SearchApiTestCase):
         body = response.json()
         self.assertEqual(body["total"], 0)
         self.assertEqual(body["omitted_types"], ["messages"])
-        # No section at all, so no excerpt of the body can have been rendered.
-        # Asserted on `groups` rather than on the raw response text because the
-        # payload legitimately echoes `query` back, and the query here is the
-        # caller's own words - not something read out of anyone's messages.
+        # No section rendered, so no message excerpt could appear.
         self.assertEqual(body["groups"], [])
 
     def test_oauth2_token_with_messages_read_does_reach_them(self) -> None:

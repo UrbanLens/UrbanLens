@@ -1,9 +1,9 @@
 """
 The trip weather panel reads stored weather and fetches forecasts under the request-path policy.
 
-N29 G5-26/G6-2/G2-14 (forecasts fetched per coordinate on the request with no deadline, even for activities
-weeks outside any forecast) and G5-27 (history built every calendar day between the earliest and latest
-activity, ``scheduled_at`` had no minimum, and a place's recorded days were one JSON document read whole).
+Forecasts fetched per coordinate on the request with no deadline, even for activities
+weeks outside any forecast. History built every calendar day between the earliest and latest
+activity; ``scheduled_at`` had no minimum, and a place's recorded days were one JSON document read whole.
 """
 
 from __future__ import annotations
@@ -123,7 +123,7 @@ class HistoryIsReadNotFetchedTests(_TripCase):
         self.assertEqual(enqueue.call_count, 1)
 
     def test_activities_decades_apart_never_become_one_span(self) -> None:
-        """The G5-27 case: 1940 and today used to be one request for every day between them."""
+        """Activities decades apart must not become one request for every day between them."""
         from urbanlens.dashboard.tasks import fetch_recorded_weather_at
 
         self._activity(timezone.make_aware(datetime.datetime(1941, 5, 1, 12, 0)))

@@ -1,5 +1,5 @@
 """
-Merge duplicate building places - one real building recorded twice - into one (REData P98).
+Merge duplicate building places - one real building recorded twice - into one.
 
 A duplicate is found by REData's own identity record: a legacy-keyed place whose content hash REData resolves to an
 ``overture:<gers_id>`` that another place holds (or that another legacy place resolves to as well). Each group's
@@ -37,12 +37,6 @@ class Command(BaseCommand):
     help = "Merge building places REData says are one Overture building; report geometry-only and cross-parcel duplicates. Dry-run unless --apply."
 
     def add_arguments(self, parser: ArgumentParser) -> None:
-        """
-        Register the command's flags.
-
-        Args:
-            parser: The argument parser.
-        """
         parser.add_argument("--apply", action="store_true", help="Merge; without it, only report what would move.")
 
     def handle(self, *args: Any, **options: Any) -> None:

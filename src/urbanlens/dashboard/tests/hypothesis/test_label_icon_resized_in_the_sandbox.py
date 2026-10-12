@@ -3,8 +3,8 @@ A label's custom icon must not be decoded by the request that uploads it.
 
 ``_resize_custom_icon`` opened every uploaded icon with Pillow inside the label create and edit
 requests, with no ``untrusted_parse`` guard - so ``warn`` could not even log it, and the web process
-ran a decoder over bytes the uploader chose (P103). The upload is now held until the sandbox worker
-has re-encoded it (P119).
+ran a decoder over bytes the uploader chose. The upload is now held until the sandbox worker
+has re-encoded it.
 """
 
 from __future__ import annotations
@@ -161,7 +161,7 @@ class LabelIconIsShrunkInTheSandboxTests(TestCase):
             publish_held_upload(KEY, label.pk, label.custom_icon_upload)
 
     def test_a_small_icon_is_still_reencoded(self) -> None:
-        """Its size needs nothing, but whatever metadata the upload carried would be served with it (P119)."""
+        """Its size needs nothing, but whatever metadata the upload carried would be served with it."""
         label = self._label_holding(64, 64)
 
         with self._in_sandbox():

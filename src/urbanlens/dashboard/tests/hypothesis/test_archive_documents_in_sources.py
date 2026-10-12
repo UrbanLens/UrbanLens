@@ -1,7 +1,7 @@
 """
-A PDF or DjVu an archive search found is listed under Article > Sources, from the gallery's own cached row (P260).
+A PDF or DjVu an archive search found is listed under Article > Sources, from the gallery's own cached row.
 
-The Media gallery leaves documents out (P196), and only Commons and CRIS listed documents under Sources, so a document
+The Media gallery leaves documents out, and only Commons and CRIS listed documents under Sources, so a document
 among the Library of Congress, Internet Archive, Smithsonian, Digital Commonwealth or Chronicling America results was
 shown nowhere. Sources reads the rows the gallery already cached for those archives and never searches them itself.
 """
@@ -196,7 +196,7 @@ class ArchiveDocumentFetchTests(_ArchiveSourcesCase):
 
 
 class ArchiveDocumentConcealmentTests(_ArchiveSourcesCase):
-    """A document found only by a pin's own names is shown only on that pin's page, as Commons' are (P188)."""
+    """A document found only by a pin's own names is shown only on that pin's page, as Commons' are."""
 
     def setUp(self) -> None:
         super().setUp()

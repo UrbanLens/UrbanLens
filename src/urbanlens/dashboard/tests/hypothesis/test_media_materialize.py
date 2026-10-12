@@ -70,7 +70,7 @@ class MaterializeMediaItemTests(TestCase):
         self.assertTrue(image.checksum)
 
     def test_overlong_caption_is_truncated_to_the_column_width(self) -> None:
-        """Regression: Wikimedia returns the full page description (sometimes a multi-paragraph history) as the caption, which used to overflow Image.caption's varchar(500) and raise DataError, losing the photo entirely instead of saving it with a truncated caption."""
+        """Wikimedia returns the full page description (sometimes a multi-paragraph history) as the caption, which would overflow Image.caption's varchar(500) and raise DataError, losing the photo entirely instead of saving it with a truncated caption."""
         long_caption = "x" * 600
         with mock.patch(
             "urbanlens.dashboard.services.media.media_materialize.requests.get", return_value=_ok_response()
@@ -99,7 +99,7 @@ class MaterializeMediaItemTests(TestCase):
         self.assertIn("UrbanLens", headers.get("User-Agent", ""))
 
     def test_panel_key_loc_translates_to_library_of_congress(self) -> None:
-        """The "loc" panel key never matched ImageSource.LIBRARY_OF_CONGRESS's real value ("library_of_congress") - without the translation this used to silently fall back to plain ImageSource.UPLOAD."""
+        """The "loc" panel key never matched ImageSource.LIBRARY_OF_CONGRESS's real value ("library_of_congress") - without the translation it would silently fall back to plain ImageSource.UPLOAD."""
         with mock.patch(
             "urbanlens.dashboard.services.media.media_materialize.requests.get", return_value=_ok_response()
         ):
@@ -288,7 +288,7 @@ class MaterializeMediaItemTests(TestCase):
 
 
 class PastedExternalImageTests(TestCase):
-    """P178: the external-image download path, as a pasted overlay URL uses it."""
+    """The external-image download path, as a pasted overlay URL uses it."""
 
     def setUp(self) -> None:
         self.profile = baker.make(User).profile

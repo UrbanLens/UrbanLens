@@ -312,15 +312,10 @@ class MapPinPayloadService:
         return MediaRelevance.objects.filter(profile=self.profile, is_relevant=False).values_list("item_key", flat=True)
 
     def _annotations(self) -> dict[str, Any]:
-        """
-        The computed columns both paths select.
-        ``child_count`` is a scalar subquery rather than ``Count(distinct=True)``: aggregating over a join makes the planner sort the whole join product, and the fan-out inflates every other column's row count on the way."""
+        """Computed columns both paths select; child_count uses a scalar subquery to avoid join fan-out inflating row counts."""
         latest_rating = Review.objects.filter(pin_id=OuterRef("pk")).order_by("-created").values("rating")[:1]
         children = Pin.objects.filter(parent_pin_id=OuterRef("pk")).order_by().values("parent_pin_id").annotate(total=Count("pk")).values("total")
-        # Fallback cover photo when the pin has none set explicitly: its own earliest photo that
-        # this profile hasn't voted irrelevant.
-        # Annotated as raw storage paths (not a second query per pin) so page()/all() stay a single
-        # query regardless of how many pins are being built.
+        # Fallback cover: pin's earliest relevant photo, annotated as raw paths to keep page()/all() a single query.
         fallback_photo = Image.objects.filter(pin_id=OuterRef("pk"), media_type=MediaKind.PHOTO, pending_scan=False).exclude(media_item_key__in=self._irrelevant_item_keys_for_profile()).order_by("created")
         return {
             "map_rating": Subquery(latest_rating),
@@ -329,21 +324,9 @@ class MapPinPayloadService:
         }
 
     def prepare_queryset(self, query: QuerySet[Pin]) -> QuerySet[Pin]:
-        """
-        Annotate and join *query* for the model-instance path.
-        The map's own paths use :meth:`page` and :meth:`all`, which read columns instead.
-
-        Args:
-            query: Pins to serialize.
-
-        Returns:
-            The queryset with the payload's annotations and joins applied.
-        """
+        """Annotate and join *query* for the model-instance path (map paths use page()/all() instead)."""
         return (
-            # location__wiki as well as location: every pin serialized here reads effective_name,
-            # which falls through to Location.display_name, which reads the reverse OneToOne `wiki`
-            # - one query per pin on the map's own payload unless it is joined in.
-            # That property's docstring asks callers to do this.
+            # Joins location__wiki so effective_name (via Location.display_name) doesn't N+1.
             query.select_related("location", "location__wiki", "cover_photo").annotate(**self._annotations()).prefetch_related(Prefetch("labels", queryset=Label.objects.with_customizations_for(self.profile))).order_by("pk")
         )
 

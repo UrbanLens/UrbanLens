@@ -1,7 +1,7 @@
 """
-Asking a keyword source again about a photo it did not answer for (P323).
+Asking a keyword source again about a photo it did not answer for.
 
-When a source does not answer for a photo, ``generate_keywords_for_image`` keeps the photo's keywords from it (P322)
+When a source does not answer for a photo, ``generate_keywords_for_image`` keeps the photo's keywords from it
 and records an :class:`~urbanlens.dashboard.models.images.keyword.ImageKeywordRetry` row for the (photo, source). The
 source might be down, it might have refused the call for now, or the photo's analysis copy might not have been
 readable. An answer from the source, through any path, deletes the row. :func:`sweep` (beat ``keyword-retry-sweep``)

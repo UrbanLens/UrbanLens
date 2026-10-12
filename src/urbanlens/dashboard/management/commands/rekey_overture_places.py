@@ -1,5 +1,5 @@
 """
-Move building places, floorplans and swept-building records off Overture's legacy content-hash refs (REData P98).
+Move building places, floorplans and swept-building records off Overture's legacy content-hash refs.
 
 Each legacy key is resolved through REData's ``/buildings/resolve/``; one REData never recorded is matched by footprint
 against its parcel's current buildings. Ambiguous matches, and stable refs another place already holds (duplicates, to be merged), are reported and left alone. Never deletes, and safe to run again.
@@ -25,12 +25,6 @@ class Command(BaseCommand):
     help = "Re-key building places, floorplans and swept buildings from legacy Overture refs to overture:<gers_id>. Dry-run unless --apply; --check gates P98's removal."
 
     def add_arguments(self, parser: ArgumentParser) -> None:
-        """
-        Register the command's flags.
-
-        Args:
-            parser: The argument parser.
-        """
         mode = parser.add_mutually_exclusive_group()
         mode.add_argument("--apply", action="store_true", help="Re-key; without it, only report what would move.")
         mode.add_argument("--check", action="store_true", help="Count the legacy refs that remain and exit 1 if there are any.")

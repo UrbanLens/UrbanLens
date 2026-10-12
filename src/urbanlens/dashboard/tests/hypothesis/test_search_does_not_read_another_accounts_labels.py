@@ -35,7 +35,7 @@ The axis here is rows *read*, not rows returned: the subquery returns almost not
 query counter, a ``rowcount`` wrapper and a response-size budget all read this as flat. That is why
 ``EndpointScalingMixin`` cannot express this defect.
 
-**Fixed 2026-09-17.** ``_semijoin`` now bounds the crossing relation's own filter by the outer queryset's
+``_semijoin`` now bounds the crossing relation's own filter by the outer queryset's
 candidate primary keys. Measured directly (``EXPLAIN ANALYZE``, 20,000 unrelated labels): adding that same
 restriction as a *nested* subquery is a no-op, because Postgres flattens it straight back into the identical
 unbounded plan - materialising the candidate keys as a concrete Python list first, a genuine extra round trip,
@@ -201,7 +201,7 @@ class _PinSearchCase(TestCase):
 
 
 class SearchDoesNotReadAnotherAccountsLabelsTests(_PinSearchCase):
-    """P123: one account's labels must not be read to answer another account's search."""
+    """One account's labels must not be read to answer another account's search."""
 
     def test_it_does_not_read_a_strangers_matching_labels(self) -> None:
         """
@@ -217,8 +217,7 @@ class SearchDoesNotReadAnotherAccountsLabelsTests(_PinSearchCase):
 
         Separated from the matching case because the two originally had different fixes: the trigram index
         alone (migration 0049) helped only the matching case, so a candidate fix that passed one test and
-        not the other had done half the job. Fixed 2026-09-17 by the bounded semi-join - see the module
-        docstring.
+        not the other had done half the job.
         """
         self.assertDoesNotGrow(SECOND_BATCH, matching=False)
 

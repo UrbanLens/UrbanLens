@@ -118,14 +118,12 @@ def find_profile_by_username(username: str, allowed: Q) -> Profile | None:
 
     Matches as :func:`find_user_by_username` does, active accounts only: an exact username, else the one account
     holding its key. A match *allowed* refuses answers as no match, after the same one statement, so a caller cannot
-    tell a hidden account from a username nobody has (P280).
+    tell a hidden account from a username nobody has.
 
     Args:
         username: Any spelling of a username.
         allowed: The profiles the caller may name.
 
-    Returns:
-        The profile, or None.
     """
     from django.db.models import BooleanField, ExpressionWrapper
 

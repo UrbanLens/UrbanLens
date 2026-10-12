@@ -102,7 +102,7 @@ class BoundaryChainSkipsTests(SimpleTestCase):
         self.assertIsNotNone(resolved.building_polygon)
 
     def test_the_public_overture_release_lets_the_refusal_through_unconverted(self) -> None:
-        """It used to turn every refusal into a rate limit, which the chain defers."""
+        """The public Overture release surfaces the refusal rather than converting it to a rate limit."""
         from urbanlens.dashboard.services.apis.locations.boundaries.overture_maps import OvertureMapsGateway
 
         with deployment("development"), self.assertRaises(EnvironmentRefusedError):
@@ -372,7 +372,7 @@ class _FakeGateway:
 
 class AiPathsAreReservedAndLoggedTests(TestCase):
     """
-    The seven features that called the provider with no ledger row and no gate (2026-10-05 audit).
+    The seven features that called the provider with no ledger row and no gate.
 
     The assistant is covered in ``test_ai_assistant``.
     """
@@ -465,7 +465,7 @@ class AiPathsAreReservedAndLoggedTests(TestCase):
                 self.assertEqual(gateway.calls, 0)
 
     def test_development_refuses_every_ai_feature_and_records_nothing(self) -> None:
-        """Jess, 2026-10-06: dev should not call AI providers. The sweep is covered in ``test_ai_refused_in_development``."""
+        """Development refuses all AI features and logs nothing."""
         for feature in self.FEATURES:
             with self.subTest(feature=feature), deployment("development"):
                 gateway = self._call(feature)

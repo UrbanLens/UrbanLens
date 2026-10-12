@@ -1,5 +1,5 @@
 """
-A pin's own names find results that only accounts with exactly the same names are shown (P188).
+A pin's own names find results that only accounts with exactly the same names are shown.
 
 Every account at a place shares one search per provider, built from the names anyone who can see the place knows it
 by. A pin's own names get one more search, cached for exactly that set of names. The upstream is faked at each
@@ -53,7 +53,7 @@ def marks(text: str) -> set[int]:
 
 def _naming(query: str) -> str:
     """
-    A result's caption naming what was searched for, so the gallery's relevance rule keeps it (P196).
+    A result's caption naming what was searched for, so the gallery's relevance rule keeps it.
 
     Custom names are searched casefolded; capitals let an acronym such as HRSH match as one.
     """
@@ -198,7 +198,7 @@ class AudienceTestCase(RedataConfiguredMixin, TestCase):
 
 
 class SevenAccountsTests(AudienceTestCase):
-    """Jess's example: one shared search, one per distinct set of custom names, nobody sees another set's results."""
+    """One shared search, one per distinct set of custom names, nobody sees another set's results."""
 
     SETS = {
         "Bob": (),

@@ -40,9 +40,8 @@ _NETWORK_GUARD_MARKER = "External network access is disabled during tests"
 #: this file for writes.
 _WRITE_METHODS = ("get", "post", "delete")
 
-#: Routes known to crash, with the reason. **Empty**, and the way it emptied is the point: it held exactly one
-#: entry, ``pin.link`` (detach a pin from its shared Location), excused as an open product decision.
-#: Keep that property if anything is ever added here.
+#: Routes known to crash, with the reason. Empty by design; held exactly one
+#: entry (pin.link) excused as an open product decision. Keep this property.
 _KNOWN_CRASHES: set[str] = set()
 
 #: Routes skipped because exercising them would sabotage the sweep itself rather
@@ -154,11 +153,8 @@ class _WriteRouteSweep(_SweepBase):
             "map_uuid": str(baker.make(MarkupMap, profile=profile).uuid),
             "filter_uuid": str(baker.make(SavedFilter, profile=profile).uuid),
             "label_id": baker.make(Label, profile=profile, kind="tag").pk,
-            # Cheap to supply and each unlocks a whole family: label_kind is an
-            # enum string, profile_slug/profile_id are the requester's own, and
-            # checkin_uuid/group_uuid are one object each. Measured first -
-            # these five parameter names alone gate 59 of the 133 routes that
-            # were out of reach with a single unknown parameter.
+            # Cheap to supply; each unlocks a family of routes. These five
+            # parameter names alone gate 59 of 133 previously unreachable routes.
             "label_kind": KIND_TAG,
             "profile_slug": profile.slug,
             "profile_id": profile.pk,
@@ -288,7 +284,7 @@ class _WriteRouteSweepTests(_WriteRouteSweep):
         )
 
     def test_no_write_route_answers_a_malformed_json_body_with_a_server_error(self) -> None:
-        """A body that is not a JSON object was a 500 wherever a view called ``.get()`` on what it decoded (P29)."""
+        """A body that is not a JSON object was a 500 wherever a view called ``.get()`` on what it decoded."""
         unexpected: dict[str, str] = {}
         for body in _MALFORMED_JSON_BODIES:
             for name, how in self._crashing_routes(json_body=body).items():

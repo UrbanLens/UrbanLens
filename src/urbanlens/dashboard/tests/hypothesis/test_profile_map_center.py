@@ -361,22 +361,17 @@ class ComputeMapCenterClusteringTests(TestCase):
         self.profile = baker.make(User).profile
 
     def test_larger_cluster_wins_over_isolated_pin(self) -> None:
-        # Three pins near NYC (~40°N 74°W) vs one pin near London (51°N 0°W).
-        # The NYC cluster has more members and must win.
         nyc = [(40.7, -74.0), (40.8, -73.9), (40.6, -74.1)]
         for lat, lng in nyc:
             _pin_at(self.profile, lat, lng)
         _pin_at(self.profile, 51.5, -0.1)  # London
         result = self.profile.compute_map_center()
         self.assertIsNotNone(result)
-        # Result must be near NYC, not in the middle of the Atlantic.
         self.assertGreater(result[0], 35.0)  # latitude well above equator
         self.assertLess(result[0], 50.0)  # but not near London
         self.assertLess(result[1], -40.0)  # longitude clearly in the Americas
 
     def test_equal_sized_clusters_returns_a_cluster_centroid_not_midpoint(self) -> None:
-        # One pin in NYC and one in London.  The result must be one of the two
-        # locations - NOT the midpoint in the mid-Atlantic (~46°N 37°W).
         _pin_at(self.profile, 40.7, -74.0)  # NYC
         _pin_at(self.profile, 51.5, -0.1)  # London
         result = self.profile.compute_map_center()
@@ -389,7 +384,6 @@ class ComputeMapCenterClusteringTests(TestCase):
         )
 
     def test_result_is_within_the_winning_cluster_bounding_box(self) -> None:
-        # Six pins in Europe, two pins in South America.  Result must be in Europe.
         europe = [(48.8, 2.3), (51.5, -0.1), (52.5, 13.4), (41.9, 12.5), (40.4, -3.7), (50.0, 14.4)]
         for lat, lng in europe:
             _pin_at(self.profile, lat, lng)
@@ -397,7 +391,6 @@ class ComputeMapCenterClusteringTests(TestCase):
             _pin_at(self.profile, lat, lng)
         result = self.profile.compute_map_center()
         self.assertIsNotNone(result)
-        # Result must be in the European latitude/longitude band.
         self.assertGreater(result[0], 30.0)  # north of Africa
         self.assertLess(result[0], 60.0)  # south of Scandinavia
         self.assertGreater(result[1], -10.0)  # east of Atlantic

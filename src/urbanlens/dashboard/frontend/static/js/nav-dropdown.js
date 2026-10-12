@@ -1,6 +1,6 @@
 // The navbar's user/notification/messages dropdowns and the mobile hamburger drawer
 // (partials/layout/header.html). Served as a file so the browser caches it across navigations
-// instead of re-downloading it inline on every page (P133).
+// instead of re-downloading it inline on every page.
 (function () {
     var menu      = document.getElementById('nav-user');
     var btn       = document.getElementById('nav-user-btn');
@@ -97,11 +97,8 @@
             }
         });
 
-        // data-notif-url carries NotificationLog.url, the same unvalidated
-        // CharField _notification_push.html guards before navigating. These two
-        // sinks had no guard at all, so they were strictly less protected than
-        // the ones a scanner had already flagged. Same single-code-path check:
-        // let the browser's own parser decide, never a hand-rolled prefix test.
+        // data-notif-url carries NotificationLog.url. The same-origin
+        // check uses the browser's URL parser, not a hand-rolled prefix test.
         function notifUrlIfSameOrigin(url) {
             if (typeof url !== 'string' || !url) return null;
             try {

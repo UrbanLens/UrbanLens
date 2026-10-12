@@ -56,10 +56,8 @@ _MAX_LOCATION_ATTEMPTS = 25
 ROUND_TIME_LIMIT_CHOICES = (30, 60, 90, 120)
 
 #: How long a round can sit unrevealed before the stall-sweep Celery task
-#: force-reveals it - the safety net for a participant who closed their
-#: tab. Independent of round_time_limit_seconds, whose expiry the client
-#: reports itself while one is still around; this is the backstop for
-#: when none is.
+#: force-reveals it - backstop for a participant who closed their tab.
+#: Independent of round_time_limit_seconds (client-reported expiry).
 STALL_ROUND_TIMEOUT_MINUTES = 10
 
 
@@ -160,10 +158,8 @@ class GameConfig:
     date_guessing_enabled: bool = False
     use_aliases: bool = True
     geo_bounds_geojson: dict | None = None
-    #: Seconds each round stays open before it's force-revealed, or None for
-    #: untimed play. One of ROUND_TIME_LIMIT_CHOICES in practice (the
-    #: settings dialog only offers those), but not validated against that
-    #: list here - any positive int is honored.
+    #: Seconds each round stays open before force-reveal, or None for untimed.
+    #: Settings dialog offers ROUND_TIME_LIMIT_CHOICES; any positive int accepted.
     round_time_limit_seconds: int | None = None
     #: Restrict candidate locations to those tagged (by any participant's own pin)
     #: with this Label or one of its descendants - see
@@ -684,11 +680,8 @@ def submit_guess(round_: GameRound, profile: Profile, guess_point: Point, guesse
     bonus_scope = geo_bonus.BonusScope.from_dict((session.config or {}).get("bonus_scope", {}))
     bonus = geo_bonus.bonus_points_for_guess(guess_point, round_.location, bonus_scope)
 
-    # Two round-completing guesses can land at the same instant, which would
-    # double-apply ratings and race the next round's uniqueness.
-    # select_for_update() serializes the read-count-decide section per round;
-    # duplicates then surface as IntegrityError, and only the submission that
-    # actually completes the round proceeds to rating/broadcast/next-round.
+    # Two round-completing guesses can land simultaneously, double-applying ratings.
+    # select_for_update() serializes per round; duplicates raise IntegrityError.
     round_completed_now = False
     with transaction.atomic():
         locked_round = GameRound.objects.select_for_update().get(pk=round_.pk)

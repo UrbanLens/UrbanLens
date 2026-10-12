@@ -143,9 +143,6 @@ def writing_as(source: WriteOrigin, *, actor: WriteActor = None) -> Iterator[Non
             write rather than here.
         actor: Profile pk to attribute writes to, when the source is USER, or a callable
             returning one - called at the first write rather than here.
-
-    Yields:
-        None.
     """
     source_token = _write_source.set(source)
     actor_token = _write_actor.set(actor)
@@ -164,9 +161,6 @@ def unversioned(*, reason: str) -> Iterator[None]:
 
     Args:
         reason: Why this block is exempt. Recorded in the log line.
-
-    Yields:
-        None.
     """
     logger.warning("Versioning suppressed: %s", reason)
     token = _unversioned.set(True)

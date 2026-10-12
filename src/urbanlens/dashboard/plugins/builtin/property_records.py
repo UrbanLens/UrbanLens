@@ -140,9 +140,7 @@ def _fetch_payload(location: Location, latitude: float, longitude: float) -> dic
 def _add_sections(payload: dict[str, Any], gateway: RedataGateway, parcel_uuid: str) -> None:
     """
     Add the parcel's sections asked for beside its record, each best-effort.
-
-    A section REData could not answer for now is left out and named under the payload's ``unanswered_sources`` (see
-    :data:`_SECTIONS`); a section REData refused for good is left out silently, as before.
+    Unanswered sections are named under ``unanswered_sources``; refused sections are omitted silently.
 
     Args:
         payload: The record payload, updated in place.
@@ -168,9 +166,6 @@ def _add_sections(payload: dict[str, Any], gateway: RedataGateway, parcel_uuid: 
         unanswered.extend(f"{section}:{provider}" for provider in answer.unanswered_sources)
         return answer.results
 
-    # Cheap local precheck for the two supplementary calls below that *are* coverage-registry
-    # domains (assessments, sale_records) - see RedataGateway.lookup_coverage. A failed precheck
-    # calls both, so it leaves nothing unanswered itself.
     try:
         coverage = gateway.lookup_coverage(parcel_uuid)
     except PropertyRecordsUnavailableError:
@@ -182,45 +177,27 @@ def _add_sections(payload: dict[str, Any], gateway: RedataGateway, parcel_uuid: 
         if history:
             payload["assessment_history"] = history
 
-    # Supplementary recorded sales (CT OPM, Cook County) - same
-    # best-effort stance. Matched rows are appended to sales_history so
-    # the existing OFFICIAL-sale pipeline ingests them unchanged.
     if _coverage_worth_calling(coverage, "sale_records"):
         sale_rows = rows("sale-records", asked("sale-records", gateway.lookup_sale_records))
         supplementary = _supplementary_sales(sale_rows, payload.get("situs_address") or "", payload.get("apn") or "")
         if supplementary:
             payload["sales_history"] = list(payload.get("sales_history") or []) + supplementary
 
-    # Encumbrances and unpaid tax.
-    # For this application these are the most telling records on the card: an open
-    # code-enforcement lien and years of delinquent tax are what "abandoned" looks like in
-    # public records, long before anything says so in words.
     if lien_rows := asked("liens", gateway.lookup_liens):
         payload["liens"] = _lien_rows(lien_rows)
 
     if tax_rows := asked("tax-payments", gateway.lookup_tax_payments):
         payload["tax_status"] = _tax_status(tax_rows)
 
-    # The record names only today's owner; REData's owner rows add former owners, contact details and how
-    # many other parcels each holds, and its recorded sales outlast the one retrieval behind this record.
     if owners := _owner_records(asked("owners", gateway.lookup_owners) or []):
         payload["owners"] = owners
 
     if recorded := _recorded_sales(asked("sales", gateway.lookup_sales) or []):
         payload["sales_history"] = _merged_sales(payload.get("sales_history") or [], recorded)
 
-    # Neighbourhood demographics (census tract population/income/home value/rent/owner-renter
-    # split) - genuinely useful context for someone researching a site.
-    # Best-effort: the endpoint 503s wholesale without REData's own Census API key configured
-    # server-side, which is settled until REData's operator configures one (_SETTLED_SECTION_REFUSALS).
-    # The gateway shares the answer, or the failure, with every other location on the parcel.
     if demographics := asked("demographics", gateway.lookup_demographics):
         payload["demographics"] = demographics
 
-    # The park containing this parcel, if any - a real point-in-boundary check, unlike
-    # plugins.builtin.nps's nearest-by-coordinate panel elsewhere on the same pin (see that
-    # plugin's own docstring for the precision tradeoff it accepts). nearby_parks duplicates
-    # that existing panel, so it is read and discarded here rather than shown twice.
     national_parks = asked("national-parks", gateway.lookup_national_parks) or {}
     if containing_park := national_parks.get("containing_park"):
         payload["containing_park"] = containing_park

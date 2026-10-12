@@ -554,12 +554,11 @@ class _ImportMemberTooLargeError(_ImportValidationError):
     """A data file in the archive is over :data:`_MAX_JSON_MEMBER_BYTES`."""
 
 
-#: The most bytes any one JSON file in an archive may hold, since ``json.load`` builds it whole. The importer reads only
-#: this app's own export (``SUPPORTED_FORMATS``): no Google Takeout file, Records.json included, comes through here -
-#: those go through the import preview, which streams them. The largest file an export writes is ``pins.json``, about
-#: 1.5 KB a pin before descriptions and articles, so this holds ~170,000 pins; the app is sized for 10,000+ per user.
-#: Parsed, indented export JSON measured about 1.75x its size in Python objects (2.5x compact), so one file at the
-#: ceiling costs a sandbox worker roughly 0.45-0.65 GB; the worker pod is limited to 4 GiB across four children.
+#: The most bytes any one JSON file in an archive may hold, since ``json.load`` builds it whole.
+#: Only this app's own export (``SUPPORTED_FORMATS``) comes through here; Google Takeout files
+#: go through the import preview which streams them. ``pins.json`` is the largest at ~1.5 KB/pin,
+#: so this ceiling holds ~170,000 pins (app sized for 10,000+/user). A file at the ceiling costs
+#: a sandbox worker ~0.45-0.65 GB; the worker pod is limited to 4 GiB across four children.
 _MAX_JSON_MEMBER_BYTES = 256 * 1024**2
 
 #: What the user is told when an archive holds a data file over the ceiling.
@@ -2830,8 +2829,6 @@ def _float_or_none(value: Any) -> float | None:
     Args:
         value: The raw exported value.
 
-    Returns:
-        A float, or None.
     """
     if value is None:
         return None

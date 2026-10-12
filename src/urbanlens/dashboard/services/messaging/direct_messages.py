@@ -359,11 +359,8 @@ def serialize_direct_message(message: DirectMessage, *, viewer: Profile | None =
 
 
 def _broadcast_direct_message(message: DirectMessage) -> None:
-    """Push a new message to both participants' live sessions after commit (best-effort)."""
-    # Per-recipient payloads: the recipient's copy resolves the sender's name through their own
-    # visibility (a live message must never reveal a name a refresh would mask) and carries image
-    # URLs only once they have consented to see images from this sender.
-    # The sender's copy names them as viewer too, rather than passing None.
+    """Push new message to both participants' live sessions after commit (best-effort)."""
+    # Per-recipient payloads respect each viewer's visibility and image consent; sender's copy uses themselves as viewer.
     deliveries = [
         (direct_message_group_name(message.sender_id), serialize_direct_message(message, viewer=message.sender)),
         (direct_message_group_name(message.recipient_id), serialize_direct_message(message, viewer=message.recipient)),
@@ -676,29 +673,13 @@ def create_direct_message(
     """
     Validate, persist, broadcast, and notify for one new direct message.
 
-    Args:
-        sender: Profile sending the message.
-        recipient: Profile receiving it.
-        body: Plaintext message text.
-        ciphertext: End-to-end encrypted body (base64) under the conversation key.
-        nonce: Base64 nonce for ``ciphertext`` (required with it).
-        key_version: ``ConversationKey.version`` that encrypted this message.
-        image_ids: PKs of sender's unattached ``Image`` rows to attach.
-        markup_map_uuid: UUID of sender's ``MarkupMap`` to attach.
-        reply_to_id: PK of earlier message in this conversation to quote.
-        client_uuid: Caller-generated idempotency key.
-        defer_broadcast: Skip live WebSocket push; caller will call ``broadcast_direct_message`` after attaching a ``DirectMessageShare``.
-
-    Returns:
-        The newly created DirectMessage.
-
     Raises:
         DirectMessageTooLongError: ``body`` exceeds ``MAX_DIRECT_MESSAGE_LENGTH``.
-        MixedPlaintextAndCiphertextError: Both ``body`` and ``ciphertext`` were given.
-        MalformedCiphertextError: The ``ciphertext``/``nonce``/``key_version`` triple isn't valid.
-        NoEligibleAttachmentsError: ``image_ids`` was given but none resolve to an unattached image owned by ``sender``.
-        EmptyDirectMessageError: Neither ``body``, ``ciphertext``, an eligible attachment, nor ``markup_map_uuid`` was given.
-        RecipientNotAcceptingMessagesError: The recipient's privacy settings don't permit the sender."""
+        MixedPlaintextAndCiphertextError: Both ``body`` and ``ciphertext`` given.
+        MalformedCiphertextError: Invalid ``ciphertext``/``nonce``/``key_version`` triple.
+        NoEligibleAttachmentsError: ``image_ids`` given but none resolve to sender's unattached images.
+        EmptyDirectMessageError: No content, attachment, or markup map provided.
+        RecipientNotAcceptingMessagesError: Recipient's privacy settings block the sender."""
     from urbanlens.dashboard.services.security.e2ee import MAX_CIPHERTEXT_LENGTH, MAX_NONCE_LENGTH, valid_blob
 
     # Idempotent replay, checked before validation and before the permission gate: the message this

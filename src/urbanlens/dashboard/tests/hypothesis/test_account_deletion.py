@@ -290,7 +290,7 @@ class HardDeleteProfileTests(TestCase):
         self.assertFalse(Pin.objects.filter(pk=pin_pk).exists())
 
     def test_cascades_to_owned_trip_comments(self):
-        """P25: TripComment.author is CASCADE, matching Comment.profile."""
+        """TripComment.author is CASCADE, matching Comment.profile."""
         other = baker.make(User)
         trip = baker.make(Trip, creator=other.profile)
         comment = baker.make(TripComment, trip=trip, author=self.profile)
@@ -365,7 +365,7 @@ class HardDeleteProfileFileCleanupTests(TestCase):
 
     def test_trip_comment_is_deleted_with_its_image(self):
         """
-        TripComment.author is CASCADE, matching Comment.profile (P25) - a
+        TripComment.author is CASCADE, matching Comment.profile - a
         trip comment with no replies is erased along with the account, and
         its image file does not outlive the row."""
         other = baker.make(User)
@@ -387,7 +387,7 @@ class HardDeleteProfileFileCleanupTests(TestCase):
 
 class HardDeleteProfileCommentTombstoneTests(TestCase):
     """
-    P25: deleting an account erases its own comments, but a reply another
+    Deleting an account erases its own comments, but a reply another
     member wrote is never deleted or emptied - the CASCADE reaches exactly as
     far as the departing profile's own rows, and the existing UL-219
     parent_deleted signal tombstones the reply the same way a direct

@@ -75,18 +75,14 @@ class CopyWikiPhotoToPinTests(TestCase):
         self.assertEqual(copy.longitude, self.image.longitude)
 
     def test_survives_the_original_image_being_deleted(self) -> None:
-        """The headline requirement: deleting the wiki photo must not delete or break the copy."""
+        """Deleting the wiki photo must not delete or break the copy."""
         copy, _created = copy_wiki_photo_to_pin(self.image, self.pin, self.copier)
 
         self.image.delete()
         copy.refresh_from_db()
 
         self.assertIsNotNone(copy.pk)
-        # copied_from points at the Image row itself, so it goes null...
         self.assertIsNone(copy.copied_from_id)
-        # ...but copied_from_profile/location point at the Profile/Location,
-        # neither of which was touched by deleting the Image row, so live
-        # attribution is still available beyond just the denormalized text.
         self.assertEqual(copy.copied_from_profile_id, self.uploader.pk)
         self.assertEqual(copy.author, f"Uploaded by {self.uploader.username}")
 
@@ -233,11 +229,8 @@ class CopyWikiPhotoViewTests(TestCase):
         self.location = baker.make(Location)
         self.wiki = baker.make(Wiki, location=self.location)
         self.pin = baker.make(Pin, profile=self.profile, location=self.location)
-        # Profile.photo_upload_visibility/viewer_photo_filter both default to
-        # ANYTHING_IN_COMMON, not ANYONE - a pin at the same location is what
-        # makes ImageQuerySet.visible_to (which CopyWikiPhotoView's lookup
-        # goes through, same as every other wiki-photo view) admit a viewer
-        # who isn't the uploader and shares no friendship/trip with them.
+        # Profile defaults require a pin at the same location for visibility
+        # (photo_upload_visibility/viewer_photo_filter default to ANYTHING_IN_COMMON).
         baker.make(Pin, profile=self.uploader, location=self.location)
         self.image = _wiki_image(wiki=self.wiki, location=self.location, profile=self.uploader)
 

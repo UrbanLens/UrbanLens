@@ -1,7 +1,7 @@
 """
 The ``ApiKey`` secret hash: its format, its upgrade path, its cost, and the writes around it.
 
-P146. A key's secret is 32 bytes of ``secrets.token_urlsafe``, so a password KDF's work factor prices
+A key's secret is 32 bytes of ``secrets.token_urlsafe``, so a password KDF's work factor prices
 nothing an attacker could guess, while PBKDF2 at Django's default iterations cost ~0.9s of CPU on
 every authenticated request - and on every unauthenticated one naming a real (public) prefix.
 """
@@ -56,7 +56,7 @@ def _secret_of(raw_key: str) -> str:
 
 
 def _legacy_hash(secret: str) -> str:
-    """What the pre-P146 issuer stored: ``make_password`` under PBKDF2, at test-speed iterations."""
+    """What the legacy issuer stored: ``make_password`` under PBKDF2, at test-speed iterations."""
     return hashers.PBKDF2PasswordHasher().encode(secret, hashers.PBKDF2PasswordHasher().salt(), iterations=1000)
 
 
@@ -206,7 +206,7 @@ class VerificationCostTests(TestCase):
 
 @override_settings(PASSWORD_HASHERS=_PRODUCTION_HASHERS)
 class LegacyApiKeyUpgradeTests(TestCase):
-    """Keys issued before P146 keep working, and rewrite themselves on first use."""
+    """Keys issued before the hash upgrade keep working, and rewrite themselves on first use."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)

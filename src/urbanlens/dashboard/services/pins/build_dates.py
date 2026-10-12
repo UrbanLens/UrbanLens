@@ -157,11 +157,8 @@ def parcel_year_may_date(marker: Pin | Wiki) -> bool:
     """
     Whether the parcel record's year may date a pin or wiki: not one that reads as a building.
 
-    A campus pin standing on its main building's place reads as that building, and the assessor's year for the
-    parcel's principal improvement is not known to be that building's.
-
-    Args:
-        marker: The pin or wiki.
+    A campus pin on its main building's place reads as that building; the assessor's year for the
+    parcel's principal improvement isn't known to be that building's.
 
     Returns:
         False when ``marker`` reads as a building.
@@ -324,11 +321,7 @@ def wiki_build_year(wiki: Wiki) -> int | None:
     """
     The year a wiki's place was built, for its About card.
 
-    The community's estimate once it has one; until then the newest record's. A record is one observation, which the
-    fact's crowd threshold would otherwise never let show.
-
-    Args:
-        wiki: The wiki.
+    Community estimate once available; until then the newest record (a single observation the crowd threshold would hide).
 
     Returns:
         The year, or None when nothing says.

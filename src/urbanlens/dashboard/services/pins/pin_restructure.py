@@ -193,12 +193,8 @@ def property_polygon(pin: Pin) -> GEOSGeometry | None:
 def nestable_root_pins(pin: Pin) -> list[Pin]:
     """
     Return the owner's other top-level pins inside this pin's property boundary.
-
-    Args:
-        pin: The prospective parent pin.
-
-    Returns:
-        Top-level pins of the same profile within the property, excluding this pin and any that would form a cycle."""
+    Excludes this pin and any that would form a cycle.
+    """
     if pin.pk is None:
         return []
     polygon = property_polygon(pin)
@@ -505,8 +501,6 @@ class BuildingNester:
             buildings: Raw building records for its parcel.
             boundary: The property's real boundary, or None.
 
-        Returns:
-            The nester.
         """
         from urbanlens.dashboard.services.pins.building_clusters import cluster_buildings
 
@@ -522,8 +516,6 @@ class BuildingNester:
             pin: The campus pin.
             fallback: Records to use when nothing is cached for the pin's location.
 
-        Returns:
-            The nester.
         """
         return cls.build(pin, site_scope.parcel_buildings(pin.location) or fallback or [], property_polygon(pin))
 

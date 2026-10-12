@@ -265,24 +265,17 @@ class DecoratedParserTests(SimpleTestCase):
             extract_text("notes.docx", b"")
 
     def test_an_exemption_is_what_lets_the_exif_backfill_command_run(self) -> None:
-        # The command decodes already-stored, already-scanned files, and runs
-        # with no UL_PROCESS_ROLE at all - so without its allow_untrusted_parse
-        # block `deny` would refuse the very tool whose job is stripping EXIF.
         from urbanlens.dashboard.services.media.images import downscale_stored_image
 
         with self.assertRaises(UnsandboxedParseError):
             downscale_stored_image(object(), None, False)  # type: ignore[arg-type]
         with allow_untrusted_parse("the backfill command's own reason"), self.assertRaises(AttributeError):
-            # Past the guard now, so it fails on the bogus argument instead -
-            # which is the proof the guard is what stopped it above.
             downscale_stored_image(object(), None, False)  # type: ignore[arg-type]
 
     def test_byte_level_metadata_strip_is_not_guarded(self) -> None:
-        # The deliberate exception, and the reason it exists: strip_metadata
-        # walks container segments in pure Python and never decodes, which is
-        # what lets an upload be scrubbed inside the request instead of sitting
+        # strip_metadata walks container segments in pure Python and never decodes,
+        # letting an upload be scrubbed inside the request instead of sitting
         # in the media tree with its GPS intact until a worker gets to it.
-        # Guarding it would push that scrub back onto the queue.
         from urbanlens.dashboard.services.media.metadata_strip import strip_metadata
 
         self.assertIsNone(strip_metadata(b"not an image"))
