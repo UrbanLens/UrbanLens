@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 from django.contrib.auth.models import User
 from django.db import connection, transaction
 from django.test.utils import CaptureQueriesContext
 from django.urls import NoReverseMatch, get_resolver, reverse
+from django.utils import timezone
 from model_bakery import baker
 import pytest
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.core.tests.thread_writes import DiscardsLedgerRowsFromOtherThreadsMixin
+from urbanlens.dashboard.models.account.model import ApiKey
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
@@ -122,7 +126,13 @@ class RouteQueryScalingTests(DiscardsLedgerRowsFromOtherThreadsMixin, TestCase):
 
         The savepoint matters: a route that raises a database error would otherwise poison the surrounding test
         transaction and take every subsequent route down with it, turning one broken route into a sweep-wide
-        failure that names the wrong culprit."""
+        failure that names the wrong culprit.
+
+        A bearer key's ``last_used_at`` is stamped first. The key refreshes it and logs a usage row, a few extra
+        queries, on the first request after ``LAST_USED_RESOLUTION``, so on a slow run whichever route crosses
+        that boundary would look like it scales."""
+        if self._headers:
+            ApiKey.objects.filter(user=self.user).update(last_used_at=timezone.now())
         with transaction.atomic(), CaptureQueriesContext(connection) as ctx:
             response = self.client.get(url, **self._headers)
             return response.status_code, len(ctx.captured_queries)
@@ -167,6 +177,18 @@ class RouteQueryScalingTests(DiscardsLedgerRowsFromOtherThreadsMixin, TestCase):
             any(name.startswith("external_api:") for name in names),
             "the external API is namespaced; without the prefix none of it reverses",
         )
+
+    def test_a_stale_api_key_does_not_change_a_routes_query_count(self) -> None:
+        """The key's once-a-minute usage sample must not make a route look like it scales."""
+        self._headers = self._api_headers()
+        url = reverse("external_api:custom_fields")
+
+        ApiKey.objects.filter(user=self.user).update(last_used_at=timezone.now())
+        _, first = self._measure(url)
+        ApiKey.objects.filter(user=self.user).update(last_used_at=timezone.now() - timedelta(minutes=5))
+        _, second = self._measure(url)
+
+        self.assertEqual(first, second)
 
     @pytest.mark.slow
     def test_no_external_api_route_scales(self) -> None:
