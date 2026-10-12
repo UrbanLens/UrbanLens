@@ -45,6 +45,9 @@ describe("without leaflet-rotate", () => {
     test("no source means no rotation, and the map is built plain", async () => {
         expect(await ensureLeafletRotate(null)).toBe(false);
         expect(await ensureLeafletRotate({ src: "" })).toBe(false);
+        expect(await ensureLeafletRotate({ src: "javascript:alert(1)" })).toBe(false);
+        expect(await ensureLeafletRotate({ src: "data:text/javascript,alert(1)" })).toBe(false);
+        expect(document.head.querySelector("script[src^='javascript:'], script[src^='data:']")).toBeNull();
         expect(rotateOptions(90)).toEqual({});
     });
 

@@ -37,6 +37,16 @@ const LOAD_TIMEOUT_MS = 6000;
 
 let loading: Promise<boolean> | null = null;
 
+/** Whether `src` is an http(s) address - a `javascript:` or `data:` source is never loaded as a script. */
+function isWebAddress(src: string): boolean {
+    try {
+        const { protocol } = new URL(src, document.baseURI);
+        return protocol === "https:" || protocol === "http:";
+    } catch {
+        return false;
+    }
+}
+
 /** Whether leaflet-rotate has patched this page's Leaflet. */
 export function rotationAvailable(): boolean {
     return typeof L !== "undefined" && typeof (L.Map?.prototype as Partial<RotatableMap> | undefined)?.setBearing === "function";
@@ -64,7 +74,7 @@ function restoreDefaults(): void {
 export function ensureLeafletRotate(source: ScriptSource | null | undefined): Promise<boolean> {
     if (typeof L === "undefined" || typeof document === "undefined") return Promise.resolve(false);
     if (rotationAvailable()) return Promise.resolve(true);
-    if (!source?.src) return Promise.resolve(false);
+    if (!source?.src || !isWebAddress(source.src)) return Promise.resolve(false);
     loading ??= new Promise<boolean>((resolve) => {
         const script = document.createElement("script");
         script.src = source.src;
