@@ -70,24 +70,20 @@ def covered_paths(config_path: str, config: dict, candidates: list[str]) -> set[
     prefix = "" if str(directory) == "." else f"{directory}/"
 
     named = {f"{prefix}{entry}" for entry in config.get("files") or []}
-    # `include` defaults to everything *only* when the config lists no `files`.
-    # With `files` present TypeScript defaults it to nothing, and reading it as
-    # `**/*` would report a whole directory as covered by a project that
-    # compiles one file of it.
+    # `include` defaults to everything only without `files`; with `files` it defaults to nothing.
+    # Reading it as `**/*` would falsely claim full-directory coverage.
     default_include = [] if "files" in config else ["**/*"]
     includes = config.get("include") or default_include
     excludes = list(config.get("exclude") or []) + list(_DEFAULT_EXCLUDES)
 
     def expand(entry: str) -> list[re.Pattern[str]]:
-        # A bare directory means everything under it; TypeScript infers the
-        # extensions rather than requiring the glob.
+        # Bare directory means everything under it with inferred extensions.
         if not entry.endswith(_DIRECTORY_SUFFIXES) and "*" not in entry and "?" not in entry:
             return [glob_to_regex(f"{prefix}{entry.rstrip('/')}/**/*{suffix}") for suffix in _DIRECTORY_SUFFIXES]
         return [glob_to_regex(f"{prefix}{entry}")]
 
     included = [pattern for entry in includes for pattern in expand(entry)]
-    # An exclude entry names a subtree as often as a file, so it matches the
-    # path itself or anything under it.
+    # Exclude entries match the path itself or anything under it.
     excluded = [pattern for entry in excludes for pattern in (glob_to_regex(f"{prefix}{entry}"), glob_to_regex(f"{prefix}{entry.rstrip('/')}/**"))]
 
     matched = {path for path in candidates if any(pattern.match(path) for pattern in included) and not any(pattern.match(path) for pattern in excluded)}

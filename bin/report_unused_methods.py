@@ -63,10 +63,8 @@ DEFAULT_EXCLUDE_DIRS = {
 
 
 # ---------------------------------------------------------------------------
-# Convention-based defaults (toggle off with --no-default-ignores).
-# Frameworks invoke these by reflection/dynamic lookup, not by reference, so
-# a static count always reads 0 while the code is in use. Each entry notes
-# its mechanism so the blind spot is explicit.
+# Convention defaults (--no-default-ignores disables): invoked by reflection,
+# so static counts read 0 while in use.
 # ---------------------------------------------------------------------------
 
 # Directory names skipped entirely.
@@ -171,13 +169,9 @@ def _iter_python_files(
 
 _FALLBACK_ENCODINGS = ("utf-8-sig", "utf-16", "cp1252", "latin-1")
 
-# Used to separate "production" references from "test" references when
-# counting usages (see analyze()'s exclude_test_references). Deliberately
-# broader than DEFAULT_IGNORE_FILENAME_PATTERNS/DIR_NAMES, since those only
-# need to catch the files that should never even be scanned, whereas this
-# needs to catch test *code* wherever it lives - including test helper/
-# factory modules inside a tests/ package that don't match a test_*.py-style
-# glob, and singular/plural variants like *_tests.py.
+# Separates production from test references (see analyze()).
+# Broader than DEFAULT_IGNORE_* to catch test code anywhere,
+# including helpers/factories and *_tests.py variants.
 _TEST_FILENAME_PATTERNS = ("test_*.py", "*_test.py", "*_tests.py", "tests.py", "conftest.py")
 _TEST_DIR_NAMES = {"test", "tests", "testing"}
 
@@ -304,10 +298,7 @@ class ReferenceCounter(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_arg(self, node: ast.arg) -> None:
-        # A parameter named after a function counts as a use - this is how
-        # pytest fixtures are "called" (injected by parameter name rather
-        # than referenced as a Name/Attribute), so without this every fixture
-        # only used by other test functions reads as unused.
+        # pytest fixtures are injected by parameter name, not reference.
         if node.arg in self.simple_names:
             self.counts[node.arg] += 1
         self.generic_visit(node)
@@ -458,18 +449,12 @@ def analyze(
 
 
 # ---------------------------------------------------------------------------
-# Confidence scoring
-#
-# Confidence scoring: "0 references" is less certain for patterns known to
-# slip past static analysis. Borderline cases stay in the report with a lower
-# score so they get triaged, not trusted or dismissed outright.
+# Confidence scoring: zero references is uncertain for patterns static
+# analysis misses; borderline cases get lower scores for triage.
 # ---------------------------------------------------------------------------
 
-# Class name suffixes that are commonly base/mixin classes for Django, DRF,
-# and similar frameworks that dispatch methods by name/string convention
-# (URLconf as_view() dicts, admin list_display, form/serializer machinery,
-# management command runners, etc.) beyond what DEFAULT_IGNORE_* already
-# special-cases by exact name.
+# Class suffixes for frameworks dispatching by name/string convention
+# beyond what DEFAULT_IGNORE_* covers (e.g. as_view dicts, list_display).
 FRAMEWORK_CLASS_HINTS = re.compile(
     r"(View|ViewSet|Controller|Serializer|Form|Admin|Command|Backend|"
     r"Middleware|TestCase|AppConfig|Listener|Handler|Resource|Endpoint|Mixin)$",

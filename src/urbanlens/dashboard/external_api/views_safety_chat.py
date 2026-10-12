@@ -105,14 +105,11 @@ class SafetyCheckinMessagesView(SafetyCheckinViewerScopedView, PaginatedListMixi
         viewer = self.resolve_viewer(request)
         messages = (
             checkin.messages.select_related("sender_profile", "sender_contact")
-            # Newest first, and *total*: `created` alone ties whenever two messages land in the same instant -
-            # which is exactly what happens when a system message is written alongside a user's, as mark-safe
-            # and partner-accept both do - and an unstable sort silently drops or repeats rows across page
-            # boundaries.
+            # Tie-break on pk: `created` ties when system + user messages land together, and
+            # an unstable sort drops/repeats rows across pages.
             .order_by("-created", "-pk")
         )
-        # The viewer goes in the context rather than being compared client-side: see
-        # SafetyCheckinMessageSerializer.is_mine for why display names are not a safe identity comparison.
+        # Viewer in context: display names are not safe identity; see SafetyCheckinMessageSerializer.is_mine.
         return self.paginated_response(messages, SafetyCheckinMessageSerializer, request, context={"viewer": viewer})
 
     @extend_schema(request=SafetyCheckinMessageCreateSerializer, responses={201: SafetyCheckinMessageSerializer, 400: ErrorSerializer, 404: ErrorSerializer, 409: ErrorSerializer})

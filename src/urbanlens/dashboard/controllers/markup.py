@@ -418,15 +418,13 @@ class SafetyContactMarkupJsonView(View):
         Returns:
             JsonResponse with ``markup_items`` list, or 404 if the token is invalid.
         """
-        # by_token resolves only a contact already alerted, so the route - part of the trip plan - is never
-        # reachable before an incident.
+        # by_token only matches alerted contacts, so route stays hidden pre-incident.
         contact = get_object_or_404(SafetyCheckinContact.objects.select_related("checkin__markup_map").by_token(token))
         checkin = contact.checkin
         markup_map = checkin.markup_map
         if markup_map is None:
             return JsonResponse({"markup_items": []})
-        # Capped like the signed-in reader: this route is reachable by anyone
-        # holding the magic link, so it is the *less* guarded of the two.
+        # Capped like signed-in reader; magic link is less guarded.
         rows, truncated = _bounded_markup_rows(PinMarkup.objects.for_map(markup_map))
         return JsonResponse({"markup_items": [m.to_json() for m in rows], "truncated": truncated})
 
@@ -483,9 +481,6 @@ class MarkupMapCreateView(LoginRequiredMixin, View):
         ``pin_slug``/``location_slug`` (used only to pick a sensible default title) and
         ``markup``/``shapes`` (a full snapshot's markup list, which switches this into the one-shot save
         mode).
-
-        Args:
-            request: HttpRequest.
 
         Returns:
             JsonResponse with ``ok`` and the new map's ``uuid``, or a 400 with ``ok: False`` when a

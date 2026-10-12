@@ -47,12 +47,9 @@ jobs:
   sqlmap:
     name: sqlmap scan
     runs-on: ubuntu-latest
-    # Reuses the same GH Environment (and the same UL_E2E_ACCOUNTS_JSON secret)
-    # as integration.yml/nuclei.yml purely because that is where the
-    # provisioned-account manifest already lives - it says nothing about what
-    # base_url may be. bin/run_sqlmap_scan.sh's own allowlist is what actually
-    # keeps this off staging/production regardless of which environment's
-    # secrets this job can see.
+    # Reuses integration.yml/nuclei.yml environment only for the provisioned-account manifest.
+    # It does not authorize base_url: bin/run_sqlmap_scan.sh's allowlist
+    # keeps this off staging/production regardless of visible secrets.
     environment: staging
     timeout-minutes: 90
 

@@ -76,11 +76,9 @@ for arg in "$@"; do
 done
 
 if [ -n "$PARALLEL" ]; then
-    # --dist loadscope keeps each class on one worker: several suites here build
-    # expensive per-class state, and splitting a class pays it once per worker.
-    # --no-loadscope-reorder hands classes out in pytest-django's order, every
-    # TestCase before any TransactionTestCase (whose teardown empties the tables
-    # migrations seeded), as CI does.
+    # Keep each class on one worker (per-class state is expensive to rebuild).
+    # Preserve pytest-django ordering: TestCase before TransactionTestCase whose
+    # teardown empties migration-seeded tables, as CI does.
     args=(-n "$PARALLEL" --dist loadscope --no-loadscope-reorder "${args[@]}")
 else
     ul_default_xdist_args "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" "${args[@]}"

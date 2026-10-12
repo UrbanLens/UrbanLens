@@ -35,9 +35,7 @@ class StripeWebhookView(View):
         from urbanlens.UrbanLens.settings.app import settings as app_settings
 
         if not app_settings.stripe_webhook_secret:
-            # There is no signature this deployment could ever accept while unconfigured, so it's a permanent
-            # refusal like a bad signature, not a transient one - same status as the construct_event failure
-            # below.
+            # No secret can ever verify, so reject permanently like a bad signature.
             logger.error("Stripe webhook received but UL_STRIPE_WEBHOOK_SECRET is not set.")
             return HttpResponse(status=400)
 
@@ -48,9 +46,7 @@ class StripeWebhookView(View):
             logger.warning("Rejected Stripe webhook with invalid payload/signature.")
             return HttpResponse(status=400)
 
-        # stripe.Event doesn't implement .get() - convert to a plain dict once at the boundary so every
-        # downstream handler (and JSONField storage below) can use ordinary dict access instead of the SDK's
-        # attribute-only interface.
+        # stripe.Event lacks .get(); convert once for dict access and JSONField storage.
         event = stripe_event.to_dict()
 
         from urbanlens.dashboard.models.billing import StripeWebhookEvent
@@ -59,15 +55,13 @@ class StripeWebhookView(View):
         # Handlers call the Stripe API; an unset key is a deployment fault, so fail loudly and let Stripe redeliver.
         stripe_client.configure()
 
-        # Handling and marking-as-handled have to commit together.
         StripeWebhookEvent.objects.get_or_create(
             stripe_event_id=event["id"],
             defaults={"event_type": event["type"], "payload": event},
         )
 
         with transaction.atomic():
-            # Re-read under a row lock: two deliveries of one event arriving at once would otherwise both read
-            # processed_at as null and both run the side effects.
+            # Row lock prevents concurrent duplicate deliveries from double-processing.
             webhook_event = StripeWebhookEvent.objects.select_for_update().get(stripe_event_id=event["id"])
             if webhook_event.processed_at is not None:
                 return HttpResponse(status=200)

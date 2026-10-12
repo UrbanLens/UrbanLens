@@ -59,10 +59,7 @@ class HostIsLocalhostTests(TestCase):
                 self.assertFalse(_host_is_localhost(name))
 
     def test_private_non_loopback_ip_is_not_localhost(self) -> None:
-        # RFC1918/link-local/unique-local ranges are private but routable over a
-        # real network - conflating `is_loopback` with `is_private` would let the
-        # guard wave through connections to another machine on the LAN or a
-        # Docker bridge network, not just this process.
+        # Private ranges are routable to other machines, not just this process.
         for host in ("10.0.0.1", "192.168.1.1", "172.16.0.5", "169.254.1.1", "fc00::1", "fe80::1"):
             with self.subTest(host=host):
                 self.assertFalse(_host_is_localhost(host))

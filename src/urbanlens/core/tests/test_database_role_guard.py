@@ -1,4 +1,4 @@
-"""A run that cannot create its test database says where tests do run, instead of failing in CREATE DATABASE (P130)."""
+"""A run that cannot create its test database says where tests do run, instead of failing in CREATE DATABASE."""
 
 from __future__ import annotations
 

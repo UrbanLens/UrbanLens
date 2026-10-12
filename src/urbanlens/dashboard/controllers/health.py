@@ -67,9 +67,6 @@ def _deadlined_cursor() -> Iterator[CursorWrapper]:
     Inside an enclosing transaction, such as a test case's, ``atomic()`` is only a savepoint, and releasing one leaves
     a transaction-scoped setting in force for every later query of that transaction. So the previous value is put
     back before the block is left; a query the deadline cancels rolls the savepoint back, which undoes the setting too.
-
-    Yields:
-        The cursor.
     """
     with transaction.atomic(), connection.cursor() as cursor:
         cursor.execute("SELECT current_setting('statement_timeout')")

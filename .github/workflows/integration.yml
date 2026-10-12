@@ -1,12 +1,8 @@
 name: Integration tests
 
-# Manual only, on purpose. This suite drives a *deployed* instance: it signs in,
-# creates rows, deletes them again, and runs a real background job. Firing that
-# on every push would mean several concurrent runs writing to one staging
-# database and blaming each other for the results.
-#
-# It also cannot be run against production, and a workflow that is only ever
-# started deliberately is the cheapest way to keep that true.
+# Manual only: drives a *deployed* instance (writes/deletes rows, runs real jobs),
+# so concurrent runs would clash on one staging database.
+# Must never run against production.
 on:
   workflow_dispatch:
     inputs:

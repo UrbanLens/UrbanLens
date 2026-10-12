@@ -900,8 +900,7 @@ def _render_trip_comments(request: HttpRequest, trip: Trip, profile: Profile) ->
     from urbanlens.dashboard.services.core.pagination import get_page
     from urbanlens.dashboard.services.trips.trip_comments import visible_comment_count, visible_comment_queryset
 
-    # Default to the last page: comments run oldest to newest, so the most
-    # recent activity is what a viewer should see without paging back.
+    # Newest comments are last, so start on the last page.
     page_obj = get_page(request, visible_comment_queryset(trip, profile), _TRIP_COMMENTS_PAGE_SIZE, default_last=True)
     rendered: list[TripCommentData] = build_comment_tree(trip, profile, comments=page_obj.object_list)
     return render(
@@ -911,12 +910,9 @@ def _render_trip_comments(request: HttpRequest, trip: Trip, profile: Profile) ->
             "trip": trip,
             "rendered_comments": rendered,
             "page_obj": page_obj,
-            # The panel partial is also rendered inside the full trip page, so
-            # the pagination bar cannot fall back to request.path - a click
-            # there would swap a whole document into the panel.
+            # Explicit URL: panel is embedded in the full page.
             "comments_url": reverse("trips.comments", args=[trip.slug]),
-            # The whole visible thread, not the page - a badge taken from the
-            # page would shrink the moment paging started.
+            # Total thread count, so the badge does not shrink when paging.
             "comment_count": visible_comment_count(trip, profile),
             "profile": profile,
             "allowed_emojis": ALLOWED_COMMENT_EMOJIS,

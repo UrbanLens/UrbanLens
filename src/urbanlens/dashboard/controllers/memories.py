@@ -373,9 +373,6 @@ class MemoriesView(LoginRequiredMixin, View):
         """
         Render the Memories page with hero stats and scrubber bounds.
 
-        Args:
-            request: The HTTP request.
-
         Returns:
             Rendered Memories page.
         """
@@ -419,9 +416,6 @@ class MemoriesHeroStatsView(LoginRequiredMixin, View):
         """
         Render the hero-stats partial.
 
-        Args:
-            request: The HTTP request.
-
         Returns:
             Rendered ``_hero_stats.html`` partial.
         """
@@ -445,9 +439,6 @@ class MemoriesFeedDataView(LoginRequiredMixin, View):
     def get(self, request: HttpRequest):
         """
         Return MemoryEvents for the requested date range/viewport as JSON.
-
-        Args:
-            request: The HTTP request.
 
         Returns:
             JsonResponse with ``start``, ``end``, and ``events``.
@@ -506,9 +497,6 @@ class MemoriesOnThisDayView(LoginRequiredMixin, View):
     def get(self, request: HttpRequest):
         """
         Render the "on this day" callout partial.
-
-        Args:
-            request: The HTTP request.
 
         Returns:
             Rendered partial listing past-year visits/routes/photos on today's month/day.
@@ -685,9 +673,6 @@ class MemoriesVisitsView(LoginRequiredMixin, View):
     def get(self, request: HttpRequest) -> HttpResponse:
         """
         Render the unlogged-visits page.
-
-        Args:
-            request: The HTTP request.
 
         Returns:
             Rendered Visits page listing every visited-but-unlogged pin.
@@ -976,9 +961,6 @@ class MemoriesSharingView(LoginRequiredMixin, View):
         """
         Render the sharing history page.
 
-        Args:
-            request: The HTTP request.
-
         Returns:
             The Sharing page, showing one page of each sent list.
         """
@@ -1007,9 +989,6 @@ class MemoriesSharingSentView(LoginRequiredMixin, View):
         """
         Render the sent half on its own, for a pagination click.
 
-        Args:
-            request: The HTTP request.
-
         Returns:
             The sent-shares partial.
         """
@@ -1029,9 +1008,6 @@ class MemoriesSharingReceivedView(LoginRequiredMixin, View):
     def get(self, request: HttpRequest) -> HttpResponse:
         """
         Render the received half on its own.
-
-        Args:
-            request: The HTTP request.
 
         Returns:
             The received-shares partial.
@@ -1053,9 +1029,6 @@ class MemoriesMapsView(LoginRequiredMixin, View):
     def get(self, request: HttpRequest) -> HttpResponse:
         """
         Render the markup maps page.
-
-        Args:
-            request: The HTTP request.
 
         Returns:
             Rendered Maps page listing every markup map the user created.
@@ -1124,9 +1097,6 @@ class MemoriesJournalView(LoginRequiredMixin, View):
     def get(self, request: HttpRequest) -> HttpResponse:
         """
         Render the journal page.
-
-        Args:
-            request: The HTTP request.
 
         Returns:
             Rendered Journal page listing the profile's visit notes, ratings, and comments, newest first.

@@ -61,13 +61,10 @@ def _visit_dialog_context(pin: Pin, visit: PinVisit | None = None) -> dict[str, 
         Context dict with ``pin``, the owner's ``pin_images`` (offered in the existing-photo picker),
         and taggable ``connections``.
     """
-    # The pin owner's own photos already on this pin, offered in the visit dialog so they can attach existing
-    # gallery photos to the visit. Photos already documenting a different visit are not offered.
     pin_images = Image.objects.filter(pin=pin, profile=pin.profile)
     pin_images = pin_images.filter(Q(visit__isnull=True) | Q(visit=visit)) if visit else pin_images.filter(visit__isnull=True)
     connections = get_connections(pin.profile)
-    # The participant picker shows each friend's avatar - a distinct fallback color per person (see
-    # assign_avatar_colors) keeps them visually distinguishable when several in a row have no uploaded photo.
+    # Distinct fallback colors keep adjacent participants without photos distinguishable.
     assign_avatar_colors(connections, identity=lambda p: p.slug or str(p.pk))
     return {
         "pin": pin,

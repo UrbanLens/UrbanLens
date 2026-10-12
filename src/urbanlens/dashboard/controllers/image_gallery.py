@@ -138,18 +138,15 @@ def _pin_gallery_images(request: HttpRequest, pin: Pin, profile: Profile):
     Returns:
         Tuple of (queryset, include_children flag).
     """
-    # Child expansion is owner-only: the "show child pin details" toggle exists
-    # on the owner's own pin page, and another user's child pins are theirs.
+    # Child expansion is owner-only: another user's child pins are theirs.
     include_children = request.GET.get("children") == "1" and pin.profile_id == profile.pk
     if include_children:
         subtree = Pin.objects.filter(pk=pin.pk).with_descendants()
         images = Image.objects.filter(pin__in=subtree).select_related("profile", "pin", "pin__location", "pin__location__wiki")
     else:
         images = Image.objects.filter(pin=pin).select_related("profile")
-    # .photos() is defense-in-depth, not the primary guard: PhotoActionView's create-pin/log-visit refuse a
-    # document outright, so nothing should ever actually set Image.pin on one - but this gallery has no document
-    # rendering (see partials/pins/_photo_gallery.html), so a row that somehow got here anyway should still not
-    # show as a broken tile.
+    # .photos() is defense-in-depth: this gallery has no document rendering, so exclude
+    # documents that slipped through rather than showing broken tiles.
     return images.photos().visible_to(profile), include_children
 
 
@@ -314,10 +311,8 @@ def _delete_owned_images(images: QuerySet[Image], *, unlink_from_pin_when_on_wik
     batch = list(images)
     to_unlink_ids = [image.pk for image in batch if unlink_from_pin_when_on_wiki and image.wiki_id is not None]
     to_destroy = [image for image in batch if image.pk not in set(to_unlink_ids)]
-    # No explicit per-row file cleanup here: Image's post_delete receiver (models/images/signals.py) does it for
-    # every delete path, and it runs after the rows are gone - so it asks the shared-file question with the
-    # single row's own pk rather than carrying the whole batch as an exclude(pk__in=...), which is what made
-    # deleting N photos cost N queries of N parameters each against a client-supplied, uncapped batch.
+    # File cleanup is via Image's post_delete receiver (models/images/signals.py),
+    # which checks shared files by single pk to avoid N queries on an uncapped batch.
     Image.objects.filter(pk__in=[image.pk for image in to_destroy]).delete()
     if to_unlink_ids:
         Image.objects.filter(pk__in=to_unlink_ids).update(pin=None)
@@ -330,9 +325,6 @@ class VaultGalleryBulkView(LoginRequiredMixin, View):
 
     POST /vault/photos/bulk/
 
-    P61: a Vault album had no bulk delete at all - the Delete and Send-to-wiki buttons rendered
-    ``hidden`` forever, because the album panel handed the client a bulk URL only when the album's owner
-    was a ``Pin``.
     Delete is the only one of the three that transfers. **Send to wiki** cannot: the pin endpoint
     derives the wiki from ``pin.location``, and a vault album has no location - the vault's own
     per-photo version takes a ``location_slug`` from a picker the bulk bar has nowhere to put. **Bulk

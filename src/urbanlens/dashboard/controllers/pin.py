@@ -166,7 +166,7 @@ _BESPOKE_CARD_KEYS = ("azure_maps", "parcel_buildings", "yelp", "nps", "loopnet"
 
 def _probe_page_panels(request: HttpRequest, pin: Pin, info_panels: Sequence[InfoPanelSource], visible: Sequence[PanelSource]) -> tuple[PanelProbe, list[str]]:
     """
-    Which of the Private Pin page's enrichment panels to leave out, because they are known to have nothing (P53).
+    Which of the Private Pin page's enrichment panels to leave out, because they are known to have nothing.
 
     Args:
         request: The current request, for its viewer.
@@ -1724,7 +1724,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """
         HTMX partial: every building standing on this pin's property, and every child pin it has.
 
-        One list (P172): the property's buildings from REData, OpenStreetMap and CRIS, each marked and opened in place
+        One list: the property's buildings from REData, OpenStreetMap and CRIS, each marked and opened in place
         when a child pin covers it, and a Child pins tab with every child of any type. A pin the Buildings list does not
         apply to (a child pin, one with no coordinates) still lists its own children.
         """
@@ -2124,19 +2124,15 @@ def _confirmed_import_urls(job_id: str) -> dict[str, str]:
 
 _REDATA_MEDIA_CACHE_TTL = 3600
 
-#: Largest proxied REData body worth putting in the shared Dragonfly. Larger than
-#: ``bounded_cache.MAX_CACHED_BODY_BYTES``, deliberately and at the call site:
-#: that ceiling is sized for thumbnails, and these are scanned PDFs and TIFFs, so
-#: inheriting it would refuse to cache almost all of them and turn every view
-#: into a fresh REData download - a different resource spent, not a saving.
+#: Largest proxied REData body worth putting in the shared Dragonfly, larger than
+#: ``bounded_cache.MAX_CACHED_BODY_BYTES``: that ceiling is sized for thumbnails
+#: while these are scanned PDFs and TIFFs, so inheriting it would turn every view
+#: into a fresh REData download.
 REDATA_MEDIA_MAX_CACHED_BYTES = 4 * 1024 * 1024
 
 #: How often one caller may pull these proxies. Charged to the account when there
-#: is one and to the address otherwise: an address is a poor identity behind NAT,
-#: where an office would share one budget, and a poor isolation boundary, since
-#: the requirement is that one account cannot spend everyone else's. Generous
-#: either way - a panel is many requests, and a limit tight enough to break
-#: ordinary browsing would be reverted rather than tuned.
+#: is one and to the address otherwise (a poor identity behind NAT and a poor isolation boundary).
+#: Generous either way because a panel is many requests.
 REDATA_MEDIA_RATE = Rate(limit=600, window_seconds=300)
 
 #: GET is the expensive method here, which the throttle's default set excludes.

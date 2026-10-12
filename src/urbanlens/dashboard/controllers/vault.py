@@ -36,12 +36,6 @@ class VaultHomeView(LoginRequiredMixin, View):
     def get(self, request: HttpRequest) -> HttpResponse:
         """
         Render the Vault home page.
-
-        Args:
-            request: The HTTP request.
-
-        Returns:
-            The rendered Vault home page.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
         gallery = Image.objects.uploaded_by(profile)

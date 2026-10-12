@@ -95,9 +95,6 @@ class Db:
 
         Args:
             user_input_path: User-supplied path.
-
-        Returns:
-            None.
         """
         self._log_path = self.sanitize_path(user_input_path)
 
@@ -112,9 +109,6 @@ class Db:
 
         Args:
             user_input_path: User-supplied path.
-
-        Returns:
-            None.
         """
         self._data_path = self.sanitize_path(user_input_path)
 

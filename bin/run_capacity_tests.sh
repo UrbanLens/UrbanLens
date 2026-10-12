@@ -154,11 +154,9 @@ MANIFEST="$(cd "$(dirname "${MANIFEST}")" && pwd)/$(basename "${MANIFEST}")"
 
 # -- tiles -------------------------------------------------------------------
 
-# The map's tiles are most of its requests, and a run against a cold tile cache measures the
-# vendor (and a burst of 503s from the proxy's own slot bound) rather than this deployment. Seeded
-# for whichever population is about to be measured rather than only one just provisioned: reusing
-# a manifest is the cheap way to re-measure, and that path used to seed nothing and report the
-# refusals as latency (X26). The grid comes out of the k6 side so the two cannot drift apart.
+# Tiles dominate requests; a cold cache measures the vendor (and proxy 503s from its slot bound),
+# not this deployment, so seed for the population about to be measured.
+# Grid comes from the k6 side so the two cannot drift apart.
 if [[ "${TILES}" == "1" ]]; then
 	SEED_CONTAINER="${PROVISION_CONTAINER:-${APP_CONTAINER}}"
 	if [[ -z "${SEED_CONTAINER}" ]]; then

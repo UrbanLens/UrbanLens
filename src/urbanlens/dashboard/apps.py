@@ -17,23 +17,20 @@ class DashboardConfig(AppConfig):
     def ready(self):
         register_heif_opener()
 
-        # csv refuses a cell over 128 KiB by default, which is a per-element cap; Jess ruled an
-        # import has none (P95). Process-wide because csv keeps one limit; 2**31 - 1 is the largest
-        # a C long holds everywhere, and the 1 GB upload-entry cap binds long before it.
+        # csv caps a cell at 128 KiB by default; imports allow larger cells. Process-wide
+        # because csv keeps one limit; 2**31 - 1 fits a C long everywhere, below the 1 GB upload-entry cap.
         csv.field_size_limit(2**31 - 1)
 
         from urbanlens.core.integer_dumpers import install_checked_integer_dumpers
 
         install_checked_integer_dumpers()
 
-        # Importing the module registers its @register()ed system checks. Media
-        # authorization is default-deny, so a file family nobody authorized
-        # would 404 for everyone; the check turns that into a startup error.
+        # Importing the module registers its system checks; media authorization is
+        # default-deny so unauthorized file families fail at startup, not 404.
         import urbanlens.dashboard.checks
 
-        # drf-spectacular resolves each extension's target_class lazily by
-        # mutating a shared class attribute with no lock - unsafe under
-        # threaded workers. See schema.patch_extension_thread_safety.
+        # drf-spectacular resolves target_class by mutating a shared attribute with no
+        # lock - unsafe under threaded workers. See schema.patch_extension_thread_safety.
         from urbanlens.dashboard.external_api.schema import patch_extension_thread_safety
 
         patch_extension_thread_safety()
@@ -65,27 +62,23 @@ class DashboardConfig(AppConfig):
         import urbanlens.dashboard.models.wiki_edit.signals  # noqa: F401 - imported for the @receiver registrations, like every signals module above it
         from urbanlens.dashboard.plugins import plugin_registry
 
-        # Deletes an icon or avatar that a replace or a row deletion left behind.
-        # Django never removes FileField files, and a stranded file is
-        # indistinguishable from one the viewer may not learn about.
+        # Removes replaced or orphaned icon/avatar files; Django never removes FileField files,
+        # and stranded files are indistinguishable from undisclosed ones.
         from urbanlens.dashboard.services.media.file_cleanup import connect as connect_file_cleanup
 
         post_save.connect(create_default_tags, sender=Profile, dispatch_uid="label_create_default_tags")
         connect_file_cleanup()
 
-        # Signing out drops the session's cached tile access rather than leaving it to expire.
         from urbanlens.dashboard.services.map.tile_authorisation import forget_tile_viewer
 
         user_logged_out.connect(forget_tile_viewer, dispatch_uid="basemap_tile_auth_forget")
 
-        # Memoise the SiteSettings singleton for the length of a request only - see that
-        # module's docstring for why this is scoped to requests instead of cached globally.
+        # Memoises the SiteSettings singleton for a request only; see that module for why.
         from urbanlens.dashboard.models.billing import RoleSubscription
         from urbanlens.dashboard.models.site_settings import request_cache as site_settings_cache
         from urbanlens.dashboard.models.site_settings.model import SiteSettings
 
-        # And across requests for the two the navbar reads on every page - see that module for
-        # the acts that retire them.
+        # Caches navbar subscriptions across requests; see that module for invalidation.
         from urbanlens.dashboard.models.subscriptions.access_state import connect_invalidation as connect_access_invalidation
         from urbanlens.dashboard.models.subscriptions.model import SubscriptionRole, UserSubscription
 
@@ -106,29 +99,24 @@ class DashboardConfig(AppConfig):
                 dispatch_uid=f"site_settings_cache_invalidate_{sender.__name__}_delete",
             )
 
-        # Achievements subscribe to a dozen unrelated models, so their receivers
-        # are registered from a table rather than one import per sender.
+        # Achievements fan out to many models, so receivers register from a table.
         connect_achievement_signals()
 
-        # The reputation ledger's rule_key choices are supplied by this
-        # registry, so it has to be populated before any form or admin page
-        # renders that field. Registration only builds dataclasses.
+        # rule_key choices come from this registry, so populate before forms render it.
+        # Registration only builds dataclasses.
         from urbanlens.dashboard.services.reputation.builtin_rules import register_builtin_rules
 
         register_builtin_rules()
 
-        # Same table-driven shape as achievements, but the ledger write is
-        # synchronous - see that module's docstring.
+        # Ledger write is synchronous - see that module's docstring.
         from urbanlens.dashboard.models.reputation.signals import connect as connect_reputation_signals
 
         connect_reputation_signals()
 
-        # Plugin discovery only imports modules and instantiates plugin
-        # classes - it must never touch the database this early.
+        # Plugin discovery must never touch the database this early.
         plugin_registry.discover()
 
-        # What this deployment may call, once per process, so an override or allow-listed sweep is never silent.
-        # After discovery: plugin services are classified by their own defaults.
+        # Logs callable egress once per process after discovery, so overrides are never silent.
         from urbanlens.dashboard.services.core.egress import log_egress_policy
 
         log_egress_policy()

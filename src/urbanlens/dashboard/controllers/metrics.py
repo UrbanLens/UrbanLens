@@ -52,8 +52,7 @@ def _build_registry() -> prometheus_client.CollectorRegistry:
     multiproc_dir = os.environ.get(MULTIPROC_DIR_ENV)
     if not multiproc_dir:
         registry = prometheus_client.REGISTRY
-        # Registered once on the default registry, which persists for the life
-        # of the process - registering per scrape would raise Duplicated.
+        # Default registry persists; re-registering per scrape would raise Duplicated.
         if not _DEFAULT_REGISTRY_EXTRAS:
             _register_scrape_time_collectors(registry)
             _DEFAULT_REGISTRY_EXTRAS.append(True)
@@ -61,9 +60,7 @@ def _build_registry() -> prometheus_client.CollectorRegistry:
 
     registry = prometheus_client.CollectorRegistry()
     multiprocess.MultiProcessCollector(registry, path=multiproc_dir)
-    # MultiProcessCollector reads the workers' sample files and nothing else, so a collector registered on the
-    # default registry is invisible in multiprocess mode - the failure being avoided is a collector that works
-    # under runserver and silently disappears in production.
+    # MultiProcessCollector reads only worker files, so register collectors here.
     _register_scrape_time_collectors(registry)
     return registry
 

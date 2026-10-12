@@ -306,13 +306,10 @@ services:
       options:
         max-size: "20m"
         max-file: "5"
-    # The spool for request bodies and buffered responses. On the image's
-    # writable layer this is the same filesystem as postgres-data, and nothing
-    # authenticates before a body is written - so it is a tmpfs, sized to hold
-    # one maximum-size upload (client_max_body_size 200m) plus the 64m response
-    # ceiling, with room to spare. Filling it refuses that upload; it cannot
-    # reach the disk. mem_limit must stay above the size: tmpfs pages are
-    # charged to this cgroup, and an OOM-killed nginx is the whole site.
+    # Unauthenticated bodies share filesystem with postgres-data, so tmpfs:
+    # sized for one max upload (200m) plus 64m response ceiling.
+    # Filling it refuses that upload without reaching disk.
+    # mem_limit must stay above size or OOM kills nginx.
     tmpfs:
       - /tmp:size=${TMPFS_SIZE__NGINX:-512m},mode=1777,noexec,nosuid,nodev
     cpus: ${CPU_LIMIT__NGINX:-${CPU_LIMIT:-2}}
@@ -742,15 +739,10 @@ services:
     restart: unless-stopped
     command:
       [
-        # Redis-protocol-compatible. Scaling across cores is the reason to run
-        # this rather than a single-threaded store, so the thread count tracks
-        # the cpu limit below. Raise the two memory knobs with it: maxmemory
-        # must be at least 256MiB per thread or startup refuses outright
-        # ("There are 4 threads, so 1.00GiB are required. Exiting..."), and
-        # mem_limit needs headroom above maxmemory. cache_mode deliberately
-        # left off: it evicts silently instead of raising once full, which is a
-        # materially different failure mode than the raise that
-        # ResilientRedisCache's _REFUSED handling, and its tests, expect.
+        # Threads track cpu limit for multi-core scaling; maxmemory needs
+        # >=256MiB per thread or startup refuses, mem_limit above maxmemory.
+        # No cache_mode: silent eviction differs from the raise that
+        # ResilientRedisCache's _REFUSED handling expects.
         "--maxmemory=${UL_DRAGONFLY_MAXMEMORY:-1gb}",
         "--proactor_threads=${UL_DRAGONFLY_THREADS:-4}",
       ]
@@ -785,15 +777,10 @@ services:
     restart: unless-stopped
     command:
       [
-        # Bytes proxied from somewhere else - map tiles, Immich thumbnails, Google Photos
-        # previews. A tile is keyed by layer and coordinate, so the keyspace is however many
-        # coordinates anyone has looked at in the entry's week: unbounded by anything this
-        # deployment controls. Keeping that next to the sessions and the Channels layer means
-        # a week of panning decides whether they can be written.
-        #
-        # cache_mode, unlike the instance above: evicting the least recently used tile is what
-        # a full tile cache should do, and nothing here is anything but a cache. The other
-        # instance cannot have it because evicting a Channels key breaks a live socket.
+        # Unbounded proxied tiles (keyed by layer+coordinate, week TTL) kept
+        # separate so panning cannot crowd out sessions/Channels layer.
+        # cache_mode on here: LRU eviction suits a pure cache; the other
+        # instance cannot use it because evicting a Channels key breaks sockets.
         "--cache_mode=true",
         "--maxmemory=${UL_TILE_CACHE_MAXMEMORY:-512mb}",
         "--proactor_threads=${UL_TILE_CACHE_THREADS:-2}",
@@ -915,11 +902,9 @@ services:
           - urbanlens_egress_proxy
       ai_egress_network: {}
     healthcheck:
-      # A complete request, not `nc -z`: a bare connect that closes without
-      # sending anything makes tinyproxy log an ERROR every interval, and this
-      # log is where a blocked provider call would show up. The 403 is the
-      # healthy answer - tinyproxy.stats is not in the allowlist on purpose, so
-      # the probe exercises parsing and policy without sending real egress.
+      # Full request, not `nc -z`: bare connect logs ERROR each interval,
+      # hiding blocked provider calls. 403 is healthy - tinyproxy.stats
+      # stays unallowlisted so probe exercises parsing/policy w/o real egress.
       test:
         [
           "CMD-SHELL",

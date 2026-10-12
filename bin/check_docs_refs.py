@@ -14,14 +14,10 @@ import tomllib
 #: open-ended so prose like "the docs/ directory" cannot match.
 _CITATION = re.compile(r"(?:\.\./)*(?:[A-Za-z0-9_.-]+/)?docs/[A-Za-z0-9_./-]+\.(?:md|rst|json|txt|py)")
 
-#: A markdown file named on its own - ``CHANGELOG.md``, ``TODO.md``. The
-#: ``docs/``-prefixed form above cannot see these, which is how eleven citations
-#: of a root ``TODO.md`` survived its rename in ``3f12e875``.
-#: Capitalised because that is the convention for the repository-level documents
-#: this is about, and lowercase would match every ``readme.md`` in prose.
-#: Resolved against ``docs/`` and ``docs/internal/`` as well as the root, since a
-#: bare ``FEATURES.md`` means ``docs/FEATURES.md`` here and a bare ``INDEX.md``
-#: means ``docs/internal/INDEX.md``; neither is a defect.
+#: A markdown file named on its own - ``CHANGELOG.md``, ``TODO.md``.
+#: Capitalised to avoid matching ``readme.md`` in prose.
+#: Resolved against root plus ``docs/`` and ``docs/internal/``: bare ``FEATURES.md``
+#: means ``docs/FEATURES.md``, bare ``INDEX.md`` means ``docs/internal/INDEX.md``.
 _BARE_CITATION = re.compile(r"(?<![\w./-])([A-Z][A-Za-z0-9_-]*\.md)\b")
 
 #: Files whose citations are checked. Everything else is prose about prose.
@@ -252,11 +248,9 @@ def broken_citations(root: pathlib.Path) -> tuple[dict[str, list[str]], dict[str
         except (OSError, UnicodeDecodeError):
             continue
         for citation in set(_CITATION.findall(text)) | set(_BARE_CITATION.findall(text)):
-            # Keyed on the citing *directory*, not just the citation: `_resolves`
-            # also tries the citing file's own directory, so the same string can
-            # legitimately resolve from one directory and not another. Keying on
-            # the string alone let whichever file was scanned first decide for
-            # every other - in both directions.
+            # Keyed on citing *directory*: `_resolves` also tries the citing file's directory,
+            # so the same string can resolve from one directory and not another; keying on
+            # the string alone would let scan order decide for every other file.
             key = (citation, str(pathlib.PurePosixPath(name).parent))
             if key not in checked:
                 checked[key] = _resolves(citation, root, pathlib.Path(name)) and not (not citation.startswith("../") and _is_ignored(citation, root))

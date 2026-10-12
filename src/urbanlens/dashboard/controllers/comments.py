@@ -288,31 +288,23 @@ def _render_comments(request, context: dict) -> HttpResponse:
 
 
 def _build_context(comments_qs, profile: Profile, request: HttpRequest, replies_qs=None, conceal: bool = False, **extra) -> dict:
-    # Before the page is cut, not after: a gate applied to the page makes the
-    # page size mean nothing, and a viewer who cannot see most of a thread got
-    # two comments where the panel shows eight.
+    # Gate before paging so page size stays meaningful.
     visible_qs = comments_qs.visible_to(profile)
     visible_replies = (replies_qs if replies_qs is not None else Comment.objects.all()).visible_to(profile)
     top_level_qs = top_level_comment_queryset(visible_qs, replies_qs=visible_replies)
-    # Default to the last page so the most recent activity (comments are
-    # ordered oldest-to-newest) is what a viewer sees without paging back.
+    # Default to last page to show most recent activity.
     page_obj = get_page(request, top_level_qs, _COMMENTS_PAGE_SIZE, default_last=True)
     top_level = list(page_obj.object_list)
 
-    # Collect all unique commenter profiles so we can check photo visibility once.
     all_commenters: set[Profile] = set()
     for c in top_level:
         all_commenters.add(c.profile)
         all_commenters.update(r.profile for r in c.replies.all())
-    # Set of profile IDs whose images should be blurred for this viewer. In
-    # batch: the per-pair gate reads both accounts' whole Pin table at
-    # COMMON_PIN, so this cost a pair of scans per distinct commenter.
+    # Batched: per-pair check scans whole Pin table at COMMON_PIN.
     admitted = Profile.visible_photo_uploader_pks(profile, list(all_commenters))
     blurred_profiles: set[int] = {p.pk for p in all_commenters if p.pk != profile.pk and p.pk not in admitted}
 
-    # Every visibility decision - comment-visibility, pending-scan, the @loc mention gate, and author-identity
-    # masking - lives in this one call, shared with the external API so the two surfaces cannot drift apart on
-    # it.
+    # Shared with the external API so both surfaces stay consistent.
     visible = visible_comment_tree(top_level, profile)
 
     rendered = [
@@ -335,8 +327,7 @@ def _build_context(comments_qs, profile: Profile, request: HttpRequest, replies_
     return {
         "rendered_comments": rendered,
         "page_obj": page_obj,
-        # The gated count, not comments_qs.count(): a raw total disagrees with the thread whenever a gate
-        # dropped something, which is the existence oracle services.comments.comments is built to deny.
+        # Gated count, not raw total, to avoid leaking hidden rows.
         "total_comment_count": visible_comment_count(comments_qs, profile),
         "profile": profile,
         "blurred_profiles": blurred_profiles,
@@ -664,8 +655,7 @@ class CommentReactionView(LoginRequiredMixin, View):
 
     def post(self, request, comment_id):
         profile = _profile(request)
-        # Only comments the user can actually see: comments on their own pins, or on wikis for locations they
-        # have pinned themselves.
+        # Only comments on own pins or pinned-location wikis.
         comment = get_object_or_404(
             Comment.objects.filter(Q(pin__profile=profile) | Q(wiki__isnull=False)).select_related("wiki__location", "profile"),
             id=comment_id,
@@ -673,17 +663,12 @@ class CommentReactionView(LoginRequiredMixin, View):
         if comment.wiki is not None:
             if not location_visible_to(comment.wiki.location, profile):
                 raise Http404
-            # Re-resolved through the same concealment-aware lookup every other by-id wiki-comment path uses
-            # (reply-parent resolution, delete) - the fetch above only established which wiki this is; it
-            # applies no concealment narrowing itself, so a concealed comment was otherwise still reachable (and
-            # reactable) by a guessed sequential id.
+            # Re-resolve with concealment narrowing; the fetch above applies none,
+            # so concealed comments stay unreachable by guessed id.
             comment = _wiki_comment_addressable_by(comment.wiki, profile, comment_id)
-        # Page-level visibility isn't enough on its own. comment_is_visible applies the same per-comment gates
-        # the listing does: the author's comment_visibility, a pending malware scan, and an @loc mention the
-        # caller has not pinned.
+        # Same per-comment gates as listing (visibility, scan, @loc).
         elif not comment_is_visible(comment, profile):
             raise Http404
-        # The add/remove/notify sequence lives in the service, not here.
         try:
             toggle_reaction(profile, comment, request.POST.get("emoji", ""))
         except UnsupportedReactionEmojiError as exc:
@@ -778,11 +763,8 @@ def _aggregate_reactions(reactions_qs, profile: Profile | None = None, *, concea
 
         reactions_qs = conceal_rows(reactions_qs, profile)
     result: dict[str, _ReactionData] = {}
-    # Iterated as given, with no `.select_related()` and no `.all()`: either
-    # one clones the queryset, and a clone does not carry the result cache a
-    # prefetch populated - so every caller that carefully prefetched
-    # `reactions` was paying a query per comment regardless. The join was never
-    # needed either, since `emoji` and `profile_id` are columns on the row.
+    # Do not clone the queryset (.all()/select_related): clones drop the
+    # prefetch cache and `emoji`/`profile_id` need no join.
     for r in reactions_qs:
         if r.emoji not in result:
             result[r.emoji] = {"count": 0, "reacted_by": []}

@@ -97,9 +97,6 @@ class PinArticleApiView(OwnedPinRequiredMixin, ExternalApiView):
             request: The authenticated request.
             pin_slug: The pin's slug or uuid, from the URL.
 
-        Returns:
-            Tuple of (pin, its article).
-
         Raises:
             Http404: The pin is not the caller's, or it has no article yet.
         """

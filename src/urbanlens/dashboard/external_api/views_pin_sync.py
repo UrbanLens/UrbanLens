@@ -80,16 +80,13 @@ class PinWikiSyncPushView(PinWikiSyncApiView):
         serializer = PinWikiSyncPushSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        # Checked up front so the expensive matching pass is skipped entirely for a property with no wiki - the
-        # service would do all that work and then return 0 anyway, and the client cannot tell the two zeros
-        # apart without this flag.
+        # Skip expensive matching with no wiki; flag distinguishes this zero.
         if Wiki.objects.get_for_location(pin.location) is None:
             return self.result(0, wiki_exists=False)
 
         children = list(pin.detail_pins.filter(uuid__in=serializer.validated_data["child_pin_uuids"]).select_related("location"))
         if not children:
-            # A stale selection (the child pins were deleted or re-parented since the client last looked) is a
-            # no-op, not an error - same as the internal toolbar, which shows an informational toast.
+            # Stale selection is a no-op, not an error.
             return self.result(0, wiki_exists=True)
 
         created = send_pins_to_wiki(pin, children, pin.profile)

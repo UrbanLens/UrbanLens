@@ -188,9 +188,6 @@ class VaultPinAlbumsView(LoginRequiredMixin, View):
         """
         Render one card per album across every pin this profile owns.
 
-        Args:
-            request: The HTTP request.
-
         Returns:
             The rendered pin-albums partial.
         """
@@ -198,25 +195,18 @@ class VaultPinAlbumsView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.photos.albums import describe_albums
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        # Filtered through the join rather than by collecting the profile's pins and OR-ing one clause per pin,
-        # which is what albums_listing would do here: that builds a WHERE term per pin, and this panel's whole
-        # point is the account that has a lot of them.
+        # Join filter avoids one WHERE term per pin for accounts with many pins.
         albums = Album.objects.filter(parent_pin__profile=profile).select_related("cover_image", "parent_pin__location__wiki").order_by("name", "pk")
         page = get_page(request, albums, _PIN_ALBUMS_PAGE_SIZE)
         rows = []
-        # conceal=False: concealment is a wiki-only concept and every album
-        # here belongs to a pin, which is also what albums_listing concluded.
         for entry in describe_albums(list(page.object_list), profile):
             pin = entry.album.parent_pin
             if pin is None:
-                # Unreachable: the filter above joins through parent_pin, so a wiki- or vault-owned album cannot
-                # be in this page. Narrowed rather than assumed because the field itself is nullable.
+                # Nullable field, but the join above excludes wiki/vault albums.
                 continue
             row = _album_row(pin, entry.album, cover=entry.cover, photo_count=entry.photo_count, date_start=entry.date_start, date_end=entry.date_end)
             row["owner_pin_name"] = pin.effective_name
-            # detail_url is the AJAX-only album-detail partial (no page chrome) - this card is a plain, non-htmx
-            # navigation, so it needs the pin's actual detail page with the Photos tab pre-selected and this
-            # album pre-opened instead.
+            # Card needs the pin page with album pre-opened, not the AJAX-only partial.
             row["pin_page_url"] = f"{reverse('pin.details', args=[pin.slug])}?album={entry.album.slug}#tab-photos"
             rows.append(row)
         return render(request, "dashboard/partials/vault/_pin_albums_panel.html", {"album_rows": rows, "page_obj": page})
@@ -232,9 +222,6 @@ class PhotoQueueView(LoginRequiredMixin, View):
     def get(self, request: HttpRequest) -> HttpResponse:
         """
         Render just the organize-queue partial.
-
-        Args:
-            request: The HTTP request.
 
         Returns:
             The rendered attention-queue partial.

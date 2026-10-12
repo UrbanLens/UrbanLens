@@ -349,11 +349,9 @@ class InboundVolumeMixin(_CredentialScopeBase):
     :attr:`max_frame_chars`; everything else is inherited.
     """
 
-    #: Tightens the site-wide character cap for a consumer whose legitimate
-    #: frames are smaller. The effective cap is the smaller of this and
-    #: ``UL_WEBSOCKET_MAX_FRAME_CHARS``, so lowering the setting still lowers
-    #: every socket - a class attribute that could shadow the setting upwards
-    #: would make the setting a suggestion.
+    #: Caps frames below ``UL_WEBSOCKET_MAX_FRAME_CHARS``; effective cap is the
+    #: smaller of the two, so lowering the setting still lowers every socket.
+    #: Shadowing the setting upwards would make it only a suggestion.
     max_frame_chars: int | None = None
 
     def volume_identity(self) -> str:
@@ -571,16 +569,14 @@ class DirectMessageConsumer(SocketAllowanceMixin, InboundVolumeMixin, Credential
             await self.close(code=4404)
             return
 
-        # Checked before any group is joined, so a scope-refused connection never
-        # becomes a member that an incoming message could be delivered to.
+        # Before group join so a refused connection never receives messages.
         if not self.credential_allows(ApiKeyScope.MESSAGES_READ):
             logger.info("Direct message socket rejected: credential lacks messages:read (user %s)", getattr(user, "pk", None))
             await self.close(code=4404)
             return
 
-        # Before any group is joined: Channels only reliably fires disconnect()
-        # for a connection that reached accept(), so a refusal after group_add
-        # would leak the membership the cleanup below exists to prevent.
+        # Before group join: disconnect() only fires after accept(),
+        # so a late refusal would leak membership.
         if not await self.claim_socket_slot():
             await self.close(code=4429)
             return
@@ -596,17 +592,13 @@ class DirectMessageConsumer(SocketAllowanceMixin, InboundVolumeMixin, Credential
             await sync_to_async(mark_profile_online, thread_sensitive=False)(self.profile_id, self.channel_name)
         except Exception:
             logger.exception("Direct message socket connect failed for user %s", getattr(user, "pk", None))
-            # Leave the group again if group_add succeeded but a later step then failed - Channels only reliably
-            # fires disconnect() for a connection that reached accept(), so without this the group membership
-            # would otherwise leak.
+            # Leave group: disconnect() only fires after accept().
             if hasattr(self, "group_name"):
                 try:
                     await self.channel_layer.group_discard(self.group_name, self.channel_name)
                 except Exception:
                     logger.exception("Direct message socket failed to leave group %s during connect-failure cleanup", self.group_name)
-            # Channels fires disconnect() only for a connection that reached
-            # accept(), so without this the place - and the task renewing its
-            # claim - would be held for the life of the process.
+            # Release slot: disconnect() only fires after accept().
             await self.release_socket_slot()
             await self.close(code=4500)
 
@@ -951,15 +943,12 @@ class SafetyCheckinChatConsumer(SocketAllowanceMixin, InboundVolumeMixin, Creden
             return
         except Exception:
             logger.exception("Safety chat connect failed unexpectedly: route keys=%s checkin_uuid=%s", sorted(kwargs), kwargs.get("checkin_uuid"))
-            # Channels fires disconnect() only for a connection that reached
-            # accept(), so without this the place - and the task renewing its
-            # claim - would be held for the life of the process.
+            # Release slot: disconnect() only fires after accept().
             await self.release_socket_slot()
             await self.close(code=4500)
             return
 
-        # Scope only ever restricts the session route. Ordered after _resolve() because that is what tells the
-        # two routes apart.
+        # Scope limits session route only; _resolve() tells routes apart.
         if self.contact is None and not self.credential_allows(ApiKeyScope.SAFETY_READ):
             logger.info("Safety chat connection rejected: credential lacks safety:read (checkin %s)", self.checkin.pk)
             await self.close(code=4404)
@@ -968,13 +957,10 @@ class SafetyCheckinChatConsumer(SocketAllowanceMixin, InboundVolumeMixin, Creden
         from urbanlens.dashboard.services.visits.safety import safety_checkin_group_name, safety_checkin_location_group_name
 
         self.group_name = safety_checkin_group_name(self.checkin.pk)
-        # Live location is never shared with token-route contacts (see the model's own docstring on
-        # live_location_sharing_enabled) - only the session route (owner or an accepted partner, both already
-        # verified by _resolve()) joins the location group.
+        # Token-route contacts never join the location group; session route
+        # already verified by _resolve().
         self.location_group_name = safety_checkin_location_group_name(self.checkin.pk) if self.contact is None else None
-        # Before any group is joined: Channels only reliably fires disconnect()
-        # for a connection that reached accept(), so a refusal after group_add
-        # would leak the membership the cleanup below exists to prevent.
+        # Before group join: disconnect() only fires after accept().
         if not await self.claim_socket_slot():
             await self.close(code=4429)
             return
@@ -989,24 +975,19 @@ class SafetyCheckinChatConsumer(SocketAllowanceMixin, InboundVolumeMixin, Creden
             await self.accept()
         except Exception:
             logger.exception("Safety chat failed to join group for checkin %s", self.checkin.pk)
-            # Leave any group(s) already joined before accept() failed - Channels only
-            # reliably fires disconnect() for a connection that reached accept(), so without
-            # this the group membership would otherwise leak.
+            # Leave joined groups: disconnect() only fires after accept().
             for name in joined_groups:
                 try:
                     await self.channel_layer.group_discard(name, self.channel_name)
                 except Exception:
                     logger.exception("Safety chat failed to leave group %s during connect-failure cleanup", name)
-            # Channels fires disconnect() only for a connection that reached
-            # accept(), so without this the place - and the task renewing its
-            # claim - would be held for the life of the process.
+            # Release slot: disconnect() only fires after accept().
             await self.release_socket_slot()
             await self.close(code=4500)
             return
         logger.info("Safety chat connected: checkin=%s contact=%s", self.checkin.pk, getattr(self.contact, "pk", None))
-        # Defense-in-depth against a dropped *_access_revoked broadcast: those group_sends are best-effort, same
-        # as every other broadcast in this module, but they are the only mechanism that revokes an already-open
-        # connection's access (permission is otherwise checked once, at connect() time).
+        # Revocation relies on best-effort broadcast; permission is otherwise
+        # checked only at connect().
         self.remember_session_password()
         self._revalidation_task = asyncio.create_task(self._revalidate_access_periodically())
 
@@ -1386,16 +1367,14 @@ class _ParticipantSessionConsumer(SocketAllowanceMixin, InboundVolumeMixin, Cred
             await self.close(code=4404)
             return
 
-        # The same ALPHA_FEATURES entitlement every game HTTP route enforces
-        # (controllers.games.AlphaFeatureRequiredMixin).
+        # Same ALPHA_FEATURES entitlement as the game HTTP routes.
         if not await self._has_alpha_features(user):
             logger.info("%s socket rejected: user %s lacks ALPHA_FEATURES", self.game_label, getattr(user, "pk", None))
             await self.close(code=4404)
             return
 
-        # Checked before the participant lookup and before any group is joined, so a scope-refused connection
-        # never becomes a member a broadcast could reach even briefly - and never gets to distinguish a real
-        # session from an invented one by how long the refusal takes.
+        # Before lookup and group join so a refused connection never joins,
+        # nor probes sessions by timing.
         if not self.credential_allows(ApiKeyScope.GAMES_READ):
             logger.info("%s socket rejected: credential lacks games:read (user %s)", self.game_label, getattr(user, "pk", None))
             await self.close(code=4404)
@@ -1405,9 +1384,7 @@ class _ParticipantSessionConsumer(SocketAllowanceMixin, InboundVolumeMixin, Cred
             is_participant = await self._is_participant(session_id, user)
         except Exception:
             logger.exception("%s socket connect failed unexpectedly for session %s", self.game_label, session_id)
-            # Channels fires disconnect() only for a connection that reached
-            # accept(), so without this the place - and the task renewing its
-            # claim - would be held for the life of the process.
+            # Release slot: disconnect() only fires after accept().
             await self.release_socket_slot()
             await self.close(code=4500)
             return
@@ -1419,9 +1396,7 @@ class _ParticipantSessionConsumer(SocketAllowanceMixin, InboundVolumeMixin, Cred
         self.session_id = session_id
         self.group_name = self._group_name(session_id)
         self.profile_id = await self._connection_profile_id(user)
-        # Before any group is joined: Channels only reliably fires disconnect()
-        # for a connection that reached accept(), so a refusal after group_add
-        # would leak the membership the cleanup below exists to prevent.
+        # Before group join: disconnect() only fires after accept().
         if not await self.claim_socket_slot():
             await self.close(code=4429)
             return
@@ -1432,16 +1407,12 @@ class _ParticipantSessionConsumer(SocketAllowanceMixin, InboundVolumeMixin, Cred
             self.start_credential_revalidation()
         except Exception:
             logger.exception("%s socket failed to join group for session %s", self.game_label, session_id)
-            # Leave the group again if group_add succeeded but accept() then failed -
-            # Channels only reliably fires disconnect() for a connection that reached
-            # accept(), so without this the group membership would otherwise leak.
+            # Leave group: disconnect() only fires after accept().
             try:
                 await self.channel_layer.group_discard(self.group_name, self.channel_name)
             except Exception:
                 logger.exception("%s socket failed to leave group %s during connect-failure cleanup", self.game_label, self.group_name)
-            # Channels fires disconnect() only for a connection that reached
-            # accept(), so without this the place - and the task renewing its
-            # claim - would be held for the life of the process.
+            # Release slot: disconnect() only fires after accept().
             await self.release_socket_slot()
             await self.close(code=4500)
 

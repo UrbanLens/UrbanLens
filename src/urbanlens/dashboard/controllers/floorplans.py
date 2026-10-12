@@ -427,8 +427,7 @@ class FloorplanEditorView(LoginRequiredMixin, TemplateView):
         from urbanlens.dashboard.models.labels.model import Label
 
         context["pin"] = pin
-        # The same icon set and palette every other picker on the site uses, so a marker styled here and a
-        # detail pin styled from the pin page cannot offer different choices.
+        # Same icon set/palette as other pickers for consistent styling.
         context["icon_categories"] = ICON_CATEGORIES
         context["color_choices"] = COLOR_CHOICES
         context["place"] = _building_place(pin)
@@ -438,14 +437,10 @@ class FloorplanEditorView(LoginRequiredMixin, TemplateView):
         # People and media labels attach to profiles and photos, never to a plan's walls or doors.
         floorplan_labels = Label.objects.for_profile(pin.profile).location_labels().order_by("name").values_list("uuid", "name")
         context["labels_json"] = [{"uuid": str(uuid), "name": name} for uuid, name in floorplan_labels]
-        # The reference pool attaches to every item, so the photos already on
-        # this pin are the likeliest evidence for a wall, a door or its lock.
         context["photos_json"] = [{"uuid": str(image.uuid), "url": image.image.url, "caption": image.caption or ""} for image in pin.images.servable().order_by("-created")[:60] if image.image]
-        # Same "Manage Image Overlays" dialog as the pin-detail and wiki maps - browsing this pin's own photos
-        # for a blueprint/site plan to pin and skew onto the floorplan map, not a bespoke picker.
+        # Same Manage Image Overlays dialog as pin-detail/wiki maps.
         context["manage_overlays_url"] = reverse("pin.overlays", args=[pin.slug])
         context["overlay_corners_url_template"] = reverse("pin.overlays.corners", args=[pin.slug, OVERLAY_UUID_PLACEHOLDER])
-        # attributionControl is off on this map; required attribution renders
-        # in the page footer instead (see createMapLayers' onAttribution).
+        # Attribution renders in page footer (map control off).
         context["show_map_footer"] = True
         return context

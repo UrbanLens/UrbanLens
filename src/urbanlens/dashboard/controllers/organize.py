@@ -191,12 +191,8 @@ class OrganizePrioritySaveView(LoginRequiredMixin, View):
         try:
             data = posted_json_object(request)
             items = data.get("items", [])
-            # Counted before the ids are read out of it: the list goes into one
-            # `id__in` statement whatever its length, and the unresolved ones come
-            # back out in the response, so an oversized request is expensive in
-            # both directions. Measured against the length rather than the parsed
-            # ids so an oversized body is not converted first. The refusal
-            # deliberately does not name what was submitted.
+            # Check length before parsing ids: oversized input is costly both ways.
+            # Refusal omits what was submitted.
             ceiling = settings.LABEL_REORDER_MAX_IDS
             if len(items) > ceiling:
                 return JsonResponse({"error": f"Reorder at most {ceiling} labels at a time."}, status=400)
@@ -216,19 +212,15 @@ class OrganizePrioritySaveView(LoginRequiredMixin, View):
         skipped_global_ids: list[int] = []
         for index, item_id in enumerate(item_ids):
             if item_id not in owned_ids:
-                # Either global, or someone else's, or nonexistent - the three
-                # are deliberately not distinguished in the response.
+                # Global/other/missing are deliberately not distinguished.
                 skipped_global_ids.append(item_id)
                 continue
             reordered.append(Label(id=item_id, order=total - index))
 
         if reordered:
-            # One statement instead of N, inside a transaction: a partial reorder is worse than none, since the
-            # user sees an arrangement that was never what they dragged.
             with transaction.atomic():
                 Label.objects.bulk_update(reordered, ["order"])
-            # bulk_update fires no post_save, so the receiver never runs - and
-            # order decides which label supplies a pin's icon.
+            # bulk_update skips post_save; order selects pin icon so touch manually.
             touch_pins_for_labels([label.pk for label in reordered])
 
         return JsonResponse({"ok": True, "reordered": len(reordered), "skipped_global_ids": skipped_global_ids})

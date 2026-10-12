@@ -92,7 +92,7 @@ def personalized_map_title(user: User) -> str:
         user: The bootstrap administrator.
 
     Returns:
-        A title such as ``Jess's Map``.
+        A possessive title based on the display name.
     """
     first = (user.first_name or "").strip()
     if first:

@@ -1,7 +1,7 @@
 """
 A cache that gives up quickly, and behaves like an empty one, when it is down.
 
-Measured on a staging-model environment with Valkey paused (P105): every
+Measured on a staging-model environment with Valkey paused: every
 request 500s **after about 32 seconds**, the readiness endpoint included. The
 500 is not the interesting part - `socket_connect_timeout` is 1s and
 `socket_timeout` 2s, so one call fails in about two. Reaching thirty-two means
@@ -58,18 +58,14 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: Raised when the store cannot be reached at all. **redis-py's exceptions do
-#: not subclass the builtins** - its `ConnectionError` and `TimeoutError` derive
-#: from `RedisError`, not from `OSError` - so catching only the builtins caught
-#: nothing, and every unit test still passed because the mocks raised builtins.
-#: Found by pausing Valkey against a real stack.
+#: Raised when the store cannot be reached at all. redis-py's `ConnectionError`
+#: and `TimeoutError` derive from `RedisError`, not `OSError`, so builtins alone
+#: miss them.
 _UNREACHABLE: tuple[type[BaseException], ...] = (OSError,)
 
-#: The store answered, and refused. A full Dragonfly (run without `cache_mode`,
-#: deliberately - see docker-compose.yml) rejects a write with
-#: `OutOfMemoryError` the same way Valkey's `volatile-lru` did; that is one
-#: write not fitting, not the store going away, so it degrades the call
-#: without holding reads off - reads are still perfectly able to answer.
+#: The store answered, and refused. A full store rejects a write with
+#: `OutOfMemoryError`; that is one write not fitting, not the store going away,
+#: so it degrades the call without holding reads off.
 _REFUSED: tuple[type[BaseException], ...] = ()
 
 #: Any error reply. Only the ones :func:`_refused_for_memory` recognises are
@@ -333,15 +329,13 @@ class ResilientRedisCache(RedisCache):
                 :data:`DEFAULT_BREAKER_SECONDS`; 0 disables the breaker, so
                 every call tries the store and only the raising is suppressed.
         """
-        # Removed before the superclass sees it: `RedisCache` forwards every
-        # OPTIONS key to the redis client's constructor, so leaving ours there
-        # would break the connection rather than configure the breaker.
+        # `RedisCache` forwards every OPTIONS key to the client constructor,
+        # so ours must be removed first.
         params = dict(params)
         options = dict(params.get("OPTIONS") or {})
         self._breaker_seconds = float(options.pop("BREAKER_SECONDS", DEFAULT_BREAKER_SECONDS))
         params["OPTIONS"] = options
-        # Before the superclass runs, so `is_open` is answerable from the
-        # moment this object exists.
+        # Set before super() so `is_open` works immediately.
         self._unreachable_until = 0.0
         super().__init__(server, params)
 
@@ -355,10 +349,8 @@ class ResilientRedisCache(RedisCache):
         first = not self.is_open
         self._unreachable_until = time.monotonic() + self._breaker_seconds
         if first:
-            # Once per window, and without the stack: the traceback is the same
-            # every time and says less than the exception's own message, while
-            # a long outage at one per window per worker is enough volume to
-            # age real errors out of a rotated log (H61).
+            # Once per window without the stack: the traceback repeats and volume
+            # would age real errors out of a rotated log.
             logger.warning("Cache unreachable on %s (%s: %s); serving as empty for %.0fs", operation, type(exc).__name__, exc, self._breaker_seconds)
 
     def _guard(self, operation: str, call: Callable[[], Any], *, fallback: Any) -> Any:

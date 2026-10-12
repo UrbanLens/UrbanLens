@@ -349,9 +349,6 @@ class ProfilePreviewStopView(LoginRequiredMixin, View):
         """
         Clear any active preview session.
 
-        Args:
-            request: The HTTP request.
-
         Returns:
             Redirect to the owner's profile page.
         """
@@ -692,10 +689,7 @@ class EditProfileView(LoginRequiredMixin, View):
         if form.is_valid():
             # Named, so an avatar the sandbox re-encoded since the profile was read is not written back.
             form.save(commit=False).save(update_fields=list(form.fields))
-            # Truncated to the column width, matching how every other free-text field here is handled (e.g.
-            # albums' name). These two are assigned straight from POST rather than through the form above, so
-            # nothing else bounds them, and User.first_name/last_name are max_length=150 - an over-long name
-            # reached the database and came back as a 500.
+            # Truncated: assigned straight from POST so nothing else bounds them.
             name_limit = User._meta.get_field("first_name").max_length  # noqa: SLF001 - _meta is public API
             request.user.first_name = request.POST.get("first_name", "").strip()[:name_limit]
             request.user.last_name = request.POST.get("last_name", "").strip()[:name_limit]
@@ -867,9 +861,6 @@ class SocialLinkVerifyView(LoginRequiredMixin, View):
     def get(self, request: HttpRequest) -> HttpResponse:
         """
         Verify the platform+handle pair and return an optional toast trigger.
-
-        Args:
-            request: The HTTP request.
 
         Returns:
             204 when the link appears valid or cannot be determined.

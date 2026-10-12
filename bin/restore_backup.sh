@@ -2,7 +2,7 @@
 #
 # Restore one of `core/controllers/backups/db.py`'s dumps into a scratch database.
 #
-# Dumps are plain SQL, gzip-compressed since P202 (older ones are uncompressed); restore from the app container into
+# Dumps are plain SQL, gzip-compressed or uncompressed; restore from the app container into
 # an empty DB with ON_ERROR_STOP + --single-transaction.
 #
 # Never writes to the live database - see docs/BACKUPS.md.

@@ -159,9 +159,7 @@ def _run(codeql: Path, *args: str, check: bool = True, extra_env: dict[str, str]
         codeql: Path to the CLI executable. *args: Arguments following the executable.
         check: Raise if the process exits non-zero.
         extra_env: Additional environment variables for this process.
-
-    Returns:
-        The completed process."""
+    """
     env = os.environ.copy()
     if extra_env:
         env.update(extra_env)

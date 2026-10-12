@@ -18,8 +18,7 @@ def ensure_label(*, profile: Profile | None, name: str, kind: str, **attrs: Any)
         name: Label name.
         kind: Label kind. **attrs: Applied when creating, and updated onto an existing row so a fixture asking for a particular icon/description still...
 
-    Returns:
-        The label."""
+    """
     from urbanlens.dashboard.models.labels.model import Label
 
     existing = Label.objects.filter(profile=profile, name__iexact=name, kind=kind).first()

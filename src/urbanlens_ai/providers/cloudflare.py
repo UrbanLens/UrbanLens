@@ -78,11 +78,8 @@ class CloudflareAdapter(ProviderAdapter):
     def send(self, request: InferenceRequest) -> InferenceResponse:
         images = [image for message in request.messages for image in message.images]
         if images:
-            # Workers AI's vision models take a flat {image, prompt} payload,
-            # not a messages array - the image is a byte array rather than a
-            # data URL, and there is no multi-turn shape to put it in. Only
-            # the last image and the whole conversation's text are sent;
-            # every shipped vision caller is a single-turn, single-image ask.
+            # Workers AI vision takes flat {image, prompt}, not messages; image is byte array.
+            # Only last image + full text sent; callers are single-turn, single-image.
             prompt = NEWLINE.join(part for part in ([request.system] + [message.text for message in request.messages]) if part)
             payload: dict[str, Any] = {"image": list(base64.b64decode(images[-1].data)), "prompt": prompt, "max_tokens": request.max_tokens}
         else:
@@ -97,16 +94,13 @@ class CloudflareAdapter(ProviderAdapter):
         result = body.get("result")
         if not isinstance(result, dict):
             raise ProviderError(f"Cloudflare Workers AI response missing result: {body!r}")
-        # Vision models answer under "description"; text models under
-        # "response". Accept either rather than branching on which call this
-        # was - the model, not this adapter, decides which key it fills.
+            # Accept either key; the model decides which it fills.
         text = result.get("response") or result.get("description")
         if text is None:
             raise ProviderError(f"Cloudflare Workers AI response missing result.response: {body!r}")
         text = str(text)
 
-        # Workers AI does not consistently report token usage across models;
-        # the caller falls back to its own estimate when both fields are None.
+        # Usage often missing; caller estimates when None.
         usage = Usage()
         if isinstance(result.get("usage"), dict):
             raw_usage = result["usage"]

@@ -193,17 +193,13 @@ class TripCalendarExportView(TripScopedApiView):
             account.delete()
             return self._blocked(request, error_code=CALENDAR_REAUTHORIZATION_REQUIRED, message=_REAUTHORIZATION_MESSAGE)
         if isinstance(exc, CalendarNotConfiguredError):
-            # A deployment-level omission, not anything the caller did wrong.
             return Response({"error": _NOT_CONFIGURED_MESSAGE}, status=503)
         if isinstance(exc, CalendarUnavailableError):
-            # Google refused the site's project or OAuth client; already logged at ERROR by the gateway.
+            # Already logged at ERROR by the gateway.
             return Response({"error": CALENDAR_UNAVAILABLE_MESSAGE}, status=503)
         if isinstance(exc, RateLimitExceededError):
-            # The calendar budget was spent before anything of the trip was written; an export that got further
-            # answers 200 with complete: false instead.
+            # Only before anything was written; partial exports answer 200 with complete: false instead.
             return Response({"error": CALENDAR_BUSY_MESSAGE}, status=503, headers={"Retry-After": str(_CALENDAR_BUSY_RETRY_AFTER_SECONDS)})
-        # Only a GatewayRequestError reaches here (the other two members of the except clause above are handled
-        # by the isinstance checks).
         logger.warning("Google Calendar gateway request failed: %s", exc, exc_info=exc)
         return Response({"error": _GATEWAY_FAILURE_MESSAGE}, status=502)
 

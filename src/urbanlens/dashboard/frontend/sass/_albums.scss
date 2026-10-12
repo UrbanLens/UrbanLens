@@ -1,10 +1,8 @@
 @use 'variables' as *;
 
-// -- Albums (Photos tab on pin detail + wiki) -------------------------------
-// The photo grids themselves reuse .gallery-grid/.gallery-item from _gallery.scss;
-// everything here is the album shell around them.
-//
-// Layout rule for this surface: the main column holds album covers and photos and nothing else.
+// -- Albums (Photos tab on pin detail + wiki) ---
+// Grids reuse .gallery-grid/.gallery-item from _gallery.scss.
+// Main column holds album covers and photos only.
 
 $album-gutter: 1rem;
 

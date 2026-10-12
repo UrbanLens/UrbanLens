@@ -222,7 +222,6 @@ class _ReactionMixin:
         """
         emoji = kwargs.pop("emoji")
 
-        # Validated before the target is resolved, on purpose.
         allowed = self.reaction_allowed_emojis
         if allowed is not None and emoji not in allowed:
             return Response({"error": self.reaction_invalid_emoji_message}, status=400)
@@ -234,17 +233,13 @@ class _ReactionMixin:
             try:
                 self.reaction_toggle(profile, target, emoji)
             except UnsupportedReactionEmojiError as exc:
-                # The only exception a reaction service currently raises for a rejected emoji.
                 logger.info("reaction toggle rejected: %s", exc)
                 return Response({"error": self.reaction_invalid_emoji_message}, status=400)
             except ValueError as exc:
-                # A future reaction service wired through this mixin that raises some other ValueError subclass
-                # hasn't been audited for safe messaging yet, so its text stays server-side.
+                # Unaudited error text stays server-side.
                 logger.warning("Unhandled reaction-toggle ValueError: %s", exc, exc_info=True)
                 return Response({"error": "Could not update this reaction."}, status=400)
 
-        # The summary is read from the target's ``reactions`` relation, which may still be holding a prefetch
-        # cache populated before the toggle; refreshing drops it so the response reflects the write that just
-        # happened rather than the state the request arrived in.
+        # Refresh to drop any prefetch cache so the summary reflects the write.
         target.refresh_from_db()
         return Response({self.reaction_response_key: self.reaction_summarizer(target, profile)})

@@ -83,8 +83,7 @@ class PinSuggestionQueueView(LoginRequiredMixin, View):
         suggestions_qs = _pending_suggestions(profile)
         page_obj = get_page(request, suggestions_qs, _PAGE_SIZE)
         merge_cards = merge_suggestion_cards(pending_merge_suggestions(profile))
-        # Paginated with its own parameter, so a next-page click on either section of this page does not move
-        # the other - see PinImportFailureQueuePartialView.
+        # Separate page param so paging one section doesn't move the other.
         failures_page = get_page(
             request,
             pending_pin_import_failures(profile),
@@ -103,23 +102,16 @@ class PinSuggestionQueueView(LoginRequiredMixin, View):
                 "pin_suggestions_count": page_obj.paginator.count,
                 "bulk_actions": _BULK_ACTIONS,
                 "available_labels": _available_labels(profile),
-                # Merge suggestions are expected to be rare (one per genuine duplicate-pin collision), so unlike
-                # pin_suggestions they get no pagination/map of their own - see merge_suggestion_cards.
+                # Merge suggestions are rare, so no pagination/map of their own.
                 "merge_suggestion_cards": merge_cards,
                 "merge_suggestions_count": len(merge_cards),
-                # Places Google couldn't locate during an import - see controllers.pin_import_failures. Small in
-                # number like merge suggestions, so no pagination/map of its own either.
+                # Import failures are similarly rare, so also unpaginated.
                 "pin_import_failures": import_failures,
                 "failures_page_obj": failures_page,
                 "pin_import_failures_count": failures_page.paginator.count,
-                # The map (and its attribution) only renders when there are suggestions to plot - see
-                # locations.html's {% if pin_suggestions_count %}. pin-select-map.ts disables Leaflet's own
-                # on-map attribution control for every map it creates, so whichever page embeds it must enable
-                # the footer's live attribution slot instead.
+                # pin-select-map.ts disables Leaflet attribution, so enable the footer slot instead.
                 "show_map_footer": bool(page_obj.paginator.count),
-                # Set when this page was reached via the map's new-user "suggested pins near you" dialog
-                # (?onboarding=1) - highlights the "Accept all suggestions" button and, once clicked, redirects
-                # back to the map instead of just refreshing the queue in place.
+                # Onboarding entry highlights accept-all and returns to the map.
                 "onboarding_flow": request.GET.get("onboarding") == "1",
             },
         )

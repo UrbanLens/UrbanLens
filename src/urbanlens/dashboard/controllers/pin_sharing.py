@@ -67,7 +67,7 @@ class PinShareCreateView(LoginRequiredMixin, View):
     def post(self, request, pin_slug):
         sender = request.user.profile
         pin = get_object_or_404(Pin, slug=pin_slug, profile=sender)
-        # Among the sender's connections, so an id nobody holds and a stranger's are refused alike (P280).
+        # Among the sender's connections, so an id nobody holds and a stranger's are refused alike.
         recipient = Profile.objects.filter(Profile.connections_q(sender), pk=safe_int_or_none(request.POST.get("profile_id"))).first()
         if recipient is None:
             return HttpResponse(NOT_CONNECTED_MESSAGE, status=403)

@@ -107,33 +107,25 @@ def _model_summary(fetch: Callable[[], dict[str, Any]], label: str) -> dict[str,
     try:
         payload = scrub_personal_keys(fetch() or {})
     except (GatewayRequestError, RequestCancelledError, ValueError) as exc:
-        # RequestCancelledError covers this side's own rate limiter refusing or the service being switched off
-        # in admin; ValueError covers a gateway that will not construct because REData is unconfigured. None
-        # is a gateway error, and letting them through would 500 the page that exists to report on exactly
-        # that kind of problem.
+        # Report instead of 500: this page diagnoses exactly these failures.
+        # RequestCancelledError is our limiter/off switch; ValueError is unconfigured REData.
         logger.info("REData %s model metadata unavailable: %s", label, exc)
         return {"available": False, "message": str(exc)}
 
-    # The metrics live on the serialized model version, not at the top level - the envelope is {active,
-    # ranker|scorer, feature_schema_fingerprint, features, recent_versions}.
     active = payload.get("active")
-    # Defensive about the shape as well as the content: this page exists to report on REData, so an unexpected
-    # payload has to render as "no model" rather than as a 500 that hides what it was trying to say.
+    # Render unexpected shapes as "no model" instead of 500.
     if not isinstance(active, dict):
         active = {}
-    # REData states which ranker answered rather than leaving it to be inferred from `active`; the field is
-    # named `ranker` for labels and `scorer` for photo relevance.
+    # Upstream names it `ranker` for labels, `scorer` for photos.
     ranker = payload.get("ranker") or payload.get("scorer") or ("model" if active else "heuristic")
     return {
         "available": True,
         "ranker": ranker,
-        # "heuristic" is a normal state, not a failure: it answers until a
-        # model beats both it and the incumbent on the same holdout.
+        # "heuristic" is a normal state, not a failure.
         "has_model": bool(active),
         "version": active.get("version"),
         "algorithm": active.get("algorithm") or "",
         "trained_at": active.get("trained_at") or "",
-        # Labels count training rows; photo relevance counts the photos it trained on.
         "training_size": _training_size(active),
         "metrics": active.get("metrics") or {},
         "ranking_metrics": active.get("ranking_metrics") or {},

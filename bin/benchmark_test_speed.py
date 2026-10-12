@@ -56,10 +56,7 @@ def _slug(label: str) -> str:
 def _run_pytest(python: str, files: list[Path], db_name: str, extra_args: list[str]) -> tuple[float, subprocess.CompletedProcess[str]]:
     env = dict(os.environ)
     env["UL_TEST_DB_NAME"] = db_name
-    # Always eager, on both machines: locally there is no reachable broker (see
-    # local-non-docker-pytest-needs-celery-eager), and forcing it everywhere
-    # keeps the two machines doing the same actual work instead of one
-    # enqueuing-and-returning while the other runs the task inline.
+    # No broker locally; force eager everywhere so machines do the same work.
     env["UL_CELERY_TASK_ALWAYS_EAGER"] = "True"
     args = [python, "-m", "pytest", *extra_args, *[str(f) for f in files]]
     start = time.monotonic()

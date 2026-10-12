@@ -32,11 +32,9 @@ def attempt_limits(timeout_seconds: float | None) -> tuple[float, int]:
     return min(float(timeout_seconds), float(PROVIDER_TIMEOUT_SECONDS)), 0
 
 
-#: The official API host for each provider whose base URL is not otherwise
-#: configurable. Passed explicitly to each SDK client rather than left to the
-#: SDK's own default so an ``ANTHROPIC_BASE_URL``/``OPENAI_BASE_URL``
-#: environment variable in this container's env cannot silently redirect
-#: traffic to a look-alike host that happens to pass the egress-proxy filter.
+#: Pinned API hosts; passed explicitly to each SDK client so
+#: ``ANTHROPIC_BASE_URL``/``OPENAI_BASE_URL`` env cannot silently redirect
+#: traffic to a look-alike host passing the egress-proxy filter.
 ANTHROPIC_BASE_URL = "https://api.anthropic.com"
 OPENAI_BASE_URL = "https://api.openai.com/v1"
 
@@ -140,11 +138,9 @@ def validate_cloudflare_endpoint(endpoint: str) -> None:
         raise PolicyError(f"Cloudflare Workers AI endpoint host {host!r} is not a cloudflare.com host")
 
 
-#: Decoded size ceiling for a single inlined image. Callers send a
-#: downscaled copy (512px longest edge, JPEG q80 - typically well under
-#: 100 KB), so this is the backstop for a caller that forgets, not the
-#: working limit. Enforced on the *decoded* length so a caller cannot slip a
-#: large image past it by counting base64 characters.
+#: Decoded size ceiling per inlined image; backstop for callers that forget
+#: the downscaled copy. Enforced on decoded length so base64 size
+#: cannot hide a large image.
 MAX_IMAGE_BYTES = 1_500_000
 #: Images allowed in one request. Every shipped vision caller sends exactly
 #: one; more than a couple would blow the request cap anyway.

@@ -1184,18 +1184,15 @@ class AccountSettingsView(ExternalApiView):
         try:
             touched = apply_settings_patch(profile, serializer.validated_data, user=request.user)
         except SettingsValidationError as exc:
-            # Per-field, unlike the internal view's silent no-op: a sync client that cannot tell a rejected
-            # write from an accepted one will retry it forever.
+            # Per-field errors: a sync client would retry a rejected write forever.
             return Response({"error": "Some settings could not be changed.", "fields": exc.errors}, status=400)
 
         if touched:
             with transaction.atomic():
                 profile.save(update_fields=[*touched, "updated"])
 
-        # Re-read from the saved instance rather than echoing the submission:
-        # Profile.save() forces the community-gated visibility and wiki-sync
-        # fields off when community_enabled is False, and the client must be
-        # told the coerced values, not the ones it asked for.
+        # Re-read to return coerced values: save() forces community-gated fields off
+        # when community_enabled is False.
         return Response(SettingsSerializer(read_settings(profile, user=request.user)).data)
 
 
@@ -1428,8 +1425,7 @@ class PhotoDetailView(_OwnedImageMixin, ExternalApiView):
         """
         image = self._get_image(request, image_uuid)
         if image is None:
-            # 404 rather than 403 for someone else's photo - the same
-            # no-oracle policy the rest of this API and the media gate follow.
+            # 404 avoids revealing someone else's photo (no-oracle policy).
             return Response({"error": "No such photo."}, status=404)
 
         withdrawing = request.query_params.get("from_wiki", "").lower() in {"1", "true", "yes"} and image.is_own_contribution
@@ -1437,8 +1433,6 @@ class PhotoDetailView(_OwnedImageMixin, ExternalApiView):
             Image.objects.filter(pk=image.pk).update(pin=None)
             return Response(status=204)
 
-        # Reached only when there's no wiki copy to protect, or the caller explicitly asked to withdraw it too -
-        # either way nothing is left that should keep this row alive, regardless of any pin still attached.
         delete_stored_file(image)
         image.delete()
         return Response(status=204)
@@ -1853,13 +1847,11 @@ class MemoriesJournalView(PaginatedListMixin, ExternalApiView):
         """
         grants = filter_sources_by_grants(request.auth, self.JOURNAL_SOURCE_SCOPES)
 
-        # JournalFeed is a sequence, not a list: the paginator asks it only for its length and one slice, and it
-        # answers both without building the rest.
+        # JournalFeed answers length/slice without building the rest.
         paginator = self.pagination_class()
         page = paginator.paginate_queryset(JournalFeed(request.user.profile, sources=grants.granted), request, view=self)
         response = paginator.get_paginated_response(JournalEntrySerializer(page, many=True).data)
-        # Named so a client can tell "nothing happened yet" from "your credential cannot see this kind of entry"
-        # and prompt for re-authorization - see SourceGrants.
+        # Named so clients can tell empty feed from missing grant.
         response.data["omitted_sources"] = list(grants.omitted)
         return response
 
@@ -1933,12 +1925,9 @@ class PinListsView(PaginatedListMixin, ExternalApiView):
         except CapacityExceededError as exc:
             return Response({"error": exc.user_message}, status=400)
         except IntegrityError:
-            # Two concurrent creates can both pass the .exists() check above
-            # before either commits - the loser's save() then hits
-            # uq_pin_list_profile_name directly. Same response as the
-            # pre-check, so a client can't tell the two racing outcomes apart.
-            # (PublicDashboardModel.save() already runs in its own atomic()
-            # savepoint, so this doesn't need one of its own.)
+            # Concurrent creates can both pass the .exists() check; the loser hits uq_pin_list_profile_name.
+            # Same response as the pre-check so racing outcomes are indistinguishable.
+            # PublicDashboardModel.save() already runs in its own atomic() savepoint.
             return Response({"error": "You already have a list with that name."}, status=400)
 
         # A list created with rules should show its matching pins immediately,
@@ -4480,9 +4469,6 @@ class TripScopedApiView(TripErrorResponseMixin, ExternalApiView):
         Args:
             request: The authenticated request.
             trip_slug: The trip's URL slug.
-
-        Returns:
-            The trip.
 
         Raises:
             TripNotFoundError: No such trip, or it isn't the caller's.
