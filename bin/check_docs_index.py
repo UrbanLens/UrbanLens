@@ -10,18 +10,18 @@ import sys
 
 #: Status values each prefix allows.
 _STATUSES = {
-    "I": {"unvalidated", "actionable", "absorbed"},
+    "I": {"absorbed"},
     "X": {"holds", "collapsed", "untestable", "disqualified"},
-    "PL": {"live", "superseded"},
     "R": {"current", "stale"},
     "N": {"current", "stale"},
 }
 
 #: Prefixes whose records moved out of the index, and where they went.
 _RETIRED = {
-    "P": "problems are GitHub issues",
-    "T": "tasks are GitHub issues",
+    "P": "problems are Waypoint issues (`wp ls`)",
+    "T": "tasks are Waypoint issues (`wp ls`)",
     "D": "decisions are ADRs in docs/adr/",
+    "PL": "plans are Waypoint pages (`wp page ls`)",
 }
 
 

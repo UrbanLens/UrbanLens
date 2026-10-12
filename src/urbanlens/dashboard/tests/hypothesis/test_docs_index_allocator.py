@@ -46,17 +46,21 @@ class DocsIndexAllocatorTests(SimpleTestCase):
         cls.checker = _load_checker()
 
     def test_a_consistent_index_is_clean(self) -> None:
-        index = _index([_row("N1"), _row("N2"), _row("PL1", "live")], "`N3` · `PL2`")
+        index = _index([_row("N1"), _row("N2"), _row("I3", "absorbed")], "`N3` · `I4`")
         self.assertEqual(self.checker.audit(index, ["0001-a.md", "0002-b.md", "README.md"]), [])
 
     def test_a_problem_row_is_refused(self) -> None:
         failures = self.checker.audit(_index([_row("P339", "open")], "`N1`"), [])
-        self.assertTrue(any("P339: problems are GitHub issues" in failure for failure in failures), failures)
+        self.assertTrue(any("P339: problems are Waypoint issues" in failure for failure in failures), failures)
 
     def test_a_task_or_decision_row_is_refused(self) -> None:
         failures = self.checker.audit(_index([_row("T4", "open"), _row("D28", "accepted")], "`N1`"), [])
-        self.assertTrue(any("T4: tasks are GitHub issues" in failure for failure in failures), failures)
+        self.assertTrue(any("T4: tasks are Waypoint issues" in failure for failure in failures), failures)
         self.assertTrue(any("D28: decisions are ADRs" in failure for failure in failures), failures)
+
+    def test_a_plan_row_is_refused(self) -> None:
+        failures = self.checker.audit(_index([_row("PL12", "live")], "`N1`"), [])
+        self.assertTrue(any("PL12: plans are Waypoint pages" in failure for failure in failures), failures)
 
     def test_next_free_naming_a_retired_prefix_is_flagged(self) -> None:
         failures = self.checker.audit(_index([_row("N1")], "`N2` · `P339`"), [])

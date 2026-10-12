@@ -62,4 +62,4 @@ UrbanLens's codebase is open under AGPL, but location data, coordinates, and sit
 
 ## Questions
 
-Open a GitHub issue or reference the relevant Jira ticket if you're unsure whether something is in scope.
+Open an issue or reference the relevant Jira ticket if you're unsure whether something is in scope.
