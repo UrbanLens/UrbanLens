@@ -240,7 +240,8 @@ def entries_from_context(context: Sequence[dict[str, Any]]) -> list[Entry]:
     seen: set[tuple[str, str, str]] = set()
     for release in context:
         for commit in release.get("commits") or []:
-            section = re.sub(r"<!--.*?-->", "", commit.get("group") or "").strip()
+            # cliff.toml names a group "<!-- 0 -->Features"; the comment only sorts it.
+            section = (commit.get("group") or "").rpartition("-->")[2].strip()
             text = (commit.get("message") or "").split("\n", 1)[0].strip()
             breaking = (commit.get("breaking_description") or text) if commit.get("breaking") else ""
             if (section not in SECTIONS and not breaking) or not text:
