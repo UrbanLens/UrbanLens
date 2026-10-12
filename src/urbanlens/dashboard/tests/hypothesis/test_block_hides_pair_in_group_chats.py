@@ -47,6 +47,7 @@ from urbanlens.dashboard.services.messaging.group_chats import (
 )
 from urbanlens.dashboard.services.social.friendship import block_profile, unblock_profile
 from urbanlens.dashboard.tasks import broadcast_channel_group_messages
+from urbanlens.dashboard.tests.hypothesis.websocket_helpers import all_of, rows_at_least, settle
 
 AccessToken = get_access_token_model()
 READ_WRITE = f"{ApiKeyScope.MESSAGES_READ.value} {ApiKeyScope.MESSAGES_WRITE.value}"
@@ -568,12 +569,6 @@ class WebSocketTests(TransactionTestCase):
     def _sent(self) -> int:
         return GroupMessage.objects.filter(sender=self.bob).count()
 
-    async def _frames(self, comm: WebsocketCommunicator) -> list[dict]:
-        frames = []
-        while not await comm.receive_nothing(timeout=0.5):
-            frames.append(json.loads(await comm.receive_from()))
-        return frames
-
     def test_a_live_frame_reaches_the_group_but_not_the_other(self) -> None:
         with tasks_run_inline(broadcast_channel_group_messages):
             _run(self._exchange())
@@ -596,9 +591,14 @@ class WebSocketTests(TransactionTestCase):
             )
         )
 
-        carols = await self._frames(carol)
-        alices = await self._frames(alice)
-        await self._frames(bob)
+        def _both_reached_carol(frames: list[dict]) -> bool:
+            return sum(1 for frame in frames if frame.get("type") == "group_message") >= 2
+
+        # Carol is the socket that must hear both frames, so wait for them (and for both rows) there; the other
+        # two sockets are then drained, because by then the broadcast has gone to every member it will reach.
+        carols = await settle(carol, until=all_of(_both_reached_carol, rows_at_least(self._sent, 2)))
+        alices = await settle(alice)
+        await settle(bob)
 
         self.assertEqual(await self._sent(), 2)
         self.assertIn("socket hello", {frame.get("body") for frame in carols if frame.get("type") == "group_message"})

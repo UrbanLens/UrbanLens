@@ -21,6 +21,7 @@ from urbanlens.core.tests.testcase import TransactionTestCase
 from urbanlens.dashboard.checks import websocket_frame_cap_conflict
 from urbanlens.dashboard.consumers import SafetyCheckinChatConsumer
 from urbanlens.dashboard.models.safety.model import SafetyCheckinMessage
+from urbanlens.dashboard.tests.hypothesis.websocket_helpers import all_of, got_frame, rows_at_least, settle
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[5]
 
@@ -180,10 +181,10 @@ class SafetyChatVolumeLimitTests(TransactionTestCase):
 
         for index in range(8):
             await comm.send_to(text_data=json.dumps({"body": f"message {index}"}))
-        # Drain rather than assert on the echoes: what is under test is how many
-        # rows the flood produced, not what came back.
-        while not await comm.receive_nothing(timeout=0.3):
-            await comm.receive_from()
+        # Not an assertion on the echoes: what is under test is how many rows the flood produced. Wait for the
+        # rows the budget allows and for the refusal of the first frame past it, then let the rest of the flood
+        # drain, so "stopped at the budget" is measured after the consumer got through the flood.
+        await settle(comm, until=all_of(rows_at_least(self._acount_saved, 3), got_frame("error")))
 
         saved = await self._acount_saved()
         self.assertEqual(saved, 3, "the write budget did not stop the flood")
@@ -206,11 +207,8 @@ class SafetyChatVolumeLimitTests(TransactionTestCase):
         for index in range(5):
             await comm.send_to(text_data=json.dumps({"body": f"message {index}"}))
 
-        details: list[str] = []
-        while not await comm.receive_nothing(timeout=0.3):
-            frame = json.loads(await comm.receive_from())
-            if frame.get("type") == "error":
-                details.append(frame["detail"])
+        frames = await settle(comm, until=got_frame("error"))
+        details = [frame["detail"] for frame in frames if frame.get("type") == "error"]
 
         self.assertTrue(details, "a throttled sender got no error frame")
         self.assertTrue(await comm.receive_nothing(timeout=0.2))
@@ -231,10 +229,9 @@ class SafetyChatVolumeLimitTests(TransactionTestCase):
         for index in range(30):
             await comm.send_to(text_data=json.dumps({"body": f"message {index}"}))
 
-        errors = 0
-        while not await comm.receive_nothing(timeout=0.3):
-            if json.loads(await comm.receive_from()).get("type") == "error":
-                errors += 1
+        # Wait for the first error, then the quiet window shows whether a second one follows.
+        frames = await settle(comm, until=got_frame("error"))
+        errors = sum(1 for frame in frames if frame.get("type") == "error")
 
         self.assertEqual(errors, 1, "the throttle answered a flood with a flood")
         await comm.disconnect()
