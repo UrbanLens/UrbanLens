@@ -14,7 +14,7 @@ set -euo pipefail
 
 CONTAINER="${UL_TEST_CONTAINER:-urbanlens_development_main_test_runner}"
 # Reused DB: rebuilding costs minutes against seconds of tests.
-DB_NAME="${UL_TEST_DB_NAME:-ul_fast}"
+DB_NAME="${UL_TEST_DB_NAME:-test_ul_fast}"
 MAX_CHILDREN="${UL_MUTMUT_CHILDREN:-3}"
 
 if ! docker inspect "$CONTAINER" >/dev/null 2>&1; then

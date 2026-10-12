@@ -180,3 +180,19 @@ def prepare_threshold(default: int | None = DEFAULT_PREPARE_THRESHOLD) -> int | 
         return max(0, int(normalized))
     except ValueError:
         return default
+
+
+TEST_DATABASE_PREFIX = "test_"
+
+
+def isolated_test_database_name() -> str | None:
+    """
+    Read ``UL_TEST_DB_NAME``, adding the ``test_`` prefix when it lacks one.
+
+    Chiron's disk cleanup drops only stale ``test_*`` databases, so a run under any other name would
+    leave its database behind for good.
+    """
+    name = (os.getenv("UL_TEST_DB_NAME") or "").strip()
+    if not name:
+        return None
+    return name if name.startswith(TEST_DATABASE_PREFIX) else f"{TEST_DATABASE_PREFIX}{name}"

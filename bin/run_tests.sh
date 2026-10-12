@@ -33,7 +33,7 @@
 #   UL_TEST_DB_NAME     test database name. Without --fast/--fresh-db, a unique one is
 #                       generated when unset (parallel runs collide otherwise, and the
 #                       channel-layer prefix derives from it). With --fast/--fresh-db the
-#                       default is the fixed name 'ul_fast' for reuse - so on a shared host
+#                       default is the fixed name 'test_ul_fast' for reuse - so on a shared host
 #                       always set this explicitly.
 set -euo pipefail
 
@@ -204,7 +204,9 @@ verify_frontend_build
 
 if [ "$FAST" -eq 1 ]; then
     # A stable name, so the database survives between runs and can be reused.
-    DB_NAME="${UL_TEST_DB_NAME:-ul_fast}"
+    DB_NAME="${UL_TEST_DB_NAME:-test_ul_fast}"
+    # Settings prefix any other name with test_; match them so --fresh-db drops the database the run uses.
+    [[ "$DB_NAME" == test_* ]] || DB_NAME="test_$DB_NAME"
     if [ "$FRESH_DB" -eq 1 ]; then
         DB_FLAG="--create-db"
         echo "==> rebuilding the reusable database '$DB_NAME'"
@@ -260,7 +262,7 @@ DROP_DB
         echo "==> reusing database '$DB_NAME' (run --fresh-db after any migration)"
     fi
 else
-    DB_NAME="${UL_TEST_DB_NAME:-t_$(date +%s)_$$}"
+    DB_NAME="${UL_TEST_DB_NAME:-test_t_$(date +%s)_$$}"
     DB_FLAG=""
 fi
 

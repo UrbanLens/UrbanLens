@@ -23,6 +23,7 @@ from urbanlens.UrbanLens.settings._env import (
     prepare_threshold,
     require_deployment_setting,
     running_under_pytest,
+    isolated_test_database_name,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -258,7 +259,7 @@ DATABASES = {
             "prepare_threshold": prepare_threshold(),
         },
         # UL_TEST_DB_NAME isolates concurrent test runs to separate databases.
-        "TEST": {"NAME": os.getenv("UL_TEST_DB_NAME") or None},
+        "TEST": {"NAME": isolated_test_database_name()},
     },
 }
 UL_DB_APP_PASS = _app_settings.db_app_pass

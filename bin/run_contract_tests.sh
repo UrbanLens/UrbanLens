@@ -68,7 +68,7 @@ if [ -n "$URL" ]; then
     echo "==> live mode against $URL (methods: $METHODS)"
 else
     # Unique DB per run so concurrent runs do not share fixtures.
-    env_args+=("UL_TEST_DB_NAME=${UL_TEST_DB_NAME:-ctr_$(date +%s)_$$}")
+    env_args+=("UL_TEST_DB_NAME=${UL_TEST_DB_NAME:-test_ctr_$(date +%s)_$$}")
     # Eager Celery so endpoints do not fail against a missing broker.
     env_args+=("UL_CELERY_TASK_ALWAYS_EAGER=True")
     echo "==> in-process mode (methods: $METHODS)"
