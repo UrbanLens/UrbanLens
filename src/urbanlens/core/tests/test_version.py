@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from importlib.metadata import PackageNotFoundError
+import importlib.util
 import json
 from pathlib import Path
 import subprocess
+import sys
 import tomllib
 from unittest import mock
 
@@ -342,18 +344,26 @@ class PreOneReleaseTests(SimpleTestCase):
     UrbanLens stays on 0.x releases until the maintainer explicitly decides otherwise.
 
     A 1.0.0 commits the project to semver's stability promise, and UrbanLens is still in
-    beta. release-please would otherwise turn one breaking-change commit into a 1.0.0
-    release PR, so the config must keep a breaking change on the minor version. Changing
-    these assertions is that explicit decision, not a test fix.
+    beta. A release tool following semver would turn one breaking-change commit into a 1.0.0
+    release PR, so bin/release.py must keep a breaking change on the minor version
+    (release-please's bump-minor-pre-major). Changing these assertions is that explicit
+    decision, not a test fix.
     """
 
     repo_root = PYPROJECT_PATH.parent
 
-    def test_release_please_keeps_breaking_changes_below_1_0(self) -> None:
-        config = json.loads((self.repo_root / "release-please-config.json").read_text())
-        for path, package in config["packages"].items():
-            with self.subTest(package=path):
-                self.assertIs(package.get("bump-minor-pre-major", config.get("bump-minor-pre-major")), True)
+    def test_the_release_tool_keeps_breaking_changes_below_1_0(self) -> None:
+        spec = importlib.util.spec_from_file_location("release", self.repo_root / "bin" / "release.py")
+        assert spec is not None and spec.loader is not None
+        release = sys.modules.get("release") or importlib.util.module_from_spec(spec)
+        if "release" not in sys.modules:
+            sys.modules["release"] = release
+            spec.loader.exec_module(release)
+        self.assertEqual(release.next_version("0.9.4", minor=True), "0.10.0")
+        with self.assertRaises(release.ReleaseError):
+            release.next_version("1.0.0", minor=False)
+        cliff = tomllib.loads((self.repo_root / "cliff.toml").read_text())
+        self.assertIs(cliff["bump"]["breaking_always_bump_major"], False)
 
     def test_every_recorded_version_is_0_x(self) -> None:
         with PYPROJECT_PATH.open("rb") as pyproject_file:

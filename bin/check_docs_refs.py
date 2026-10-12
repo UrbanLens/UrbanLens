@@ -32,9 +32,6 @@ _SKIP_FILES = {
     # prove this script reports `docs/sub/GUIDE.md` when it should. Same trap as
     # this file's own docstring, one directory over.
     "src/urbanlens/dashboard/tests/hypothesis/test_docs_citation_resolution.py",
-    # Declares the changelog it will generate ("changelog-path"), which is a
-    # path this repository does not have yet rather than a citation of one.
-    "release-please-config.json",
     # Freezes the notes earlier releases wrote into ApiRateLimit rows, which cite
     # documents since moved (docs/redata.md, docs/redata-cid-resolution.md). The
     # text has to match those rows exactly, so it cannot be repointed.
