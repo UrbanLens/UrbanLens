@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import pathlib
 import shutil
 import subprocess
@@ -14,6 +15,12 @@ import sys
 #: is set low enough to survive a large deletion and high enough to catch the
 #: failure it exists for, which produced zero.
 _MINIMUM_API_PAGES = 100
+
+#: Sphinx read-phase workers. `-j auto` meant one per CPU the container could see (8 on the
+#: Forgejo runner), each a fork of a ~3 GiB parent: the build peaked at 13.3 GiB inside a
+#: 16 GiB docker-in-docker shared with the other job. Two workers peak at 6.1 GiB
+#: (proportional set size of the process tree). SPHINX_JOBS overrides.
+_DEFAULT_JOBS = "2"
 
 
 def main() -> int:
@@ -30,9 +37,10 @@ def main() -> int:
     if out.exists():
         shutil.rmtree(out)
 
-    # -j auto: the read phase dominates (a thousand generated API pages) and is
-    # the part that parallelises. Serial, this build runs into the tens of minutes.
-    command = [sys.executable, "-m", "sphinx", "-j", "auto", "-b", "html", str(source), str(out)]
+    # The read phase dominates (a thousand generated API pages) and is the part that
+    # parallelises, but each worker costs about 1.2 GiB; see _DEFAULT_JOBS.
+    jobs = os.environ.get("SPHINX_JOBS", _DEFAULT_JOBS)
+    command = [sys.executable, "-m", "sphinx", "-j", jobs, "-b", "html", str(source), str(out)]
     if args.strict:
         command.insert(-2, "-W")
     result = subprocess.run(command, check=False)
