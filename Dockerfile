@@ -1,5 +1,5 @@
 # Allow future upgrades by pinning the base image version here
-ARG PYTHON_BASE_IMAGE_VERSION=3.14-bookworm
+ARG PYTHON_BASE_IMAGE_VERSION=3.12-bookworm
 
 FROM python:${PYTHON_BASE_IMAGE_VERSION} AS base
 
