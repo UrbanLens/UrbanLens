@@ -72,11 +72,8 @@ class _SocialProfileTestCase(TestCase):
         self.profile = Profile.objects.get(user=self.user)
         self.other_user = baker.make(User, username="bystander")
         self.other = Profile.objects.get(user=self.other_user)
-        # ``profile_visibility`` defaults to ANYTHING_IN_COMMON, and two fresh
-        # accounts share no pin, friend or trip - so without this the profiles
-        # would be invisible to each other and every test here would 404 on the
-        # visibility gate rather than exercising the behaviour it names.
-        # ``test_invisible_profile_is_404_on_every_route`` re-tightens it.
+        # Default visibility is ANYTHING_IN_COMMON; fresh accounts share nothing,
+        # so open both to ANYONE to exercise the routes under test.
         for profile in (self.profile, self.other):
             profile.profile_visibility = VisibilityChoice.ANYONE
             profile.save(update_fields=["profile_visibility"])

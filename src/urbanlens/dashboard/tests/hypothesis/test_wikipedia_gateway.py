@@ -226,7 +226,7 @@ class GetArticleMediaTests(SimpleTestCase):
         self.assertEqual(media, [])
 
     def test_an_unreachable_wikipedia_raises_rather_than_answering_no_images(self) -> None:
-        """``[]`` here is cached as "no images" for the whole cache term (P187)."""
+        """``[]`` here is cached as "no images" for the whole cache term."""
         with (
             mock.patch.object(self.gateway.session, "get", side_effect=ConnectionError("boom")),
             self.assertRaises(ConnectionError),
@@ -242,12 +242,14 @@ class GetArticleMediaTests(SimpleTestCase):
 
 class WikipediaCampusFallbackTests(TestCase):
     """
-    UL-354: a building whose own coordinates find no article retries from the places it stands in (campus-aware search).
+    UL-354: a building whose own coordinates find no article retries from the
+    places it stands in (campus-aware search).
 
-    A large campus has one article geotagged at a single point (usually the main building); an outbuilding
-    can sit outside the geosearch radius, so its own search legitimately finds nothing - the campus's point and
-    name are the right second query, without widening the global radius. The places are public, never the owner's
-    own pin nesting, since the match is shared (P188); ``test_wikipedia_campus_fallback.py`` holds that."""
+    A large campus has one article geotagged at a single point (usually the
+    main building); an outbuilding can sit outside the geosearch radius, so its
+    own search legitimately finds nothing - the campus's point and name are the
+    right second query, without widening the global radius. The places are
+    public, never the owner's own pin nesting, since the match is shared."""
 
     _CAMPUS_ARTICLE = {
         "title": "Hudson River State Hospital",

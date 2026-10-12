@@ -1,4 +1,4 @@
-"""Deleting an account keeps the device scans it uploaded, detached from it: device scans are never deleted (Jess, 2026-09-29)."""
+"""Deleting an account keeps the device scans it uploaded, detached from it: device scans are never deleted."""
 
 from __future__ import annotations
 
@@ -61,7 +61,7 @@ class DeviceScanAccountDeletionTests(TestCase):
         self.assertTrue(WikiDeviceMarker.objects.filter(pk=marker.pk).exists())
 
     def test_nothing_left_on_the_scans_ties_them_to_the_person(self) -> None:
-        """Jess, 2026-09-30: fully anonymised. Times and routes may stay; the "who" may not."""
+        """Fully anonymised. Times and routes may stay; the "who" may not."""
         baker.make(User)
         leaving = baker.make(User).profile
         device = baker.make(ScannedDevice)

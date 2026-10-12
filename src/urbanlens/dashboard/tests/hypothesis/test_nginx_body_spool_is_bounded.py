@@ -19,7 +19,7 @@ for that to be true rather than merely stated, and neither file can see the
 other:
 
 - the tmpfs must be **at least** the vhost's `client_max_body_size`, or a
-  legitimate maximum-size upload fails where it used to work;
+  legitimate maximum-size upload fails;
 - `mem_limit` must be **above** the tmpfs size, because tmpfs pages are charged
   to the container's cgroup - a tmpfs that can fill past the memory limit turns
   one oversized upload into an OOM-killed nginx, which is a worse outage than
@@ -148,7 +148,7 @@ class TheSpoolCannotReachTheDatabasesDiskTests(SimpleTestCase):
                     self.assertIn("size", options, f"{name}'s tmpfs for {directory} has no size=")
 
     def test_the_tmpfs_holds_a_maximum_size_request_body(self) -> None:
-        """Sized under the vhost's own ceiling, this would refuse uploads that used to work."""
+        """A spool smaller than the vhost ceiling would refuse legitimate maximum-size uploads."""
         for name, vhost in VHOST_BY_SERVICE.items():
             ceilings = directive_arguments((NGINX_DIR / vhost).read_text(), "client_max_body_size")
             self.assertTrue(

@@ -51,24 +51,14 @@ def _render(template: Template, **extra: object) -> HttpResponse:
 def cheap(request: HttpRequest) -> HttpResponse:
     """
     A row costs two spans - what a well-behaved list page looks like.
-
-    Args:
-        request: The HTTP request.
-
-    Returns:
-        The rendered page."""
+    """
     return _render(_CHEAP)
 
 
 def expensive(request: HttpRequest) -> HttpResponse:
     """
     A row costs a whole icon grid - the defect the mixin exists to catch.
-
-    Args:
-        request: The HTTP request.
-
-    Returns:
-        The rendered page."""
+    """
     return _render(_EXPENSIVE, icons=[f"icon_{index}" for index in range(ICONS_PER_ROW)])
 
 

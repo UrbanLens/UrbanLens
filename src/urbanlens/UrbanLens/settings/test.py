@@ -32,12 +32,8 @@ MEDIA_X_ACCEL = False
 # Production hashing is pure overhead in tests and can blow handshake timeouts.
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
-# locmem: no live service needed and no cross-test bleed (network guard only allows localhost).
-#
-# Both aliases name the same location on purpose. What separates them in a deployment is which
-# Dragonfly they connect to and whether it may evict, neither of which locmem has; what a test
-# asserts is what was cached, and a second store would only mean every test seeding a proxied
-# body had to know which one. test_proxied_bytes_have_their_own_store.py covers the wiring.
+# locmem: no live service needed, no cross-test bleed. Separate LOCATIONs keep the two
+# caches isolated so tests don't need to know which store a proxied body uses.
 CACHES = {
     "default": {
         "BACKEND": "urbanlens.core.cache_backend.AtomicLocMemCache",

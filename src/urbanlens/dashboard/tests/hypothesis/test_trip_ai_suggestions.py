@@ -481,10 +481,9 @@ class ApplySuggestedOrderViewTests(TestCase):
 
     def test_valid_permutation_applies(self) -> None:
         # A successful reorder re-renders the activities panel, which computes
-        # travel legs between consecutive activities through REData's routing
-        # API - a real outbound call the suite's network guard rightly blocks.
-        # The rejection tests below never reach the render, which is why this
-        # was the only one affected. Same seam test_trip_planning.py patches.
+        # travel legs via REData's routing API - a real outbound call the
+        # suite's network guard blocks. The rejection tests below never reach
+        # the render, which is why this was the only one affected.
         with patch("urbanlens.dashboard.services.trips.trip_legs.get_route_between", return_value=None):
             response = self.client.post(
                 self.url, data=f'{{"order": [{self.act_b.id}, {self.act_a.id}]}}', content_type="application/json"

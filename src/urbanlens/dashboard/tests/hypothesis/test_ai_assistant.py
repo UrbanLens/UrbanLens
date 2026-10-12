@@ -171,11 +171,9 @@ class AssistantLoopTests(TestCase):
         with patch("urbanlens.dashboard.services.ai.assistant.get_gateway", return_value=gateway):
             turn = run_assistant_turn(self.profile, [], "loop forever")
         self.assertIn("step limit", turn.reply)
-        # Exactly the round budget, not merely "some small number": a bug
-        # that widened MAX_ROUNDS (or dropped the cap) must fail this. One
-        # tool call per round means MAX_ROUNDS (4) governs here, well below
-        # MAX_TOOL_CALLS (6) - see test_tool_call_budget_stops below for
-        # that budget exercised independently.
+        # Exactly the round budget: a bug widening MAX_ROUNDS must fail this.
+        # One tool call per round means MAX_ROUNDS (4) governs, well below
+        # MAX_TOOL_CALLS (6) - see test_tool_call_budget_stops for that budget.
         self.assertEqual(len(gateway.prompts), MAX_ROUNDS)
         self.assertEqual(turn.actions, ["Checked your trips"] * MAX_ROUNDS)
 

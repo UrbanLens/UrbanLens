@@ -1,9 +1,9 @@
 /**
- * P92 regression guard: the main map's cluster group must come from the
- * shared factory (see shared/map-clusters.test.ts for the factory's own
- * behavioural coverage), not a hand-rolled L.markerClusterGroup() with its
- * own copy of the numbered-badge markup that can silently drift from every
- * other map's. This entry has heavy module-scope side effects (it reads
+ * The main map's cluster group must come from the shared factory
+ * (see shared/map-clusters.test.ts for the factory's own behavioural
+ * coverage), not a hand-rolled L.markerClusterGroup() with its own copy
+ * of the numbered-badge markup that can silently drift from every other
+ * map's. This entry has heavy module-scope side effects (it reads
  * #map-page-config and constructs a live Leaflet map on import), so it is
  * checked as text rather than imported and executed in a test environment.
  */

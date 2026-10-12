@@ -218,12 +218,11 @@ class AggregateOnlyEndToEndTests(TestCase):
         self.assertEqual(response_two.status_code, HTTPStatus.ACCEPTED)
 
         # Runs the background pipeline inline - production defers this to
-        # Celery via transaction.on_commit, but the classification/clustering
-        # logic under test here is identical either way.
+        # Celery via transaction.on_commit, but the logic under test is identical.
         for upload in DeviceScanUpload.objects.all():
             process_scan_upload(upload)
 
-        # Proves the merge actually happened, not merely that the serializer
+        # Proves the merge happened, not merely that the serializer
         # hides a field: one marker, corroborated by both uploads.
         marker = WikiDeviceMarker.objects.get()
         self.assertEqual(marker.observation_count, 2)
@@ -238,10 +237,7 @@ class AggregateOnlyEndToEndTests(TestCase):
         self.assertEqual(len(markers), 1)
 
         # Deliberately checks distinctive strings only (username, uuid) - a
-        # raw pk is too short/common to assert against meaningfully (it would
-        # false-positive against digits in the timestamp or confidence
-        # value), and the field-allowlist tests above already guarantee no
-        # "profile_id"-shaped field could appear in the first place.
+        # raw pk is too short/common to assert against meaningfully.
         body_text = response.content.decode()
         for identity in (
             self.uploader_one.username,

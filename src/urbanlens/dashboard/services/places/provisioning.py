@@ -55,9 +55,7 @@ def find_matching_place(kind: str, polygon: MultiPolygon, *, provider: str = "",
         provider: Provider key namespace (e.g. ``"redata"``).
         provider_key: The provider's stable id for this record, when it has one.
         exclude_pk: A place to never match, however well its geometry fits - for a parcel being split, its own (still-``CURRENT`` until the split transaction commits) centroid very often lands inside one of its own successors, and without this a successor's upsert...
-
-    Returns:
-        The matching place, or None when this is genuinely new."""
+    """
     if provider and provider_key:
         if existing := Place.objects.filter(provider=provider, provider_key=provider_key, kind=kind).exclude(pk=exclude_pk).first():
             return existing
@@ -218,9 +216,7 @@ def provision_outcome_for_coordinate(location: Location, *, name: str | None = N
         location: The Location whose coordinate to resolve.
         name: Optional place-name hint forwarded to name-aware providers.
         detect_splits: Probe for a subdivision when the parcel shrinks.
-
-    Returns:
-        The outcome of this chain run."""
+    """
     from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain
 
     latitude, longitude = float(location.latitude), float(location.longitude)

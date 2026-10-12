@@ -1,4 +1,4 @@
-"""P227: Site Conditions is a tab of the Location Data card, requested only when its tab opens."""
+"""Site Conditions is a tab of the Location Data card, requested only when its tab opens."""
 
 from __future__ import annotations
 
@@ -66,7 +66,7 @@ class SiteConditionsPlacementTests(_Base):
         self.assertIn(">Site Conditions<", strip)
 
     def test_nothing_requests_it_when_the_page_opens(self) -> None:
-        """A tab loads when it is opened (P53): its button keeps htmx's default click trigger."""
+        """A tab loads when opened: its button keeps htmx's default click trigger."""
         (tag,) = self._requesting_tags()
         self.assertNotIn("hx-trigger", tag)
 

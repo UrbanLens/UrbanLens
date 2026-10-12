@@ -146,11 +146,8 @@ def viewer_hidden_activity_ids(activities: list[TripActivity], viewer: Profile) 
     Returns:
         IDs of activities whose location this viewer may not see."""
     hidden = {act.id for act in activities if act.location_hidden}
-    # An activity whose adder is NULL reaches the filter too.
-    # Every production path sets added_by to a real profile, so NULL means that account was deleted
-    # (the FK is SET_NULL) - their setting is gone and the filter treats it as most restrictive.
-    # A title taken from a place is that place even with no Location behind it, as an imported calendar event's
-    # location is, so it is withheld as a location would be.
+    # NULL adder = deleted account (FK SET_NULL); treat as most restrictive.
+    # Place title without Location is withheld like a location.
     sensitive = [act for act in activities if not act.location_hidden and (act.location_id or act.title_from_place) and act.added_by_id != viewer.id and (act.added_by is None or act.added_by.trip_pin_location_visibility != VisibilityChoice.ANYONE)]
     if sensitive:
         apply_trip_visibility_filter(sensitive, viewer, hidden)

@@ -1,7 +1,7 @@
 """
-A pinned location on a campus building gets the building's wiki once the campus's building list says where it stands (P265).
+A pinned location on a campus building gets the building's wiki once the campus's building list says where it stands.
 
-A location pinned before the list was cached was answered with the campus's wiki, so since P261 it links none.
+A location pinned before the list was cached was answered with the campus's wiki, so it links none.
 """
 
 from __future__ import annotations

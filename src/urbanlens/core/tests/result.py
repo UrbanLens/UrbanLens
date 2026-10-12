@@ -10,15 +10,7 @@ logger = logging.getLogger(__name__)
 
 class MessageResult(unittest.TextTestResult):
     def getDescription(self, test: TestCase) -> str:
-        """
-        Include the class and method name in the test description.
-
-        Args:
-            test (TestCase): The test case instance
-
-        Returns:
-            str: The description of the test case
-        """
+        """Include the class and method name in the test description."""
         message = super().getDescription(test)
         try:
             return test.create_message(message)

@@ -77,11 +77,7 @@
             var q = input.value.trim();
             if (!q) return;
             commitQuery();
-            // #gs-panel is a shared swap target for three independent,
-            // uncoordinated triggers. Its DOM state is inherently racy:
-            // whichever response lands last wins. Fetching this exact query
-            // directly and reading the first result from that response
-            // sidesteps the race entirely.
+            // #gs-panel is a shared swap target; fetch directly to avoid race between concurrent responses.
             fetch(panelUrl + '?q=' + encodeURIComponent(q), { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
                 .then(function (r) { return r.text(); })
                 .then(function (html) {

@@ -108,13 +108,10 @@ test.describe("map document", () => {
     });
 
     test("what Valkey hands back is what the database produced", async ({ page, api }) => {
-        // Creating a pin moves the collection's fingerprint, so the next request
-        // is a miss against a key nothing has written - which is the only way to
-        // be sure the first of these two responses came from the database.
-        //
-        // Retried because the suite runs in parallel against one account: a
-        // sibling spec can load the map between the write and the read, and warm
-        // the very version this is trying to catch cold.
+        // Creating a pin moves the fingerprint, so the next request is a miss
+        // against an unwritten key - the only way to ensure the first response
+        // came from the database. Retried because parallel specs can warm the
+        // cache between the write and read.
         let miss: Timed | null = null;
         for (let attempt = 0; attempt < 4 && miss === null; attempt += 1) {
             await api.createPin();
@@ -184,11 +181,8 @@ test.describe("map document", () => {
         const head = documentLines(await first.response.text()).at(0);
         const total = Number(head?.total ?? 0);
         test.skip(total < HEAVY_PINS, `the heavy account holds ${total} pins; re-provision with --heavy-pins ${HEAVY_PINS}`);
-        // Exactly at the limit is served as one document; the branch that sends a
-        // client back to the paged endpoint is one pin further on, and is
-        // unit-tested. Asserted here rather than in its own spec because a
-        // sibling reading this endpoint would warm the cache and the miss below
-        // would never be measured.
+        // At the limit: served as one document; paged branch is one pin further
+        // and unit-tested. Asserted here to avoid sibling specs warming the cache.
         expect(head?.mode, "an account at the ceiling should still be served as one document").toBe("document");
 
         // Not forced. The obvious way to guarantee a miss is to create a pin,

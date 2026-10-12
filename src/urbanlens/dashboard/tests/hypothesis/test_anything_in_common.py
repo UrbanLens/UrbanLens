@@ -186,17 +186,13 @@ class ImageVisibilityFriendTests(TestCase):
         super().setUp()
         self.uploader = _make_profile()
         self.viewer = _make_profile()
-        # The viewer's own filter must not interfere with these tests.
+        # Viewer's filter must not interfere.
         self.viewer.viewer_photo_filter = VisibilityChoice.ANYONE
         self.viewer.save(update_fields=["viewer_photo_filter"])
-        # Shared, because that is the first gate and this file is about the
-        # second. A photo nobody shared is invisible to everyone but its owner
-        # whatever relationship they have, so testing the relationship rules on an
-        # unshared photo would only ever re-assert the first gate.
+        # Photo must be shared; unshared photos are invisible regardless of relationship.
         wiki = baker.make("dashboard.Wiki")
         self.image: Image = baker.make("dashboard.Image", profile=self.uploader, pin=None, wiki=wiki)
-        # visible_to()'s container gate asks whether the VIEWER can reach this specific wiki (earned only by a
-        # pin at its place), not merely whether the photo sits on *some* wiki.
+        # Viewer must have a pin at this specific wiki's place (container gate).
         Pin.objects.create(profile=self.viewer, location=wiki.location)
 
     def _set_upload_visibility(self, visibility: str) -> None:
@@ -220,10 +216,8 @@ class ImageVisibilityFriendTests(TestCase):
         self.assertIn(self.image, Image.objects.visible_to(self.viewer))
 
     def test_shared_pin_qualifies_for_anything_in_common(self) -> None:
-        # Image visibility resolves common-pin/common-friend/common-trip itself
-        # (queryset._relationship_allows), rather than delegating to
-        # Profile.visibility_permits, so this needs its own coverage per
-        # relationship kind rather than trusting the shared-trip case above.
+        # Image visibility resolves common-pin/friend/trip in queryset._relationship_allows,
+        # not Profile.visibility_permits, so each relationship kind needs its own coverage.
         self._set_upload_visibility(VisibilityChoice.ANYTHING_IN_COMMON)
         _share_pin(self.uploader, self.viewer)
         self.assertIn(self.image, Image.objects.visible_to(self.viewer))

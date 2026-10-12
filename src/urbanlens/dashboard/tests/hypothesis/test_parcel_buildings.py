@@ -208,7 +208,7 @@ class FetchParcelBuildingsTests(RedataConfiguredMixin, TestCase):
             self.assertEqual(fetch_parcel_buildings(self.location), {})
 
     def test_a_redata_outage_with_nothing_else_found_raises(self) -> None:
-        """``{}`` here is cached as "no buildings" for the whole cache term (P187)."""
+        """``{}`` here is cached as "no buildings" for the whole cache term."""
         with (
             patch.object(RedataGateway, "__post_init__", lambda _self: None),
             patch.object(
@@ -677,7 +677,7 @@ class ChildPinRowsTests(SimpleTestCase):
 
 
 class ParcelBuildingsTabsTests(TestCase):
-    """The pin page's one list of buildings and child pins (PinController.parcel_buildings, P172)."""
+    """The pin page's one list of buildings and child pins (PinController.parcel_buildings)."""
 
     def setUp(self) -> None:
         super().setUp()

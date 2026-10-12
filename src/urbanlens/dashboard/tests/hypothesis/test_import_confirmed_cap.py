@@ -38,21 +38,15 @@ def _pin_payload(index: int) -> dict[str, Any]:
     """
     One confirmed pin, in the shape the preview step hands the client.
 
-    Keys are `iter_confirmed_import_events`'s documented contract (`name`, `lat`,
-    `lng`, `description`, `cid`, `maps_url`, `label_ids`), and getting them
-    wrong is not a harmless mismatch: a payload the generator does not recognise
-    imports nothing, so an "it created no pins" assertion over it passes without
-    the endpoint having done anything. Deliberately no `cid` - a pin carrying one
-    with no matching Location is queued for background resolution rather than
-    placed, which would produce the same vacuous pass.
+    Keys match `iter_confirmed_import_events`'s contract. A payload the generator
+    doesn't recognize imports nothing, so an "it created no pins" assertion would
+    pass vacuously. No `cid` - a pin with one but no matching Location is queued
+    for background resolution, which would also pass vacuously.
     """
     return {
         "name": f"Imported {index}",
-        # Spread by whole degrees, not fractions. At 0.0001 degrees apart (~11m)
-        # the importer matched every pin to the first one's Location and reported
-        # "exists" for the rest, so three confirmed pins created one row - which
-        # would understate the work the endpoint does and weaken every assertion
-        # here. Verified against the live stream: widely-spaced pins each create.
+        # Spread by whole degrees. At 0.0001 degrees apart (~11m) the importer
+        # matched every pin to the first Location, understating work and weakening assertions.
         "lat": 30.0 + index * 0.5,
         "lng": -120.0 + index * 0.5,
         "description": "",

@@ -1,5 +1,5 @@
 """
-A pin share reaches its recipient only as far as the sender consented, and is copied as of acceptance (P193).
+A pin share reaches its recipient only as far as the sender consented, and is copied as of acceptance.
 
 What a share consents to (``docs/PRIVACY_MODEL.md`` §5): the place as it was when shared (``PinShare.location``),
 the site's objective facts (type, indoor/outdoor, dates, security indicators), a name only when the sender typed one
@@ -227,7 +227,6 @@ class AcceptedCopyHoldsOnlyWhatWasConsentedTests(_ShareFixture):
         self.assertTrue(new_pin.name_is_user_provided)
 
     def test_the_sites_facts_are_read_as_of_acceptance(self) -> None:
-        """Jess, 2026-10-02: copied as of acceptance, to the degree consented. The facts are consented."""
         share = self._share()
         Pin.objects.filter(pk=self.pin.pk).update(
             cameras=SecurityLevel.EVERYWHERE,

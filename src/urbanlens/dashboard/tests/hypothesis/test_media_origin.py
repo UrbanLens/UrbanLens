@@ -204,10 +204,9 @@ class MediaOriginGateTests(TestCase):
         self.assertEqual(self._fetch().status_code, 404)
 
     def test_the_cookie_is_refused_on_the_app_origin(self) -> None:
-        # It is domain-scoped, so the browser sends it to the app origin too.
-        # Accepting it there would make it a second, longer-lived session: it
-        # survives up to 12h past the real one, and every byte-serving view
-        # (including the billed panel image proxy) would take it.
+        # Domain-scoped, so the browser sends it to the app origin too. Accepting it
+        # would make a second, longer-lived session (survives up to 12h past the real one),
+        # and every byte-serving view would take it.
         image_path = f"/media/{self.image_name}"
         self.client.cookies[MEDIA_COOKIE_NAME] = mint_media_token(self.user.pk)
         response = self.client.get(image_path, HTTP_HOST="app.example.com")
@@ -278,9 +277,7 @@ class MediaUrlTests(SimpleTestCase):
     @override_settings(MEDIA_URL=f"{MEDIA_ORIGIN}/media/")
     def test_file_urls_are_built_against_the_media_origin(self) -> None:
         # FileSystemStorage.url is urljoin(MEDIA_URL, name), so an absolute
-        # MEDIA_URL moves every template, serializer and API response at once -
-        # which is the entire reason the cookie approach was chosen over
-        # per-viewer signed URLs.
+        # MEDIA_URL moves every template, serializer and API response at once.
         from django.core.files.storage import default_storage
 
         self.assertEqual(default_storage.url("pin_images/a7/x.webp"), f"{MEDIA_ORIGIN}/media/pin_images/a7/x.webp")

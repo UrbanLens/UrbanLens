@@ -8,7 +8,7 @@ import type { Page } from "@playwright/test";
 
 import { env } from "./env.js";
 
-/** What happened when we tried to hold a socket open. */
+/** What happened when holding a socket open. */
 export interface SocketProbe {
     /** The absolute `wss://` URL that was dialled. */
     url: string;
@@ -55,11 +55,10 @@ export async function probeWebSocket(page: Page, path: string, options: ProbeOpt
     const holdMs = options.holdMs ?? 1_000;
     const connectTimeoutMs = options.connectTimeoutMs ?? 15_000;
 
-    // No Playwright timeout on the evaluate: the probe bounds itself with its
-    // own timers and always resolves with a diagnosis, where an outer timeout
-    // would replace that diagnosis with "the call took too long". The spec's
-    // own `test.setTimeout` is the backstop for a page that has stopped
-    // executing script at all.
+    // No Playwright timeout on the evaluate: the probe bounds itself with
+    // its own timers and always resolves with a diagnosis. An outer timeout
+    // would replace that with "the call took too long". The spec's
+    // `test.setTimeout` is the backstop for a page that has stopped executing.
     return page.evaluate(
         async ({ url, holdMs, connectTimeoutMs, send, sendEveryMs }) =>
             new Promise<SocketProbe>((resolve) => {

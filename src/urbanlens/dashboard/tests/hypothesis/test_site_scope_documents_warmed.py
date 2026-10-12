@@ -53,7 +53,7 @@ class WarmSiteScopeDocumentsTests(SimpleTestCase):
         schedule.assert_not_called()
 
     def test_a_source_whose_documents_are_the_same_at_any_scope_is_left_alone(self) -> None:
-        """Wikimedia's books are found by name: becoming a site changes nothing about them (P196)."""
+        """Wikimedia's books are found by name: becoming a site changes nothing about them."""
         source = _source("wikimedia", ready=False)
         source.documents_depend_on_site_scope = False
 
@@ -62,7 +62,7 @@ class WarmSiteScopeDocumentsTests(SimpleTestCase):
         schedule.assert_not_called()
 
     def test_a_source_listed_only_from_its_gallerys_cache_is_left_alone(self) -> None:
-        """An archive's documents are read from what its gallery cached; nothing searches it for Sources (P260)."""
+        """An archive's documents are read from what its gallery cached; nothing searches it for Sources."""
         source = _source("loc", ready=False)
         source.fetched_for_sources = False
 

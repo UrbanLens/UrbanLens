@@ -251,11 +251,8 @@ class PinNameCriterionTests(TestCase):
     @given(nonempty_name)
     @_db_settings
     def test_pin_is_found_by_exact_name(self, name: str) -> None:
-        # Pin.save() sanitizes name (see services.locations.naming.sanitize_name)
-        # before it's persisted, so the *stored* name - not the raw input - is
-        # what a search must be able to find. A name built entirely from
-        # characters the sanitizer strips (e.g. "\", ";", "%") saves as empty
-        # and has nothing meaningful left to search for.
+        # Search uses the sanitized stored name, not raw input.
+        # Names sanitized to empty have nothing to search.
         assume(len(name.strip()) >= 1)
         pin = baker.make(Pin, profile=self.profile, name=name)
         assume(pin.name)

@@ -300,7 +300,7 @@ class ProvisioningReproductionTests(TestCase):
 
 
 class DetachOversizedPlacesCommandTests(TestCase):
-    """The repair for rows created before the fix."""
+    """The repair for oversized-place rows."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -316,7 +316,6 @@ class DetachOversizedPlacesCommandTests(TestCase):
         for location in (self.west, self.east):
             resolution.attach_location(location, self.county)
         resolution.attach_location(self.on_building, self.building)
-        # Attached directly, as the rows written before the fix were.
         _pin(self.first, self.west)
         _pin(self.second, self.east)
         _pin(self.second, self.on_building)

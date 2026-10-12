@@ -42,12 +42,8 @@ async function uploadPhoto(
         },
     });
 
-    // Every upload is scanned before it is stored, and the scanner is a separate
-    // service. When it is down the API answers 503 - correctly, because
-    // accepting an unscanned file would be worse - but that says nothing about
-    // the metadata this file is here to test. Skipping keeps a scanner outage
-    // from reading as a photo-metadata failure; the outage itself is what
-    // `services/dependencies.spec.ts` is for.
+    // Scanner outage returns 503; skipping prevents it from reading as a metadata failure.
+    // Scanner health is tested in services/dependencies.spec.ts.
     test.skip(
         response.status() === 503,
         `The malware scanner is unavailable on this deployment, so nothing can be uploaded: ${(await response.text()).slice(0, 160)}`,
@@ -114,17 +110,11 @@ test.describe("photo metadata", () => {
     });
 
     test("a vote on a plain upload is refused, not accepted", async ({ api, apiRequestContext, account }) => {
-        // A relevance vote is keyed by the (location, media_source_key,
-        // media_item_key) identity that services.media.media_materialize sets
-        // when an externally-sourced Media gallery item is materialized onto a
-        // wiki - see PhotoVoteView's docstring and
-        // PhotoVoteTests.test_plain_upload_cannot_be_voted_on in
-        // test_external_api_photos.py. A plain upload never carries that
-        // identity, even once shared to a wiki (services.photos.attachment's
-        // attach_to_wiki sets Image.wiki, nothing else), and the external API
-        // has no endpoint that performs the materialization itself - only the
-        // web UI's wiki Media gallery does, through WikiMediaVoteView. So the
-        // only half of this feature reachable from here is the refusal.
+        // A relevance vote requires the (location, media_source_key, media_item_key)
+        // identity set by media_materialize for external gallery items.
+        // Plain uploads never carry it, even when shared to a wiki.
+        // The external API lacks a materialization endpoint; only the web UI does it.
+        // So only the refusal is testable here.
         const photo = await uploadPhoto(api, apiRequestContext, account.apiKey ?? "", "voted photo");
 
         const response = await api.post(`photos/${photo.uuid}/vote/`, { value: 1 });

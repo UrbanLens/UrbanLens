@@ -1,5 +1,5 @@
 """
-A stored link is http(s), whichever door it came in by (N29 G4-26 and its import incidental).
+A stored link is http(s), whichever door it came in by.
 
 The forms and API refused ``javascript:`` links, but the archive importer wrote custom-field URL values straight
 into the column, and the KML importer turned any ``<a href>`` in a placemark description into a pin link. Both are
@@ -88,7 +88,7 @@ class TheSharedValidatorTests(SimpleTestCase):
                 clean_link_url(raw, max_length=2000)
 
     def test_a_link_that_names_a_user_is_refused_even_with_its_scheme(self) -> None:
-        """Jess, 2026-09-30: refused outright. ``https://paypal.com@evil.ru`` opens evil.ru."""
+        """Refused outright. ``https://paypal.com@evil.ru`` opens evil.ru."""
         from urbanlens.dashboard.services.security.link_urls import InvalidLinkUrlError, clean_link_url, is_link_url
 
         for raw in [

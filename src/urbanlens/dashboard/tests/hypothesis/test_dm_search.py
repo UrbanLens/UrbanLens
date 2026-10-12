@@ -72,11 +72,11 @@ class SearchDirectMessagesTests(TestCase):
         self.assertEqual(len(hits), 1)
 
     def test_date_range_phrase_filters_by_created(self) -> None:
-        # An explicit year, not a relative phrase like "last week", so this
-        # doesn't depend on which day of the week the test happens to run.
-        # The preposition is required: the parser deliberately refuses to read
-        # a bare "2024" as a date filter, since a 4-digit token appears in
-        # ordinary names ("Building 2024") - see _extract_date_phrases.
+        # An explicit year, not a relative phrase, so this
+        # doesn't depend on which day the test runs.
+        # The preposition is required: the parser refuses to read
+        # a bare "2024" as a date filter, since 4-digit tokens appear in
+        # ordinary names ("Building 2024").
         in_range = baker.make("dashboard.DirectMessage", sender=self.alice, recipient=self.bob, body="reunion photos")
         out_of_range = baker.make(
             "dashboard.DirectMessage", sender=self.alice, recipient=self.bob, body="reunion photos too"

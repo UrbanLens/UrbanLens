@@ -106,9 +106,7 @@ class GroupMemberSearchAvatarColorTests(TestCase):
             candidate.user.save(update_fields=["username"])
             # _profile() only opens direct_message_visibility. The member search
             # also filters through can_view_profile, and the baker default is
-            # ANYTHING_IN_COMMON - which these throwaway profiles fail, having
-            # nothing in common with the searcher. Without this the search
-            # returns zero rows and the test is asserting nothing about colors.
+            # ANYTHING_IN_COMMON - these profiles fail that filter.
             Profile.objects.filter(pk=candidate.pk).update(profile_visibility=VisibilityChoice.ANYONE)
             candidate.refresh_from_db()
             self.candidates.append(candidate)

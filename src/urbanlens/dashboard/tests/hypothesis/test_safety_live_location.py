@@ -130,11 +130,8 @@ class UpdateLiveLocationPrecisionTests(TestCase):
         update_live_location(checkin, latitude=latitude, longitude=longitude, accuracy=accuracy)
 
         checkin.refresh_from_db()
-        # places=5, not 6: DecimalField(max_digits=9, decimal_places=6) can round the 6th
-        # decimal place either up or down, so a value sitting exactly on that rounding
-        # boundary (e.g. 1.0703125) can differ from the input by up to 5e-7 - exactly the
-        # places=6 threshold - making that stricter tolerance flaky by construction, not a
-        # sign of truncation (which would produce an error orders of magnitude larger).
+        # DecimalField(max_digits=9, decimal_places=6) rounds the 6th decimal place up or down;
+        # a value on the rounding boundary can differ by up to 5e-7, so places=5 avoids flakiness.
         self.assertAlmostEqual(float(checkin.live_latitude), latitude, places=5)
         self.assertAlmostEqual(float(checkin.live_longitude), longitude, places=5)
         if accuracy is None:

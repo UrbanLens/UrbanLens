@@ -1,5 +1,5 @@
 """
-A deleted drawn region must stay deleted (P27).
+A deleted drawn region must stay deleted.
 
 leaflet-draw's remove tool only stages a deletion, committed through its own Save action; starting
 any other draw or edit tool reverts it. Region maps use `shared/region-delete.ts` instead, which
@@ -57,7 +57,7 @@ class RegionDeletionIsImmediateTests(SimpleTestCase):
                 self.assertIn("window.RegionDelete.add(", (_DASHBOARD / name).read_text(encoding="utf-8"))
 
     def test_every_region_map_loads_each_stored_part_as_its_own_layer(self) -> None:
-        """A stored MultiPolygon loaded whole is one layer, which delete and edit act on as a whole (P120)."""
+        """A stored MultiPolygon loaded whole is one layer, which delete and edit act on as a whole."""
         for name in _REGION_MAPS:
             with self.subTest(template=name):
                 self.assertIn("window.RegionDelete.polygonParts(", (_DASHBOARD / name).read_text(encoding="utf-8"))

@@ -128,9 +128,6 @@ def publish_limits(service: str, row: Any = None) -> Limits:
         service: The service key.
         row: The ``ApiRateLimit`` row, when the caller holds it; read otherwise.
 
-    Returns:
-        Its limits.
-
     Raises:
         DatabaseError: The row had to be read and could not be.
     """
@@ -152,9 +149,6 @@ def limits_for(service: str) -> Limits:
 
     Args:
         service: The service key.
-
-    Returns:
-        Its limits.
 
     Raises:
         DatabaseError: The row had to be read and could not be.

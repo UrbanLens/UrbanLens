@@ -56,16 +56,7 @@ def glob_to_regex(pattern: str) -> re.Pattern[str]:
 
 
 def covered_paths(config_path: str, config: dict, candidates: list[str]) -> set[str]:
-    """
-    Which of `candidates` the project at `config_path` lists.
-
-    Args:
-        config_path: Repo-relative path of the ``tsconfig.json``.
-        config: Its parsed contents.
-        candidates: Repo-relative paths to test.
-
-    Returns:
-        The subset the project includes and does not exclude, plus anything the config names outright in ``files``."""
+    """Which of `candidates` the project at `config_path` lists."""
     directory = pathlib.PurePosixPath(config_path).parent
     prefix = "" if str(directory) == "." else f"{directory}/"
 

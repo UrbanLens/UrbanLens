@@ -1,4 +1,4 @@
-"""P228: a known National Register listing links to NPS's record, and that link joins the pin's and wiki's links."""
+"""A known National Register listing links to NPS's record, and that link joins the pin's and wiki's links."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ from urbanlens.dashboard.services.locations.national_register import nps_record_
 
 #: Hudson River State Hospital, Main Building: NPS's own PROPERTY_ID, as REData's nps_nrhp row carries it.
 _REFERENCE = "89001166"
-#: Checked live 2026-10-03: this page renders the listing; a made-up number renders an empty page, also as a 200.
+#: This page renders the listing; a made-up number renders an empty page, also as a 200.
 _NPS_URL = "https://npgallery.nps.gov/AssetDetail/NRIS/89001166"
 _LISTING_NAME = "Hudson River State Hospital, Main Building"
 _AUTO_TITLE = "Added automatically from National Register of Historic Places"

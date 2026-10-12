@@ -904,11 +904,6 @@ class OrganizeDialogQueryScalingTests(QueryScalingMixin, TestCase):
 
     def seed_rows(self, count: int) -> None:
         for _ in range(count):
-            # A counter of this test's own, not the module-level one: every
-            # candidate has to land inside `_parcel_polygon()` or the view has
-            # nothing to offer and answers 204, and the shared counter has
-            # already been advanced an unknown number of times by the classes
-            # above.
             sequence = next(self.candidate_counter)
             location = baker.make(
                 Location,
@@ -916,9 +911,7 @@ class OrganizeDialogQueryScalingTests(QueryScalingMixin, TestCase):
                 longitude=-73.9350 + sequence * 0.0002,
                 google_place=None,
             )
-            # Blank name on purpose: `effective_name` then falls through to
-            # `Location.display_name`, which reads the wiki, and that is one of
-            # the per-candidate queries.
+            # Blank name triggers `Location.display_name` wiki lookup, a per-candidate query.
             candidate = baker.make(Pin, profile=self.user.profile, location=location, name="")
             Article.objects.create(pin=candidate, content=f"article for {candidate.pk}")
             CustomFieldValue.objects.create(field=self.field, pin=candidate, value_text="Fair")

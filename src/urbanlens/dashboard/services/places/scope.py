@@ -138,12 +138,6 @@ def implied_pin_type(target: Pin | Wiki) -> str | None:
     A child stored as a building on a multi-building parcel is one of that parcel's buildings. Its own building
     place may have no footprint, and the shared Location is placed only by containment, so the parcel is often
     the nearest place the coordinate knows.
-
-    Args:
-        target: The pin or wiki.
-
-    Returns:
-        A :class:`~urbanlens.dashboard.models.pin.model.PinType` value, or None.
     """
     from urbanlens.dashboard.models.pin.model import Pin, PinType
 
@@ -158,12 +152,6 @@ def implied_pin_type(target: Pin | Wiki) -> str | None:
 def effective_pin_type(target: Pin | Wiki) -> str:
     """
     The type a pin or wiki actually reads as, user choice included.
-
-    Args:
-        target: The pin or wiki being rendered.
-
-    Returns:
-        A :class:`~urbanlens.dashboard.models.pin.model.PinType` value.
     """
     from urbanlens.dashboard.models.pin.model import PinType
 

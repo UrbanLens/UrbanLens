@@ -373,11 +373,8 @@ class PinSyncViewTests(TestCase):
 
     def test_child_pins_are_served_with_their_parent_uuid(self) -> None:
         parent = self._make_pin("Campus", 42.5, -73.5)
-        # A real "entrance" pin sits within the fuzzy dedup radius of its parent's
-        # Location (create_pin_for_profile now resolves nearby coordinates onto the
-        # same Location, so a second top-level create here would correctly raise
-        # PinCreationError). Build the child directly with parent_pin set - it's
-        # exempt from db_pin_unique_location_per_profile once parent_pin is non-null.
+        # Child pins share the parent's Location; create_pin_for_profile would dedup
+        # and reject a second top-level create. Build directly with parent_pin set.
         child = baker.make(
             "dashboard.Pin", profile=self.profile, location=parent.location, parent_pin=parent, name="Entrance"
         )

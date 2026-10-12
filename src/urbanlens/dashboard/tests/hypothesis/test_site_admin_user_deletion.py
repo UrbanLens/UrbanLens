@@ -23,11 +23,8 @@ class AdminUserDeletionGuardTests(TestCase):
         self.client.force_login(self.admin)
         self.target = baker.make(User, username="zzaudit-target")
         self.target_profile = Profile.objects.get(user=self.target)
-        # profile_visibility defaults to ANYTHING_IN_COMMON, and a fresh admin shares
-        # nothing with a fresh user - so by default the handler treats the target as
-        # hidden and expects the literal "hidden user" as confirmation instead of the
-        # username. Made visible here so these tests exercise the username branch; the
-        # hidden branch has its own test below.
+        # Default visibility hides users with nothing in common; make target visible
+        # to exercise the username branch (hidden branch tested separately).
         self.target_profile.profile_visibility = VisibilityChoice.ANYONE
         self.target_profile.save(update_fields=["profile_visibility"])
 

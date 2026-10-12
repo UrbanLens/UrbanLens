@@ -290,11 +290,9 @@ CHANNEL_LAYER_URL = os.getenv("UL_CHANNEL_LAYER_URL") or DRAGONFLY_URL
 if DRAGONFLY_URL:
     CACHES = {
         "default": {
-            # Not the stock RedisCache: with Dragonfly down that raises from the
-            # two paths Django leaves unguarded in cached_db (login and
-            # logout), and every request pays socket_timeout once per cache
-            # call - measured at 32s per request, readiness probe included.
-            # See core/cache_backend.py.
+            # Not stock RedisCache: with Dragonfly down it raises from unguarded
+            # cached_db paths (login/logout), and every request pays socket_timeout
+            # per cache call (measured at 32s/request). See core/cache_backend.py.
             "BACKEND": "urbanlens.core.cache_backend.ResilientRedisCache",
             "LOCATION": DRAGONFLY_URL,
             "KEY_PREFIX": "urbanlens",

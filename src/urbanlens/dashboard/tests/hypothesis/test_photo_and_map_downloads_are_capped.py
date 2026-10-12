@@ -1,5 +1,5 @@
 """
-Photo originals and Google's fixed-size map images are read through ``read_capped`` (Spark P356).
+Photo originals and Google's fixed-size map images are read through ``read_capped``.
 
 Each was ``response.content``, which buffers whatever the far end sends into the worker. A photo original is a file the
 site is about to store, so it is bounded by the upload limit a browser upload gets; a Static Map or Street View image
@@ -159,7 +159,7 @@ class FixedSizeMapImagesHaveASmallCeilingTests(TestCase):
 
 
 class PickerListingIsBoundedTests(TestCase):
-    """Spark P364: ``list_session_media_items`` was ``while True`` on whatever ``nextPageToken`` Google returned."""
+    """``list_session_media_items`` was ``while True`` on whatever ``nextPageToken`` Google returned."""
 
     def test_a_listing_that_never_ends_stops_at_the_page_cap_and_says_so(self) -> None:
         profile = baker.make(User).profile

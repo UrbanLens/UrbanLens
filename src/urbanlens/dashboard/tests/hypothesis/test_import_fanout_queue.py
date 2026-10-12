@@ -1,10 +1,11 @@
 """
-Work a model signal queues from inside a batch job goes to the bulk queue (P109).
+Work a model signal queues from inside a batch job goes to the bulk queue.
 
-Importing 1,000 pins left about 2,600 tasks behind it - wiki creation, enrichment, category suggestion and
-reputation scoring, a set per pin. D13 classes those interactive, because a person creating one pin is
-waiting on them, so an import's worth drained through the same four-slot worker as
-``escalate_overdue_checkins``. Queued from inside a batch task they now go to bulk; queued by a person's own
+Importing 1,000 pins left about 2,600 tasks behind it - wiki creation, enrichment,
+category suggestion and reputation scoring, a set per pin. These are classed as
+interactive because a person creating one pin waits on them, so an import's worth
+drained through the same four-slot worker as ``escalate_overdue_checkins``.
+Queued from inside a batch task they now go to bulk; queued by a person's own
 action they keep their interactive queue.
 """
 
@@ -31,11 +32,10 @@ from urbanlens.dashboard.tasks import (
     suggest_wiki_category,
 )
 
-#: The three signal handlers (and ensure_wiki_for_location's own enrichment enqueue) now call
+#: The three signal handlers (and ensure_wiki_for_location's enrichment enqueue) call
 #: enqueue_follow_on (bulk_followup.py), not safely_enqueue_task directly. Outside any
-#: batching_follow_on_work() context - none of these tests open one - it still calls
-#: safely_enqueue_task exactly as before, but the name it calls through lives in bulk_followup's own
-#: namespace, not celery's; patching celery.safely_enqueue_task would patch a name nothing here holds.
+#: batching_follow_on_work() context it still calls safely_enqueue_task, but the name
+#: lives in bulk_followup's namespace; patching celery.safely_enqueue_task would miss it.
 ENQUEUE = "urbanlens.dashboard.services.core.bulk_followup.safely_enqueue_task"
 
 

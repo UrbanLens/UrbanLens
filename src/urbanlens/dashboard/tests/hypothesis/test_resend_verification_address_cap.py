@@ -1,4 +1,4 @@
-"""Resending a signup verification is capped per address, inside the task, so the response never changes (G2-30)."""
+"""Resending a signup verification is capped per address, inside the task, so the response never changes."""
 
 from __future__ import annotations
 
@@ -66,7 +66,7 @@ class ResendVerificationAddressCapTests(TestCase):
         self.assertEqual([m.to for m in mail.outbox], [["newcomer@example.com"]])
 
     def test_a_refused_resend_keeps_the_live_link(self) -> None:
-        """G2-31 is undecided: a capped resend must at least not rotate the token it did not send."""
+        """A capped resend must not rotate the token it did not send."""
         token = EmailVerification.objects.get(user=self.pending).token
         resend_verification("pending@example.com")
         sent_token = EmailVerification.objects.get(user=self.pending).token

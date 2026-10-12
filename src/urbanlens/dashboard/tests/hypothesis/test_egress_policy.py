@@ -62,7 +62,7 @@ class TheTableTests(SimpleTestCase):
                 self.assertFalse(decision.overridden)
 
     def test_development_refuses_hosted_ai(self) -> None:
-        """Jess, 2026-10-06: dev should not call AI providers. Refused the way quota and billed are."""
+        """Dev should not call AI providers. Refused the way quota and billed are."""
         for environment in (DEVELOPMENT, LOCAL):
             with self.subTest(environment=environment):
                 decision = _decide(EgressCategory.AI, environment)
@@ -238,7 +238,7 @@ class EmailBackendTests(SimpleTestCase):
 
 class HostedBasemapTests(SimpleTestCase):
     def test_production_and_staging_hand_out_the_key(self) -> None:
-        """Browser-side and free for noncommercial use, so staging draws what production draws (Jess, 2026-10-06)."""
+        """Browser-side and free for noncommercial use, so staging draws what production draws."""
         for environment in (PRODUCTION, STAGING, TESTING):
             with self.subTest(environment=environment):
                 self.assertEqual(hosted_basemap_key(environment, "key"), "key")

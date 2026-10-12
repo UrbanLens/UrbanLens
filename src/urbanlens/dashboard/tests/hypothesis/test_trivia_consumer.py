@@ -54,10 +54,9 @@ class TriviaSessionConsumerTests(TransactionTestCase):
         self.host = _make_profile()
         self.guest = _make_profile()
         self.outsider = _make_profile()
-        # Force these onto the instances now, in this synchronous setUp -
-        # the async test bodies below must never trigger a *lazy* DB query
-        # (e.g. a first-touch of `.user`), since Django's async-safety guard
-        # blocks ORM access from a running event loop with no thread bridge.
+        # Force user relations now; async test bodies must not trigger lazy
+        # DB queries, since Django's async-safety guard blocks ORM access
+        # from a running event loop without a thread bridge.
         _ = self.host.user, self.guest.user, self.outsider.user
 
         friendship = Friendship.request(self.host, self.guest)
@@ -181,9 +180,9 @@ class TriviaSessionConsumerTests(TransactionTestCase):
 
     async def _a_heartbeat_ping_is_ignored(self) -> None:
         # Every game client pings every 45s so Cloudflare's ~100s idle cutoff
-        # can't kill a lobby waiting on the host (ts/shared/live-socket.ts). The
-        # ping gets no reply, and the socket has to survive it - this is the
-        # shared _ParticipantSessionConsumer.receive() all three games use.
+        # can't kill a lobby waiting on the host. The ping gets no reply, and
+        # the socket must survive it - this is the shared
+        # _ParticipantSessionConsumer.receive() all three games use.
         comm = self._communicator(self.host.user)
         connected, _ = await comm.connect()
         self.assertTrue(connected)

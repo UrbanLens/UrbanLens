@@ -150,9 +150,7 @@ class BasemapTileCostTests(TestCase):
         self.addCleanup(basemap_tiles.UpstreamSlots.reset)
         # One tile before anything is measured. The session and its user are read from the database
         # once per client, and the session's tile access is established on its first tile - both are
-        # per-session costs, and counting either in a per-tile budget would charge every later tile
-        # for them. `test_the_first_tile_of_a_session_pays_once` is where that first tile is
-        # measured instead.
+        # per-session costs. `test_the_first_tile_of_a_session_pays_once` measures that first tile.
         self._warm_client()
 
     def _url(self, x: int = 1204, y: int = 1539, layer: str = "street", z: int = 12) -> str:

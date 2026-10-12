@@ -252,23 +252,16 @@ class PrewarmSpotguessrRoundTaskTests(TestCase):
         self.assertFalse(result)
 
     def test_creating_a_round_live_triggers_the_background_prewarm_of_the_next_one(self) -> None:
-        """End-to-end: get_or_create_round's own enqueue (run inline under Celery's eager-mode test setting) should leave the *next* round already cached, so completing the current one serves the next from cache instead of generating it live."""
+        """get_or_create_round enqueues the next round's prewarm; running it inline leaves the next round cached."""
         profile = _make_profile()
         _make_photo_location(profile)
         _make_photo_location(profile)
         session = start_solo_session(profile, SpotGuessrMode.PHOTOS, GameConfig(), total_rounds=3)
-        # 2 rounds total (below the MIN_ROUNDS_PER_SESSION=3 floor
-        # start_solo_session's own total_rounds param would clamp to), so
-        # creating round 2 doesn't *also* enqueue - and eagerly run - a
-        # prewarm for a round after it, which would call the mocked
-        # generate_round_content too and confuse the assertion below.
+        # 2 rounds total (below MIN_ROUNDS_PER_SESSION=3 floor), so creating round 2
+        # doesn't also enqueue a prewarm for a round after it.
         session.total_rounds = 2
         session.save(update_fields=["total_rounds"])
 
-        # get_or_create_round enqueues the *next* round's prewarm; running it
-        # inline is what this test is actually about (see
-        # core.tests.celery_inline - its docstring's "Celery's eager-mode test
-        # setting" was never actually configured anywhere).
         with tasks_run_inline(prewarm_spotguessr_round):
             round_1 = get_or_create_round(session)
             assert round_1 is not None

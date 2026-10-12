@@ -1,4 +1,4 @@
-"""Render-time cost of one more undo-history row (P69 - deliberately unpaginated, never measured)."""
+"""Render-time cost of one more undo-history row (deliberately unpaginated, never measured)."""
 
 from __future__ import annotations
 
@@ -16,8 +16,8 @@ class UndoHistoryRowCostTests(RenderTimeScalingMixin, TestCase):
     """
     The settings-page undo panel lists every active entry with no cap or slice.
 
-    P69 left it that way on the theory that the 7-day retention window bounds it regardless of
-    account age, not because a row was measured and found cheap. This puts a number on it.
+    The 7-day retention window bounds the list regardless of account age,
+    but no row was measured for cost. This puts a number on it.
     """
 
     def setUp(self) -> None:

@@ -301,7 +301,7 @@ class RepairLegacyPinCoordinatesTests(TestCase):
 
 
 class RepointCidToCorrectedLocationTests(TestCase):
-    """P20: repoint_cid_to_corrected_location moves a CID off the wrongly-placed Location."""
+    """repoint_cid_to_corrected_location moves a CID off the wrongly-placed Location."""
 
     def _location(self, latitude: float, longitude: float) -> Location:
         return Location.objects.create(latitude=latitude, longitude=longitude)
@@ -373,7 +373,7 @@ class RepointCidToCorrectedLocationTests(TestCase):
 
 
 class CidRepointOnRepairTests(TestCase):
-    """P20: _create_pin_from_confirmed repoints the cid instead of skipping the backfill."""
+    """_create_pin_from_confirmed repoints the cid instead of skipping the backfill."""
 
     def setUp(self):
         super().setUp()

@@ -119,7 +119,7 @@ class FilterByCriteriaDangerTests(TestCase):
         return Pin.objects.filter(profile=self.profile)
 
     def test_min_danger_zero_is_applied_not_skipped(self) -> None:
-        """Before the fix, min_danger=0 was indistinguishable from "no criterion at all" - since every pin here has danger>=0, that happens to look identical either way, so assert against a stricter min_danger=1 in the same call to prove 0 was actually evaluated."""
+        """min_danger=0 must be evaluated, not skipped as "no criterion" - all pins have danger>=0 so it would look identical either way. Assert against min_danger=1 in the same call to prove 0 was actually evaluated."""
         result_ids = set(
             self._base_qs().filter_by_criteria({"min_danger": 0, "max_danger": 0}).values_list("pk", flat=True)
         )
@@ -245,7 +245,7 @@ class FilterByCriteriaRatingTests(TestCase):
                 self.assertLessEqual(rating_val, max_r)
 
     def test_min_rating_zero_is_a_no_op_and_includes_unrated_pins(self) -> None:
-        """The regression this fixes: min_rating=0 used to be silently skipped by an `if x := ...:` truthiness check - confirm it no longer is, AND that the result is every pin including unrated ones (0 is the floor of the scale, not a real threshold)."""
+        """min_rating=0 must not be silently skipped by a truthiness check. It is a no-op (floor of scale), so the result is every pin including unrated ones."""
         result_ids = set(self._base_qs().filter_by_criteria({"min_rating": 0}).values_list("pk", flat=True))
         all_ids = set(self._base_qs().values_list("pk", flat=True))
         self.assertEqual(result_ids, all_ids)

@@ -59,12 +59,6 @@ def places_to_detach() -> list[Place]:
 def locations_standing_on(place: Place) -> QuerySet[Location]:
     """
     Locations on the place, on its children, or anywhere in a domain it roots.
-
-    Args:
-        place: The place.
-
-    Returns:
-        The locations.
     """
     return Location.objects.filter(Q(place=place) | Q(place__parent=place) | Q(place__domain_root_id=place.pk)).distinct()
 

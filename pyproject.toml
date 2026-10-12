@@ -211,17 +211,9 @@ ignore = [
 unfixable = ["RUF100"]
 
 [tool.ruff.lint.per-file-ignores]
-# Test code is linted, but only for mechanical hygiene - import order, quote
-# style, dead noqa, modernisation. A test is allowed to pass a wrong type on
-# purpose, reach into a private, hardcode a fake password and assert on a naive
-# datetime; a linter that argues about any of that is a linter people turn off.
-#
-# The previous `"test_*.py"` key never fired the way CI invokes ruff, because
-# `extend-exclude` dropped the directories first, and it missed every helper not
-# named test_*.py (strategies.py, place_helpers.py, testcase.py, result.py).
-# The brace alternation below covers all three test locations:
-#   src/urbanlens/dashboard/tests/**  (894 files)  src/urbanlens/core/tests/**  (17)
-#   tests/contract/**  (3)                         src/urbanlens/conftest.py
+# Test code is linted for mechanical hygiene only (imports, quotes, dead noqa).
+# Tests may pass wrong types, reach into privates, use fake passwords, naive datetimes.
+# Brace alternation covers all test locations (extend-exclude drops dirs first).
 "**/{tests/**,test_*.py,conftest.py}" = [
     # --- pytest/unittest idiom. The suite is unittest-style by choice; PT009
     # (assertEqual) is already globally ignored for exactly this reason.

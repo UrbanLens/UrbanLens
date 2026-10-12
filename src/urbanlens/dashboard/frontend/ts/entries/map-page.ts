@@ -4401,11 +4401,10 @@ function applySavedFilter(chipEl: HTMLElement): void {
     // Chip stays marked applied until resetFilters() clears panel — merge writes directly to shared fields, can't be cleanly un-applied.
     chipEl.classList.add("fp-saved-filter-apply--active");
 
-    // Trigger the sidebar's normal submission path. The form's own 'change'
-    // listener (registered above) already calls _refreshPinList() - calling
-    // it again here would fire a second, unsynchronized request to the same
-    // target racing the first (whichever response lands last silently wins
-    // the DOM, which could show stale/empty results).
+    // Trigger the sidebar's normal submission path. The form's 'change'
+    // listener already calls _refreshPinList(); calling it again would fire
+    // a second, unsynchronized request racing the first (last response wins
+    // the DOM, showing stale/empty results).
     htmx.trigger(form, "change");
     _updateFilterLabel();
 }

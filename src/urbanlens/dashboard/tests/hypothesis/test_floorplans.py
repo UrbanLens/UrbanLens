@@ -863,7 +863,7 @@ class FloorplanEndpointTests(TestCase):
         self.assertTrue(any("floor_count" in message for message in logs.output))
 
     def test_a_place_off_the_globe_or_a_number_that_is_not_finite_is_a_400(self) -> None:
-        """Every one was stored, or became a Location off the globe (P285)."""
+        """Coordinates off the globe or non-finite numbers are rejected."""
         hazard = {"kind": "hazard", "x": 1.0, "y": 1.0}
         for document in (
             {"plan_origin": {"lat": 95, "lng": -73.9}},
@@ -1972,7 +1972,7 @@ class FloorplanDocumentLimitsTests(TestCase):
         self.floorplan = Floorplan.objects.create(place=self.place, profile=self.profile)
 
     def test_an_over_long_name_is_refused_rather_than_reaching_postgres(self) -> None:
-        """Django does not enforce max_length on save, so this used to surface as a DataError - a 500 saying nothing about which field was wrong."""
+        """Django does not enforce max_length on save; validate before Postgres raises DataError."""
         with self.assertRaises(ValueError):
             save_document(
                 self.floorplan, {"plan_origin": _ORIGIN, "name": "x" * 300, "floors": []}, profile=self.profile

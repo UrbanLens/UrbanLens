@@ -79,9 +79,6 @@ class WikiManager(_WikiManagerBase["Wiki"]):
 
         Args:
             location: The Location (None-safe).
-
-        Returns:
-            The Wiki, or None.
         """
         if location is None or location.place_id is None:
             return None
@@ -94,9 +91,6 @@ class WikiManager(_WikiManagerBase["Wiki"]):
 
         Args:
             location: The shared Location to look up (None-safe).
-
-        Returns:
-            The Wiki, or None.
         """
         return self.existing_for_location(location)
 

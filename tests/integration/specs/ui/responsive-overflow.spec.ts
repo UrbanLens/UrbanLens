@@ -1,9 +1,7 @@
 /**
- * No page may scroll sideways on a phone or a tablet. A horizontal scrollbar at those widths is the
- * one layout fault that affects every page at once and that nobody notices on a desktop, which is how
- * this one survived: `.app-nav-right` ran 40px past a 390px viewport on every page in the application,
- * and it was first reported against the map because that is where somebody happened to look (P52).
- * One breakpoint up, the seven primary links reappear at 768px and the bar needed 837px (P82).
+ * No page may scroll sideways on phone or tablet. Horizontal scrollbar at
+ * those widths affects every page and goes unnoticed on desktop. The nav bar
+ * ran 40px past 390px viewport; at 768px the full link row needed 837px.
  */
 
 import { expect, test } from "../../lib/fixtures.js";
