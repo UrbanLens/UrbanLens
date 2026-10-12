@@ -22,12 +22,9 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.wiki.model import Wiki
 
-#: Ceiling on earned-access fixpoint rounds. The walk resolves exactly one
-#: lineage tier per round and real lineage is two or three deep, so reaching
-#: this means the lineage is corrupt (most likely a cycle). Hitting it returns
-#: what was earned so far - which is less than the truth, never more - and says
-#: so in the log, because an access check that quietly stops early is a wrong
-#: answer nobody can find later.
+#: Ceiling on earned-access fixpoint rounds. Real lineage is 2-3 tiers deep;
+#: reaching this limit means the lineage is corrupt (likely a cycle). Returns
+#: what was earned so far (less than truth, never more) and logs the truncation.
 MAX_EARNING_ROUNDS = 16
 
 
@@ -188,17 +185,7 @@ def place_visible_to(place: Place | None, profile: Profile) -> bool:
 
 
 def _visible_given_pins(location: Location, pins, profile: Profile | None, *, extra_point=None) -> bool:
-    """
-    Whether *location*'s wiki is visible to the owner of *pins*.
-
-    Args:
-        location: The Location whose wiki is being tested.
-        pins: A ``Pin`` queryset standing in for the viewer's pins.
-        profile: The viewer, for grant lookup; None skips grants.
-        extra_point: An additional point to treat as pinned.
-
-    Returns:
-        Whether that set of pins grants visibility of *location*'s wiki."""
+    """Whether the location's wiki is visible to the owner of pins."""
     if pins.filter(location=location).exists():
         return True
 
@@ -391,16 +378,6 @@ def visible_location_or_404(profile: Profile, location_slug: str, *, related: tu
     Visibility is part of the one query that finds the row, so a Location the profile cannot see 404s at the same cost
     as a slug nothing ever used. Bare, so a DEBUG page cannot tell the two apart either.
 
-    Args:
-        profile: The viewing profile.
-        location_slug: Slug, former slug or uuid of the Location.
-        related: Relations to ``select_related``.
-
-    Returns:
-        The Location.
-
-    Raises:
-        Http404: No Location the profile may see matches.
     """
     from urbanlens.dashboard.models.location.model import Location
 
@@ -482,18 +459,7 @@ def canonical_location_slug(request: HttpRequest, location_slug: str) -> str | N
 
 
 def resolve_visible_wiki(request: HttpRequest, location_slug: str) -> tuple[Location, Wiki, Profile]:
-    """
-    Resolve a Location and its Wiki, 404ing unless the requester can see it.
-
-    Args:
-        request: The current request (used for the requesting profile).
-        location_slug: Slug of the Location whose Wiki is being resolved.
-
-    Returns:
-        Tuple of (Location, Wiki, requester's Profile).
-
-    Raises:
-        Http404: The location doesn't exist, has no wiki, or the requester can't see it."""
+    """Resolve a Location and its Wiki, 404ing unless the requester can see it."""
     location, wiki, profile = locate_visible_wiki(request, location_slug)
 
     # Viewing while access is held grants it permanently (D19). Only reached once location_visible_to has passed.

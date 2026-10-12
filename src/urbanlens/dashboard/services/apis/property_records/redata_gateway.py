@@ -97,8 +97,7 @@ REASON_DETAIL_UNRESOLVED = "detail_unresolved"
 #: The ``detail_status`` of that answer.
 _DETAIL_UNRESOLVED = "unresolved"
 
-#: REData is computing a cold parcel's unfiltered boundaries, buildings and related buildings in the background (its
-#: P62, 0.3.7): ask again after the ``retry_after`` its 503 body names. The wait is the parcel's, so it carries no
+#: REData is computing a cold parcel's unfiltered boundaries, buildings and related buildings in the background: ask again after the ``retry_after`` its 503 body names. The wait is the parcel's, so it carries no
 #: ``Retry-After`` header, which would hold off every parcel's calls.
 REASON_REFRESH_QUEUED = "refresh_queued"
 #: The same, when the computation outran the request and could not be queued, or failed in the background lately.
@@ -634,19 +633,11 @@ class RedataGateway(Gateway):
 
         body = self._lookup_parcel_body(latitude, longitude, situs_address=situs_address, apn=apn)
         payload = dict(body.get("record_payload") or {})
-        # Taken from the top-level ``complete``/``sources`` when REData answers them, so this does not depend on the key
-        # REData happens to use inside its own record_payload; a body with neither is left as it came.
         unanswered = parcel_unanswered_sources(body)
         if unanswered is not None and (unanswered or UNANSWERED_SOURCES_KEY in payload):
             payload[UNANSWERED_SOURCES_KEY] = unanswered
-        # The Parcel publishes parcel_geometry as GeoJSON beside record_payload, whose own copy is the tier's
-        # Esri-ring snapshot. A county building footprint reaches here only inside record_payload, still in Esri
-        # rings - read it with services.apis.locations.base.polygon_from_wire, which takes either shape.
         if "parcel_geometry" in body:
             payload["parcel_geometry"] = body["parcel_geometry"]
-        # Also a top-level field (see lookup_parcel_uuid) - surfaced here too so
-        # callers who already called lookup_parcel don't need a second,
-        # identically-parametered request just to get the uuid.
         if "uuid" in body:
             payload["uuid"] = body["uuid"]
         return payload
@@ -931,7 +922,7 @@ class RedataGateway(Gateway):
         """
         Map a building ref REData once served to its stable ``overture:<gers_id>``.
 
-        Transitional, as REData's endpoint is (its P98): used only to move places and floorplans off Overture's
+        Transitional: used only to move places and floorplans off Overture's
         legacy content-hash refs, and removed with them. A resolved answer is kept for a day, since a served hash
         names one footprint for good; any other answer for an hour.
 

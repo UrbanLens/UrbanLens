@@ -303,7 +303,9 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
     def coerce_colors(self) -> None:
         """
         Drop `color` to NULL unless it is a colour this application stores.
-        Enforced on the column rather than at each writer because the value is served as `effective_color` and interpolated into a Leaflet `divIcon`'s `html`, and the writers do not share a gate: the floorplan editor's save assigns it straight from its JSON body, and the archive importer assigns it from an uploaded file.
+        Enforced on the column because `effective_color` is interpolated into a Leaflet
+        `divIcon`'s `html`, and writers don't share a gate (floorplan editor from JSON,
+        archive importer from uploaded file).
         """
         self.color = clean_color(self.color, default=None)
         for field in _KEYWORD_COLOR_FIELDS:
@@ -477,10 +479,9 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
             return None
         from urbanlens.dashboard.models.labels.meta import KIND_USER
 
-        # `.all()` + a Python filter, not `.exclude(kind=...)`: a filtered call on the related
-        # manager builds a fresh queryset and so ignores prefetch_related("labels"), which made this
-        # one query per pin on every list that renders effective_icon / effective_color.
-        # Unprefetched callers still pay exactly one query, as before.
+        # `.all()` + Python filter, not `.exclude()`: a filtered call builds a fresh
+        # queryset and ignores prefetch_related("labels"), causing N+1 queries.
+        # Unprefetched callers pay one query as before.
         labels = sorted((label for label in self.labels.all() if label.kind != KIND_USER), key=lambda label: (-label.order, label.name or ""))
         for label in labels:
             if label.custom_icon and not label.icon_is_overridden:
@@ -876,8 +877,7 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
             Index(fields=["profile", "updated"], name="idxdb_profile_update"),
             Index(fields=["profile", "created"], name="idxdb_pin_pfile_created"),
             # Sorted by the key a `.distinct()` de-duplicates on, so autocomplete's search can
-            # start from one account's pins instead of walking the table in primary-key order to
-            # get presorted input (X28, P100).
+            # start from one account's pins instead of walking the table in primary-key order.
             Index(fields=["profile", "id"], name="idxdb_pin_pfile_id"),
         ]
         constraints = [

@@ -1,5 +1,5 @@
 """
-A building's Location takes its own provider name, never the name of the campus it stands in (P231).
+A building's Location takes its own provider name, never the name of the campus it stands in.
 
 On production (v0.8.0) the wiki of HRSH's "BLDG 33/POWERHOUSE & MACHINE SHOP (1929)" child pin was titled "Hudson
 River State Hospital" and reached by the Location's uuid. On the dev stack, ten building Locations under the campus
@@ -122,7 +122,6 @@ class CrisRecordMustStandOnTheBuildingTests(_Scoped):
         self.assertTrue(building_name_admissible("cris", self.location))
 
     def test_a_neighbours_record_lends_no_name(self) -> None:
-        """P255: the record came from a 200 m lookup with no distance limit."""
         self.rows["cris_building_usn"] = _cris(point=_NEIGHBOUR_POINT)
         self.assertFalse(building_name_admissible("cris", self.location))
 
@@ -149,7 +148,6 @@ _CRIS_DISTRICT = {"HistoricName": _LISTING, "resource_type": "national_register_
 
 class ABuildingsListingNamesTests(_Scoped):
     def test_a_listing_merely_holding_the_building_is_not_its_name(self) -> None:
-        """The lead from P230: the campus listing's boundary holds most of HRSH's buildings."""
         self.rows["redata_historic_registers"] = {"resources": [_HOLDING_LISTING]}
         self.rows["cris_building_usn"] = _cris(district=_CRIS_DISTRICT)
 
@@ -237,7 +235,7 @@ class CrisArrivalRefreshesNamesTests(SimpleTestCase):
 
 class TheBuildingsOwnRecordOutranksREDatasNameTests(SimpleTestCase):
     """
-    The child pin was named from CRIS's record, so its location takes the same provider's name (P231).
+    The child pin was named from CRIS's record, so its location takes the same provider's name.
 
     On the dev stack BLDG 33's location also held REData's "POWERHOUSE & MACHINE SHOP", which won outright on any
     child pin's location.

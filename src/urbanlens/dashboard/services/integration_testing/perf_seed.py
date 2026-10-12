@@ -234,7 +234,7 @@ def seed_heavy_account(
     }
 
 
-#: Name prefix for labels seeded purely to grow the labels table (P123). Unattached to any
+#: Name prefix for labels seeded purely to grow the labels table. Unattached to any
 #: pin/image/wiki on purpose: the semi-join this reproduces (`services/global_search/providers.py`'s
 #: `_semijoin`) scans the whole `dashboard_labels` table before any join to another model narrows
 #: it, so what these rows are attached to has no bearing on the cost - only how many exist does.
@@ -243,7 +243,7 @@ BULK_LABEL_PREFIX = "Perf Bulk Label"
 
 def seed_bulk_labels(profile: Profile, *, count: int, analyze: bool = True, batch_size: int = BATCH_SIZE) -> dict[str, Any]:
     """
-    Grow `dashboard_labels` by *count* rows, for P123's cross-account label-scan load test.
+    Grow `dashboard_labels` by *count* rows, for cross-account label-scan load test.
 
     Args:
         profile: Whose account the rows are created under. Immaterial to the defect being
@@ -283,7 +283,7 @@ def seed_bulk_labels(profile: Profile, *, count: int, analyze: bool = True, batc
 #: Name prefix shared by every row `seed_bulk_search_relations` creates. Each relation is attached
 #: to one dedicated host row (a pin, a wiki, a trip, a check-in) rather than left unattached like
 #: `BULK_LABEL_PREFIX` - a NOT NULL foreign key requires a host - but the host is otherwise
-#: irrelevant to the defect: like the labels semi-join, `_semijoin` scans the whole relation table
+#: irrelevant: like the labels semi-join, `_semijoin` scans the whole relation table
 #: before any join to the search account's own rows narrows it, so which host the rows are attached
 #: to has no bearing on the cost.
 BULK_RELATIONS_PREFIX = "Perf Bulk Relation"
@@ -291,8 +291,8 @@ BULK_RELATIONS_PREFIX = "Perf Bulk Relation"
 #: Host object names/titles - deliberately a different string from `BULK_RELATIONS_PREFIX`. A pin's
 #: own name is auto-aliased on save (`Pin.save`'s alias-history sync), so naming the host pin with
 #: the bulk prefix itself would make `_top_up`'s `name__startswith` count that one alias as already
-#: present on every fresh run - harmless to the defect (it is one more row in a table this measures
-#: by total size anyway) but a confusing off-by-one in the report.
+#: present on every fresh run - harmless (one more row in a table measured by total size)
+#: but a confusing off-by-one in the report.
 _HOST_NAME_PREFIX = "Perf Search Relations Host"
 
 #: (host attribute on the seeded account, db_table) pairs `seed_bulk_search_relations` grows -
@@ -328,7 +328,7 @@ def _bulk_relation_host_location(profile: Profile) -> Location:
 
 def seed_bulk_search_relations(profile: Profile, *, count: int, analyze: bool = True, batch_size: int = BATCH_SIZE) -> dict[str, Any]:
     """
-    Grow the five to-many relations P123 generalised to, for the same cross-account scan load test.
+    Grow the five to-many relations generalized for the same cross-account scan load test.
 
     One dedicated host row per relation (a pin, its wiki, a trip, a check-in) carries *count* children
     each: `PinAlias`/`WikiAlias` (`ArticleSearchProvider`'s `pin__aliases__name`/`wiki__aliases__name`),

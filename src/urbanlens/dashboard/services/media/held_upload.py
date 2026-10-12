@@ -1,5 +1,5 @@
 """
-An uploaded icon or avatar is held where nothing serves it until the sandbox worker has re-encoded it (P119).
+An uploaded icon or avatar is held where nothing serves it until the sandbox worker has re-encoded it.
 
 The upload is stored under :data:`HELD_PREFIX`, which has no media authorizer, so the gate serves it to nobody, and its
 name is kept in the row's ``<field>_upload`` column. The worker writes the re-encoded file into the field itself, so the
@@ -142,9 +142,6 @@ def icon_upload_error(upload: UploadedFile) -> tuple[str, int] | None:
 
     The ceiling comes first, from the declared size, because the gauntlet's last step is the antivirus scan, which
     copies the whole file into this process and streams it to the shared clamd daemon.
-
-    Args:
-        upload: The uploaded file.
 
     Returns:
         ``(message, status_code)`` for the first failing check, or None.
@@ -378,9 +375,6 @@ def reencode_shown(key: str, pk: int, name: str) -> bool:
 def held_rows(held: HeldField) -> QuerySet[Any, tuple[int, str]]:
     """
     The ``(pk, held name)`` of every row holding an upload for *held*, served by the partial index on its column.
-
-    Args:
-        held: The field.
 
     Returns:
         An unordered queryset of pairs.

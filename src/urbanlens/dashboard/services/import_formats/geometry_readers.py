@@ -5,7 +5,7 @@ GEOS reads both formats recursively, so tens of thousands of nested collections 
 process. WKT whose parentheses nest deeper than :data:`MAX_NESTING`, or WKB whose collections do, is refused before GEOS
 sees it.
 
-GEOS's WKT reader also costs about nine times a line's length (P95). A line longer than :data:`GEOS_WKT_LINE_LIMIT` is
+GEOS's WKT reader also costs about nine times a line's length. A line longer than :data:`GEOS_WKT_LINE_LIMIT` is
 read here instead, into WKB, which GEOS reads at about its own size. That reader takes a strict subset of WKT; a long
 line outside it is refused, where GEOS might have read it:
 
@@ -52,9 +52,6 @@ def read_wkt(line: str) -> BaseGeometry:
     Args:
         line: One WKT geometry.
 
-    Returns:
-        The geometry.
-
     Raises:
         UnreadableGeometryError: It nests too deeply, is a curve, or is a long line outside the subset this module reads.
         shapely.errors.ShapelyError: GEOS refused it.
@@ -75,9 +72,6 @@ def read_wkb(data: bytes) -> BaseGeometry:
 
     Args:
         data: One WKB or EWKB geometry.
-
-    Returns:
-        The geometry.
 
     Raises:
         UnreadableGeometryError: It nests too deeply, is shorter than its own counts say, or holds a curve or a type GEOS

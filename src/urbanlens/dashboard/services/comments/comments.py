@@ -185,15 +185,10 @@ def visible_comment_count(comments: CommentQuerySet, profile: Profile) -> int:
     The number rendered beside a thread has to agree with the thread, or it
     reinstates the oracle gate 3 exists to close: a comment mentioning a
     location the viewer has not pinned vanishes from the list, and a raw
-    ``.count()`` then announces that something was hidden - and, from the
-    position, roughly what.
+    ``.count()`` then announces that something was hidden.
 
     Every gate is a queryset filter, so this is one ``COUNT`` whose cost does
-    not grow with the thread. It used to apply gates 2 and 3 only, and to stop
-    being exact above a ceiling, because both were answered in Python over the
-    text of every mentioning comment - work anyone who could comment set for
-    every later viewer of the page. Neither compromise is needed now, so the
-    badge counts what the thread shows.
+    not grow with the thread.
 
     Args:
         comments: The comments to count. A ``CommentQuerySet`` rather than a
@@ -320,11 +315,6 @@ def toggle_reaction(profile: Profile, comment: Comment, emoji: str) -> bool:
         with transaction.atomic():
             Reaction.objects.create(profile=profile, emoji=emoji, comment=comment)
     except IntegrityError:
-        # A concurrent double-tap stored it first; that request notifies, so this one stays silent.
         return True
-    # The internal HTMX panel has always notified here; the external API's reaction endpoints route
-    # through this service instead of the panel, so without this line reacting from the mobile
-    # client silently notified nobody - the same reaction produced a notification on the web and
-    # none over the API.
     notify_reaction(profile, comment)
     return True

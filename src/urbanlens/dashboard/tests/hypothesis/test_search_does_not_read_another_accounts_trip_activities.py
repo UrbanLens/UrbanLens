@@ -1,8 +1,7 @@
 """
 Searching your own trips must not read activity rows belonging to a trip you are not on.
 
-Same mechanism as P123 (``test_search_does_not_read_another_accounts_labels.py``):
-``TripSearchProvider.search`` feeds ``activities__title`` and ``activities__notes`` to
+Same mechanism as the pin notes case: ``TripSearchProvider.search`` feeds ``activities__title`` and ``activities__notes`` to
 ``apply_text``, and both cross a to-many relation (``TripActivity`` is a reverse foreign key,
 ``related_name="activities"``), so both go through the same unscoped ``_semijoin`` - an
 ``Exists(Trip._base_manager.filter(...))`` subquery built from the *unfiltered* manager, run before
@@ -15,11 +14,9 @@ per field path, OR-ed together) but land in the same statement against the same
 at once. The viewer's own activity matches through both columns independently, so the two matching
 variants below are genuinely distinct reproductions, not the same query run twice.
 
-**Fixed 2026-09-17.** ``activities`` crosses at *path*'s own first segment, so ``_semijoin`` now bounds
+``activities`` crosses at *path*'s own first segment, so ``_semijoin`` now bounds
 its filter by the outer queryset's own candidate primary keys, materialised as a concrete list first
-rather than left as a nested subquery. See
-``test_search_does_not_read_another_accounts_labels.py``'s module docstring for the measured
-mechanism.
+rather than left as a nested subquery.
 """
 
 from __future__ import annotations
@@ -147,15 +144,15 @@ class SearchDoesNotReadAnotherAccountsTripActivitiesTests(_TripActivityCase):
     """One trip's activities must not be read to answer a search for a different, accessible trip."""
 
     def test_it_does_not_read_a_strangers_activities_when_the_term_matches_via_title(self) -> None:
-        """Fixed 2026-09-17 by the bounded semi-join - see the module docstring."""
+        """The viewer's search does not read a stranger's activities when the term matches via title."""
         self.assertDoesNotGrow(TERM_TITLE, matching=True)
 
     def test_it_does_not_read_a_strangers_activities_when_the_term_matches_via_notes(self) -> None:
-        """Fixed 2026-09-17 by the bounded semi-join - see the module docstring."""
+        """The viewer's search does not read a stranger's activities when the term matches via notes."""
         self.assertDoesNotGrow(TERM_NOTES, matching=True)
 
     def test_it_does_not_read_a_strangers_activities_when_the_term_matches_nothing(self) -> None:
-        """Fixed 2026-09-17 by the bounded semi-join - see the module docstring."""
+        """The viewer's search does not read a stranger's activities when the term matches nothing."""
         self.assertDoesNotGrow(NOWHERE, matching=False)
 
 

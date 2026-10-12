@@ -12,7 +12,7 @@ it cannot answer in full - a provider REData has not asked about this point yet 
 Every REData media row and street-view capture reaches this site through :func:`media_near` or
 :func:`street_view_dates`, so a row whose source image is gone (:func:`mirror_gone`) is left out here, on both paths and
 before the answer is shared: no gallery tile, carousel slide, copy (``services.media.remote_copies``) or proxy link is
-made for an image that will not load (P325).
+made for an image that will not load.
 """
 
 from __future__ import annotations
@@ -228,9 +228,6 @@ def street_view_dates(latitude: float, longitude: float) -> StreetViewDates:
         latitude: WGS-84 latitude.
         longitude: WGS-84 longitude.
 
-    Returns:
-        The dates.
-
     Raises:
         LocationContextUnavailableError: No network answered, or the request failed.
     """
@@ -347,9 +344,6 @@ def reference_documents_near(latitude: float, longitude: float) -> LocationConte
         latitude: WGS-84 latitude.
         longitude: WGS-84 longitude.
 
-    Returns:
-        The envelope.
-
     Raises:
         LocationContextUnavailableError: No source answered, or the request failed.
     """
@@ -372,9 +366,6 @@ def historical_features_near(latitude: float, longitude: float) -> LocationConte
     Args:
         latitude: WGS-84 latitude.
         longitude: WGS-84 longitude.
-
-    Returns:
-        The envelope.
 
     Raises:
         LocationContextUnavailableError: The source failed to answer, or the request failed.

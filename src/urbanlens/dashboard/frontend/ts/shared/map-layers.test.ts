@@ -511,9 +511,9 @@ describe("registerRedataLayers", () => {
     });
 
     test("the pre-D15 catalogue's shape leaves Leaflet's default base layer on a vendor CDN", async () => {
-        // REData's production catalogue as of 2026-09-20, with `url_template` already rewritten to
+        // REData's production catalogue, with `url_template` already rewritten to
         // this deployment's proxy the way `basemap_catalogue.py` hands it to a browser. street and
-        // dark went vector-only that day; the other three stayed raster.
+        // dark went vector-only; the other three stayed raster.
         stubFetch({
             body: {
                 layers: [
@@ -1367,7 +1367,7 @@ describe("createMapLayers draws an underlay behind the base", () => {
 
     test("a dark topographic map gets a dark background, not the light tiles it inverts", () => {
         /**
-         * Measured against this deployment before the fix: the loaded map averaged rgb(16,32,39)
+         * Measured against this deployment: the loaded map averaged rgb(16,32,39)
          * and the gap behind it rgb(175,194,200) - a bright flash in exactly the case the underlay
          * exists for. `topographic` is only dark because a CSS filter inverts it, and the underlay
          * is cut from the same uninverted tiles, so it has to be told to do the same.
@@ -1638,8 +1638,8 @@ describe("createMapLayers destroy()", () => {
         layers.openPanel();
         expect(root.classList.contains("is-open")).toBe(true);
         document.body.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-        // Before the fix, the leaked listener from a still-earlier instance
-        // would still close this - after it, nothing is listening any more.
+        // The leaked listener from a prior instance would still close this;
+        // after destroy, nothing is listening any more.
         expect(root.classList.contains("is-open")).toBe(true);
     });
 

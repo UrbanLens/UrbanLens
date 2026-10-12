@@ -578,10 +578,8 @@ class ThreadRenderingRegressionTests(TestCase):
         self.client.force_login(self.me.user)
 
     def _render(self) -> str:
-        # HTMX-partial request: just _thread.html's own markup, not the full
-        # page (which also embeds these same class names as JS selector
-        # strings in its <script> block - counting those too would inflate
-        # every assertion below and hide a real markup regression).
+        # HTMX-partial request: _thread.html markup only, not the full page
+        # (which embeds the same class names in a <script> block).
         response = self.client.get(
             reverse("messages.conversation", kwargs={"profile_slug": self.partner.slug}),
             HTTP_HX_REQUEST="true",
@@ -774,15 +772,12 @@ class MessageTextAlertTests(TestCase):
         mock_sms.assert_not_called()
 
     def test_second_message_in_same_streak_is_debounced(self) -> None:
-        """The debounce marker is claimed atomically by ``is_text_alert_debounced()`` itself (called from the delayed task), not by a separate ``cache.set()`` inside ``send_message_text_alerts_now`` - see that function's docstring for why. Exercise it through the real task entry point both messages go through."""
+        """Debounce marker is claimed atomically by is_text_alert_debounced() (called from the delayed task), not by a separate cache.set()."""
         from urbanlens.dashboard.tasks import send_direct_message_text_alerts_if_unread
 
         self._set_toggles(whatsapp=True)
-        # create_direct_message schedules this very task. Under eager Celery
-        # (UL_CELERY_TASK_ALWAYS_EAGER, how this suite runs outside Docker) it
-        # would then run here - outside the patch below - and claim the
-        # debounce marker, leaving the explicit calls with nothing to do. Stub
-        # the scheduling so the two invocations under test are the only ones.
+        # Under eager Celery, create_direct_message runs the task inline and
+        # claims the debounce marker. Stub scheduling so our two calls are the only ones.
         with patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"):
             first = create_direct_message(self.sender, self.recipient, "hi")
             second = create_direct_message(self.sender, self.recipient, "still there?")
@@ -948,7 +943,7 @@ class SenderOwnDeletedForEveryoneVisibilityTests(TestCase):
 
 
 class DeleteMessageForEveryoneRedactsNotificationTests(TestCase):
-    """P47: unsending a message must not leave its preview in the recipient's notification."""
+    """Unsending a message must not leave its preview in the recipient's notification."""
 
     def setUp(self) -> None:
         super().setUp()

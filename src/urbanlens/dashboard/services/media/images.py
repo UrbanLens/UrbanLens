@@ -1005,22 +1005,15 @@ THUMBNAIL_MAX_DIMENSION = 400
 THUMBNAIL_BACKFILL_BATCH = 50
 
 #: How long a sweep leaves an unreadable row alone before trying it again.
-#:
-#: The sweep runs hourly, so this is the difference between one retry a week and
-#: 168 of them. It is a backoff rather than a blacklist because the alternative
-#: fails catastrophically: a boolean "broken" flag set during a storage outage
-#: would mark every row in the library, silently, with nothing that ever
-#: revisits it. Coming back a week later costs one wasted read per genuinely
-#: dead row and makes a restored file heal on its own.
+#: A backoff (not a blacklist) because a "broken" flag set during an outage would
+#: mark every row silently with no revisit. A week later costs one wasted read
+#: per genuinely dead row and lets a restored file heal on its own.
 THUMBNAIL_RETRY_AFTER_UNREADABLE = timedelta(days=7)
 
 
 def _readable_recently_enough(qs: QuerySet[ImageModel]) -> QuerySet[ImageModel]:
     """
     Drop rows whose file was found unreadable inside the backoff window.
-
-    Args:
-        qs: An ``Image`` queryset.
 
     Returns:
         The subset a sweep should attempt now.
@@ -1578,25 +1571,15 @@ def detach_image_from_pin(image: Any) -> None:
 def detach_image_from_wiki(image: Image, *, withdrawn_by_contributor: bool) -> None:
     """
     The wiki-side mirror of ``detach_image_from_pin``.
-
-    Args:
-        image: The ``Image`` to remove from its wiki.
-        withdrawn_by_contributor: Whether the photo's own owner asked for this."""
+    """
     from urbanlens.dashboard.models.images.attachment import ImageAttachment
     from urbanlens.dashboard.services.media.quota_rewards import revoke_community_quota_bonus
     from urbanlens.dashboard.services.reputation.scoring import retract_events_for_target
 
     if withdrawn_by_contributor:
-        # The ledger half of the same withdrawal the quota bonus covers below.
-        # Done before either branch because both are withdrawals - the photo is kept when it is
-        # still on a pin and deleted when it is not, and the contribution has ended either way.
         retract_events_for_target(image, reason="contribution_withdrawn")
 
     if image.wiki_id is not None:
-        # The pin side already does this (``PinImageView.delete``).
-        # Leaving the row behind keeps the photo eligible to be made the wiki's cover, since
-        # ``WikiCoverPhotoView`` accepts an attachment as proof the photo is on the wiki, and keeps
-        # it counted by ``reference_count``.
         ImageAttachment.objects.filter(image=image, wiki_id=image.wiki_id).delete()
     if image.pin_id is not None:
         if withdrawn_by_contributor:

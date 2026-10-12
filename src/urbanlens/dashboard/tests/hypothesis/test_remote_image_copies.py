@@ -1,7 +1,6 @@
 """
-Third-party images are shown from this site's own copy, made once and kept after the provider drops them (P165).
+Third-party images are shown from this site's own copy, made once and kept after the provider drops them.
 
-Jess, 2026-09-30: download and keep forever, with a record of where each came from.
 """
 
 from __future__ import annotations
@@ -182,7 +181,7 @@ class CopyEndpointTests(TestCase):
         enqueue.assert_not_called()
 
     def test_a_slow_provider_gets_longer_than_a_web_request_would_wait(self) -> None:
-        """P180: the USGS export took 18 s and 31 s, and the in-request fetch gave up at 20."""
+        """A slow provider gets more time than a web request would wait."""
         from urbanlens.dashboard.services.media.remote_copies import DOWNLOAD_TIMEOUT_SECONDS
         from urbanlens.dashboard.tasks import fetch_remote_image_copy
 
@@ -239,7 +238,7 @@ class CopyEndpointTests(TestCase):
             return image.size
 
     def test_a_tile_gets_a_tile_sized_copy_from_the_same_download(self) -> None:
-        """P190: a tile for an item with no provider thumbnail loaded the lightbox's 1200 px copy."""
+        """A tile gets a tile-sized copy from the same download."""
         from urbanlens.dashboard.services.media.remote_copies import (
             REMOTE_COPY_MAX_DIMENSION,
             REMOTE_COPY_TILE_DIMENSION,
@@ -272,7 +271,7 @@ class CopyEndpointTests(TestCase):
         self.assertEqual(RemoteImageCopy.objects.get(pk=self.copy.pk).failed_attempts, 2)
 
     def test_while_every_download_slot_is_busy_a_new_copy_is_queued_once(self) -> None:
-        """A request that found the slot busy used to be refused unqueued, so a page's tiles were made one per lucky poll."""
+        """When every download slot is busy, a new copy is queued once."""
         self._hold_every_download_slot()
 
         self._first_request()
@@ -383,7 +382,7 @@ class CopyEndpointTests(TestCase):
         self._assert_slot_free()
 
     def test_one_slow_answer_costs_the_image_nothing_and_the_next_request_tries_again(self) -> None:
-        """USGS answers in under 20 s but once took over 90 (P184); an hour of icons for that is the wrong trade."""
+        """One slow answer costs the image nothing; the next request tries again."""
         from urbanlens.dashboard.services.media.previews import RemoteSourceTimeoutError
 
         self._time_out(RemoteSourceTimeoutError())

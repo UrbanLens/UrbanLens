@@ -318,10 +318,6 @@ def _reject_stale(floorplan: Floorplan, document: dict[str, Any]) -> None:
     token = str(document.get("version_token") or "")
     if not token or floorplan.pk is None or floorplan.updated is None:
         return
-    # The token describes the row the document was *read* from.
-    # Writing that document into a different row is a copy, not an update - publish_to_wiki does
-    # exactly this, and so does every deliberate fork - and the token says nothing about the row
-    # being written.
     if str(document.get("uuid") or "") != str(floorplan.uuid):
         return
     current = floorplan.updated.isoformat()
@@ -771,10 +767,6 @@ def save_document(floorplan: Floorplan, document: dict[str, Any], *, profile: Pr
                     lock.state = _choice_in(payload.get("state"), FloorplanLockState.values, "lock state", FloorplanLockState.UNKNOWN)
                     key_attributes = payload.get("key_attributes") or {}
                     if not isinstance(key_attributes, dict):
-                        # Free-form, not shapeless: a list or string here reaches the database
-                        # happily and then breaks every reader that expects an object, far from the
-                        # save that caused it.
-                        # ValueError rather than the TypeError ruff wants, because every caller in
                         raise FloorplanValidationError("key_attributes must be an object")
                     lock.key_attributes = key_attributes
                     return lock

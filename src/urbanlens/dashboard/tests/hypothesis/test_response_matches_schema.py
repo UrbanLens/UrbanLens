@@ -17,9 +17,8 @@ from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 
 #: Endpoints checked on every run, as ``(url name, kwargs or None)``.
 #:
-#: Chosen for shape rather than importance: a paging envelope, a bare object, a
-#: custom envelope, and a list. Between them they cover the ways a response can
-#: be declared, which is what this is really testing.
+#: Chosen for shape: a paging envelope, a bare object, a custom envelope, and a
+#: list. Between them they cover the ways a response can be declared.
 _ENDPOINTS: list[tuple[str, dict[str, Any] | None]] = [
     ("external_api:whoami", None),
     ("external_api:labels", None),
@@ -28,7 +27,7 @@ _ENDPOINTS: list[tuple[str, dict[str, Any] | None]] = [
     ("external_api:custom_fields", None),
     ("external_api:saved_filters", None),
     ("external_api:notifications", None),
-    # A cursor page built by hand rather than by the paginator (P311).
+    # A cursor page built by hand rather than by the paginator.
     ("external_api:memories.timeline", None),
 ]
 
@@ -222,7 +221,7 @@ class ResponseSchemaConformanceTests(TestCase):
         jsonschema.validate(instance=response.json(), schema=schema)
 
     def test_a_trip_its_creator_belongs_to_matches_its_declared_detail(self) -> None:
-        """The creator is a member, so the payload skipped masking the creator's own copy and it lost ``display_name`` (P311)."""
+        """The creator is a member, so the payload skipped masking the creator's own copy and it lost ``display_name``."""
         document = self._document()
         path = reverse("external_api:trips")
 
@@ -236,7 +235,7 @@ class ResponseSchemaConformanceTests(TestCase):
         )
 
     def test_both_refusals_of_a_calendar_sync_toggle_match_its_declared_400(self) -> None:
-        """A malformed body is refused with ``error`` alone; the 400 declared only the not-exported refusal (P311)."""
+        """A malformed body is refused with ``error`` alone; the 400 declared only the not-exported refusal."""
         document = self._document()
         created = self.client.post(
             reverse("external_api:trips"),

@@ -991,8 +991,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 # (which re-uses this exact dict, not a fresh parse of the file) has the real
                 # description to save.
                 "description": (p.get("description") or "")[:MAX_PIN_DESCRIPTION_LENGTH],
-                # A string: the browser holds this as JSON, and a JSON number above 2**53 comes back
-                # from a JavaScript Number with its low digits zeroed (REData P120).
+                # JSON number above 2**53 loses low digits in JavaScript.
                 "cid": str(cid) if cid else None,
                 # Also just carried through to the confirm step - not displayed -
                 # so a deferred lookup can pass it to REData. See _csv_row_iter.

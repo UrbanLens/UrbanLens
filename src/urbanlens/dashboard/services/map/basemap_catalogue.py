@@ -48,15 +48,7 @@ _LAYER_ID = re.compile(r"[-a-zA-Z0-9_]+")
 
 
 def tile_url_template(layer: str) -> str:
-    """
-    Leaflet-style template for one layer, pointing at this deployment's proxy.
-
-    Args:
-        layer: The layer id.
-
-    Returns:
-        A URL with literal ``{z}``/``{x}``/``{y}`` placeholders.
-    """
+    """Leaflet-style template for one layer, pointing at this deployment's proxy."""
     from django.urls import reverse
 
     # Sentinel coordinates rather than braces: reverse() would encode braces as %7Bz%7D, handing the client a
@@ -113,7 +105,7 @@ def hosted_basemap_tiles() -> str | None:
     Protomaps' hosted API, fetched by the browser directly - the key travels in the URL, which is how a Protomaps key
     is meant to be used: its dashboard restricts the origins it answers. Only the tiles move. The style, glyphs and
     sprites stay the ones REData publishes on this project's own mirror, so the map looks the same either way: both
-    serve the Protomaps v4 schema (compared tile by tile on 2026-10-06). The client falls back to the style's own tiles
+    serve the Protomaps v4 schema. The client falls back to the style's own tiles
     when these fail (``frontend/ts/shared/hosted-basemap.ts``).
 
     Deliberately not part of the cached catalogue: a key rotated or removed takes effect on the next page, not a day
@@ -152,15 +144,7 @@ def _depth_of_the_bytes(published: Any, vendor_depth: int | None) -> Any:
 
 
 def _offered_layers(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """
-    Rewrite REData's sources into the entries a browser on this deployment can use.
-
-    Args:
-        sources: REData's catalogue, as returned by the gateway.
-
-    Returns:
-        One entry per layer this deployment will offer.
-    """
+    """Rewrite REData's sources into the entries a browser on this deployment can use."""
     layers: list[dict[str, Any]] = []
     for source in sources:
         source_id = source.get("id")
@@ -171,11 +155,9 @@ def _offered_layers(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
             logger.warning("Skipping REData tile source with unusable id %r", source_id)
             continue
         if not source.get("attribution"):
-            # Attribution is not decorative - every vendor here requires it
-            # on the rendered map, so a layer without it is not offered.
+            # Every vendor requires attribution on the rendered map.
             continue
-        # Absent on REData deployments that have not yet rolled out the source_type
-        # contract (D11) - treat as raster, the only shape that ever existed before it.
+        # Absent on older REData deployments (pre-D11) - treat as raster.
         is_vector = source.get("source_type") == "vector"
         if is_vector and not source.get("style_url"):
             continue
@@ -187,14 +169,8 @@ def _offered_layers(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "min_zoom": source.get("min_zoom"),
             "max_zoom": source.get("max_zoom"),
         }
-        # Where this deployment fetches the raster from a different vendor than REData names, the
-        # credit and the depth both have to move with it. On a vector entry the raster is the
-        # fallback, so it is `fallback_attribution` that describes those bytes, not `attribution`.
         vendor = vendor_for(source_id)
         overridden = vendor.attribution if vendor else None
-        # Names the Esri service behind the proxied raster, so the browser can credit the providers
-        # for the area it is showing rather than the whole world's list. Describes `url_template`'s
-        # bytes, which on a vector entry are the fallback half.
         if vendor and vendor.esri_service:
             entry["esri_service"] = vendor.esri_service
         vendor_depth = vendor.max_native_zoom if vendor else None
@@ -204,10 +180,7 @@ def _offered_layers(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
             entry["max_zoom"] = _depth_of_the_bytes(entry["max_zoom"], vendor_depth)
         if is_vector:
             entry["style_url"] = source["style_url"]
-            # The two halves of a vector entry are different datasets (Protomaps' basemap and a
-            # vendor's raster), so each carries its own credit and depth - showing one's attribution
-            # over the other's bytes is a licence error, and publishing one's ceiling lets a client
-            # pan past what the other can draw. Absent on a REData that predates D15.
+            # Vector entries combine two datasets; each carries its own credit and depth.
             for field in ("fallback_attribution", "fallback_min_zoom", "fallback_max_zoom"):
                 if source.get(field) is not None:
                     entry[field] = source[field]
@@ -216,9 +189,7 @@ def _offered_layers(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
             raster_depth = _depth_of_the_bytes(entry.get("fallback_max_zoom"), vendor_depth)
             if raster_depth is not None:
                 entry["fallback_max_zoom"] = raster_depth
-        # Offered whenever REData will serve the layer tile-by-tile. A raster entry always is. A
-        # vector one only since D15: before it, such a layer answered a tile request with 400, and
-        # the template's absence upstream is what distinguishes the two deployments.
+        # Vector entries only have a template since D15; before that they returned 400.
         if not is_vector or source.get("url_template"):
             entry["url_template"] = tile_url_template(source_id)
         layers.append(entry)
@@ -290,26 +261,10 @@ def basemap_tile_catalogue(*, allow_fetch: bool = True) -> list[dict[str, Any]]:
 
 
 def catalogue_for_viewer(*, authenticated: bool, allow_fetch: bool = True) -> list[dict[str, Any]]:
-    """
-    :func:`basemap_tile_catalogue`, filtered to what this viewer can actually fetch.
-
-    ``url_template`` points at :class:`~urbanlens.dashboard.controllers.basemap_tiles.BasemapTileView`,
-    which is login-required, so offering it to a signed-out visitor (a public share page) would swap
-    a working vendor layer for a grid of 404s. A ``style_url`` is fetched straight from REData with
-    no key, so it is offered to everyone - and an entry carrying both keeps only the style.
-
-    Args:
-        authenticated: Whether the viewer is signed in to this deployment.
-        allow_fetch: Passed through; see :func:`basemap_tile_catalogue`.
-
-    Returns:
-        The entries this viewer can load.
-    """
+    """Catalogue filtered to what the viewer can fetch. Unauthenticated viewers lose url_template (login-required)."""
     layers = basemap_tile_catalogue(allow_fetch=allow_fetch)
     if authenticated:
         return layers
-    # Since D15 a vector entry carries a proxy template too, so dropping the raster entries is no
-    # longer enough: the template has to come off the ones that stay, or a public share page paints
-    # a grid of 404s exactly where it currently paints a working layer. Copied rather than mutated,
-    # because these dicts are the cached catalogue every other reader shares.
+    # Since D15 vector entries also carry a proxy template; strip it for public viewers.
+    # Copy rather than mutate: these dicts are the shared cached catalogue.
     return [{key: value for key, value in entry.items() if key != "url_template"} for entry in layers if entry.get("style_url")]

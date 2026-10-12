@@ -3,7 +3,7 @@ Third-party images served from this site instead of their provider's, and kept a
 
 A page that would show a provider's image links to :func:`copy_url` instead. The first request for it downloads the
 source, the sandbox worker re-encodes it (``render_remote_image_copy``), and every later request is served from the
-stored file, whether or not the provider still has it (Jess, 2026-09-30).
+stored file, whether or not the provider still has it.
 """
 
 from __future__ import annotations
@@ -39,8 +39,7 @@ MAX_REMOTE_COPY_SOURCE_BYTES = 25 * 1024 * 1024
 FIRST_RETRY_DELAY = timedelta(hours=1)
 MAX_RETRY_DELAY = timedelta(days=7)
 
-#: How long the download may take. It runs on a worker, so a slow provider costs no web request: the USGS
-#: National Map's export took 18 s and 31 s to answer (P180).
+#: How long the download may take. It runs on a worker, so a slow provider costs no web request.
 DOWNLOAD_TIMEOUT_SECONDS = 90
 
 #: How long a copy stays pending before another request may start it again: the download, the render, and the
@@ -150,7 +149,7 @@ def forgive_timeout(copy: RemoteImageCopy) -> bool:
     """
     Whether a timed-out download may go uncounted: the first in :data:`FIRST_RETRY_DELAY` does.
 
-    A provider that usually answers in seconds sometimes takes longer than the timeout (P184), and counting that
+    A provider that usually answers in seconds sometimes takes longer than the timeout, and counting that
     like a refusal would show an icon for the next hour.
 
     Args:
@@ -251,9 +250,6 @@ def retry_is_due(copy: RemoteImageCopy) -> bool:
     """
     Whether a copy whose downloads failed may be tried again yet.
 
-    Args:
-        copy: The copy.
-
     Returns:
         True when it has never failed, or its backoff has run out.
     """
@@ -266,9 +262,6 @@ def retry_is_due(copy: RemoteImageCopy) -> bool:
 def record_failure(copy: RemoteImageCopy) -> None:
     """
     Count one failed download or render of *copy*.
-
-    Args:
-        copy: The copy.
     """
     from django.db.models import F
 

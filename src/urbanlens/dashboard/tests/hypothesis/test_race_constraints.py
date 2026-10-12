@@ -1,4 +1,4 @@
-"""Check-then-insert paths with a unique constraint behind them (G5-4, G4-15, G2-35, G4-13 dedupe half)."""
+"""Check-then-insert paths with a unique constraint behind them."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ def _profile() -> Profile:
 
 
 class GeolocationVisitDedupeTests(TestCase):
-    """G5-4: two overlapping pings both passed the "visited today?" read and both inserted."""
+    """Two overlapping pings both passed the "visited today?" read and both inserted."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -80,7 +80,7 @@ class GeolocationVisitDedupeTests(TestCase):
 
 
 class PublicPinSuggestionDedupeTests(TestCase):
-    """G4-15: overlapping sweeps both read "not yet suggested" and both inserted."""
+    """Overlapping sweeps both read "not yet suggested" and both inserted."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -114,7 +114,7 @@ class PublicPinSuggestionDedupeTests(TestCase):
 
 
 class MapShareDedupeTests(TestCase):
-    """G2-35: every submit inserted another share and another notification, ignoring preferences."""
+    """Every submit inserted another share and another notification, ignoring preferences."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -160,7 +160,7 @@ class MapShareDedupeTests(TestCase):
 
 
 class DeviceScanReplayTests(TestCase):
-    """G4-13 (dedupe half): a retried upload stored every entry and reading a second time."""
+    """A retried upload stored every entry and reading a second time."""
 
     def setUp(self) -> None:
         super().setUp()

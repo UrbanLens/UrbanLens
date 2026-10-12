@@ -623,13 +623,7 @@ def list_partnered_checkins(profile: Profile) -> SafetyCheckinQuerySet:
     # Annotations must precede partnered_with's filter; Django reuses a join when a filter follows
     # an annotation over the same relation, which would constrain the aggregate to matched rows
     # and make partner_count permanently 1 (the caller's own row).
-    return (
-        # The annotations MUST come before partnered_with's filter, not after. partnered_with
-        # filters on the multi-valued `partners` relation, and Django reuses a single join when a
-        # filter follows an annotation over the same relation - which would constrain the aggregate
-        # to the rows the filter matched and make partner_count permanently 1 (the caller's own row)
-        SafetyCheckin.objects.annotate(contact_count=Count("contacts", distinct=True), partner_count=Count("partners", distinct=True)).partnered_with(profile).select_related("profile", "trip", "archive").order_by("-checkin_by", "-pk")
-    )
+    return SafetyCheckin.objects.annotate(contact_count=Count("contacts", distinct=True), partner_count=Count("partners", distinct=True)).partnered_with(profile).select_related("profile", "trip", "archive").order_by("-checkin_by", "-pk")
 
 
 def get_partnered_checkin(profile: Profile, checkin_uuid: str) -> SafetyCheckin | None:
@@ -667,17 +661,15 @@ def invite_checkin_partner(checkin: SafetyCheckin, *, inviter: Profile, username
         PartnerAlreadyInvitedError: The named profile already has an invited or accepted partner row on this check-in."""
     from urbanlens.dashboard.models.site_settings.model import SiteSettings
 
-    # Checked before the username is even looked up: if this ran after resolving the user, "check-in
-    # full" would only ever fire for a real, unblocked account, turning check-in capacity into a
-    # free username-existence oracle for anyone who can fill their own check-in with known accounts
-    # once.
+    # Checked before username lookup: otherwise "check-in full" would only fire for a real,
+    # unblocked account, turning capacity into a username-existence oracle.
     max_partners = SiteSettings.get_current().max_safety_checkin_partners
     if max_partners > 0 and checkin.partners.count() >= max_partners:
         raise MaxPartnersReachedError(f"invite_checkin_partner: checkin {checkin.pk} is at its max_safety_checkin_partners cap ({max_partners}); inviter {inviter.pk}.")
 
     from urbanlens.dashboard.services.auth.username import find_profile_by_username
 
-    # A blocked or hidden account answers as an unknown username, after the same statement.
+    # A blocked or hidden account answers as an unknown username.
     invitee = find_profile_by_username(username, Profile.invitable_q(inviter))
     if invitee is None:
         raise PartnerNotFoundError(f'invite_checkin_partner: no user the inviter may name has username "{username}" (checkin {checkin.pk}, inviter {inviter.pk}).')
@@ -704,10 +696,8 @@ def accept_checkin_partner_invite(partner: SafetyCheckinPartner) -> None:
     Args:
         partner: The invite being accepted."""
     accepted_at = timezone.now()
-    # Conditional UPDATE: only flips a row still INVITED at write time.
-    # Guards against repeat accept (row already ACCEPTED) and concurrent owner removal
-    # (row no longer exists) - `.update()` on non-matching/absent row affects 0 rows,
-    # a clean no-op instead of a save() into a
+    # Conditional UPDATE: only flips a row still INVITED at write time. Guards against
+    # repeat accept and concurrent owner removal - `.update()` on non-matching row is a clean no-op.
     updated = SafetyCheckinPartner.objects.filter(pk=partner.pk, status=SafetyCheckinPartnerStatus.INVITED).update(status=SafetyCheckinPartnerStatus.ACCEPTED, accepted_at=accepted_at, updated=accepted_at)
     if not updated:
         return
@@ -715,10 +705,7 @@ def accept_checkin_partner_invite(partner: SafetyCheckinPartner) -> None:
     partner.accepted_at = accepted_at
 
     checkin = partner.checkin
-    # A partner invite can still be legitimately outstanding (and acceptable) after its checkin has
-    # already resolved and archived - e.g. the owner self-checked-in with no other viewers yet,
-    # archived immediately, and the invitee accepts hours later.
-    # The ACCEPTED status flip above is fine either way (it's not PII), but a plaintext system
+    # A partner invite can be accepted after its checkin has resolved and archived.
     if not hasattr(checkin, "archive"):
         system_message = SafetyCheckinMessage.objects.create(
             checkin=checkin,
@@ -1911,18 +1898,12 @@ def mark_found_safe(contact: SafetyCheckinContact) -> None:
         contact: The contact reporting the profile as safe.
     """
     # Only post the system chat message if this call actually performed the resolution -
-    # otherwise a check-in already resolved (including already archived, or a duplicate
-    # report racing another contact/partner) would get a fresh, never-to-be-scrubbed
-    # plaintext message with nothing behind it.
+    # otherwise an already-resolved checkin would get a fresh, never-to-be-scrubbed plaintext message.
     contact.found_safe_at = timezone.now()
     contact.save(update_fields=["found_safe_at", "updated"])
 
     checkin = contact.checkin
     if _resolve_as_found_safe(checkin, resolved_by_label=contact.display_name, exclude_contact=contact):
-        # Only post the system chat message if this call actually performed the resolution -
-        # otherwise a checkin that's already resolved (including one already archived, or a
-        # duplicate report racing another contact/partner) would get a fresh, never-to-be-scrubbed
-        # plaintext message with nothing behind it.
         system_message = SafetyCheckinMessage.objects.create(
             checkin=checkin,
             sender_contact=contact,
@@ -2030,9 +2011,6 @@ def _resolution_notice(checkin: SafetyCheckin, *, removed: bool) -> _ResolutionN
     Args:
         checkin: The resolved check-in, carrying its ``status`` and ``resolved_by_label``.
         removed: The owner is deleting it, so the notice must not claim a check-in.
-
-    Returns:
-        The notice.
     """
     owner = checkin.profile.username
     if checkin.status == SafetyCheckinStatus.FOUND_SAFE:

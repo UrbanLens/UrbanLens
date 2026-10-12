@@ -104,8 +104,7 @@ class VendorTiles:
 
 
 _ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services"
-#: What Esri sends with a tile: ``Cache-Control: max-age=86400``, read off World_Imagery and
-#: World_Street_Map on 2026-10-06.
+#: What Esri sends with a tile: ``Cache-Control: max-age=86400``, read off World_Imagery and World_Street_Map.
 _ESRI_MAX_AGE = 86_400
 
 #: The service path inside an ArcGIS Online tile URL - ``Canvas/World_Dark_Gray_Base`` keeps its folder.
@@ -117,25 +116,19 @@ VENDOR_TILES: dict[str, VendorTiles] = {
     "street": VendorTiles(url_template=f"{_ESRI}/World_Street_Map/MapServer/tile/{{z}}/{{y}}/{{x}}", browser_max_age=_ESRI_MAX_AGE),
     "satellite": VendorTiles(url_template=f"{_ESRI}/World_Imagery/MapServer/tile/{{z}}/{{y}}/{{x}}", browser_max_age=_ESRI_MAX_AGE),
     "borders": VendorTiles(url_template=f"{_ESRI}/Reference/World_Boundaries_and_Places/MapServer/tile/{{z}}/{{y}}/{{x}}", browser_max_age=_ESRI_MAX_AGE),
-    # Esri's dark canvas rather than CARTO's dark_all, which was the last CARTO reference left and
-    # was never a deliberate choice here. Only the fallback either way: `dark` draws as a Protomaps
-    # vector style wherever WebGL2 is available.
-    # 16 rather than the 20 REData publishes for CARTO: measured real tiles through 16 and Esri's
-    # one "not yet available" JPEG from 17 down, as `map-layers.ts`'s raster table already says.
+    # Esri's dark canvas rather than CARTO's dark_all. `dark` draws as a Protomaps
+    # vector style where WebGL2 is available. Measured tiles through 16; 17+ returns
+    # "not yet available" JPEG. `map-layers.ts`'s raster table confirms.
     "dark": VendorTiles(
         url_template=f"{_ESRI}/Canvas/World_Dark_Gray_Base/MapServer/tile/{{z}}/{{y}}/{{x}}",
         attribution="Esri, HERE, Garmin, © OpenStreetMap contributors, and the GIS User Community",
         max_native_zoom=16,
         browser_max_age=_ESRI_MAX_AGE,
     ),
-    # Esri's topographic map rather than OpenTopoMap, which measured 0.566s a tile against 0.25s
-    # here. It is the full map - contours, roads and labels - rather than the bare relief of
-    # `World_Hillshade`, which is meant to go *under* a map and renders near-white over flat or
-    # urban ground. Credit trimmed to the principal sources: Esri's `copyrightText` names 18 and
-    # overflows the footer.
-    # 19 rather than the 17 REData publishes for OpenTopoMap, which is where this map stopped
-    # drawing detail: measured real tiles through 19 and the blank at 20, matching the depth the
-    # other Esri rasters here are already published at.
+    # Esri's topographic map (0.25s/tile vs OpenTopoMap's 0.566s). Full map with
+    # contours, roads, labels -- not bare relief like `World_Hillshade`. Credit trimmed;
+    # Esri's `copyrightText` names 18 sources and overflows the footer. Measured tiles
+    # through 19; blank at 20, matching other Esri rasters' depth.
     "terrain": VendorTiles(
         url_template=f"{_ESRI}/World_Topo_Map/MapServer/tile/{{z}}/{{y}}/{{x}}",
         attribution="Esri, HERE, Garmin, Intermap, USGS, NPS, © OpenStreetMap contributors, and the GIS User Community",

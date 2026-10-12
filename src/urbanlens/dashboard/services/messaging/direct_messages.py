@@ -359,12 +359,7 @@ def serialize_direct_message(message: DirectMessage, *, viewer: Profile | None =
 
 
 def _broadcast_direct_message(message: DirectMessage) -> None:
-    """
-    Push a new message to both participants' live sessions after commit.
-    Best-effort, mirroring ``services.visits.safety._broadcast_chat_message``: the row is already durably saved, so a channel-layer failure is logged, not raised - the recipient still sees the message on their next page load or label poll.
-
-    Args:
-        message: The freshly created message."""
+    """Push a new message to both participants' live sessions after commit (best-effort)."""
     # Per-recipient payloads: the recipient's copy resolves the sender's name through their own
     # visibility (a live message must never reveal a name a refresh would mask) and carries image
     # URLs only once they have consented to see images from this sender.
@@ -682,17 +677,17 @@ def create_direct_message(
     Validate, persist, broadcast, and notify for one new direct message.
 
     Args:
-        sender: The profile sending the message.
-        recipient: The profile receiving it.
+        sender: Profile sending the message.
+        recipient: Profile receiving it.
         body: Plaintext message text.
-        ciphertext: End-to-end encrypted body (base64), produced client-side under the conversation key.
+        ciphertext: End-to-end encrypted body (base64) under the conversation key.
         nonce: Base64 nonce for ``ciphertext`` (required with it).
         key_version: ``ConversationKey.version`` that encrypted this message.
-        image_ids: PKs of the sender's own not-yet-attached ``Image`` rows (uploaded separately beforehand) to attach to this message.
-        markup_map_uuid: UUID of a ``MarkupMap`` owned by the sender to attach.
-        reply_to_id: PK of an earlier message in this conversation to quote.
+        image_ids: PKs of sender's unattached ``Image`` rows to attach.
+        markup_map_uuid: UUID of sender's ``MarkupMap`` to attach.
+        reply_to_id: PK of earlier message in this conversation to quote.
         client_uuid: Caller-generated idempotency key.
-        defer_broadcast: When True, skip the live WebSocket push - the caller is attaching a ``DirectMessageShare`` to this message right after and must call ``broadcast_direct_message`` once that's done, so `serialize_direct_message`'s ``has_share`` flag is correct on...
+        defer_broadcast: Skip live WebSocket push; caller will call ``broadcast_direct_message`` after attaching a ``DirectMessageShare``.
 
     Returns:
         The newly created DirectMessage.
@@ -1073,16 +1068,12 @@ def conversations_for(profile: Profile, *, only_unread: bool = False) -> list[di
 
     Args:
         profile: The profile whose inbox to build.
-        only_unread: Build rows only for conversations with unread messages.
+        only_unread: Only include conversations with unread messages.
 
     Returns:
-        A list of dicts with ``partner`` (Profile), ``last_message`` (DirectMessage), ``unread_count`` (int), and the ``display_identity_for`` keys for rendering the partner's identity."""
-    # visible_to: a message this profile deleted from their own view must not
-    # surface as the sidebar's last-message preview or count as unread there.
+        List of dicts with ``partner``, ``last_message``, ``unread_count``, and identity keys for rendering."""
     aggregate = DirectMessage.objects.visible_to(profile).conversation_rows(profile)
     if only_unread:
-        # A HAVING on the same aggregate, so the partners/messages/identity
-        # lookups below are sized by what will actually be shown.
         aggregate = aggregate.filter(unread_count__gt=0)
     return build_dm_conversations(profile, list(aggregate))
 

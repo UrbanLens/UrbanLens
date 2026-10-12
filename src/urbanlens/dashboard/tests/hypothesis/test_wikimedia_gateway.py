@@ -1,4 +1,4 @@
-"""What the Wikimedia Commons gateway asks Commons, and what it keeps of each file for judging relevance (P196)."""
+"""What the Wikimedia Commons gateway asks Commons, and what it keeps of each file for judging relevance."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ _THUMB = "https://thumb.wikimedia.org/wikipedia/commons/thumb"
 _UPLOAD = "https://upload.wikimedia.org/wikipedia/commons"
 _UTM = "?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
 
-# Shapes as Commons returned them on 2026-10-03 for prop=imageinfo|coordinates with an extmetadata filter.
+# Shapes as Commons returns them for prop=imageinfo|coordinates with an extmetadata filter.
 _PAGES: dict[str, dict[str, Any]] = {
     _BOOK_SCAN: {
         "imageinfo": [
@@ -175,7 +175,7 @@ class _GatewayTestCase(SimpleTestCase):
 
 
 class WikimediaKeepsDocumentsTests(_GatewayTestCase):
-    """Jess, 2026-10-02: returning a book is fine; only an irrelevant one is wrong. Relevance is judged on read."""
+    """Returning a book is fine; only an irrelevant one is wrong. Relevance is judged on read."""
 
     def test_books_and_pdfs_are_returned_with_their_type(self) -> None:
         items, _fake = self.media([_BOOK_SCAN, _COUNTY_HISTORY, _PHOTO])
@@ -283,7 +283,7 @@ class WikimediaSearchTermsTests(SimpleTestCase):
 
 
 class CommonsTrackingParametersTests(_GatewayTestCase):
-    """P215: Commons began adding ``utm_`` parameters to file URLs on 2026-09-23; a file keeps one URL regardless."""
+    """Commons adds ``utm_`` parameters to file URLs; a file keeps one URL regardless."""
 
     def test_the_items_urls_carry_no_tracking_parameters(self) -> None:
         item = self.item(_PHOTO)

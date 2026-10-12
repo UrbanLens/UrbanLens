@@ -46,7 +46,7 @@ def _first_lookup_misses(method_owner: type, name: str, missing: object = None):
 
 
 class TripActivityGeocodedLocationTests(TestCase):
-    """G3-20: numeric(9,6) columns never matched a raw 8-decimal float, so the second activity 500'd."""
+    """numeric(9,6) columns never matched a raw 8-decimal float, so the second activity 500'd."""
 
     def test_two_activities_at_one_precise_point_share_a_location(self) -> None:
         from urbanlens.dashboard.services.trips.trip_activities import resolve_activity_place
@@ -160,7 +160,7 @@ class LabelCreateUniqueTests(TestCase):
 
 
 class PinCategoryEditTests(TestCase):
-    """G3-16: the category edit matches names case-insensitively, stays profile-scoped, and is all-or-nothing."""
+    """The category edit matches names case-insensitively, stays profile-scoped, and is all-or-nothing."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -227,7 +227,7 @@ class MediaLabelTests(TestCase):
 
 
 class DefaultLabelSeedingTests(TestCase):
-    """G1-25: default labels are seeded in bulk and skip a name the profile already has in any case."""
+    """Default labels are seeded in bulk and skip a name the profile already has in any case."""
 
     def test_new_profile_gets_the_defaults_and_the_hierarchy(self) -> None:
         from urbanlens.dashboard.models.labels.signals import CATEGORY_HIERARCHY, DEFAULT_CATEGORIES, DEFAULT_TAGS
@@ -324,7 +324,7 @@ class LabelImportUuidCollisionTests(TestCase):
 
 
 class ApiKeyPrefixCollisionTests(TestCase):
-    """G3-28: a prefix collision is retried at the insert, not pre-checked and then left to raise."""
+    """A prefix collision is retried at the insert, not pre-checked and then left to raise."""
 
     def test_a_colliding_prefix_is_retried(self) -> None:
         from urbanlens.dashboard.services.auth.api_keys import generate_api_key
@@ -359,7 +359,7 @@ class ApiKeyPrefixCollisionTests(TestCase):
 
 
 class WikiCreateRaceTests(TestCase):
-    """G1-14: both one-to-ones on Wiki (location, place) race; the loser reads the winner's row."""
+    """Both one-to-ones on Wiki (location, place) race; the loser reads the winner's row."""
 
     def test_a_raced_insert_on_the_same_location_returns_the_existing_wiki(self) -> None:
         location = Location.objects.create(latitude=40.0, longitude=-74.0)

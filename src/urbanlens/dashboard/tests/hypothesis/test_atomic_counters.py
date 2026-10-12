@@ -1,4 +1,4 @@
-"""One counter primitive, and a store outage that no longer removes the limits built on it (G2-5, G2-26, G2-27)."""
+"""One counter primitive, and a store outage that no longer removes the limits built on it."""
 
 from __future__ import annotations
 
@@ -82,7 +82,7 @@ class TheTestBackendIsAtomicTests(SimpleTestCase):
 
 
 class AnOutageIsNotAMissingKeyTests(SimpleTestCase):
-    """G2-27: an unreachable store read as "expired", so every event started a fresh window of one."""
+    """An unreachable store read as "expired", so every event started a fresh window of one."""
 
     def test_refuse_raises_rather_than_counting_one(self) -> None:
         with store_down(), self.assertRaises(CounterUnavailableError):
@@ -293,7 +293,7 @@ class TalliesTests(SimpleTestCase):
 
 
 class LockReleaseIsCompareAndDeleteTests(SimpleTestCase):
-    """G2-26: a release that read its own token, then lost the lock before deleting, deleted the next holder's."""
+    """A release that read its own token, then lost the lock before deleting, deleted the next holder's."""
 
     _KEY = "urbanlens:test:cas-lock"
 
@@ -328,7 +328,7 @@ class LockReleaseIsCompareAndDeleteTests(SimpleTestCase):
 
 
 class TheHandRolledRouteCountersAreGoneTests(TestCase):
-    """G2-5: get-then-set counters on two routes let a burst through at the boundary."""
+    """Get-then-set counters on two routes let a burst through at the boundary."""
 
     def setUp(self) -> None:
         super().setUp()

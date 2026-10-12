@@ -1,19 +1,19 @@
 """
 Searching your own photos must not read label rows belonging to accounts you cannot see.
 
-Same mechanism as P123 (``test_search_does_not_read_another_accounts_labels.py``), a different
+Same mechanism as ``test_search_does_not_read_another_accounts_labels.py``, a different
 provider: ``PhotoSearchProvider.search`` also calls ``apply_label_clause``, which filters through
 ``_semijoin(Image, "labels", ...)`` - an ``Exists(Image._base_manager.filter(...))`` subquery built
 from the *unfiltered* manager, so it is not scoped to photos the viewer can see. A stranger's image
 never needs to be visible to the viewer for its labels to sit in the same ``dashboard_labels`` table
 the semijoin's inner query scans.
 
-P123's fix (a GIN trigram index on ``Label.name`` matching ``icontains``'s compiled form, migration
+The fix (a GIN trigram index on ``Label.name`` matching ``icontains``'s compiled form, migration
 0049) lives on the ``Label`` model itself, not on ``PinSearchProvider``, so it should in principle
 help every provider that reaches labels through this same clause - and does, for the matching
-variant. The non-matching variant needed the same bounded-semi-join rewrite as P123's own file.
+variant. The non-matching variant needed the same bounded-semi-join rewrite.
 
-**Fixed 2026-09-17.** ``_semijoin`` now bounds ``labels``' filter by the outer queryset's own
+``_semijoin`` now bounds ``labels``' filter by the outer queryset's own
 candidate primary keys, materialised as a concrete list first rather than left as a nested subquery -
 see ``test_search_does_not_read_another_accounts_labels.py``'s module docstring for the measured
 mechanism.
@@ -80,8 +80,8 @@ class _PhotoSearchCase(TestCase):
         """
         Give the stranger *count* more photo labels, then re-analyse.
 
-        Attached to the stranger's own image rather than left loose, for the same reason as P123: a
-        label reachable from nothing the semi-join can pk-match would prove less about the defect.
+        Attached to the stranger's own image rather than left loose: a label reachable from nothing
+        the semi-join can pk-match would prove less about the defect.
         """
         word = TERM if matching else OTHER
         labels = []
@@ -161,7 +161,7 @@ class SearchDoesNotReadAnotherAccountsPhotoLabelsTests(_PhotoSearchCase):
         self.assertDoesNotGrow(SECOND_BATCH, matching=True)
 
     def test_it_does_not_read_a_strangers_unrelated_labels(self) -> None:
-        """Rows the plan reads only to reject on the name. Fixed 2026-09-17 by the bounded semi-join."""
+        """Rows the plan reads only to reject on the name; fixed by the bounded semi-join."""
         self.assertDoesNotGrow(SECOND_BATCH, matching=False)
 
 

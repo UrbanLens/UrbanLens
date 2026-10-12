@@ -192,13 +192,13 @@ def property_polygon(pin: Pin) -> GEOSGeometry | None:
 
 def nestable_root_pins(pin: Pin) -> list[Pin]:
     """
-    The owner's other top-level pins standing inside this pin's property.
+    Return the owner's other top-level pins inside this pin's property boundary.
 
     Args:
         pin: The prospective parent pin.
 
     Returns:
-        Top-level pins of the same profile whose coordinates fall inside the property boundary, excluding this pin and anything that would form a cycle."""
+        Top-level pins of the same profile within the property, excluding this pin and any that would form a cycle."""
     if pin.pk is None:
         return []
     polygon = property_polygon(pin)

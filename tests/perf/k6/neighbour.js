@@ -52,27 +52,18 @@ const FIXTURES = {
     expectedSearchRelations: Number(__ENV.UL_PERF_EXPECTED_SEARCH_RELATIONS || 0),
 };
 
-/** P123: matches both `--heavy-labels`' bulk labels (`perf_seed.py`'s `BULK_LABEL_PREFIX`, "Perf
- * Bulk Label ...") and `--heavy-search-relations`' bulk aliases/activities/comments/messages
- * (`BULK_RELATIONS_PREFIX`, "Perf Bulk Relation ...") - both prefixes share this common substring,
- * so one search term exercises every relation's matching-variant cost through the same two
- * requests, GlobalSearchEngine already fanning the query out across every provider. None of the
- * matched rows are attached to anything the neighbour can see, so the matching variant's fix
- * (migration 0049's trigram index, labels only so far) is what stands between this and the same
- * cost as the miss below. */
+/** Matches both bulk labels and bulk search relations via their common "Perf Bulk" prefix.
+ * GlobalSearchEngine fans the query across every provider; matched rows aren't attached to
+ * anything the neighbour can see. */
 const SEARCH_MATCH_TERM = "Perf Bulk";
 
-/** P123's still-open variant: matches nothing, anywhere, ever - the true negative that has to read
- * the whole labels table to conclude that. */
+/** True-negative variant: matches nothing, forcing a full labels table scan. */
 const SEARCH_MISS_TERM = "zzz-nonexistent-term-xyz";
 
-/** The neighbour's rotation. Two cheap/representative/liveness checks, plus P123's two global-search
- * variants - so a budget breach on `global_search_miss` alone points at that specific defect, not a
- * general slowdown.
- */
-/** P123: each is 1-in-5 of the neighbour's rotation, so a phase table (mostly health/map traffic)
- * dilutes exactly the signal these exist to show. Recorded across the whole run, independent of
- * phase, so the miss variant's cost - or the match variant's fix - is visible on its own. */
+/** The neighbour's rotation: two liveness checks plus two global-search variants.
+ * A budget breach on `global_search_miss` alone points at that specific issue.
+ * Each search variant is 1-in-5 of the rotation, recorded across the whole run
+ * independent of phase so its cost is visible on its own. */
 const SEARCH_ENDPOINTS = ["global_search_match", "global_search_miss"];
 
 const NEIGHBOUR_REQUESTS = [
@@ -136,7 +127,7 @@ export function setup() {
         fail("No heavy label id. Pass UL_PERF_LABEL_ID, or seed through provision_integration_env --heavy-pins so the manifest carries it.");
     }
 
-    // P123: neither variant should already be broken at rest - a non-200 here means the run would
+    // Neither variant should already be broken at rest - a non-200 means the run would
     // measure an error page's latency, not the search's.
     for (const term of [SEARCH_MATCH_TERM, SEARCH_MISS_TERM]) {
         const searchResponse = get(secondary, `/dashboard/search/panel/?q=${encodeURIComponent(term)}`, { endpoint: "preflight", phase: "setup" }, { responseType: "text" });

@@ -1523,8 +1523,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
         """
         :meth:`can_view_profile` as a ``Q`` over profiles, so a lookup by slug can ask it in the same statement.
 
-        A hidden account found first and refused afterwards costs more queries than no account at all, which tells
-        anyone timing the two that the username is registered (P269).
+        A hidden account found first and refused afterwards costs more queries than no account at all,
+        which tells anyone timing the two that the username is registered.
 
         Args:
             viewer: The profile looking, or None for an anonymous visitor.
@@ -1616,7 +1616,7 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
     @staticmethod
     def known_to_q(actor: Profile) -> models.Q:
         """
-        The profiles *actor* could already have come across, as a ``Q``, so an id can be resolved through it (P281).
+        The profiles *actor* could already have come across, as a ``Q``, so an id can be resolved through it.
 
         Itself, any profile it may see or address a conversation with, and any it has a relationship row with
         that has not blocked it.
@@ -1638,7 +1638,7 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
     @staticmethod
     def friend_requestable_q(actor: Profile) -> models.Q:
         """
-        ``services.social.friendship.may_send_friend_request`` as a ``Q``, over active accounts only (P281).
+        ``services.social.friendship.may_send_friend_request`` as a ``Q``, over active accounts only.
 
         Args:
             actor: The profile that would send the request.

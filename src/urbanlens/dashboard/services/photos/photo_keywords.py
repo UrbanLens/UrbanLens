@@ -137,7 +137,7 @@ def require_analysis_jpeg_bytes(image: Image) -> bytes:
 
     Raises:
         AnalysisCopyUnavailableError: The row has no analysis copy yet, or it could not be read. Returning no
-            keywords instead would replace the ones the photo has with none (P322); the backfill that writes a
+            keywords instead would replace the photo's existing keywords with none; the backfill that writes a
             missing copy enqueues keywording again.
     """
     data = analysis_jpeg_bytes(image)
@@ -173,8 +173,8 @@ def run_keyword_provider(image: Image, provider: PhotoKeywordProvider) -> tuple[
     """
     Ask one provider about one photo, and store its keywords if it answers.
 
-    A provider that does not answer leaves the photo's keywords from it as they are (P322). Nothing here records a
-    retry; the callers decide what an outcome means for one (``services.photos.keyword_retry``).
+    A provider that does not answer leaves the photo's keywords from it unchanged. Nothing here records a
+    retry; callers decide what an outcome means for one (``services.photos.keyword_retry``).
 
     Args:
         image: The photo, with ``profile`` loaded.
@@ -229,7 +229,7 @@ def generate_keywords_for_image(image_id: int) -> dict[str, int]:
     """
     Run every enabled photo-keyword provider for one uploaded image.
     Each provider is isolated: one failing provider is logged and skipped without affecting the others. A source that
-    did not answer is recorded for the retry sweep (P323).
+    did not answer is recorded for the retry sweep.
 
     Args:
         image_id: PK of the image to keyword.

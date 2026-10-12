@@ -10,21 +10,21 @@ bare-term query and had to find the path Wiki actually shares with them.
 
 That shared path is ``apply_label_clause`` (`label:`/`tag:` operator, ``providers.py``), called
 identically by ``PinSearchProvider``, ``PhotoSearchProvider`` and ``WikiSearchProvider``. It filters
-through the same ``_semijoin(Wiki, "labels", ...)`` as P123
-(``test_search_does_not_read_another_accounts_labels.py``) - an
+through the same ``_semijoin(Wiki, "labels", ...)`` as
+``test_search_does_not_read_another_accounts_labels.py`` - an
 ``Exists(Wiki._base_manager.filter(...))`` subquery built from the *unfiltered* manager, unscoped to
 wikis the viewer has earned access to. A stranger's wiki, at a place the viewer has never pinned, never needs to be visible to the viewer for its labels to sit in
 the same ``dashboard_labels`` table the semijoin's inner query scans.
 
-The one structural difference from P123/Photo worth flagging: `label:` matches with ``iexact``, not
-``icontains``. P123's fix (a GIN trigram index on ``Label.name``, migration 0049) targets
+The one structural difference worth flagging: `label:` matches with ``iexact``, not
+``icontains``. The fix (a GIN trigram index on ``Label.name``, migration 0049) targets
 ``icontains``'s compiled form specifically; measured here (not assumed), it says nothing about an
 ``iexact`` plan at all - so unlike Photo, where the index alone helped the matching variant, *both*
 variants of this path needed the bounded-semi-join rewrite instead. Rows examined grew by the full
 amount of unrelated stranger labels added, whether or not the search term matched anything of the
-viewer's, before the fix.
+viewer's.
 
-**Fixed 2026-09-17.** ``_semijoin`` now bounds ``labels``' filter by the outer queryset's own
+``_semijoin`` now bounds ``labels``' filter by the outer queryset's own
 candidate primary keys, materialised as a concrete list first. See
 ``test_search_does_not_read_another_accounts_labels.py``'s module docstring for the measured
 mechanism.
@@ -53,7 +53,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
 #: The exact name of the viewer's own label - `label:` matches on the whole string (iexact), so
-#: there is nothing to search for "containing" this the way P123's icontains variant needs.
+#: there is nothing to search for "containing" this the way the icontains variant needs.
 MINE = "quokka-mine"
 
 #: A name that matches nothing anywhere, for the true-negative variant.

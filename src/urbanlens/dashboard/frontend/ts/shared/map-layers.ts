@@ -74,13 +74,9 @@ const OVERLAY_ERROR_TILE_URL = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///y
  * layer never drops out when the user zooms past the native depth.
  */
 const TILE_DEFS: Record<string, TileDef> = {
-    // Esri's street and dark canvas maps: keyless, and the same bytes a signed-in viewer's catalogue layer is
-    // proxied to (`services/map/basemap_vendors.py`), so a signed-out map draws what a signed-in one does. Not
-    // CARTO, whose `light_all`/`dark_all` now answer every tile with a 200 "API KEY REQUIRED" picture (2026-10-06),
-    // and not OSM's own tile.openstreetmap.org, whose usage policy wants the Referer this site never sends
-    // (`Referrer-Policy: no-referrer`) and answers its absence with an "Access blocked" tile, also at 200 - neither
-    // reaches `errorTileUrl`. These are the raster tier, for a map that cannot draw vector: where it can, the
-    // street and dark bases are vector (`VECTOR_STYLE_DEFS`, then `BUILT_IN_VECTOR_STYLE_DEFS`).
+    // Esri's street and dark canvas maps: keyless, same bytes as the signed-in catalogue layer
+    // (proxied via services/map/basemap_vendors.py). Not CARTO (now returns "API KEY REQUIRED"),
+    // not OSM (requires Referer we don't send). These are the raster tier; vector bases are used where available.
     street: {
         url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
         options: {
@@ -94,7 +90,7 @@ const TILE_DEFS: Record<string, TileDef> = {
         url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
         options: {
             attribution: "Esri, HERE, Garmin, &copy; OpenStreetMap contributors, and the GIS User Community",
-            // Measured 2026-10-06: real tiles through 16, and the same "not yet available" picture from 17 down.
+            // Measured: real tiles through 16, then "not yet available" picture from 17 down.
             maxNativeZoom: 16,
             maxZoom: MAP_MAX_ZOOM,
             errorTileUrl: BASE_ERROR_TILE_URL,
@@ -1125,12 +1121,9 @@ function createLeafletMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
     }
 
     // -- Loading underlay -------------------------------------------------------
-    // A gap in the tile grid shows the container's own flat colour, which is whatever CSS picked
-    // rather than anything about the place being drawn - and a fast zoom opens gaps faster than
-    // tiles can fill them, because there is no loaded level left to scale from. This draws the
-    // same base at world zooms underneath everything and blurs it, so a gap shows roughly the
-    // colours of wherever the viewer is and the real tiles read as a sharpening rather than an
-    // arrival.
+    // A tile-grid gap shows the container's flat CSS colour. Fast zoom opens gaps before tiles
+    // fill them. This draws the same base at world zooms underneath, blurred, so gaps show
+    // roughly the right colours and real tiles read as a sharpening.
     const underlayPane = "ul-underlay";
     if (!map.getPane(underlayPane)) {
         // Below Leaflet's own tilePane, which is 200.

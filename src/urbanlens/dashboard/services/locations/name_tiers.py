@@ -126,9 +126,6 @@ def tier_for(source: str, location: Location | None) -> NameTier:
     Args:
         source: The name provider's source slug.
         location: The location, for sources whose tier depends on its cached data.
-
-    Returns:
-        The tier.
     """
     if source in NOMINATIM_SOURCES:
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
@@ -164,9 +161,6 @@ def naming_scope(location: Location | None) -> NamingScope:
 
     Args:
         location: The location being named.
-
-    Returns:
-        The scope.
     """
     if location is None or not location.pk:
         return NamingScope.PARCEL
@@ -193,9 +187,6 @@ def wiki_scope(wiki: Wiki) -> NamingScope:
 
     Args:
         wiki: The wiki.
-
-    Returns:
-        The scope.
     """
     from urbanlens.dashboard.models.pin.model import PinType
     from urbanlens.dashboard.services.places.scope import pin_type_for_place

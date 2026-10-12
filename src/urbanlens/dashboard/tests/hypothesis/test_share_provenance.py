@@ -307,11 +307,9 @@ class AdditionalGamingScenarioTests(_ProvenanceTestCase):
         self.assertEqual(onward.parent_share_id, share.pk)
 
     def test_second_move_of_never_shared_nearby_pin_still_chains(self):
-        # The gap this closes: a pin sitting *near* (not exactly on, and
-        # never shared/stamped while there) an exposed location gets moved a
-        # SECOND time, before it was ever shared from the first spot. The
-        # move-propagation step must find that nearby exposure by radius,
-        # not by exact Location-row match, or the chain silently breaks here.
+        # A pin near (not on) an exposed location, never shared from there,
+        # gets moved a second time. The move-propagation step must find the
+        # exposure by radius, not exact Location-row match, or the chain breaks.
         share = self._share(self.sarah_pin, "sarah", "john")
         nearby_location = baker.make(Location, latitude="42.100900", longitude="-73.900000")
         self.assertNotEqual(nearby_location.pk, self.location.pk)
@@ -340,11 +338,9 @@ class AdditionalGamingScenarioTests(_ProvenanceTestCase):
         self.assertIsNone(onward.parent_share_id)
 
     def test_pins_own_lineage_wins_over_environmental_exposure_after_move(self):
-        # John carries two independent lineages: his own accepted pin at
-        # Sarah's place (share_a), and a separately accepted pin from Kim's
-        # own unrelated place (share_b). Moving the share_b pin into
-        # share_a's exposed radius must not overwrite its own, more specific
-        # lineage - source_share_id always wins over a proximity match.
+        # John has two lineages: accepted pin from Sarah (share_a) and from Kim
+        # (share_b). Moving the share_b pin into share_a's radius must not
+        # overwrite its own lineage - source_share_id wins over proximity.
         share_a = self._share(self.sarah_pin, "sarah", "john")
         kim_original_pin = Pin.objects.create(profile=self.profiles["kim"], location=self.far_location)
         share_b = self._share(kim_original_pin, "kim", "john")

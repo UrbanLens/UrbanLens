@@ -1,14 +1,14 @@
 """
 Searching your own trips must not read comment rows belonging to a trip you are not on.
 
-Same mechanism as P123 (``test_search_does_not_read_another_accounts_labels.py``):
+Same mechanism as ``test_search_does_not_read_another_accounts_labels.py``:
 ``TripSearchProvider.search`` feeds ``comments__text`` to ``apply_text``, and it crosses a to-many
 relation (``TripComment`` is a reverse foreign key, ``related_name="comments"``), so it goes through
 the same unscoped ``_semijoin`` as labels do - an ``Exists(Trip._base_manager.filter(...))``
 subquery built from the *unfiltered* manager, run before the outer membership check
 (``Trip.objects.filter(Q(pk__in=...) | Q(creator=profile))``) narrows anything.
 
-**Fixed 2026-09-17.** ``comments`` crosses at *path*'s own first segment, so ``_semijoin`` now bounds
+``comments`` crosses at *path*'s own first segment, so ``_semijoin`` now bounds
 its filter by the outer queryset's own candidate primary keys, materialised as a concrete list first
 rather than left as a nested subquery. See
 ``test_search_does_not_read_another_accounts_labels.py``'s module docstring for the measured
@@ -135,11 +135,11 @@ class SearchDoesNotReadAnotherAccountsTripCommentsTests(_TripCommentCase):
     """One trip's comments must not be read to answer a search for a different, accessible trip."""
 
     def test_it_does_not_read_a_strangers_matching_comments(self) -> None:
-        """Fixed 2026-09-17 by the bounded semi-join - see the module docstring."""
+        """A stranger's matching comments must not be read."""
         self.assertDoesNotGrow(SECOND_BATCH, matching=True)
 
     def test_it_does_not_read_a_strangers_unrelated_comments(self) -> None:
-        """Fixed 2026-09-17 by the bounded semi-join - see the module docstring."""
+        """A stranger's unrelated comments must not be read."""
         self.assertDoesNotGrow(SECOND_BATCH, matching=False)
 
 

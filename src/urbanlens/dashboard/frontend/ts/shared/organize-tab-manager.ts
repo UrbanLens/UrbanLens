@@ -89,7 +89,7 @@ interface CardData {
 
 /**
  * Generic per-tab manager for organize/index.html's tag/category/status/people/media
- * tabs. Consolidates what used to be four separately copy-pasted ~350-450
+ * tabs. Consolidates four separately copy-pasted ~350-450
  * line IIFEs differing mainly in id/dataset naming plus a handful of real
  * capability differences (kind-conversion, merge-time rename/re-icon/re-color,
  * a "protected" label that can't be a merge source, custom-icon upload).
@@ -342,12 +342,9 @@ export class OrgTabManager {
         });
     }
 
-    // When multiple labels are selected, a row's own "Edit" pencil should
-    // still open the bulk-edit dialog for the whole selection rather than
-    // the single-item form - otherwise it silently edits just that one row
-    // while the rest of the selection looks like it's being included. Runs
-    // in the capture phase so it can veto the click before htmx's own
-    // bubble-phase hx-get listener on the button fires.
+    // When multiple labels are selected, a row's "Edit" pencil opens the
+    // bulk-edit dialog for the whole selection, not the single-item form.
+    // Runs in capture phase to veto before htmx's bubble-phase listener fires.
     private wireRowEditIntercept(): void {
         this.rows?.addEventListener(
             "click",
@@ -495,11 +492,9 @@ export class OrgTabManager {
         });
         const sharedIcon = iconSet.size === 1 ? Array.from(iconSet)[0]! : null;
         const sharedColor = colorSet.size === 1 ? Array.from(colorSet)[0]! : null;
-        // A shared *custom uploaded* icon has no representation in the symbol/emoji
-        // picker below - without this check, every selected label sharing one was
-        // computed as sharedIcon="" (empty symbol field), which unchecked "no
-        // change" and would submit icon="" on save, silently wiping the custom
-        // icon from all of them even for a bulk edit that only touched color/order.
+        // A shared custom uploaded icon has no representation in the picker.
+        // Without this check, sharedIcon="" would uncheck "no change" and submit
+        // icon="" on save, wiping the custom icon even for color/order-only edits.
         const sharedCustomIcon = this.cfg.customIconKey && customIconSet.size === 1 ? Array.from(customIconSet)[0]! : null;
 
         const iconNochange = document.getElementById(d.iconNochangeId) as HTMLInputElement;

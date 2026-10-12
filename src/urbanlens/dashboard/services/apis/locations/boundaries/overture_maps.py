@@ -247,8 +247,8 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
         Goes through ``_reserve_call``/``_finalize_call`` (the same pair `_RateLimitedSession` uses)
         rather than the simpler `check_rate_limit`+`log_api_call` pattern the AI services use for
         their own `self.session` bypass: those are called once per task, but Overture is reached from
-        per-pin enrichment fan-out - the exact concurrent-burst scenario P110 is about - and a plain
-        check-then-log gap there would let concurrent callers all pass the check before any of them
+        per-pin enrichment fan-out - the exact concurrent-burst scenario - and a plain
+        check-then-log gap would let concurrent callers all pass the check before any of them
         logs, defeating the budget precisely when it matters most.
 
         Args:
@@ -495,7 +495,7 @@ def nearby_places(features: list[dict], latitude: float, longitude: float, *, ra
         if distance_m > radius_m:
             continue
 
-        # Overture's 2026-09-23 release replaced ``categories`` with ``taxonomy``.
+        # Overture's release replaced ``categories`` with ``taxonomy``.
         primary_category = _primary(properties.get("categories")) or _primary(properties.get("taxonomy"))
         candidates.append(
             {
