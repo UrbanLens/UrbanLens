@@ -72,11 +72,11 @@ class PluginRegistry:
         self._load_settings_modules()
         self._load_entry_points()
 
-        for info in self.plugins():
+        for plugin in self.enabled_plugins():
             try:
-                info.plugin.register(hooks)
+                plugin.register(hooks)
             except Exception:
-                logger.exception("Plugin '%s' register() failed", info.plugin.name)
+                logger.exception("Plugin '%s' register() failed", plugin.name)
         hooks.do_action(ACTION_PLUGINS_LOADED, self)
         logger.info("Discovered %d plugins: %s", len(self._plugins), ", ".join(sorted(self._plugins)))
 
@@ -252,40 +252,6 @@ class PluginRegistry:
             ``(model, ModelAdmin)`` pairs for ``admin.site.register``.
         """
         return self._collect("get_model_admins")
-
-    def beat_schedule(self) -> dict[str, dict]:
-        """
-        Celery beat entries contributed by enabled plugins.
-
-        Returns:
-            Merged mapping of entry name to entry; the first plugin to claim a
-            name wins, and a duplicate is logged.
-        """
-        merged: dict[str, dict] = {}
-        for plugin in self.enabled_plugins():
-            for name, entry in self._safe(plugin, "get_beat_schedule", {}).items():
-                if name in merged:
-                    logger.warning("Plugin '%s' redeclares beat entry '%s'; keeping the first declaration", plugin.name, name)
-                    continue
-                merged[name] = entry
-        return merged
-
-    def beat_egress(self) -> dict:
-        """
-        Egress classifications contributed by enabled plugins.
-
-        Returns:
-            Merged mapping of entry name to classification; the first plugin to
-            claim a name wins, and a duplicate is logged.
-        """
-        merged: dict = {}
-        for plugin in self.enabled_plugins():
-            for name, egress in self._safe(plugin, "get_beat_egress", {}).items():
-                if name in merged:
-                    logger.warning("Plugin '%s' redeclares beat egress for '%s'; keeping the first declaration", plugin.name, name)
-                    continue
-                merged[name] = egress
-        return merged
 
     # Internals
 

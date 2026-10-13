@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.plugins.hooks import HookRegistry
@@ -12,7 +12,6 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.services.locations.name_resolution import NameProvider
     from urbanlens.dashboard.services.photos.photo_keywords import PhotoKeywordProvider
     from urbanlens.dashboard.services.pins.external_data import PanelSource
-    from urbanlens.UrbanLens.egress import BeatEgress
 
 
 class UrbanLensPlugin:
@@ -118,32 +117,6 @@ class UrbanLensPlugin:
         Returns:
             ``(model, ModelAdmin)`` pairs; empty when the plugin contributes none."""
         return []
-
-    def get_beat_schedule(self) -> dict[str, dict[str, Any]]:
-        """
-        Celery beat entries contributed by this plugin, in ``CELERY_BEAT_SCHEDULE`` shape.
-
-        Merged into the schedule in the app's ``ready()`` after discovery (filtered
-        for the environment like every other entry), so an install without the
-        plugin simply never schedules its tasks.
-
-        Returns:
-            Mapping of entry name to ``{"task": dotted_path, "schedule": ...}``;
-            empty when the plugin contributes no scheduled work."""
-        return {}
-
-    def get_beat_egress(self) -> dict[str, BeatEgress]:
-        """
-        Egress classification for this plugin's beat entries.
-
-        Merged into ``BEAT_EGRESS`` in the app's ``ready()`` after discovery, so the
-        environment filter and the task gate know the entries. Every name in
-        :meth:`get_beat_schedule` needs one; an unclassified entry counts as external.
-
-        Returns:
-            Mapping of entry name to its classification; empty when the plugin
-            contributes no scheduled work."""
-        return {}
 
     def register(self, hooks: HookRegistry) -> None:
         """
