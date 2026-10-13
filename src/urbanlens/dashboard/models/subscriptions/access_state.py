@@ -185,11 +185,19 @@ def connect_invalidation() -> None:
     from django.contrib.auth.models import Group, Permission
     from django.db.models.signals import m2m_changed, post_delete, post_save
 
-    from urbanlens.dashboard.models.billing import RoleSubscription
     from urbanlens.dashboard.models.site_settings.model import SiteSettings
     from urbanlens.dashboard.models.subscriptions.model import SubscriptionRole, UserSubscription
+    from urbanlens.dashboard.plugins.hooks import hooks
 
-    rows = (SiteSettings, UserSubscription, RoleSubscription, SubscriptionRole, Group, Permission)
+    # Plugins watch their own tables through the access_state_invalidation_senders filter.
+    rows = (
+        SiteSettings,
+        UserSubscription,
+        SubscriptionRole,
+        Group,
+        Permission,
+        *hooks.apply_filters("access_state_invalidation_senders", []),
+    )
     for sender in rows:
         post_save.connect(forget, sender=sender, dispatch_uid=f"access_state_forget_{sender.__name__}_save")
         post_delete.connect(forget, sender=sender, dispatch_uid=f"access_state_forget_{sender.__name__}_delete")

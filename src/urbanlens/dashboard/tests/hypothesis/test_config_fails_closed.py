@@ -193,7 +193,7 @@ class RequiredDeploymentSettingsTests(_ReloadsSettings):
         self.assertEqual(reloaded.CELERY_BROKER_URL, "amqp://explicit/")
 
     def test_the_older_store_names_still_count(self) -> None:
-        """damballa's stacks predate the rename and set only UL_VALKEY_URL."""
+        """Older stacks predate the rename and set only UL_VALKEY_URL."""
         reloaded = self._reload(
             "production", **{**_CONFIGURED, "UL_DRAGONFLY_URL": "", "UL_VALKEY_URL": "redis://valkey.example/0"}
         )

@@ -182,7 +182,7 @@ class SiteAdminModelsViewTests(RedataConfiguredMixin, TestCase):
         body = {
             "active": {"version": 3, "metrics": {"brier": 0.1}},
             "ranker": "model",
-            "uploader": "jess@example.test",
+            "uploader": "alex@example.test",
             "reputation": 0.9,
         }
 
@@ -193,7 +193,7 @@ class SiteAdminModelsViewTests(RedataConfiguredMixin, TestCase):
         ):
             response = self.client.get(self.url)
 
-        self.assertNotContains(response, "jess@example.test")
+        self.assertNotContains(response, "alex@example.test")
         self.assertNotIn("uploader", response.context["models"][0]["summary"])
 
     def test_both_models_are_reported(self) -> None:

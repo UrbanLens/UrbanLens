@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 from importlib import import_module
+from unittest import skipUnless
 
 from django.apps import apps as django_apps
 from django.contrib.auth.models import User
@@ -12,7 +13,6 @@ from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.billing import BillingSubscriptionStatus, RoleSubscription
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.subscriptions import (
     SiteFeature,
@@ -20,7 +20,14 @@ from urbanlens.dashboard.models.subscriptions import (
     active_subscription_roles,
     user_has_feature,
 )
+from urbanlens.dashboard.plugins import plugin_available
 from urbanlens.dashboard.services.admin.site_admin import add_user_to_site_admin_group
+
+try:
+    from urbanlens.dashboard.models.billing import BillingSubscriptionStatus, RoleSubscription
+except ImportError:
+    BillingSubscriptionStatus = None
+    RoleSubscription = None
 
 _seed_vip_role = import_module("urbanlens.dashboard.migrations.0020_seed_vip_subscription_role").seed_vip_role
 
@@ -48,6 +55,7 @@ class VipRoleSeedTests(TestCase):
 
         self.assertEqual(list(SubscriptionRole.objects.filter(slug="vip").values_list("name", flat=True)), ["Patrons"])
 
+    @skipUnless(plugin_available("billing"), "billing plugin is not installed")
     def test_deleting_it_is_permanent(self) -> None:
         _seed_vip_role(django_apps, None)
         SubscriptionRole.objects.get(slug="vip").delete()
@@ -79,6 +87,7 @@ class UniqueSlugTests(TestCase):
         self.assertEqual(SubscriptionRole.unique_slug("!!!"), "role")
 
 
+@skipUnless(plugin_available("billing"), "billing plugin is not installed")
 class PaidSubscriptionFeatureGrantTests(TestCase):
     """user_has_feature()/active_subscription_roles() also honor paid RoleSubscriptions."""
 

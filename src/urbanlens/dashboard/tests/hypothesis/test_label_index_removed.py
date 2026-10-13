@@ -1,4 +1,4 @@
-"""The per-kind label pages duplicated the Organize page's tabs, and are gone (Jess, 2026-09-30)."""
+"""The per-kind label pages duplicated the Organize page's tabs, and are gone."""
 
 from __future__ import annotations
 

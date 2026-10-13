@@ -24,7 +24,7 @@ _COMPOSE_PATH = _REPO_ROOT / "docker-compose.yml"
 _SAMPLE_PATH = _REPO_ROOT / "src" / "urbanlens" / "config" / "env" / "staging.sample.env"
 
 #: What the kernel gives a container whose `cpu_shares` is unset, which is what
-#: every production container on damballa currently is.
+#: every production container currently is.
 _UNSET_SHARES = 1024
 
 #: The test stack, which never runs beside production.

@@ -116,6 +116,7 @@
             <i class="material-icons admin-nav-card__arrow">arrow_forward</i>
         </a>
 
+        {% if "billing" in plugin_names %}
         <a href="{% url 'site_admin_subscriptions' %}" class="admin-nav-card">
             <div class="admin-nav-card__icon" style="background:rgba(234,179,8,.12)">
                 <i class="material-icons" style="color:#ca8a04">workspace_premium</i>
@@ -126,6 +127,7 @@
             </div>
             <i class="material-icons admin-nav-card__arrow">arrow_forward</i>
         </a>
+        {% endif %}
 
         <a href="{% url 'site_admin_api_limits' %}" class="admin-nav-card">
             <div class="admin-nav-card__icon" style="background:rgba(16,185,129,.12)">

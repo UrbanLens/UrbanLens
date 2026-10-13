@@ -1,9 +1,7 @@
 name: Publish Release Artifacts
 
 on:
-  # Only a commit whose CI passed on main publishes. UrbanLens/infrastructure's
-  # app-image.yml deploys whatever :main points at to both k3s sites, with no human
-  # step between (../infrastructure/docs/runbooks/app-deploys.md), so :main must
+  # Only a commit whose CI passed on main publishes, so :main must
   # never name untested code.
   workflow_run:
     workflows: [CI]
@@ -265,32 +263,3 @@ jobs:
           subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
-
-  notify-infrastructure:
-    # Wake-up for UrbanLens/infrastructure's app-image.yml. Optional without
-    # INFRA_DISPATCH_TOKEN (succeeds); payload is informational, infra re-reads
-    # :main from ghcr as dispatches can arrive out of order.
-    # Token needs Contents read+write on that repo (also allows push: a real credential).
-    name: Tell the infrastructure repo
-    needs: [plan, publish-container]
-    if: needs.plan.outputs.move-main == 'true'
-    runs-on: ubuntu-latest
-    permissions: {}
-    steps:
-      - name: repository_dispatch to UrbanLens/infrastructure
-        env:
-          GH_TOKEN: ${{ secrets.INFRA_DISPATCH_TOKEN }}
-          SHA: ${{ needs.plan.outputs.sha }}
-          DIGEST: ${{ needs.publish-container.outputs.digest }}
-        run: |
-          set -euo pipefail
-          if [ -z "${GH_TOKEN}" ]; then
-            echo "INFRA_DISPATCH_TOKEN is not set - the infrastructure repo will pick this image up on its next scheduled run"
-            exit 0
-          fi
-          gh api --method POST repos/UrbanLens/infrastructure/dispatches \
-            -f event_type=urbanlens-image-published \
-            -f "client_payload[sha]=${SHA}" \
-            -f "client_payload[tag]=sha-${SHA:0:7}" \
-            -f "client_payload[digest]=${DIGEST}"
-          echo "dispatched urbanlens-image-published for ${SHA}"

@@ -179,10 +179,10 @@ def active_supporter_count(as_of: dt.datetime | None = None) -> int:
         as_of: Point in time to evaluate against; defaults to now.
 
     Returns:
-        The number of distinct paying supporters."""
-    from urbanlens.dashboard.models.billing import RoleSubscription
+        The number of distinct paying supporters (0 with no subscription plugin)."""
+    from urbanlens.dashboard.plugins.hooks import hooks
 
-    return RoleSubscription.objects.currently_granting(as_of).values("user_id").distinct().count()
+    return hooks.apply_filters("active_supporter_count", 0, as_of)
 
 
 def cost_per_supporter(as_of: dt.datetime | None = None) -> Decimal | None:

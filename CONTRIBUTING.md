@@ -38,7 +38,7 @@ UrbanLens's codebase is open under AGPL, but location data, coordinates, and sit
 ## How to contribute
 
 1. Fork the repo and create a branch off `main`.
-2. Reference the relevant Jira issue (e.g. `UL-123`) in your branch name or commit message where applicable.
+2. Reference the relevant GitHub issue (e.g. `#123`) in your branch name or commit message where applicable.
 3. Keep PRs scoped — one logical change per PR.
 4. Run the checks CI enforces before submitting - these are what will fail your PR:
 
@@ -62,4 +62,4 @@ UrbanLens's codebase is open under AGPL, but location data, coordinates, and sit
 
 ## Questions
 
-Open an issue or reference the relevant Jira ticket if you're unsure whether something is in scope.
+Open an issue if you're unsure whether something is in scope.

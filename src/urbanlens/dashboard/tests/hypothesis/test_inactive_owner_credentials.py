@@ -35,8 +35,8 @@ from urbanlens.core.tests.testcase import TestCase, TransactionTestCase
 from urbanlens.dashboard.consumers import UserNotificationConsumer, _credential_is_still_valid
 from urbanlens.dashboard.controllers.media_auth import CredentialOrSessionMediaMixin
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
-from urbanlens.dashboard.models.billing import RoleSubscription
 from urbanlens.dashboard.models.subscriptions import SubscriptionRole
+from urbanlens.dashboard.plugins import plugin_available
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.websocket_auth import ApiKeyAuthMiddleware
 
@@ -272,11 +272,15 @@ class SocketTests(TransactionTestCase):
 class FixedPricePledgeTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
+        if not plugin_available("billing"):
+            self.skipTest("billing plugin is not installed")
         baker.make(User)
         self.user = baker.make(User)
         self.client.force_login(self.user)
 
     def _pledge(self, role: SubscriptionRole):
+        from urbanlens.dashboard.models.billing import RoleSubscription
+
         subscription = baker.make(
             RoleSubscription, user=self.user, role=role, pledged_amount_cents=role.monthly_price_cents
         )

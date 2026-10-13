@@ -225,6 +225,68 @@ class PluginRegistry:
         """
         return self._collect("get_street_view_providers")
 
+    def urls(self) -> list:
+        """
+        URL routes contributed by enabled plugins, in plugin order.
+
+        Returns:
+            URL patterns for the root urlconf; an install without a plugin
+            simply has none of its routes. A duplicate route name is logged,
+            since Django's reverse would silently prefer one.
+        """
+        collected = self._collect("get_urls")
+        seen: set[str] = set()
+        for route in collected:
+            name = getattr(route, "name", None)
+            if name is not None:
+                if name in seen:
+                    logger.warning("Duplicate plugin route name '%s'; reverse() prefers one of them", name)
+                seen.add(name)
+        return collected
+
+    def model_admins(self) -> list[tuple[type, type]]:
+        """
+        Django-admin registrations contributed by enabled plugins, in plugin order.
+
+        Returns:
+            ``(model, ModelAdmin)`` pairs for ``admin.site.register``.
+        """
+        return self._collect("get_model_admins")
+
+    def beat_schedule(self) -> dict[str, dict]:
+        """
+        Celery beat entries contributed by enabled plugins.
+
+        Returns:
+            Merged mapping of entry name to entry; the first plugin to claim a
+            name wins, and a duplicate is logged.
+        """
+        merged: dict[str, dict] = {}
+        for plugin in self.enabled_plugins():
+            for name, entry in self._safe(plugin, "get_beat_schedule", {}).items():
+                if name in merged:
+                    logger.warning("Plugin '%s' redeclares beat entry '%s'; keeping the first declaration", plugin.name, name)
+                    continue
+                merged[name] = entry
+        return merged
+
+    def beat_egress(self) -> dict:
+        """
+        Egress classifications contributed by enabled plugins.
+
+        Returns:
+            Merged mapping of entry name to classification; the first plugin to
+            claim a name wins, and a duplicate is logged.
+        """
+        merged: dict = {}
+        for plugin in self.enabled_plugins():
+            for name, egress in self._safe(plugin, "get_beat_egress", {}).items():
+                if name in merged:
+                    logger.warning("Plugin '%s' redeclares beat egress for '%s'; keeping the first declaration", plugin.name, name)
+                    continue
+                merged[name] = egress
+        return merged
+
     # Internals
 
     def _collect(self, method_name: str) -> list:

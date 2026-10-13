@@ -1,4 +1,4 @@
-# The media origin: media.urbanlens.org and nothing else.
+# The media origin: media.example.com and nothing else.
 #
 # A second, deliberately tiny nginx whose config contains only the two media
 # locations. The app's routes are not merely un-matched here, they are absent -
@@ -7,7 +7,7 @@
 # `server_name` block to django.conf: a Host header cannot walk from this vhost
 # into the application, because this vhost does not know how to get there.
 #
-# Point NGINX Proxy Manager's media.urbanlens.org host at ${UL_MEDIA_PORT}.
+# Point NGINX Proxy Manager's media.example.com host at ${UL_MEDIA_PORT}.
 #
 # Requests still reach Django - the media gate authenticates and authorizes every
 # byte (dashboard/controllers/media.py). What changes on this origin is *how* it

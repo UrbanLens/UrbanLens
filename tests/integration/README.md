@@ -14,7 +14,7 @@ python src/urbanlens/manage.py provision_integration_env --out /tmp/e2e.json
 
 # Here:
 UL_E2E_ACCOUNTS_FILE=/tmp/e2e.json \
-  ../../bin/run_integration_tests.sh --url https://s1.dev.urbanlens.org
+  ../../bin/run_integration_tests.sh --url http://localhost:21800
 ```
 
 `--docker` needs nothing installed but Docker. `--project smoke` is the

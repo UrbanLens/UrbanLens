@@ -140,7 +140,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     media_base_url: str = Field(
         default="",
         description=(
-            "Origin that serves user uploads, e.g. https://media.urbanlens.org. Point it at the media-nginx "
+            "Origin that serves user uploads, e.g. https://media.example.com. Point it at the media-nginx "
             "container's published port (UL_MEDIA_PORT). Serving uploads from their own origin means anything "
             "that slips past validation executes where there is no session cookie and no app data; authentication "
             "there uses a separate media-only signed cookie. Leave empty to serve /media/ from the app's own "
@@ -663,6 +663,14 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         default=False,
         description=("Deliver mail for real off production, through UL_EMAIL_BACKEND (SMTP by default). Unset, development and staging print every message, verification codes and magic links included, to the log instead."),
     )
+    overpass_api_url: str = Field(
+        default="",
+        description=(
+            "Primary Overpass API endpoint this deployment asks first (usually a self-hosted instance), "
+            "with the public mirrors as ordered fallbacks. Empty means no primary: only the public "
+            "mirrors are asked, and only where the environment permits them (production by default)."
+        ),
+    )
     protomaps_api_key: str = Field(
         default="",
         description=(
@@ -687,8 +695,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "from by this server, it is where the *browser* is allowed to fetch them from. A "
             "raster layer is proxied same-origin and needs no exception, so a deployment whose "
             "REData offers only raster layers can leave this unset. "
-            "Set it to the origin in REData's published style_url. For the hosted instance that "
-            "is https://tiles.urbanlens.org, which serves the style documents, the glyphs and "
+            "Set it to the origin in REData's published style_url. For example, https://tiles.example.com, which serves the style documents, the glyphs and "
             "sprites they name, and the Protomaps planet archive behind them - measured "
             "2026-09-20: styles/street.json, styles/dark.json and styles/terrain.json all answer "
             "anonymously, with access-control-allow-origin: * and Content-Range exposed for the "
@@ -749,7 +756,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     demo_real_site_url: str = Field(
         default="",
         description=(
-            "Set on the demo instance: absolute URL of the real site, e.g. https://urbanlens.org. "
+            "Set on the demo instance: absolute URL of the real site, e.g. https://example.com. "
             "The demo banner links there for 'create a real account'. Empty hides that link - the "
             "demo's own signup would only make another throwaway account on the instance that is "
             "about to delete it."
@@ -767,7 +774,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     demo_url: str = Field(
         default="",
         description=(
-            "Absolute URL of the demo instance, e.g. https://demo.urbanlens.org. Set on the *real* "
+            "Absolute URL of the demo instance, e.g. https://demo.example.com. Set on the *real* "
             "site to show the 'Try the demo' button on the login and registration pages; empty hides "
             "it. Deliberately a URL rather than a boolean, so the button cannot appear without a "
             "destination that someone has actually provisioned."

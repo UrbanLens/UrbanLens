@@ -33,7 +33,7 @@ class EndpointBackoffTests(SimpleTestCase):
         ):
             patcher.start()
             self.addCleanup(patcher.stop)
-        self.gateway = OverpassGateway(session=mock.Mock())
+        self.gateway = OverpassGateway(session=mock.Mock(), base_url="https://primary.example/api/interpreter")
         self.primary = self.gateway.base_url
 
     def _down_for(self, *responses: mock.Mock) -> list[int]:

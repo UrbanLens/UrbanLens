@@ -228,7 +228,7 @@ class SiteAdminStatsViewContextTests(TestCase):
         self.assertIsInstance(ctx["total_users"], int)
 
     def test_there_is_no_top_locations_table(self) -> None:
-        """Jess, 2026-09-30: it has always been empty, and is removed rather than filled."""
+        """It has always been empty, and is removed rather than filled."""
         response = self.client.get(reverse("site_admin_stats_kpi"))
         self.assertNotIn("top_locations", response.context)
         self.assertNotContains(response, "Most Pinned Locations")

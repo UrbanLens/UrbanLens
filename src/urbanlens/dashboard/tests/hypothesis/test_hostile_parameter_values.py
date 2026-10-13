@@ -27,7 +27,7 @@ from urbanlens.dashboard.models.pin_list.model import PinList
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.property_owner.model import PinOwner, PinPropertySale
 from urbanlens.dashboard.models.trips.model import Trip
-from urbanlens.dashboard.services.billing.pricing import STRIPE_MAXIMUM_CHARGE_CENTS, typed_dollars_to_cents
+from urbanlens.dashboard.plugins import plugin_available
 from urbanlens.dashboard.services.core.numbers import DB_BIGINT_MAX, typed_decimal_for_column
 from urbanlens.dashboard.services.core.pagination import offset_window
 from urbanlens.dashboard.services.core.request_body import json_body, list_field, text_field, text_type_error
@@ -259,15 +259,24 @@ class LookupsByIdentifierTests(_SignedIn):
 
 
 class TypedDollarsTests(SimpleTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        if not plugin_available("billing"):
+            self.skipTest("billing plugin is not installed")
+        from urbanlens.dashboard.services.billing.pricing import STRIPE_MAXIMUM_CHARGE_CENTS, typed_dollars_to_cents
+
+        self._typed_dollars_to_cents = typed_dollars_to_cents
+        self._stripe_maximum = STRIPE_MAXIMUM_CHARGE_CENTS
+
     def test_what_stripe_could_not_charge_is_none(self) -> None:
         for raw in ("nan", "inf", "-inf", "1e999999999", "-0.01", "1000000", "abc", ""):
             with self.subTest(raw=raw):
-                self.assertIsNone(typed_dollars_to_cents(raw))
+                self.assertIsNone(self._typed_dollars_to_cents(raw))
 
     def test_amounts_stripe_charges_are_cents(self) -> None:
-        self.assertEqual(typed_dollars_to_cents(" 0.5 "), 50)
-        self.assertEqual(typed_dollars_to_cents("0"), 0)
-        self.assertEqual(typed_dollars_to_cents("999999.99"), STRIPE_MAXIMUM_CHARGE_CENTS)
+        self.assertEqual(self._typed_dollars_to_cents(" 0.5 "), 50)
+        self.assertEqual(self._typed_dollars_to_cents("0"), 0)
+        self.assertEqual(self._typed_dollars_to_cents("999999.99"), self._stripe_maximum)
 
 
 class TypedDecimalTests(SimpleTestCase):

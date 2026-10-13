@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
 import json
 import logging
@@ -24,9 +24,22 @@ from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededErro
 
 logger = logging.getLogger(__name__)
 
-# It is the primary; the public instances below are ordered fallbacks, not equal peers
-# (`_available_endpoints` keeps the primary first and only shuffles the fallbacks).
-_API_URL = "https://overpass.osm.urbanlens.org/api/interpreter"
+def _default_primary() -> str:
+    """
+    This deployment's primary Overpass endpoint.
+
+    Read per instance (not at import) so settings changes apply without a restart.
+    Empty when ``UL_OVERPASS_API_URL`` is unset: the gateway then asks only the
+    public mirrors, and only where the environment permits them.
+
+    Returns:
+        The configured primary endpoint, or an empty string.
+    """
+    from urbanlens.UrbanLens.settings.app import settings
+
+    return settings.overpass_api_url or ""
+
+
 #: The egress policy's key for the public fallbacks below, which spend the shared address's per-IP slots.
 PUBLIC_MIRROR_SERVICE = "overpass_public_mirror"
 # Public fallbacks, used when the primary is down or overloaded.
@@ -220,7 +233,9 @@ class OverpassGateway(Gateway, BoundaryProvider):
     service_key: ClassVar[str] = "overpass"
     paid_service: ClassVar[bool] = False
 
-    base_url: str = _API_URL
+    #: Primary endpoint, asked first. Empty means no primary: use ``UL_OVERPASS_API_URL``.
+    #: default_factory so settings changes apply per instance; a bare default freezes at import.
+    base_url: str = field(default_factory=_default_primary)
     mirrors: tuple[str, ...] = _API_MIRRORS
     #: Server-side Overpass QL ``[timeout:N]``.
     #: Keep it generous; the HTTP ``timeout`` below must stay strictly larger so the socket does not
@@ -251,14 +266,17 @@ class OverpassGateway(Gateway, BoundaryProvider):
         """
         Ordered, de-duplicated list of every Overpass endpoint this deployment may ask.
 
-        The public mirrors are their own ``quota`` service, :data:`PUBLIC_MIRROR_SERVICE`: where the environment
-        does not call it (off production by default, D26) only the self-hosted primary is asked.
+        The primary (``UL_OVERPASS_API_URL``) comes first; the public mirrors are their own
+        ``quota`` service, :data:`PUBLIC_MIRROR_SERVICE`: where the environment
+        does not call it (off production by default, D26) only the primary is asked,
+        and with no primary configured there is nothing to ask.
         """
         from urbanlens.dashboard.services.core.egress import egress_permitted
 
-        configured = (self.base_url, *self.mirrors) if egress_permitted(PUBLIC_MIRROR_SERVICE) else (self.base_url,)
+        primary = [self.base_url] if self.base_url else []
+        mirrors = list(self.mirrors) if egress_permitted(PUBLIC_MIRROR_SERVICE) else []
         endpoints: list[str] = []
-        for url in configured:
+        for url in (*primary, *mirrors):
             if url not in endpoints:
                 endpoints.append(url)
         return endpoints
@@ -266,7 +284,7 @@ class OverpassGateway(Gateway, BoundaryProvider):
     def _available_endpoints(self) -> list[str]:
         """Healthy endpoints: the primary first, then fallbacks in randomised order."""
         available = [url for url in self._endpoints() if not _endpoint_is_down(url)]
-        if available and available[0] == self.base_url:
+        if self.base_url and available and available[0] == self.base_url:
             fallbacks = available[1:]
             random.shuffle(fallbacks)
             return [available[0], *fallbacks]
@@ -293,6 +311,11 @@ class OverpassGateway(Gateway, BoundaryProvider):
         http_timeout = timeout or self.timeout
         candidates = self._available_endpoints()
         if not candidates:
+            if not self._endpoints():
+                raise OverpassUnavailableError(
+                    "No Overpass endpoint is available: UL_OVERPASS_API_URL is unset and the "
+                    "public mirrors are not permitted in this environment"
+                )
             raise OverpassUnavailableError("Every Overpass endpoint is flagged down")
         last_error: requests.RequestException | None = None
         suspect_empty: tuple[str, dict[str, Any]] | None = None

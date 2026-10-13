@@ -98,7 +98,7 @@ class SubscriptionRole(abstract.DashboardModel):
         help_text="Max user-triggered emails per 30 days for this role. Blank uses the site default; 0 means unlimited.",
     )
 
-    # --- Paid subscriptions (Stripe) ---
+    # --- Paid subscriptions ---
 
     monthly_price_cents = IntegerField(
         null=True,
@@ -278,15 +278,23 @@ class PendingSubscriptionGrant(abstract.DashboardModel):
         return int(self.duration_months)
 
 
-def _paid_subscription_roles(user: User) -> list[SubscriptionRole]:
+def _additional_subscription_roles(user: User) -> list[SubscriptionRole]:
     """
-    Roles the user currently holds via a paid (Stripe-backed) subscription.
-    Only counts ``RoleSubscription`` rows that are active/trialing *and* have cleared their role's pay-what-you-want threshold (see ``services.billing.pricing.role_pwyw_threshold_cents`` - re-evaluated at each successful Stripe charge, so a dynamic-threshold role can silently stop granting access without the row itself changing status).
-    """
-    from urbanlens.dashboard.models.billing import RoleSubscription
+    Roles the user holds through a means other than a direct admin grant.
 
-    paid = RoleSubscription.objects.granting_access_for(user).select_related("role")
-    return [subscription.role for subscription in paid]
+    Provided by plugins through the ``additional_subscription_roles`` filter
+    (a paid-subscription plugin grants roles whose payment threshold is met).
+    Without such a plugin there are no additional roles.
+
+    Args:
+        user: The user to look up.
+
+    Returns:
+        The extra roles, deduplicated by the caller.
+    """
+    from urbanlens.dashboard.plugins.hooks import hooks
+
+    return list(hooks.apply_filters("additional_subscription_roles", [], user))
 
 
 def user_has_feature(user: AbstractBaseUser | AnonymousUser, feature: SiteFeature | str) -> bool:
@@ -326,21 +334,21 @@ def user_features_from_database(user: User) -> frozenset[str]:
 
 def active_subscription_roles(user: AbstractBaseUser | AnonymousUser) -> list[SubscriptionRole]:
     """
-    Return the subscription roles the user currently holds, admin-granted or paid.
+    Return the subscription roles the user currently holds, admin-granted or otherwise.
 
     Args:
         user: The user to look up; anonymous users hold no roles.
 
     Returns:
         The roles of the user's active (unrevoked, unexpired) admin grants, plus any
-        role currently held via a paid subscription that's cleared its access threshold.
-        Deduplicated by role.
+        additional roles contributed by plugins (e.g. a paid subscription that's cleared
+        its access threshold). Deduplicated by role.
     """
     if not isinstance(user, User) or not user.is_authenticated:
         return []
     subscriptions = UserSubscription.objects.active_for(user).select_related("role")
     roles = {subscription.role_id: subscription.role for subscription in subscriptions}
-    for role in _paid_subscription_roles(user):
+    for role in _additional_subscription_roles(user):
         roles.setdefault(role.pk, role)
     return list(roles.values())
 

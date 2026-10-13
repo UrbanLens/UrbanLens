@@ -48,7 +48,7 @@ def freeze_warm_heap() -> int:
     Keep the warmed heap out of every later full collection.
 
     A full collection walks every tracked object, and a warmed worker holds about 400,000 that live as long as the
-    process: 175-207 ms of CPU per collection on chiron, holding the GIL for every thread. Frozen, a collection
+    process: 175-207 ms of CPU per collection on the production host, holding the GIL for every thread. Frozen, a collection
     walks only what requests left behind. A reference from a frozen object still keeps its target alive, and a cycle
     made after the freeze is still collected. What is lost is a cycle running through a frozen object that later
     becomes garbage: it is never collected, with everything it holds. Call it once per process, after a successful

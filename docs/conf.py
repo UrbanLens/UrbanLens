@@ -20,8 +20,8 @@ if TYPE_CHECKING:
     from sphinx.application import Sphinx
 
 project = "UrbanLens"
-copyright = "2023, Jess Mann"  # noqa: A001
-author = "Jess Mann"
+copyright = "2023, UrbanLens"  # noqa: A001
+author = "UrbanLens"
 
 extensions = [
     "autoapi.extension",

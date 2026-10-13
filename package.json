@@ -39,8 +39,8 @@
     "format:check": "python3 bin/precommit_autofix.py --check",
     "format": "python3 bin/precommit_autofix.py --format"
   },
-  "author": "Jess Mann",
-  "license": "N/A",
+  "author": "UrbanLens",
+  "license": "AGPL-3.0-only",
   "devDependencies": {
     "@happy-dom/global-registrator": "^21.0.0",
     "@types/google.maps": "^3.65.4",

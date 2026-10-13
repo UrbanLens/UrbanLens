@@ -505,7 +505,7 @@ function siteFixture(site: SiteConfig): [WorkerFixture<CampusFixture, Playwright
 
 /**
  * `test` for this directory, with the worker-scoped `campus` fixture (the requirement pin, primary account) and
- * `courtyard` (Jess's staging pin, secondary account). Opt-in via UL_E2E_LOCATION_DATA.
+ * `courtyard` (the staging pin, secondary account). Opt-in via UL_E2E_LOCATION_DATA.
  */
 export const locationDataTest = suiteTest.extend<{}, { campus: CampusFixture; courtyard: CampusFixture }>({
     campus: siteFixture(CAMPUS_SITE),

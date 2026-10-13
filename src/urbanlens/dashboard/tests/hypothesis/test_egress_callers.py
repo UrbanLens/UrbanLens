@@ -110,14 +110,26 @@ class BoundaryChainSkipsTests(SimpleTestCase):
 
 
 class OverpassMirrorTests(SimpleTestCase):
-    def test_development_asks_only_the_self_hosted_primary(self) -> None:
+    def test_development_asks_only_the_configured_primary(self) -> None:
         from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
 
-        gateway = OverpassGateway()
+        gateway = OverpassGateway(base_url="https://primary.example/api/interpreter")
         with deployment("development"):
             self.assertEqual(gateway._endpoints(), [gateway.base_url])
         with deployment("production"):
             self.assertGreater(len(gateway._endpoints()), 1)
+
+    def test_no_primary_and_no_mirrors_is_a_clean_refusal(self) -> None:
+        from urbanlens.dashboard.services.apis.locations.boundaries.overpass import (
+            OverpassGateway,
+            OverpassUnavailableError,
+        )
+
+        gateway = OverpassGateway(base_url="", mirrors=())
+        with deployment("development"):
+            self.assertEqual(gateway._endpoints(), [])
+            with self.assertRaises(OverpassUnavailableError):
+                gateway.query("[out:json];node(1);out;")
 
 
 class OverpassMirrorLedgerTests(TestCase):
@@ -131,7 +143,10 @@ class OverpassMirrorLedgerTests(TestCase):
     def test_a_failover_is_ledgered_under_the_mirror_service(self) -> None:
         from urbanlens.dashboard.services.apis.locations.boundaries import overpass
 
-        gateway = overpass.OverpassGateway(mirrors=("https://mirror.example/api/interpreter",))
+        gateway = overpass.OverpassGateway(
+            base_url="https://primary.example/api/interpreter",
+            mirrors=("https://mirror.example/api/interpreter",),
+        )
 
         def wire(method: str, url: str, *args, **kwargs) -> requests.Response:
             if url == gateway.base_url:
@@ -601,6 +616,10 @@ class MessagingTests(TestCase):
 
 class StripeTests(SimpleTestCase):
     def test_stripe_is_unconfigured_off_production(self) -> None:
+        from urbanlens.dashboard.plugins import plugin_available
+
+        if not plugin_available("billing"):
+            self.skipTest("billing plugin is not installed")
         from urbanlens.dashboard.services.billing import stripe_client
 
         with (
@@ -681,7 +700,11 @@ class BackgroundTaskGateTests(SimpleTestCase):
         sweep.assert_called_once()
 
     def test_a_chained_stripe_reconcile_stops_too(self) -> None:
-        from urbanlens.dashboard.tasks import reconcile_unlisted_stripe_subscriptions
+        from urbanlens.dashboard.plugins import plugin_available
+        from urbanlens.dashboard.plugins.builtin.billing import reconcile_unlisted_stripe_subscriptions
+
+        if not plugin_available("billing"):
+            self.skipTest("billing plugin is not installed")
 
         with (
             deployment("development"),

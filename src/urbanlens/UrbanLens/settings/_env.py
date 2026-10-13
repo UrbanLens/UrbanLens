@@ -189,7 +189,7 @@ def isolated_test_database_name() -> str | None:
     """
     Read ``UL_TEST_DB_NAME``, adding the ``test_`` prefix when it lacks one.
 
-    Chiron's disk cleanup drops only stale ``test_*`` databases, so a run under any other name would
+    Automated disk cleanup drops only stale ``test_*`` databases, so a run under any other name would
     leave its database behind for good.
     """
     name = (os.getenv("UL_TEST_DB_NAME") or "").strip()

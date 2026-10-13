@@ -74,9 +74,14 @@ class DashboardConfig(AppConfig):
         user_logged_out.connect(forget_tile_viewer, dispatch_uid="basemap_tile_auth_forget")
 
         # Memoises the SiteSettings singleton for a request only; see that module for why.
-        from urbanlens.dashboard.models.billing import RoleSubscription
         from urbanlens.dashboard.models.site_settings import request_cache as site_settings_cache
         from urbanlens.dashboard.models.site_settings.model import SiteSettings
+        from urbanlens.dashboard.plugins.hooks import hooks
+
+        # Plugin discovery must never touch the database this early - and it runs
+        # before the signal connections below so plugin-contributed senders
+        # (cache-invalidation filters) are registered when they connect.
+        plugin_registry.discover()
 
         # Caches navbar subscriptions across requests; see that module for invalidation.
         from urbanlens.dashboard.models.subscriptions.access_state import connect_invalidation as connect_access_invalidation
@@ -87,7 +92,8 @@ class DashboardConfig(AppConfig):
         request_started.connect(site_settings_cache.begin_scope, dispatch_uid="site_settings_cache_begin")
         request_finished.connect(site_settings_cache.end_scope, dispatch_uid="site_settings_cache_end")
         post_save.connect(site_settings_cache.invalidate, sender=SiteSettings, dispatch_uid="site_settings_cache_invalidate")
-        for sender in (UserSubscription, RoleSubscription, SubscriptionRole):
+        # Plugins watch their own tables through the site_settings_invalidation_senders filter.
+        for sender in (UserSubscription, SubscriptionRole, *hooks.apply_filters("site_settings_invalidation_senders", [])):
             post_save.connect(
                 site_settings_cache.invalidate,
                 sender=sender,
@@ -113,8 +119,16 @@ class DashboardConfig(AppConfig):
 
         connect_reputation_signals()
 
-        # Plugin discovery must never touch the database this early.
-        plugin_registry.discover()
+        # Model admins contributed by plugins (billing tables and the like) register
+        # here rather than in the main admin module, which never imports them.
+        from django.contrib import admin
+        from django.contrib.admin.sites import AlreadyRegistered
+
+        for model, admin_class in plugin_registry.model_admins():
+            try:
+                admin.site.register(model, admin_class)
+            except AlreadyRegistered:
+                continue
 
         # Logs callable egress once per process after discovery, so overrides are never silent.
         from urbanlens.dashboard.services.core.egress import log_egress_policy

@@ -3,7 +3,7 @@ Migration 0068 gives a rate-limit row still holding any earlier release's defaul
 
 `get_limit_config` writes a service's defaults into its row only when it creates it. 0064 moved rows from 0.8.0's
 values to 0.9.0's; a row created by an older release kept whatever that release wrote. Overpass rows from v0.3.0b0 and
-v0.4.0b3 still allow two calls a minute and 500 a day, where 0.9.0 allows 240 and 24,000. Jess, 2026-10-07: bring them
+v0.4.0b3 still allow two calls a minute and 500 a day, where 0.9.0 allows 240 and 24,000. Migration 0068 brings them
 up to the current defaults.
 """
 
@@ -56,7 +56,7 @@ _EDITED: dict[str, Any] = {
     "calls_per_30_days": 10_000,
     "min_interval_seconds": 2.0,
     "usa_only": True,
-    "notes": "Held down on purpose: the instance is shared with REData - Jess",
+    "notes": "Held down on purpose: the instance is shared with REData",
 }
 
 
@@ -195,7 +195,7 @@ class LeftAloneTests(TestCase):
             {"min_interval_seconds": 2.0},
             {"usa_only": True},
             {"display_name": "Overpass (self-hosted)"},
-            {"notes": "Two a minute on purpose: the mirror is shared with REData - Jess"},
+            {"notes": "Two a minute on purpose: the mirror is shared with REData"},
         ]
         for edit in edits:
             with self.subTest(edit=edit):
@@ -228,7 +228,7 @@ class LeftAloneTests(TestCase):
                 self.assertEqual(named, [field])
 
     def test_an_edited_note_is_named_but_not_quoted_in_the_log(self) -> None:
-        mine = "Billing alert at 2,000 - Jess"
+        mine = "Billing alert at 2,000"
         _row("google_places", _EARLIER["google_places"][0], notes=mine)
 
         with self.assertLogs(_MIGRATION.logger, "WARNING") as logs:

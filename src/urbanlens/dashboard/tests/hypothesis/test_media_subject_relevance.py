@@ -55,7 +55,7 @@ class _TableTestCase(SimpleTestCase):
                 self.assertEqual(judgement.relevant, expected, judgement.reason)
 
 
-class JessExamplesHrshTests(_TableTestCase):
+class FieldExamplesHrshTests(_TableTestCase):
     """Subject: Hudson River State Hospital, Poughkeepsie, Dutchess County, NY 12601; aliases HRSH and HRPC."""
 
     def test_the_name_with_a_consistent_place_matches(self) -> None:
@@ -74,7 +74,7 @@ class JessExamplesHrshTests(_TableTestCase):
         self.assert_matches(HRSH, ("HRPC OH",), expected=False)
 
 
-class JessExamplesGenericNameTests(_TableTestCase):
+class FieldExamplesGenericNameTests(_TableTestCase):
     """Subject: a place named "Historic Mansion", in Poughkeepsie."""
 
     def test_a_generic_name_alone_never_matches(self) -> None:

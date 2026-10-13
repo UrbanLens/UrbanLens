@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import ast
 import importlib
+import importlib.util
 import inspect
 import pathlib
 import pkgutil
@@ -166,7 +167,11 @@ class EveryBeatEntryIsClassifiedTests(SimpleTestCase):
             if egress is not BeatEgress.EXTERNAL:
                 continue
             with self.subTest(entry=name):
-                self.assertIn(settings.FULL_BEAT_SCHEDULE[name]["task"], GATED_BACKGROUND_TASKS.get(name, set()))
+                task_path = settings.FULL_BEAT_SCHEDULE[name]["task"]
+                module, _, _ = task_path.rpartition(".")
+                if importlib.util.find_spec(module) is None:
+                    self.skipTest(f"task module {module} is not installed here")
+                self.assertIn(task_path, GATED_BACKGROUND_TASKS.get(name, set()))
 
     def test_no_internal_entry_is_gated(self) -> None:
         import urbanlens.dashboard.tasks  # noqa: F401 - registers the gated tasks

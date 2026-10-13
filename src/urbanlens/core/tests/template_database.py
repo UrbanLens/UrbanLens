@@ -8,7 +8,7 @@ database every test database is created from, and ``migrate`` then finds nothing
 
 The template is called ``test_template_<hash>``, where the hash covers every installed app's migration files and
 the ``urbanlens`` modules they import, so a changed migration builds a new template rather than reusing a stale one.
-It is marked ``IS_TEMPLATE`` and refuses connections, and chiron's disk cleanup, which drops idle ``test_*``
+It is marked ``IS_TEMPLATE`` and refuses connections, and the host's disk cleanup, which drops idle ``test_*``
 databases, skips it by both its flag and its name. It is migrated as ``test_tplbuild_<hash>`` and renamed when
 complete, so an abandoned build is left to that cleanup. Concurrent sessions and workers wait on a Postgres advisory
 lock while one of them builds it. The four most recently used templates are kept; older ones are dropped here.

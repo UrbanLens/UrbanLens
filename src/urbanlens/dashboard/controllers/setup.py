@@ -269,7 +269,7 @@ def _build_feature_groups(app_settings) -> list[dict]:
                     "name": "Sender Address",
                     "description": "The From address shown on outgoing emails",
                     "env_var": "UL_EMAIL_FROM",
-                    "configured": bool(app_settings.email_from and app_settings.email_from != "jess@urbanlens.org"),
+                    "configured": bool(app_settings.email_from and app_settings.email_from != type(app_settings).model_fields["email_from"].default),
                 },
             ],
         },

@@ -120,7 +120,7 @@ def check_media_origin_cookie_domain(app_configs: Sequence[AppConfig] | None = N
     if not media_origin_host():
         return [
             Error(
-                f"UL_MEDIA_BASE_URL is set to {media_origin()!r}, which has no hostname. It must be a full origin, e.g. https://media.urbanlens.org.",
+                f"UL_MEDIA_BASE_URL is set to {media_origin()!r}, which has no hostname. It must be a full origin, e.g. https://media.example.com.",
                 id="dashboard.E003",
             ),
         ]
@@ -142,7 +142,7 @@ def check_media_origin_cookie_domain(app_configs: Sequence[AppConfig] | None = N
                 f"UL_MEDIA_BASE_URL is set ({media_origin_host()!r}), but no cookie domain can be derived from it and "
                 f"SITE_URL ({str(settings.SITE_URL)!r}). The media cookie would never be set, so every media URL would "
                 f"404 for every viewer. Either point the two at hosts that share a registrable domain "
-                f"(urbanlens.org + media.urbanlens.org), or set UL_MEDIA_COOKIE_DOMAIN explicitly.",
+                f"(example.com + media.example.com), or set UL_MEDIA_COOKIE_DOMAIN explicitly.",
                 id="dashboard.E004",
             ),
         ]

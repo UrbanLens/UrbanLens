@@ -30,12 +30,14 @@
         <i class="material-symbols-outlined">tune</i>
         <span>Settings</span>
     </a>
+    {% if "billing" in plugin_names %}
     <a href="{% url 'site_admin_subscriptions' %}"
        class="ul-subnav-tab {% if active == 'subscriptions' %}is-active{% endif %}"
        {% if active == 'subscriptions' %}aria-current="page"{% endif %}>
         <i class="material-symbols-outlined">workspace_premium</i>
         <span>Subscriptions</span>
     </a>
+    {% endif %}
     <a href="{% url 'site_admin_api_limits' %}"
        class="ul-subnav-tab {% if active == 'api_limits' %}is-active{% endif %}"
        {% if active == 'api_limits' %}aria-current="page"{% endif %}>

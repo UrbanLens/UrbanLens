@@ -18,6 +18,7 @@ from urllib.parse import parse_qs, urlsplit
 
 import requests
 
+from urbanlens.dashboard.services.apis.locations.boundaries.overpass import _API_MIRRORS, _default_primary
 from urbanlens.dashboard.tests.hypothesis.building_fixtures import (
     CAMPUS_LAT,
     CAMPUS_LNG,
@@ -33,7 +34,11 @@ if TYPE_CHECKING:
 
 REDATA_HOST = urlsplit(REDATA_TEST_URL).hostname
 PARCEL_UUID = "0b7e1c52-hrsh-parcel"
-OVERPASS_HOSTS = frozenset({"overpass.osm.urbanlens.org", "overpass-api.de", "maps.mail.ru"})
+#: Hosts this fake answers Overpass for: the public mirrors plus whichever
+#: primary the settings configure (empty in tests, so just the mirrors).
+OVERPASS_HOSTS = frozenset(
+    {urlsplit(url).hostname for url in _API_MIRRORS} | ({urlsplit(_default_primary()).hostname} if _default_primary() else set())
+)
 
 #: Half the parcel's side, in metres.
 PARCEL_HALF_SIDE_M = 220.0

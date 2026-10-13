@@ -100,7 +100,7 @@ class DevToolbarRouteTests(TestCase):
                 self.assertEqual(self.client.post(reverse(name)).status_code, 403, name)
 
     def test_the_toolbar_has_a_map_dark_mode_button(self) -> None:
-        """Jess, 2026-09-30: the route had no button."""
+        """The route had no button."""
         self.client.force_login(self.admin)
         with mock.patch(
             "urbanlens.dashboard.models.site_settings.model.SiteSettings.show_dev_admin_features", return_value=True

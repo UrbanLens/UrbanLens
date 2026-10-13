@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from unittest import mock
+from unittest import mock, skipUnless
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard import tasks
+from urbanlens.dashboard.plugins import plugin_available
 
 
 class GenerateBoundariesForLocationTaskTests(TestCase):
@@ -181,6 +182,7 @@ class DatabaseBackupTaskTests(SimpleTestCase):
         backup.assert_called_once()
 
 
+@skipUnless(plugin_available("billing"), "billing plugin is not installed")
 class AdvancePwywUsageLedgersTaskTests(TestCase):
     """advance_pwyw_usage_ledgers is the daily safety net that keeps a canceled pay-what-you-want subscription's banked balance counting down - invoice.payment_succeeded is the only other trigger, and it stops firing once Stripe considers the subscription gone."""
 
@@ -190,6 +192,7 @@ class AdvancePwywUsageLedgersTaskTests(TestCase):
 
         from urbanlens.dashboard.models.billing import RoleSubscription
         from urbanlens.dashboard.models.subscriptions import SubscriptionRole
+        from urbanlens.dashboard.plugins.builtin.billing import advance_pwyw_usage_ledgers
 
         pwyw_role = baker.make(SubscriptionRole, pay_what_you_want=True)
         fixed_role = baker.make(SubscriptionRole, pay_what_you_want=False, monthly_price_cents=500)
@@ -198,7 +201,7 @@ class AdvancePwywUsageLedgersTaskTests(TestCase):
         baker.make(RoleSubscription, user=user, role=fixed_role)
 
         with mock.patch("urbanlens.dashboard.services.billing.banking.advance_usage_ledger") as advance:
-            count = tasks.advance_pwyw_usage_ledgers()
+            count = advance_pwyw_usage_ledgers()
 
         self.assertEqual(count, 1)
         advance.assert_called_once_with(pwyw_sub)
@@ -212,6 +215,7 @@ class AdvancePwywUsageLedgersTaskTests(TestCase):
 
         from urbanlens.dashboard.models.billing import RoleSubscription
         from urbanlens.dashboard.models.subscriptions import SubscriptionRole
+        from urbanlens.dashboard.plugins.builtin.billing import advance_pwyw_usage_ledgers
 
         pwyw_role = baker.make(SubscriptionRole, pay_what_you_want=True)
         failing_sub = baker.make(RoleSubscription, user=baker.make(User), role=pwyw_role)
@@ -224,7 +228,7 @@ class AdvancePwywUsageLedgersTaskTests(TestCase):
         with mock.patch(
             "urbanlens.dashboard.services.billing.banking.advance_usage_ledger", side_effect=side_effect
         ) as advance:
-            count = tasks.advance_pwyw_usage_ledgers()
+            count = advance_pwyw_usage_ledgers()
 
         self.assertEqual(count, 1)
         self.assertEqual(advance.call_count, 2)
@@ -239,6 +243,7 @@ class AdvancePwywUsageLedgersTaskTests(TestCase):
 
         from urbanlens.dashboard.models.billing import BillingSubscriptionStatus, RoleSubscription
         from urbanlens.dashboard.models.subscriptions import SubscriptionRole
+        from urbanlens.dashboard.plugins.builtin.billing import advance_pwyw_usage_ledgers
 
         role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_minimum_cents=500)
         sub = baker.make(
@@ -250,7 +255,7 @@ class AdvancePwywUsageLedgersTaskTests(TestCase):
         )
         RoleSubscription.objects.filter(pk=sub.pk).update(created=timezone.now() - timedelta(days=200))
 
-        tasks.advance_pwyw_usage_ledgers()
+        advance_pwyw_usage_ledgers()
 
         sub.refresh_from_db()
         self.assertFalse(sub.has_banked_access)

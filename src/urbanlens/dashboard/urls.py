@@ -21,8 +21,6 @@ from urbanlens.dashboard.controllers import (
     article_sources,
     assistant,
     basemap_tiles,
-    billing,
-    billing_webhooks,
     boundary,
     calendar_sync,
     child_buildings,
@@ -105,6 +103,7 @@ from urbanlens.dashboard.models.images.model import MediaKind
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
 from urbanlens.dashboard.models.pin import PinViewSet
 from urbanlens.dashboard.models.reviews import ReviewViewSet
+from urbanlens.dashboard.plugins import plugin_registry
 from urbanlens.dashboard.services.security.throttle import account_or_address, throttled
 
 logger = logging.getLogger(__name__)
@@ -171,7 +170,6 @@ urlpatterns = [
     ),
     path("thanks/", thanks.ThanksView.as_view(), name="thanks"),
     path("costs/", costs.CostsView.as_view(), name="costs"),
-    path("billing/webhooks/stripe/", billing_webhooks.StripeWebhookView.as_view(), name="billing.stripe_webhook"),
     path("assistant/", assistant.AssistantView.as_view(), name="assistant"),
     path("assistant/overlay/", assistant.AssistantOverlayBodyView.as_view(), name="assistant.overlay"),
     path("assistant/message/", assistant.AssistantMessageView.as_view(), name="assistant.message"),
@@ -1251,13 +1249,6 @@ urlpatterns = [
     path("settings/security/api-keys/", api_keys.ApiKeyCreateView.as_view(), name="settings.security.api_keys.create"),
     path("settings/security/api-keys/section/", api_keys.ApiKeySectionView.as_view(), name="settings.security.api_keys.section"),
     path("settings/security/api-keys/<int:api_key_id>/revoke/", api_keys.ApiKeyRevokeView.as_view(), name="settings.security.api_keys.revoke"),
-    path("settings/billing/", billing.BillingSettingsSectionView.as_view(), name="settings.billing"),
-    path("settings/billing/checkout/", billing.BillingCheckoutView.as_view(), name="settings.billing.checkout"),
-    path("settings/billing/portal/", billing.BillingPortalView.as_view(), name="settings.billing.portal"),
-    path("settings/billing/success/", billing.BillingCheckoutSuccessView.as_view(), name="settings.billing.checkout_success"),
-    path("settings/billing/cancel-checkout/", billing.BillingCheckoutCancelView.as_view(), name="settings.billing.checkout_cancel"),
-    path("settings/billing/<int:subscription_id>/pledge/", billing.BillingPledgeUpdateView.as_view(), name="settings.billing.pledge"),
-    path("settings/billing/<int:subscription_id>/cancel/", billing.BillingCancelView.as_view(), name="settings.billing.cancel"),
     path("settings/immich/", immich.ImmichSettingsView.as_view(), name="settings.immich"),
     path("settings/immich/disconnect/", immich.ImmichDisconnectView.as_view(), name="settings.immich.disconnect"),
     path("settings/immich/scan/", immich.ImmichLibraryScanStartView.as_view(), name="settings.immich.scan"),
@@ -2210,7 +2201,6 @@ urlpatterns = [
     path("site-admin/stats/system/", site_admin.SiteAdminStatsSystemPartialView.as_view(), name="site_admin_stats_system"),
     path("site-admin/stats/api/", site_admin.SiteAdminStatsApiUsagePartialView.as_view(), name="site_admin_stats_api"),
     path("site-admin/stats/pull-latest-code/", site_admin.SiteAdminPullLatestCodeView.as_view(), name="site_admin_pull_latest_code"),
-    path("site-admin/subscriptions/", site_admin.SiteAdminSubscriptionsView.as_view(), name="site_admin_subscriptions"),
     path("site-admin/api-limits/", site_admin.SiteAdminApiLimitsView.as_view(), name="site_admin_api_limits"),
     path("site-admin/plugins/", site_admin.SiteAdminPluginsView.as_view(), name="site_admin_plugins"),
     path("site-admin/achievements/", achievements.SiteAdminAchievementsView.as_view(), name="site_admin_achievements"),
@@ -2275,3 +2265,8 @@ urlpatterns = [
     ),
     path("", include("social_django.urls", namespace="social")),
 ]
+
+# Optional-plugin routes (billing and the like): an install without the plugin
+# simply has none of these names. Collected last so plugin routes cannot
+# shadow core ones.
+urlpatterns += plugin_registry.urls()
