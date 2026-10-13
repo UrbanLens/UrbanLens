@@ -84,10 +84,10 @@ class ApiKeyAuthMiddleware:
         for name, value in scope.get("headers", ()):
             if name.lower() != b"authorization":
                 continue
-            scheme, _, token = value.decode("latin-1").strip().partition(" ")
-            token = token.strip()
-            if scheme.lower() == "bearer" and token:
-                return token
+            # split(), as DRF parses the HTTP header: any whitespace may follow the scheme.
+            parts = value.decode("latin-1").split(None, 1)
+            if len(parts) == 2 and parts[0].lower() == "bearer" and parts[1].strip():
+                return parts[1].strip()
         query_string = scope.get("query_string", b"").decode("utf-8", errors="ignore")
         values = parse_qs(query_string).get("key")
         return values[0] if values else None

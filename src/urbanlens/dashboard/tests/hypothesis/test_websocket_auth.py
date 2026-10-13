@@ -283,6 +283,8 @@ class ApiKeyWebSocketAuthTests(TransactionTestCase):
         extract = ApiKeyAuthMiddleware._extract_token
         self.assertEqual(extract({"headers": [(b"Authorization", b"bearer  abc ")], "query_string": b"key=q"}), "abc")
         self.assertEqual(extract({"headers": [(b"authorization", b"Bearer")], "query_string": b"key=q"}), "q")
+        self.assertEqual(extract({"headers": [(b"authorization", b"Bearer\tabc")], "query_string": b"key=q"}), "abc")
+        self.assertEqual(extract({"headers": [(b"authorization", b"Bearer   ")], "query_string": b"key=q"}), "q")
         self.assertEqual(extract({"headers": [(b"authorization", b"Token abc")], "query_string": b""}), None)
         self.assertEqual(extract({"headers": [], "query_string": b"key=q"}), "q")
         self.assertIsNone(extract({"query_string": b""}))
