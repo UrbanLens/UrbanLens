@@ -707,7 +707,7 @@ def _export_pins(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
     from urbanlens.dashboard.models.reviews.model import Review
 
     rating = Review.objects.filter(profile=profile, pin_id=OuterRef("pk")).order_by("-pk").values("rating")[:1]
-    pins = Pin.objects.filter(profile=profile).select_related("location", "article").prefetch_related("labels", "aliases").annotate(export_rating=Subquery(rating)).order_by("created", "pk")
+    pins = Pin.objects.filter(profile=profile).select_related("location", "article", "parent_pin").prefetch_related("labels", "aliases").annotate(export_rating=Subquery(rating)).order_by("created", "pk")
 
     with JsonArrayFile(os.path.join(temp_dir, "pins.json")) as rows:
         for pin in pins.iterator(chunk_size=EXPORT_CHUNK_SIZE):
@@ -737,6 +737,8 @@ def _export_pins(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
                     "detail_border_opacity": pin.detail_border_opacity,
                     "created": str(pin.created),
                     "updated": str(pin.updated),
+                    # A detail pin nested under another; the importer re-nests it via the archive's pin uuids.
+                    "parent_uuid": str(pin.parent_pin.uuid) if pin.parent_pin_id and pin.parent_pin else None,
                     "label_uuids": [str(b.uuid) for b in pin.labels.all()],
                     "aliases": [{"name": alias.name, "kind": alias.kind, "source": alias.source} for alias in pin.aliases.all()],
                     "article": {"content": article.content} if article and article.content else None,
