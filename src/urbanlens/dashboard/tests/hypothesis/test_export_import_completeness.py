@@ -25,6 +25,7 @@ from urbanlens.dashboard.models.custom_fields.model import (
     CustomFieldValue,
 )
 from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference
 from urbanlens.dashboard.models.notifications.model import NotificationPreference
 from urbanlens.dashboard.models.pin.model import Pin
@@ -219,6 +220,101 @@ class ImportPinCompletenessTests(TestCase):
         imported = Pin.objects.get(profile=self.importer, name="Old Mill")
         self.assertEqual(Review.objects.filter(profile=self.importer, pin=imported).count(), 1)
         self.assertEqual(Article.objects.filter(pin=imported).count(), 1)
+
+
+class RoundTripPinHierarchyTests(TestCase):
+    """A detail pin keeps its parent through export and import, and is never folded into it."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.exporter = baker.make(User).profile
+        self.importer = baker.make(User).profile
+        # ~8 m apart: inside the 50 m proximity radius that top-level pin dedup folds together.
+        self.parent = baker.make(
+            Pin,
+            profile=self.exporter,
+            name="Mill",
+            location=baker.make(Location, latitude=42.100000, longitude=-73.100000),
+        )
+        self.child = baker.make(
+            Pin,
+            profile=self.exporter,
+            name="Boiler House",
+            parent_pin=self.parent,
+            location=baker.make(Location, latitude=42.100070, longitude=-73.100000),
+        )
+        self.grandchild = baker.make(
+            Pin,
+            profile=self.exporter,
+            name="Boiler Door",
+            parent_pin=self.child,
+            location=baker.make(Location, latitude=42.100071, longitude=-73.100002),
+        )
+
+    def _round_trip(self, *, reorder=None) -> import_data.ImportResult:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            export_service._export_pins(self.exporter, temp_dir)
+            if reorder is not None:
+                rows = reorder(_read(temp_dir, "pins.json"))
+                with open(os.path.join(temp_dir, "pins.json"), "w", encoding="utf-8") as fh:
+                    json.dump(rows, fh)
+            result = import_data.ImportResult()
+            import_data._import_pins(self.importer, temp_dir, result, pin_uuid_map={}, label_uuid_map={})
+        return result
+
+    def test_export_carries_parent_uuid(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            export_service._export_pins(self.exporter, temp_dir)
+            rows = {row["name"]: row for row in _read(temp_dir, "pins.json")}
+        self.assertIsNone(rows["Mill"]["parent_uuid"])
+        self.assertEqual(rows["Boiler House"]["parent_uuid"], str(self.parent.uuid))
+        self.assertEqual(rows["Boiler Door"]["parent_uuid"], str(self.child.uuid))
+
+    def test_nearby_child_survives_as_its_own_pin_under_its_parent(self) -> None:
+        self._round_trip()
+        imported = {pin.name: pin for pin in Pin.objects.filter(profile=self.importer)}
+        self.assertEqual(set(imported), {"Mill", "Boiler House", "Boiler Door"})
+        self.assertIsNone(imported["Mill"].parent_pin_id)
+        self.assertEqual(imported["Boiler House"].parent_pin_id, imported["Mill"].pk)
+        self.assertEqual(imported["Boiler Door"].parent_pin_id, imported["Boiler House"].pk)
+
+    def test_child_keeps_its_own_coordinates(self) -> None:
+        self._round_trip()
+        child = Pin.objects.get(profile=self.importer, name="Boiler House")
+        self.assertAlmostEqual(float(child.effective_latitude), 42.100070, places=5)
+        self.assertNotEqual(child.location_id, Pin.objects.get(profile=self.importer, name="Mill").location_id)
+
+    def test_children_listed_before_their_parents_still_nest(self) -> None:
+        self._round_trip(reorder=lambda rows: list(reversed(rows)))
+        imported = {pin.name: pin for pin in Pin.objects.filter(profile=self.importer)}
+        self.assertEqual(set(imported), {"Mill", "Boiler House", "Boiler Door"})
+        self.assertEqual(imported["Boiler House"].parent_pin_id, imported["Mill"].pk)
+        self.assertEqual(imported["Boiler Door"].parent_pin_id, imported["Boiler House"].pk)
+
+    def test_missing_parent_is_skipped_with_a_warning(self) -> None:
+        result = self._round_trip(reorder=lambda rows: [row for row in rows if row["name"] != "Mill"])
+        self.assertFalse(Pin.objects.filter(profile=self.importer, name="Boiler House").exists())
+        self.assertFalse(Pin.objects.filter(profile=self.importer, name="Boiler Door").exists())
+        self.assertTrue(any("Boiler House" in warning for warning in result.warnings))
+
+    def test_parent_cycle_is_skipped_not_looped(self) -> None:
+        def make_cycle(rows):
+            by_name = {row["name"]: row for row in rows}
+            by_name["Mill"]["parent_uuid"] = by_name["Boiler House"]["uuid"]
+            return rows
+
+        result = self._round_trip(reorder=make_cycle)
+        self.assertEqual(Pin.objects.filter(profile=self.importer).count(), 0)
+        self.assertEqual(len(result.warnings), 3)
+
+    def test_reimport_is_idempotent(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            export_service._export_pins(self.exporter, temp_dir)
+            pin_uuid_map: dict[str, int] = {}
+            result = import_data.ImportResult()
+            for _ in range(2):
+                import_data._import_pins(self.importer, temp_dir, result, pin_uuid_map=pin_uuid_map, label_uuid_map={})
+        self.assertEqual(Pin.objects.filter(profile=self.importer).count(), 3)
 
 
 class ImportSettingsCompletenessTests(TestCase):

@@ -902,16 +902,20 @@ def _import_pins(
 ) -> None:
     """
     Import user pins.
-    Pins are deduped per-profile by proximity via ``Pin.objects.get_nearby_or_create`` (the same helper the Google Takeout importer uses) rather than inserted directly."""
+    Top-level pins are deduped per-profile by proximity via ``Pin.objects.get_nearby_or_create`` (the same helper the Google Takeout importer uses) rather than inserted directly.
+    A detail pin (one exported with a ``parent_uuid``) is instead created directly under its parent at its own exact coordinates: proximity dedup would fold it into the parent it sits a few metres from.
+    Parents are imported before their children whatever order the archive lists them in."""
     from django.db import IntegrityError
 
     from urbanlens.dashboard.models.abstract.choices import SecurityLevel
     from urbanlens.dashboard.models.abstract.security import SECURITY_FIELDS
+    from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
 
     rows = _read_json(data_dir, "pins.json")
     if not rows:
         return
+    rows = _parents_before_children(rows)
     total_rows = len(rows)
     security_level_values = set(SecurityLevel.values)
 
@@ -960,8 +964,29 @@ def _import_pins(
         if uuid_str and not Pin.objects.filter(uuid=uuid_str).exists():
             defaults["uuid"] = uuid_str
 
+        parent_pin = None
+        parent_uuid = row.get("parent_uuid")
+        if parent_uuid:
+            parent_pk = pin_uuid_map.get(parent_uuid)
+            parent_pin = Pin.objects.filter(pk=parent_pk, profile=profile).first() if parent_pk is not None else None
+            if parent_pin is None:
+                result.warnings.append(f"Could not import detail pin '{row.get('name', uuid_str)}': its parent pin was not imported.")
+                result.inc_skipped("pins")
+                continue
+
         try:
-            pin, created = Pin.objects.get_nearby_or_create(lat, lng, profile, defaults=defaults)
+            if parent_pin is not None:
+                # Detail pins may share or sit beside their parent's Location (the one-root-pin-per-Location
+                # constraint covers top-level pins only), so keep the exported point exactly as given.
+                location, _location_created = Location.objects.get_exact_or_create(lat, lng)
+                # Re-importing into a profile that never held the archive's uuids (they were taken by the
+                # exporter's own pins) must not stack a second copy of the same detail pin.
+                pin = Pin.objects.filter(profile=profile, parent_pin=parent_pin, location=location, name=defaults["name"]).first()
+                created = pin is None
+                if pin is None:
+                    pin = Pin.objects.create(profile=profile, location=location, parent_pin=parent_pin, **defaults)
+            else:
+                pin, created = Pin.objects.get_nearby_or_create(lat, lng, profile, defaults=defaults)
         except (IntegrityError, ValueError, TypeError):
             logger.warning("Failed to import pin %s", uuid_str, exc_info=True)
             result.warnings.append(f"Could not import pin '{row.get('name', uuid_str)}'.")
@@ -1000,6 +1025,41 @@ def _import_pins(
             from urbanlens.dashboard.services.wiki.articles import save_article
 
             save_article(editor=profile, content=content, edit_summary="Imported", pin=pin)
+
+
+def _parents_before_children(rows: list[Any]) -> list[Any]:
+    """
+    Order exported pin rows so every pin comes after the pin it is nested under.
+    The sort is stable, so rows keep their archive order within a depth. A row whose parent is not in the archive (it may already exist locally) counts as depth 1, and a cycle or self-reference in ``parent_uuid`` sinks to the end, where the importer finds no parent for it and skips it.
+
+    Args:
+        rows: The decoded ``pins.json`` rows.
+
+    Returns:
+        The same rows, parents first."""
+    parent_of: dict[str, str] = {}
+    for row in rows:
+        if isinstance(row, dict) and row.get("uuid") and row.get("parent_uuid"):
+            parent_of[str(row["uuid"])] = str(row["parent_uuid"])
+    if not parent_of:
+        return rows
+    known = {str(row["uuid"]) for row in rows if isinstance(row, dict) and row.get("uuid")}
+    cycle_depth = len(rows) + 1
+
+    def depth(uuid_str: str) -> int:
+        seen: set[str] = set()
+        level = 0
+        while uuid_str in parent_of:
+            if uuid_str in seen:
+                return cycle_depth
+            seen.add(uuid_str)
+            uuid_str = parent_of[uuid_str]
+            level += 1
+            if uuid_str not in known:
+                break
+        return level
+
+    return sorted(rows, key=lambda row: depth(str(row["uuid"])) if isinstance(row, dict) and row.get("uuid") else 0)
 
 
 def _restore_pin_alias(pin: Any, alias_row: Any) -> None:
