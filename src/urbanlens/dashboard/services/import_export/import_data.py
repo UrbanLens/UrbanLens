@@ -967,7 +967,8 @@ def _import_pins(
         parent_pin = None
         parent_uuid = row.get("parent_uuid")
         if parent_uuid:
-            parent_pk = pin_uuid_map.get(parent_uuid)
+            # A hand-edited archive may carry any JSON here; only a string can name a pin.
+            parent_pk = pin_uuid_map.get(parent_uuid) if isinstance(parent_uuid, str) else None
             parent_pin = Pin.objects.filter(pk=parent_pk, profile=profile).first() if parent_pk is not None else None
             if parent_pin is None:
                 result.warnings.append(f"Could not import detail pin '{row.get('name', uuid_str)}': its parent pin was not imported.")
@@ -1046,18 +1047,32 @@ def _parents_before_children(rows: list[Any]) -> list[Any]:
     known = {str(row["uuid"]) for row in rows if isinstance(row, dict) and row.get("uuid")}
     cycle_depth = len(rows) + 1
 
-    def depth(uuid_str: str) -> int:
-        seen: set[str] = set()
-        level = 0
-        while uuid_str in parent_of:
-            if uuid_str in seen:
+    memo: dict[str, int] = {}
+
+    def depth(start: str) -> int:
+        # Memoised, so a crafted archive of one long chain costs linear time, not quadratic.
+        path: list[str] = []
+        on_path: set[str] = set()
+        node = start
+        while node not in memo:
+            if node in on_path:
+                for seen in path:
+                    memo[seen] = cycle_depth
                 return cycle_depth
-            seen.add(uuid_str)
-            uuid_str = parent_of[uuid_str]
-            level += 1
-            if uuid_str not in known:
+            if node not in parent_of:
+                memo[node] = 0
                 break
-        return level
+            path.append(node)
+            on_path.add(node)
+            if parent_of[node] not in known:
+                memo[path.pop()] = 1
+                break
+            node = parent_of[node]
+        level = memo[node]
+        for seen in reversed(path):
+            level = cycle_depth if level == cycle_depth else level + 1
+            memo[seen] = level
+        return memo[start]
 
     return sorted(rows, key=lambda row: depth(str(row["uuid"])) if isinstance(row, dict) and row.get("uuid") else 0)
 

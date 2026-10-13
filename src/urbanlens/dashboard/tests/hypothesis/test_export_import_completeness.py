@@ -307,6 +307,16 @@ class RoundTripPinHierarchyTests(TestCase):
         self.assertEqual(Pin.objects.filter(profile=self.importer).count(), 0)
         self.assertEqual(len(result.warnings), 3)
 
+    def test_a_non_string_parent_uuid_skips_that_pin_not_the_import(self) -> None:
+        def corrupt(rows):
+            next(row for row in rows if row["name"] == "Boiler House")["parent_uuid"] = ["not", "a", "uuid"]
+            return rows
+
+        result = self._round_trip(reorder=corrupt)
+        self.assertTrue(Pin.objects.filter(profile=self.importer, name="Mill").exists())
+        self.assertFalse(Pin.objects.filter(profile=self.importer, name="Boiler House").exists())
+        self.assertTrue(any("Boiler House" in warning for warning in result.warnings))
+
     def test_reimport_is_idempotent(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             export_service._export_pins(self.exporter, temp_dir)
