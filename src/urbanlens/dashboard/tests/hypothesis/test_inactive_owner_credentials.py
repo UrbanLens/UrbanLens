@@ -18,6 +18,8 @@ from asgiref.sync import async_to_sync
 from channels.testing import WebsocketCommunicator
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser, User
+from django.http import Http404
+from django.test import RequestFactory
 from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
@@ -31,6 +33,7 @@ from oauth2_provider.models import (
 
 from urbanlens.core.tests.testcase import TestCase, TransactionTestCase
 from urbanlens.dashboard.consumers import UserNotificationConsumer, _credential_is_still_valid
+from urbanlens.dashboard.controllers.media_auth import CredentialOrSessionMediaMixin
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.billing import RoleSubscription
 from urbanlens.dashboard.models.subscriptions import SubscriptionRole
@@ -92,6 +95,31 @@ class OAuthOverHttpTests(TestCase):
         _deactivate(self.user)
 
         self.assertEqual(self._whoami().status_code, 401)
+
+    def test_a_deactivated_owners_token_is_refused_on_a_dual_auth_view(self) -> None:
+        """``DualAuthJsonView`` (the e2ee routes) has its own authenticator list, separate from ``ExternalApiView``."""
+        AccessToken.objects.filter(pk=self.access.pk).update(scope="messages:read")
+        url = reverse("e2ee.keys")
+        headers = {"HTTP_AUTHORIZATION": f"Bearer {self.access.token}"}
+        self.assertEqual(self.client.get(url, **headers).status_code, 200)
+
+        _deactivate(self.user)
+
+        self.assertEqual(self.client.get(url, **headers).status_code, 401)
+
+    def test_a_deactivated_owners_token_is_not_served_media(self) -> None:
+        """Media authentication answers a refused credential as it answers a missing file: a 404."""
+        AccessToken.objects.filter(pk=self.access.pk).update(scope="media:read")
+        request = RequestFactory().get("/media/probe/", HTTP_AUTHORIZATION=f"Bearer {self.access.token}")
+        request.user = AnonymousUser()
+        mixin = CredentialOrSessionMediaMixin()
+        self.assertEqual(mixin.resolve_media_profile(request).user, self.user)
+
+        _deactivate(self.user)
+
+        self.assertIsNone(mixin.resolve_media_profile(request))
+        with self.assertRaises(Http404):
+            mixin.media_auth_failure_response(request)
 
     def test_a_deactivated_owners_refresh_token_is_not_exchanged(self) -> None:
         _deactivate(self.user)
