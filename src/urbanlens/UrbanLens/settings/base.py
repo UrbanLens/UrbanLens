@@ -19,11 +19,11 @@ from urbanlens.UrbanLens.settings._env import (
     env_bool,
     is_loopback_host,
     is_production_environment,
+    isolated_test_database_name,
     persistent_connection_seconds,
     prepare_threshold,
     require_deployment_setting,
     running_under_pytest,
-    isolated_test_database_name,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -418,8 +418,7 @@ UL_BACKUP_RETENTION = int(os.getenv("UL_BACKUP_RETENTION", "30"))
 # Leaflet zoom at/above which a MarkupMap viewport counts every visible pin as shared.
 UL_MAP_SHARE_ZOOM_THRESHOLD = float(os.getenv("UL_MAP_SHARE_ZOOM_THRESHOLD", "14"))
 
-# Hourly work is staggered so same-interval entries don't stampede one queue. Every entry is classified in
-# urbanlens.UrbanLens.egress.BEAT_EGRESS; CELERY_BEAT_SCHEDULE below is what this environment runs.
+
 def _task_module_installed(task_path: str) -> bool:
     """
     Whether the task's module exists in this install, without importing it.
@@ -443,6 +442,8 @@ def _task_module_installed(task_path: str) -> bool:
     return installed
 
 
+# Hourly work is staggered so same-interval entries don't stampede one queue. Every entry is classified in
+# urbanlens.UrbanLens.egress.BEAT_EGRESS; CELERY_BEAT_SCHEDULE below is what this environment runs.
 FULL_BEAT_SCHEDULE = {
     "scheduled-database-backup-check": {
         "task": "urbanlens.dashboard.tasks.run_scheduled_database_backup",
@@ -676,11 +677,7 @@ FULL_BEAT_SCHEDULE = {
 # Entries whose task module is not installed (an optional plugin's tasks on an
 # install without it) are left out: beat would otherwise send them nightly to a
 # worker that can only answer "unregistered task".
-CELERY_BEAT_SCHEDULE = {
-    name: entry
-    for name, entry in scheduled_beat_entries(FULL_BEAT_SCHEDULE, EGRESS_ENVIRONMENT, _app_settings.background_tasks_allowlist).items()
-    if _task_module_installed(entry["task"])
-}
+CELERY_BEAT_SCHEDULE = {name: entry for name, entry in scheduled_beat_entries(FULL_BEAT_SCHEDULE, EGRESS_ENVIRONMENT, _app_settings.background_tasks_allowlist).items() if _task_module_installed(entry["task"])}
 
 
 # Password validation
@@ -931,7 +928,8 @@ _CSP_DIRECTIVES: dict[str, list[str]] = {
 
 # A vendor mirror must be admitted or UL_CSP_ENFORCE drops those assets.
 def allow_vendor_mirror(directives: dict[str, list[str]], base_url: object) -> str | None:
-    """Admit a vendor-asset mirror origin.
+    """
+    Admit a vendor-asset mirror origin.
 
     Args:
         directives: The CSP directive lists, modified in place.
@@ -954,7 +952,8 @@ def allow_vendor_mirror(directives: dict[str, list[str]], base_url: object) -> s
 
 
 def allow_media_origin(directives: dict[str, list[str]], base_url: str) -> str | None:
-    """Admit the media origin where uploads are fetched (video, iframe, JS bytes).
+    """
+    Admit the media origin where uploads are fetched (video, iframe, JS bytes).
 
     Args:
         directives: The CSP directive lists, modified in place.
@@ -975,7 +974,8 @@ def allow_media_origin(directives: dict[str, list[str]], base_url: str) -> str |
 
 
 def allow_basemap_style_origins(directives: dict[str, list[str]], base_urls: str) -> list[str]:
-    """Admit the origins a vector basemap is served from.
+    """
+    Admit the origins a vector basemap is served from.
 
     A raster basemap needs nothing here: it is proxied, so the browser only ever talks to this
     origin. A vector one is the opposite - REData publishes a ``style_url`` and the browser fetches
@@ -1016,7 +1016,8 @@ def allow_basemap_style_origins(directives: dict[str, list[str]], base_urls: str
 
 
 def allow_hosted_basemap_tiles(directives: dict[str, list[str]], protomaps_api_key: str) -> list[str]:
-    """Admit Protomaps' hosted tile API to ``connect-src``, wherever this deployment hands its browsers the key.
+    """
+    Admit Protomaps' hosted tile API to ``connect-src``, wherever this deployment hands its browsers the key.
 
     MapLibre fetches vector tiles from its worker, which runs under this policy, so without this every hosted tile is
     refused and the map falls back to the self-hosted ones (``frontend/ts/shared/hosted-basemap.ts``). Only the tiles:
@@ -1106,7 +1107,8 @@ CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS.copy()
 
 
 def _origin_from_url(url: str) -> str | None:
-    """Reduce a URL to its bare origin, or None when not absolute http(s).
+    """
+    Reduce a URL to its bare origin, or None when not absolute http(s).
 
     Args:
         url: Candidate URL.
@@ -1131,7 +1133,8 @@ def _origin_from_url(url: str) -> str | None:
 
 
 def _derive_trusted_origins(allowed_hosts: list[str], site_url: str, *, allow_http: bool) -> tuple[list[str], list[str]]:
-    """Derive trusted origins from hosts the deployment already serves.
+    """
+    Derive trusted origins from hosts the deployment already serves.
 
     Args:
         allowed_hosts: ``ALLOWED_HOSTS`` for this deployment.
@@ -1250,7 +1253,8 @@ EMAIL_TIMEOUT = _app_settings.email_timeout
 
 
 def _site_url_from_env(value: str | None, default: str) -> str:
-    """``UL_SITE_URL`` as an absolute URL, taking a bare host to be served over https.
+    """
+    ``UL_SITE_URL`` as an absolute URL, taking a bare host to be served over https.
 
     Args:
         value: The environment value, if set.
