@@ -12,6 +12,10 @@ actually granted; a socket that only learned *who* the credential belongs to wou
 bearer token reach every consumer, turning a narrow ``pins:read`` key into a pass for someone's
 safety-check-in chat and letting a PAT reach direct messages that ``OAUTH2_ONLY_SCOPES`` refuses it
 on every HTTP route.
+
+The credential is read from ``Authorization: Bearer <credential>`` on the handshake, which no access
+log records. The older ``?key=<credential>`` query parameter still works but is deprecated: it puts
+the credential in the request URL, which proxies and servers log.
 """
 
 from __future__ import annotations
@@ -33,14 +37,14 @@ CREDENTIAL_SCOPE_KEY = "api_credential"
 
 
 class ApiKeyAuthMiddleware:
-    """ASGI middleware: fall back to a ``?key=`` query param when the session is anonymous."""
+    """ASGI middleware: fall back to a bearer credential when the session is anonymous."""
 
     def __init__(self, inner) -> None:
         self.inner = inner
 
     async def __call__(self, scope, receive, send):
         """
-        Resolve a query-string credential, publishing both the user and the credential itself.
+        Resolve a bearer or query-string credential, publishing both the user and the credential itself.
 
         Args:
             scope: The incoming ASGI connection scope.
@@ -64,7 +68,26 @@ class ApiKeyAuthMiddleware:
 
     @staticmethod
     def _extract_token(scope) -> str | None:
-        """The ``key`` query-string parameter, if the connection URL carried one."""
+        """
+        The credential a client presented on the handshake.
+
+        An ``Authorization: Bearer <credential>`` header wins. The deprecated ``?key=`` query parameter is
+        only the fallback, because a URL ends up in access logs (nginx, any proxy) and a header does not.
+
+        Args:
+            scope: The ASGI connection scope; ``headers`` is a list of ``(name, value)`` byte pairs.
+
+        Returns:
+            The raw credential, or None when there is no well-formed bearer header and no ``key`` parameter.
+            A header that is not a ``Bearer`` scheme, or has no token after it, is ignored.
+        """
+        for name, value in scope.get("headers", ()):
+            if name.lower() != b"authorization":
+                continue
+            scheme, _, token = value.decode("latin-1").strip().partition(" ")
+            token = token.strip()
+            if scheme.lower() == "bearer" and token:
+                return token
         query_string = scope.get("query_string", b"").decode("utf-8", errors="ignore")
         values = parse_qs(query_string).get("key")
         return values[0] if values else None
@@ -74,7 +97,7 @@ class ApiKeyAuthMiddleware:
         Resolve *token* as either a PAT key or an OAuth2 access token.
 
         Args:
-            token: The raw ``?key=`` value presented by the client.
+            token: The raw credential presented by the client.
 
         Returns:
             ``(user, credential)`` on success - the credential being the same object DRF would put in
@@ -95,7 +118,7 @@ class ApiKeyAuthMiddleware:
         socket's database access. So only the lookup and the writes run there.
 
         Args:
-            token: The raw ``?key=`` value, already known to carry the PAT label.
+            token: The raw credential, already known to carry the PAT label.
 
         Returns:
             ``(user, key)`` when the secret checks out, else None.

@@ -443,8 +443,8 @@ class UserNotificationConsumer(SocketAllowanceMixin, CredentialScopeMixin, Async
     Pushes on-site notifications to a logged-in user's open tabs as they are created.
 
     Mounted at ``ws/notifications/``. Authentication comes from the session
-    cookie via Channels' ``AuthMiddlewareStack``, or from a ``?key=``
-    credential via ``ApiKeyAuthMiddleware``; each connection joins the
+    cookie via Channels' ``AuthMiddlewareStack``, or from a bearer
+    credential (``Authorization`` header; ``?key=`` is deprecated) via ``ApiKeyAuthMiddleware``; each connection joins the
     per-profile group produced by
     ``urbanlens.dashboard.models.notifications.signals.notification_group_name``,
     which the ``NotificationLog`` post_save signal broadcasts to.
