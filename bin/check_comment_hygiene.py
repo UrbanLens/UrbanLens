@@ -679,7 +679,11 @@ def update_baseline(
     omitted: dict[str, dict[str, int]] = {rule: {} for rule in RULES}
     if tracked is not None:
         measured = measured_baseline(old, root, tracked)
-        omitted = {rule: {file: n for file, n in old[rule].items() if file not in measured[rule]} for rule in RULES}
+        # Only a checkout without .forgejo/ is a partial export; in the whole repository a file that is gone was deleted
+        # or renamed, and its entry should go with it.
+        partial = not (root / ".forgejo").is_dir()
+        if partial:
+            omitted = {rule: {file: n for file, n in old[rule].items() if file not in measured[rule]} for rule in RULES}
         old = measured
     raised = [rule for rule in RULES if sum(current[rule].values()) > sum(old[rule].values())]
     if raised and not allow_increase and path.is_file():

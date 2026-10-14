@@ -264,6 +264,19 @@ class BaselineTests(SimpleTestCase):
                 )
             self.assertEqual(json.loads(path.read_text())["comment-block"], {"kept.py": 1, "private/omitted.py": 5})
 
+    def test_update_in_the_whole_repository_drops_a_deleted_files_entry(self) -> None:
+        empty = {rule: {} for rule in checker.RULES}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            (root / ".forgejo").mkdir()
+            (root / "kept.py").write_text("x = 1\n", encoding="utf-8")
+            path = root / "baseline.json"
+            path.write_text(json.dumps({**empty, "comment-block": {"kept.py": 1, "gone.py": 5}}))
+            current = {**empty, "comment-block": {"kept.py": 1}}
+            with contextlib.redirect_stdout(io.StringIO()):
+                checker.update_baseline(current, path, allow_increase=False, tracked=["kept.py"], root=root)
+            self.assertEqual(json.loads(path.read_text())["comment-block"], {"kept.py": 1})
+
 
 class MainOnAPartialTreeTests(SimpleTestCase):
     def _run(self, baseline: dict[str, dict[str, int]], files: dict[str, str]) -> tuple[int, str]:
