@@ -651,6 +651,31 @@ def _extractor_env() -> dict[str, str]:
     return env
 
 
+def _tracked_source_roots() -> list[str]:
+    """Return every top-level directory under ``src/`` that git tracks, as ``src/<name>``."""
+    listing = subprocess.run(["git", "ls-files", "src"], cwd=REPO_ROOT, capture_output=True, text=True, check=True)
+    return sorted({f"src/{parts[1]}" for line in listing.stdout.splitlines() if len(parts := line.split("/")) > 2})
+
+
+def effective_config(base: Path, roots: list[str], dest: Path) -> Path:
+    """
+    Write *base* to *dest* with any of *roots* its ``paths:`` list lacks.
+
+    The checked-in configs name only what every checkout has; a source root that only some checkouts carry is
+    scanned without the public config having to name it.
+    """
+    lines = base.read_text(encoding="utf-8").splitlines(keepends=True)
+    start = lines.index("paths:\n") + 1
+    end = start
+    while end < len(lines) and lines[end].startswith("  - "):
+        end += 1
+    listed = {line[4:].strip() for line in lines[start:end]}
+    missing = [f"  - {root}\n" for root in roots if root not in listed]
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text("".join(lines[:end] + missing + lines[end:]), encoding="utf-8")
+    return dest
+
+
 def create_databases(codeql: Path, languages: tuple[str, ...], config: Path, *, rebuild: bool = False) -> None:
     """
     (Re)build per-language databases under ``.codeql/db``.
@@ -787,7 +812,8 @@ def main(argv: list[str] | None = None) -> int:
         print("CodeQL: analysed tree unchanged since the last successful scan; skipping rebuild.")
         return 0
 
-    config = CI_CONFIG if mode == "gate" else LOCAL_CONFIG
+    base_config = CI_CONFIG if mode == "gate" else LOCAL_CONFIG
+    config = effective_config(base_config, _tracked_source_roots(), REPO_ROOT / ".codeql" / base_config.name)
     # A database snapshots the tree at extraction; stale reuse can't fail on new edits.
     reuse_is_safe = tree_matches_last_scan or args.fast
     if args.fast and not tree_matches_last_scan:

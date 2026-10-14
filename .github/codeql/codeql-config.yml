@@ -4,9 +4,9 @@ name: "UrbanLens CodeQL config"
 # directory and crashes on Windows with NotADirectoryError if a file is listed.
 # `src` is too wide: this checkout keeps Postgres data, mypy caches and
 # Hypothesis examples under `src/pgsql`, `src/.mypy_cache`, `src/.hypothesis`.
+# bin/run_codeql.py adds any other tracked top-level directory under `src/` when it runs locally.
 paths:
   - src/urbanlens
-  - src/urbanlens_ai
   - bin
   - .github
   - tests
