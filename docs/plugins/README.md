@@ -31,6 +31,7 @@ src/urbanlens/plugins/storefront/
     requirements.txt       # optional; see Dependencies
     build.sh               # optional; run in the image build after its requirements are installed
     integration/           # optional; entries.json and specs/*.playwright.mts for the integration suite
+    codeql-triaged.json    # optional; CodeQL findings judged not exploitable, as in .github/codeql/triaged-findings.json
     tests/
 ```
 

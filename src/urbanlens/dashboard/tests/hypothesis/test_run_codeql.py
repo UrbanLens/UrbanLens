@@ -192,6 +192,29 @@ class RunCodeqlWrapperTests(SimpleTestCase):
         with self.assertRaises(ValueError):
             self._triaged([entry])
 
+    def test_a_plugins_triage_file_beside_it_counts_and_is_named_when_stale(self) -> None:
+        entry = {
+            "rule": "py/a",
+            "path": "src/urbanlens/plugins/x/a.py",
+            "fingerprint": "1:1",
+            "language": "python",
+            "reason": "x",
+        }
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            plugin_file = root / "src" / "urbanlens" / "plugins" / "x" / "codeql-triaged.json"
+            plugin_file.parent.mkdir(parents=True)
+            plugin_file.write_text(json.dumps([entry]), encoding="utf-8")
+            with (
+                patch.object(self.runner, "REPO_ROOT", root),
+                patch.object(self.runner, "TRIAGED_PATH", root / "missing.json"),
+            ):
+                triaged = self.runner.load_all_triaged()
+
+        stale = self.runner.stale_triaged(triaged, set(), languages=("python",))
+
+        self.assertEqual([(e["path"], e["source"]) for e in stale], [(entry["path"], plugin_file)])
+
     def test_no_triage_file_means_nothing_is_triaged(self) -> None:
         self.assertEqual(self.runner.load_triaged(Path("/nonexistent/triaged.json")), {})
 

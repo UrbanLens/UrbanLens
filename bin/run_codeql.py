@@ -34,6 +34,8 @@ LOCAL_CONFIG = REPO_ROOT / ".github" / "codeql" / "codeql-config-local.yml"
 #: Findings read and judged not exploitable, each with the reason. Keyed on the SARIF line hash, so an entry
 #: follows its line when code above it moves, and lapses when the line itself changes.
 TRIAGED_PATH = REPO_ROOT / ".github" / "codeql" / "triaged-findings.json"
+#: A package plugin's own verdicts, kept beside it so a tree without the plugin names none of its paths.
+PLUGIN_TRIAGED_GLOB = "src/urbanlens/plugins/*/codeql-triaged.json"
 
 TriageKey = tuple[str, str, str]
 
@@ -434,7 +436,15 @@ def load_triaged(path: Path) -> dict[TriageKey, dict]:
         missing = [field for field in ("rule", "path", "fingerprint", "language", "reason") if not str(entry.get(field) or "").strip()]
         if missing:
             raise ValueError(f"{path}: triaged entry {entry!r} has no {', '.join(missing)}")
-        triaged[(entry["rule"], entry["path"], entry["fingerprint"])] = entry
+        triaged[(entry["rule"], entry["path"], entry["fingerprint"])] = {**entry, "source": path}
+    return triaged
+
+
+def load_all_triaged() -> dict[TriageKey, dict]:
+    """Read the repository's triaged findings and every package plugin's."""
+    triaged = load_triaged(TRIAGED_PATH)
+    for path in sorted(REPO_ROOT.glob(PLUGIN_TRIAGED_GLOB)):
+        triaged.update(load_triaged(path))
     return triaged
 
 
@@ -823,7 +833,7 @@ def main(argv: list[str] | None = None) -> int:
     threat_local = mode == "local"
     verbose = bool(args.verbose)
     quiet = bool(args.quiet) and not verbose
-    triaged = load_triaged(TRIAGED_PATH)
+    triaged = load_all_triaged()
     matched: set[TriageKey] = set()
     total_actionable = 0
     missing = 0
@@ -850,9 +860,9 @@ def main(argv: list[str] | None = None) -> int:
     print(f"SARIF written under {RESULTS_DIR}")
     stale = stale_triaged(triaged, matched, languages=tuple(analysed))
     if stale:
-        print(f"{len(stale)} triaged entr{'y' if len(stale) == 1 else 'ies'} matched no finding; remove from {TRIAGED_PATH.relative_to(REPO_ROOT)}:")
+        print(f"{len(stale)} triaged entr{'y' if len(stale) == 1 else 'ies'} matched no finding; remove:")
         for entry in stale:
-            print(f"  {entry['path']}: {entry['rule']} ({entry['fingerprint']})")
+            print(f"  {entry['path']}: {entry['rule']} ({entry['fingerprint']}), in {entry['source'].relative_to(REPO_ROOT)}")
     if missing:
         print(f"{missing} language(s) had no finalised database.", file=sys.stderr)
     if total_actionable:
