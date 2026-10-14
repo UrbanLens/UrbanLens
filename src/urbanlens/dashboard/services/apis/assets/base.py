@@ -40,7 +40,7 @@ class MediaItem:
         url: Full-resolution image URL.
         thumb_url: Thumbnail URL, or ``""`` when the provider has no preview image for this item (e.g. a text/document record) - the frontend renders a fallback icon tile in that case instead of dropping it.
         caption: Human-readable caption or title.
-        source: Human-readable provider name (e.g. ``"Smithsonian Open Access"``).
+        source: Human-readable provider name (e.g. ``"Wikimedia Commons"``).
         page_url: Link to the item's page on the provider's site, if any.
         content_type: The provider-declared content type of ``url``, when it publishes one.
         author: Who to credit for the photo itself, distinct from ``source`` (the provider/archive).

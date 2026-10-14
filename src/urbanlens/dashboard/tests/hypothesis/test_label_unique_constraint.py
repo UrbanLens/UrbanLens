@@ -9,27 +9,7 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
-from urbanlens.dashboard.models.location.model import Location
-from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-
-
-def _migration_0042():
-    """
-    Load the module holding the 0042 merge logic, by path since it starts with a digit.
-
-    The 0042 data migration was squashed into 0030_v0_7_0.py, which still
-    defines ``_merge`` and ``_0042_merge_duplicate_labels`` under those names.
-    """
-    import importlib.util
-    import pathlib
-
-    path = pathlib.Path(__file__).resolve().parents[2] / "migrations" / "0030_v0_7_0.py"
-    spec = importlib.util.spec_from_file_location("migration_0042", path)
-    assert spec and spec.loader
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
 
 
 class LabelUniqueConstraintTests(TestCase):
@@ -89,67 +69,6 @@ class LabelUniqueConstraintTests(TestCase):
         self.assertTrue(created_first)
         self.assertFalse(created_second)
         self.assertEqual(first.pk, second.pk)
-
-
-class LabelDuplicateMergeTests(TestCase):
-    """
-    The 0042 data pass, exercised by running its function against real rows.
-
-    The constraint is already applied in the test database, so duplicates cannot be created through the ORM."""
-
-    def setUp(self) -> None:
-        """
-        Drop the constraint, then build fixtures under it.
-
-        A duplicate cannot be produced through the ORM once 0042 has run - that is the point of the migration -
-        so reproducing what the beta databases contain means removing the constraint first."""
-        super().setUp()
-        from django.db import connection
-
-        with connection.cursor() as cursor:
-            cursor.execute("DROP INDEX uq_label_profile_name_kind_ci")
-
-        self.profile = Profile.objects.get(user=baker.make(User))
-
-    def _raw_label(self, *, name: str, kind: str = KIND_TAG, profile: Profile | None) -> int:
-        """Create a label that duplicates an existing one (constraint must be dropped)."""
-        return Label.objects.create(profile=profile, name=name, kind=kind).pk
-
-    def _pin(self) -> Pin:
-        return baker.make(Pin, profile=self.profile, location=baker.make(Location))
-
-    def test_merging_moves_pins_and_deletes_the_duplicate(self) -> None:
-        from django.db import connection
-
-        migration = _migration_0042()
-        keep = Label.objects.create(profile=self.profile, name="Keeper", kind=KIND_TAG)
-        drop_id = self._raw_label(name="Keeper", profile=self.profile)
-        pin = self._pin()
-        Label.objects.get(pk=drop_id).pins.add(pin)
-
-        with connection.cursor() as cursor:
-            migration._merge(cursor, keep_id=keep.pk, drop_ids=[drop_id])
-
-        self.assertFalse(Label.objects.filter(pk=drop_id).exists(), "the duplicate should be gone")
-        self.assertIn(pin.pk, keep.pins.values_list("pk", flat=True), "the pin should have moved to the survivor")
-
-    def test_a_pin_carrying_both_labels_does_not_break_the_move(self) -> None:
-        """
-        The through table is unique on (pin, label); a naive UPDATE would
-        collide the moment the second row was repointed."""
-        from django.db import connection
-
-        migration = _migration_0042()
-        keep = Label.objects.create(profile=self.profile, name="Both", kind=KIND_TAG)
-        drop_id = self._raw_label(name="Both", profile=self.profile)
-        pin = self._pin()
-        pin.labels.add(keep, Label.objects.get(pk=drop_id))
-
-        with connection.cursor() as cursor:
-            migration._merge(cursor, keep_id=keep.pk, drop_ids=[drop_id])
-
-        self.assertFalse(Label.objects.filter(pk=drop_id).exists())
-        self.assertEqual(pin.labels.filter(pk=keep.pk).count(), 1, "the pin should carry the survivor exactly once")
 
 
 class LabelConflictHandlingTests(TestCase):

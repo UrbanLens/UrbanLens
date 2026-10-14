@@ -74,6 +74,10 @@ class CensusTigerwebPlugin(UrbanLensPlugin):
 
     def setup(self, plugin: PluginContext) -> None:
         """TIGERweb rate-limit defaults and the Census geography pin-detail panel."""
+        from urbanlens.dashboard.plugins.points import DATA_SOURCE_CREDITS, DataSourceCredit
+
+        plugin.add(DATA_SOURCE_CREDITS, DataSourceCredit(name="US Census Bureau", category="planning", url="https://tigerweb.geo.census.gov/", note="State, county, place and tract geography for a pin's coordinates in the USA."))
+
         from urbanlens.dashboard.plugins.points import PANEL_SOURCES, SERVICE_DEFAULTS
 
         plugin.register_all(

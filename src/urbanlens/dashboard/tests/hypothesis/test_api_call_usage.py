@@ -1,4 +1,4 @@
-"""The API usage ledger records units (calls, models, tokens) and the site-admin usage report reads them."""
+"""The API usage ledger records each call's units and outcome, and the site-admin usage report reads them."""
 
 from __future__ import annotations
 
@@ -11,7 +11,13 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.api_call_log.model import ApiCallLog
 from urbanlens.dashboard.services.admin.site_admin import add_user_to_site_admin_group
-from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults, _RateLimitedSession
+from urbanlens.dashboard.services.core.rate_limiter import (
+    CallLedger,
+    ServiceDefaults,
+    _RateLimitedSession,
+    api_call_slot,
+    observe_calls,
+)
 
 
 class SummaryByServiceTests(TestCase):
@@ -62,6 +68,142 @@ class SessionRecordsEachCallTests(TestCase):
         entry = ApiCallLog.objects.get(service="some_svc")
         self.assertFalse(entry.success)
         self.assertEqual(entry.status_code, 500)
+
+
+class ObserveCallsTests(TestCase):
+    """``observe_calls`` hands each logged call's row pk and response to its observer."""
+
+    _SERVICE = "observed_svc"
+
+    def _session(self, response: Mock) -> _RateLimitedSession:
+        session = _RateLimitedSession(self._SERVICE)
+        session._session = Mock()
+        session._session.request.return_value = response
+        return session
+
+    def _patches(self, ledger: CallLedger = CallLedger.ROW_PER_CALL):
+        defaults = {self._SERVICE: ServiceDefaults(display_name="Observed", ledger=ledger)}
+        return (
+            patch("urbanlens.dashboard.services.core.rate_limiter.check_rate_limit", return_value=True),
+            patch("urbanlens.dashboard.services.core.rate_limiter.service_is_enabled", return_value=True),
+            patch("urbanlens.dashboard.services.core.rate_limiter.all_service_defaults", return_value=defaults),
+        )
+
+    def test_observer_receives_each_calls_row_pk_and_response(self) -> None:
+        response = Mock(ok=True, status_code=200)
+        seen: list[tuple[int, Mock]] = []
+        first, second, third = self._patches()
+        with first, second, third, observe_calls(lambda pk, resp: seen.append((pk, resp))):
+            session = self._session(response)
+            session.get("https://example.com/a")
+            session.get("https://example.com/b")
+
+        rows = list(ApiCallLog.objects.filter(service=self._SERVICE).order_by("pk"))
+        self.assertEqual(seen, [(rows[0].pk, response), (rows[1].pk, response)])
+
+    def test_an_observed_tallied_service_is_logged_per_row(self) -> None:
+        seen: list[int] = []
+        first, second, third = self._patches(CallLedger.TALLIED)
+        with first, second, third, observe_calls(lambda pk, _resp: seen.append(pk)):
+            self._session(Mock(ok=True, status_code=200)).get("https://example.com/a")
+
+        entry = ApiCallLog.objects.get(service=self._SERVICE)
+        self.assertEqual(seen, [entry.pk])
+
+    def test_a_failing_observer_is_logged_and_the_call_still_returns(self) -> None:
+        response = Mock(ok=True, status_code=200)
+
+        def boom(_pk: int, _resp: Mock) -> None:
+            raise ValueError("observer broke")
+
+        first, second, third = self._patches()
+        with (
+            first,
+            second,
+            third,
+            observe_calls(boom),
+            self.assertLogs("urbanlens.dashboard.services.core.rate_limiter", level="ERROR"),
+        ):
+            returned = self._session(response).get("https://example.com/a")
+
+        self.assertIs(returned, response)
+        self.assertTrue(ApiCallLog.objects.get(service=self._SERVICE).success)
+
+    def test_nested_observers_are_all_told_outermost_first(self) -> None:
+        seen: list[str] = []
+        first, second, third = self._patches()
+        with first, second, third, observe_calls(lambda _pk, _resp: seen.append("outer")):
+            session = self._session(Mock(ok=True, status_code=200))
+            with observe_calls(lambda _pk, _resp: seen.append("inner")):
+                session.get("https://example.com/a")
+            session.get("https://example.com/b")
+
+        self.assertEqual(seen, ["outer", "inner", "outer"])
+
+    def test_a_failing_observer_does_not_stop_the_others(self) -> None:
+        seen: list[int] = []
+
+        def boom(_pk: int, _resp: Mock | None) -> None:
+            raise ValueError("observer broke")
+
+        first, second, third = self._patches()
+        with (
+            first,
+            second,
+            third,
+            observe_calls(boom),
+            observe_calls(lambda pk, _resp: seen.append(pk)),
+            self.assertLogs("urbanlens.dashboard.services.core.rate_limiter", level="ERROR"),
+        ):
+            self._session(Mock(ok=True, status_code=200)).get("https://example.com/a")
+
+        self.assertEqual(seen, [ApiCallLog.objects.get(service=self._SERVICE).pk])
+
+    def test_a_request_that_raises_tells_the_observer_there_was_no_response(self) -> None:
+        seen: list[tuple[int, Mock | None]] = []
+        session = self._session(Mock())
+        session._session.request.side_effect = ConnectionError("down")
+        first, second, third = self._patches()
+        with (
+            first,
+            second,
+            third,
+            observe_calls(lambda pk, resp: seen.append((pk, resp))),
+            self.assertRaises(ConnectionError),
+        ):
+            session.get("https://example.com/a")
+
+        entry = ApiCallLog.objects.get(service=self._SERVICE)
+        self.assertEqual(seen, [(entry.pk, None)])
+        self.assertFalse(entry.success)
+
+    def test_no_observer_is_called_outside_the_block(self) -> None:
+        seen: list[int] = []
+        first, second, third = self._patches()
+        with first, second, third:
+            with observe_calls(lambda pk, _resp: seen.append(pk)):
+                pass
+            self._session(Mock(ok=True, status_code=200)).get("https://example.com/a")
+
+        self.assertEqual(seen, [])
+
+
+class SlotEntryPkTests(TestCase):
+    """An ``api_call_slot`` exposes its reserved row's pk to the code inside it."""
+
+    def test_entry_pk_is_the_reserved_row(self) -> None:
+        defaults = {"slot_svc": ServiceDefaults(display_name="Slot")}
+        with (
+            patch("urbanlens.dashboard.services.core.rate_limiter.check_rate_limit", return_value=True),
+            patch("urbanlens.dashboard.services.core.rate_limiter.service_is_enabled", return_value=True),
+            patch("urbanlens.dashboard.services.core.rate_limiter.all_service_defaults", return_value=defaults),
+            patch("urbanlens.dashboard.services.core.provider_health.check_admission"),
+            api_call_slot("slot_svc") as slot,
+        ):
+            reserved = slot.entry_pk
+            slot.success = True
+
+        self.assertEqual(ApiCallLog.objects.get(service="slot_svc").pk, reserved)
 
 
 class SiteAdminApiUsageIncludesPluginsTests(TestCase):

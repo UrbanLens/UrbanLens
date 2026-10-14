@@ -27,6 +27,13 @@ _PIN_SLUG = "placeholder-slug"
 _LIST_UUID = "00000000-0000-0000-0000-000000000000"
 
 
+def _place_sources() -> dict[str, dict[str, str]]:
+    """How the Places layer draws each plugin-provided source, by the ``source`` its places carry."""
+    from urbanlens.dashboard.plugins.points import PLACE_SOURCES
+
+    return {key: {"label": style.label, "icon": style.icon, "markerClass": style.marker_class, "fallbackUrl": style.fallback_url, "linkLabel": style.link_label, "hiddenType": style.hidden_type} for key, style in PLACE_SOURCES.as_dict().items()}
+
+
 def _number(value: Any) -> float | None:
     """
     *value* as a JSON number, or None when it is not set.
@@ -109,6 +116,7 @@ def map_page_config(request: HttpRequest, profile: Profile, context: Mapping[str
         "showPinCount": bool(context["show_pin_count"]),
         "showFilteredPinCount": bool(context["show_filtered_pin_count"]),
         "showPlacesLayer": bool(context["show_places_layer"]),
+        "placeSources": _place_sources(),
         "showPinSuggestionsIntro": bool(context["show_pin_suggestions_intro"]),
         "usePinCache": bool(context["use_pin_cache"]),
         "mapCenterMode": str(context["map_center_mode"]),

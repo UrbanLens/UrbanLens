@@ -124,6 +124,7 @@ interface MapPageConfig {
     showPinCount: boolean;
     showFilteredPinCount: boolean;
     showPlacesLayer: boolean;
+    placeSources: Record<string, PlaceSourceConfig>;
     showPinSuggestionsIntro: boolean;
     usePinCache: boolean;
     mapCenterMode: string;
@@ -602,7 +603,7 @@ function updatePinCounter(): void {
     const counter = document.getElementById("pin-counter");
     if (!counter) return;
     if (_filterMode && _SHOW_FILTERED_PIN_COUNT) {
-        // VIP users see the count of currently visible filtered pins
+        // Dev-feature viewers see the count of currently visible filtered pins
         const n = clusterGroup.getLayers().length;
         counter.style.display = "";
         document.getElementById("pin-counter-value")!.textContent = String(n);
@@ -2718,13 +2719,23 @@ function togglePins(): void {
     updatePinCounter();
 }
 
-// -- Places layer (VIP only) -----------------------------------------------
+// -- Places layer (needs access) -----------------------------------------------
 const _SHOW_PLACES_LAYER = MAP_CFG.showPlacesLayer;
 let _placesFetchTid: ReturnType<typeof setTimeout> | null = null;
 
+/** How the server says a plugin-provided Places layer source is drawn and described. */
+interface PlaceSourceConfig {
+    label: string;
+    icon: string;
+    markerClass: string;
+    fallbackUrl: string;
+    linkLabel: string;
+    hiddenType: string;
+}
+
 interface PlaceData {
     place_id?: string;
-    source: "nps" | "wikipedia" | "google";
+    source: string;
     name?: string;
     lat: number;
     lng: number;
@@ -2739,14 +2750,19 @@ interface PlaceData {
     website?: string;
 }
 
+// Sources a plugin provides come from the server; only core's own are named here.
+function _placeSourceConfig(source: string): PlaceSourceConfig | undefined {
+    return MAP_CFG.placeSources?.[source];
+}
+
 const _PLACES_SOURCE_ICONS: Record<string, { icon: string; cls: string }> = {
-    nps: { icon: "park", cls: "search-result-marker-icon--places-nps" },
     wikipedia: { icon: "bookmark", cls: "search-result-marker-icon--places-wiki" },
     google: { icon: "g_mobiledata", cls: "search-result-marker-icon--places" },
 };
 
 function _placeSourceLabel(source: string): string {
-    if (source === "nps") return "National Park Service";
+    const configured = _placeSourceConfig(source);
+    if (configured) return configured.label;
     if (source === "wikipedia") return "Wikipedia";
     return "Google Places";
 }
@@ -2754,7 +2770,8 @@ function _placeSourceLabel(source: string): string {
 function _placeFallbackUrl(place: PlaceData): string {
     if (place.url) return place.url;
     if (place.source === "wikipedia" && place.name) return `https://en.wikipedia.org/wiki/${encodeURIComponent(place.name.replace(/ /g, "_"))}`;
-    if (place.source === "nps") return "https://www.nps.gov/findapark/index.htm";
+    const configured = _placeSourceConfig(place.source);
+    if (configured?.fallbackUrl) return configured.fallbackUrl;
     if (place.place_id && place.source === "google")
         return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.name || `${place.lat},${place.lng}`)}&query_place_id=${encodeURIComponent(place.place_id)}`;
     return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.name || `${place.lat},${place.lng}`)}`;
@@ -2773,10 +2790,11 @@ function _buildPlaceDetailRows(place: PlaceData, details: Partial<PlaceData> = {
     const website = details.website || merged.url || _placeFallbackUrl(place);
     const parts: string[] = [];
 
-    if (place.source === "nps") {
+    const configured = _placeSourceConfig(place.source);
+    if (configured) {
         // Combine source label and website link into one row
         parts.push(
-            `<a class="map-context-menu__item map-context-menu__item--link places-popup-website" href="${escHtml(website)}" target="_blank" rel="noopener noreferrer"><i class="material-symbols-outlined">travel_explore</i>National Park Service | More Information</a>`,
+            `<a class="map-context-menu__item map-context-menu__item--link places-popup-website" href="${escHtml(website)}" target="_blank" rel="noopener noreferrer"><i class="material-symbols-outlined">travel_explore</i>${escHtml(configured.linkLabel || configured.label)}</a>`,
         );
     } else if (place.source === "wikipedia") {
         parts.push(
@@ -2795,7 +2813,7 @@ function _buildPlaceDetailRows(place: PlaceData, details: Partial<PlaceData> = {
         parts.push(`<div class="places-popup-detail"><i class="material-symbols-outlined">star</i><span>${escHtml(String(merged.rating))} ★${total}</span></div>`);
     }
     const typeLabel = _formatPlaceTypes(merged.types);
-    const suppressType = place.source === "wikipedia" || (place.source === "nps" && typeLabel.toLowerCase() === "national park");
+    const suppressType = place.source === "wikipedia" || (!!configured?.hiddenType && typeLabel.toLowerCase() === configured.hiddenType);
     if (typeLabel && !suppressType) {
         parts.push(`<div class="places-popup-detail"><i class="material-symbols-outlined">category</i><span>${escHtml(typeLabel)}</span></div>`);
     }
@@ -2803,7 +2821,7 @@ function _buildPlaceDetailRows(place: PlaceData, details: Partial<PlaceData> = {
     if (summary) {
         parts.push(`<div class="places-popup-summary">${escHtml(summary)}</div>`);
     }
-    if (place.source !== "nps" && place.source !== "wikipedia") {
+    if (!configured && place.source !== "wikipedia") {
         parts.push(
             `<a class="map-context-menu__item map-context-menu__item--link places-popup-website" href="${escHtml(website)}" target="_blank" rel="noopener noreferrer"><i class="material-symbols-outlined">open_in_new</i>Website / more information</a>`,
         );
@@ -2814,7 +2832,8 @@ function _buildPlaceDetailRows(place: PlaceData, details: Partial<PlaceData> = {
 function _buildPlacesMarker(place: PlaceData): L.Marker {
     const lat = place.lat,
         lng = place.lng;
-    const src = _PLACES_SOURCE_ICONS[place.source] || _PLACES_SOURCE_ICONS.google!;
+    const configured = _placeSourceConfig(place.source);
+    const src = (configured ? { icon: configured.icon, cls: configured.markerClass } : _PLACES_SOURCE_ICONS[place.source]) || _PLACES_SOURCE_ICONS.google!;
     const marker = L.marker([lat, lng], {
         icon: L.divIcon({
             className: "search-result-marker-wrap",
@@ -2896,7 +2915,7 @@ async function _fetchAndShowPlaces(): Promise<void> {
     const zoom = map.getZoom();
     const center = map.getCenter();
     // Pass zoom so the server can apply the minimum zoom restriction per source
-    // (Google Places requires zoom ≥ 10; NPS and Wikipedia show at any zoom).
+    // (Google Places requires zoom ≥ 10; the other sources show at any zoom).
     const url = `${MAP_CFG.urls.mapPlacesNearby}?lat=${center.lat.toFixed(5)}&lng=${center.lng.toFixed(5)}&zoom=${zoom}`;
     try {
         const resp = await fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest" } });
@@ -2931,8 +2950,8 @@ async function _showPlaceInfoPanel(place: PlaceData): Promise<void> {
     panel.removeAttribute("hidden");
     panel.classList.add("is-open");
 
-    // NPS and Wikipedia carry all detail data inline - no extra fetch needed.
-    if (place.source === "nps" || place.source === "wikipedia") {
+    // Wikipedia and plugin-provided sources carry all detail data inline - no extra fetch needed.
+    if (place.source === "wikipedia" || _placeSourceConfig(place.source)) {
         const parts: string[] = [];
         if (place.vicinity) parts.push(`<div class="place-info-address"><i class="material-symbols-outlined">location_on</i> ${escHtml(place.vicinity)}</div>`);
         if (place.description) parts.push(`<div class="place-info-summary">${escHtml(place.description)}</div>`);

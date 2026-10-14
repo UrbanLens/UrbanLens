@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 PROVIDER_GOOGLE = "google_places"
 
-#: The exact legacy Google Place Details fields the VIP panel needs - kept as
+#: The exact legacy Google Place Details fields the pin-detail panel needs - kept as
 #: a constant so every provider's get_place_details_full stays obviously in sync with the others.
 VIP_DETAIL_FIELDS: tuple[str, ...] = ("name", "formatted_address", "rating", "editorial_summary", "opening_hours", "website", "url", "photos")
 
@@ -283,7 +283,7 @@ def search_nearby_landmarks(latitude: float, longitude: float, radius: float, in
 # silently make every pin-add pay for Enterprise-tier fields it never uses, the exact SKU-tier cost
 def get_place_details_full(place_id: str) -> dict[str, Any]:
     """
-    Fetch full place details for the VIP-only pin-detail panel (``controllers.maps.place_details``).
+    Fetch full place details for the pin-detail panel, which needs the Places feature (``controllers.maps.place_details``).
 
     Args:
         place_id: The place id.

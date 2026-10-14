@@ -48,7 +48,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
       rabbitmq:
-        image: rabbitmq:4.3-management-alpine
+        image: rabbitmq:3.13-management-alpine
         env:
           RABBITMQ_DEFAULT_USER: urbanlens
           RABBITMQ_DEFAULT_PASS: ci-placeholder

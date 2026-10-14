@@ -1,8 +1,8 @@
 """
 The egress policy itself: which category each environment may call, and on what share.
 
-Every UrbanLens host shares one residential address with production's first-party services, so a keyless API's per-address
-tolerance and a billed API's free tier are one budget, and production is meant to spend it. These pin the
+A deployment's environments may share one outbound address and one set of keys, so a keyless API's per-address
+tolerance and a billed API's free tier are one budget, and production is meant to spend most of it. These pin the
 table in ``urbanlens.UrbanLens.egress`` without the rest of the app.
 """
 
@@ -54,7 +54,7 @@ class TheTableTests(SimpleTestCase):
                     self.assertEqual(decision.share, 1.0)
 
     def test_quota_and_billed_take_the_environment_s_share(self) -> None:
-        expected = {PRODUCTION: 0.9, STAGING: 0.05, DEVELOPMENT: 0.0, LOCAL: 0.0, TESTING: 1.0}
+        expected = {PRODUCTION: 0.95, STAGING: 0.05, DEVELOPMENT: 0.0, LOCAL: 0.0, TESTING: 1.0}
         for category in (EgressCategory.QUOTA, EgressCategory.BILLED):
             for environment, share in expected.items():
                 with self.subTest(category=category, environment=environment):

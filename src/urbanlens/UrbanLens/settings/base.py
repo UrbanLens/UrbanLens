@@ -113,8 +113,8 @@ INSTALLED_APPS = [
 ]
 
 # Package plugins are apps, so their models, migrations, templates, static files and tasks load like core's.
-# After dashboard, so a plugin never overrides a core template by sharing its name.
-from urbanlens.dashboard.plugins.loader import find_plugin_sources, plugin_apps  # noqa: E402
+# After dashboard, so a plugin replaces a core template only from its template_overrides directory.
+from urbanlens.dashboard.plugins.loader import find_plugin_sources, plugin_apps, template_override_dirs  # noqa: E402
 
 UL_PLUGIN_SOURCES = find_plugin_sources(_app_settings.plugin_modules)
 INSTALLED_APPS += plugin_apps(UL_PLUGIN_SOURCES, _app_settings.disabled_plugins)
@@ -215,8 +215,13 @@ CONTEXT_PROCESSORS = [
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        # Before APP_DIRS so our registration templates win over admin/auth.
-        "DIRS": [os.path.join(PROJECT_ROOT, "dashboard", "templates")],
+        # The operator's overrides, then plugins', then core's; core's before APP_DIRS so our registration templates
+        # win over admin/auth.
+        "DIRS": [
+            *([_app_settings.template_overrides_dir] if _app_settings.template_overrides_dir else []),
+            *template_override_dirs(UL_PLUGIN_SOURCES, _app_settings.disabled_plugins),
+            os.path.join(PROJECT_ROOT, "dashboard", "templates"),
+        ],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": CONTEXT_PROCESSORS,
@@ -1182,7 +1187,7 @@ EMAIL_DELIVERY_BACKEND = email_delivery_backend(
     configured=os.getenv("UL_EMAIL_BACKEND"),
     send_outside_production=_app_settings.email_send_outside_production,
 )
-EMAIL_HOST = os.getenv("UL_EMAIL_HOST", "")
+EMAIL_HOST = _app_settings.email_host
 EMAIL_PORT = int(os.getenv("UL_EMAIL_PORT", "587"))
 EMAIL_HOST_USER = os.getenv("UL_EMAIL_USER", "")
 EMAIL_HOST_PASSWORD = os.getenv("UL_EMAIL_PASSWORD", "")
@@ -1230,12 +1235,9 @@ if _deployment and is_loopback_host(urlparse(SITE_URL).hostname):
     raise ImproperlyConfigured(
         f"UL_SITE_URL is {SITE_URL!r} while UL_ENVIRONMENT is '{ENVIRONMENT_NAME}'. Every emailed link would point at the recipient's own machine; set it to this deployment's public URL.",
     )
-SMITHSONIAN_API_KEY = os.getenv("UL_SMITHSONIAN_API_KEY", "")
 GOOGLE_UNRESTRICTED_API_KEY = os.getenv("UL_GOOGLE_UNRESTRICTED_API_KEY", "")
-GOOGLE_DOMAIN_RESTRICTED_API_KEY = os.getenv("UL_GOOGLE_DOMAIN_RESTRICTED_API_KEY", "")
 GOOGLE_SEARCH_TENANT = os.getenv("UL_GOOGLE_SEARCH_CX") or os.getenv("UL_GOOGLE_SEARCH_TENANT", "")
 OPEN_WEATHER_API_KEY = os.getenv("UL_OPENWEATHERMAP_API_KEY", "")
-NPS_API_KEY = os.getenv("UL_NPS_API_KEY", "")
 
 TEST_RUNNER = "urbanlens.core.tests.runner.TestRunner"
 
@@ -1366,18 +1368,22 @@ OAUTH2_PROVIDER = {
     "ROTATE_REFRESH_TOKEN": True,
 }
 
-LOG_DIR = os.getenv("UL_LOG_DIR", os.path.join(PROJECT_ROOT, "logs"))
+# Unset: logs/ under the project root. Set but blank: no file log, console only (the container image's default).
+LOG_DIR = os.getenv("UL_LOG_DIR")
+if LOG_DIR is None:
+    LOG_DIR = os.path.join(PROJECT_ROOT, "logs")
 _log_file_path = os.path.join(LOG_DIR, "django.log")
 _log_handlers = ["console"]
-try:
-    os.makedirs(LOG_DIR, exist_ok=True)
-    # Probe writability; makedirs alone doesn't prove it.
-    with open(_log_file_path, "a"):
+if LOG_DIR:
+    try:
+        os.makedirs(LOG_DIR, exist_ok=True)
+        # Probe writability; makedirs alone doesn't prove it.
+        with open(_log_file_path, "a"):
+            pass
+    except OSError:
         pass
-except OSError:
-    pass
-else:
-    _log_handlers.append("file")
+    else:
+        _log_handlers.append("file")
 
 LOGGING = {
     "version": 1,
@@ -1406,14 +1412,21 @@ LOGGING = {
             "formatter": "verbose",
             "filters": ["redact_secrets"],
         },
-        "file": {
-            "class": "logging.handlers.RotatingFileHandler",
-            "filename": _log_file_path,
-            "maxBytes": 10 * 1024 * 1024,
-            "backupCount": 5,
-            "formatter": "verbose",
-            "filters": ["redact_secrets"],
-        },
+        # Defined only when usable: dictConfig builds every handler it is given, used or not.
+        **(
+            {
+                "file": {
+                    "class": "logging.handlers.RotatingFileHandler",
+                    "filename": _log_file_path,
+                    "maxBytes": 10 * 1024 * 1024,
+                    "backupCount": 5,
+                    "formatter": "verbose",
+                    "filters": ["redact_secrets"],
+                },
+            }
+            if "file" in _log_handlers
+            else {}
+        ),
     },
     "root": {
         "handlers": _log_handlers,

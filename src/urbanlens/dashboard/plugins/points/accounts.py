@@ -72,10 +72,16 @@ SETTINGS_IMPORT: ActionHook[[Profile, dict[str, Any]]] = ActionHook(
     "Fired while a data export's settings are restored. Receives the profile and the whole settings document, so a plugin can restore what it added through ``accounts.settings_export``.",
 )
 
+EXTERNAL_APIS_DISABLED: ActionHook[[Profile]] = ActionHook(
+    "accounts.external_apis_disabled",
+    "Fired when onboarding turns external APIs off for an account. A plugin that keeps an external-data preference of its own turns it off too.",
+)
+
 __all__ = [
     "ACCESS_STATE_SENDERS",
     "ACCOUNT_DELETING",
     "API_KEY_SCOPES",
+    "EXTERNAL_APIS_DISABLED",
     "HOTKEY_ACTIONS",
     "NOTIFICATION_TYPES",
     "SETTINGS_EXPORT",

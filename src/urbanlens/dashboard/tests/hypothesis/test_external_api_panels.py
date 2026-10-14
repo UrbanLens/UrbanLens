@@ -46,7 +46,7 @@ class _StubPanelSource(PanelSource):
 class _FeatureGatedStubPanelSource(_StubPanelSource):
     """Same stub, gated behind a SiteFeature - for feature-visibility tests."""
 
-    required_feature: ClassVar[SiteFeature] = SiteFeature.NEARBY_RESEARCH
+    required_feature: ClassVar[str] = SiteFeature.BETA_FEATURES
 
 
 def _bearer(raw_key: str) -> dict:
@@ -159,7 +159,7 @@ class StubbedSourceListTests(_PanelsApiTestCase):
 
     def test_feature_gated_source_listed_once_granted(self) -> None:
         stub = _FeatureGatedStubPanelSource(ready=True, gated=True)
-        role = baker.make(SubscriptionRole, features=SiteFeature.NEARBY_RESEARCH)
+        role = baker.make(SubscriptionRole, features=SiteFeature.BETA_FEATURES)
         grant_subscription(self.user, role, self.user, None)
         with mock.patch.object(views_panels, "panel_sources", return_value={stub.key: stub}):
             response = self.client.get(self._list_url(), **_bearer(self.raw_key))
@@ -219,7 +219,7 @@ class StubbedSourceDetailTests(_PanelsApiTestCase):
 
     def test_feature_gated_with_grant_returns_the_payload(self) -> None:
         stub = _FeatureGatedStubPanelSource(ready=True, payload={"info": {"summary": "hi"}})
-        role = baker.make(SubscriptionRole, features=SiteFeature.NEARBY_RESEARCH)
+        role = baker.make(SubscriptionRole, features=SiteFeature.BETA_FEATURES)
         grant_subscription(self.user, role, self.user, None)
         with mock.patch.object(views_panels, "get_panel_source", side_effect={stub.key: stub}.get):
             response = self.client.get(self._detail_url(stub.key), **_bearer(self.raw_key))

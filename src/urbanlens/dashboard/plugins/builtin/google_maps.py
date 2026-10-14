@@ -24,6 +24,10 @@ class GoogleMapsPlugin(UrbanLensPlugin):
 
     def setup(self, plugin: PluginContext) -> None:
         """Google static satellite and Street View providers, their rate-limit defaults, and background backfill of their photos."""
+        from urbanlens.dashboard.plugins.points import DATA_SOURCE_CREDITS, DataSourceCredit
+
+        plugin.add(DATA_SOURCE_CREDITS, DataSourceCredit(name="Google Street View", category="places", url="https://developers.google.com/maps", note="Street-level imagery and satellite views on the Private Pin page."))
+
         from urbanlens.dashboard.plugins.points import ENRICHMENT_SOURCES, SATELLITE_PROVIDERS, SERVICE_DEFAULTS, STREET_VIEW_PROVIDERS
         from urbanlens.dashboard.services.photos.photo_enrichment import SatelliteEnrichmentSource, StreetViewEnrichmentSource
 

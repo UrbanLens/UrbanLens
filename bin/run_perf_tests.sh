@@ -8,8 +8,8 @@
 #
 # Usage:
 #   bin/run_perf_tests.sh --url http://localhost:21810 \
-#       --provision-container urbanlens_development_main_app \
-#       --db-container urbanlens_development_main_db --heavy-pins 20000
+#       --provision-container "urbanlens_${UL_CONTAINER_NAME}_app" \
+#       --db-container "urbanlens_${UL_CONTAINER_NAME}_db" --heavy-pins 20000
 #
 #   bin/run_perf_tests.sh --url https://perf.dev.example.com --manifest /tmp/perf.json
 #

@@ -10,8 +10,10 @@
         <h1 class="faq-title">Questions, <em>answered.</em></h1>
         <p class="faq-subtitle">
             Everything you need to know about pins, privacy, and planning your next expedition.
-            Can't find what you're looking for? Check out our <a href="{% url 'about' %}">About</a>
+            {% block faq_more_help %}
+            Can't find what you're looking for? Check out the <a href="{% url 'about' %}">About</a>
             and <a href="{% url 'values' %}">Values</a> pages for more.
+            {% endblock %}
         </p>
     </div>
 </section>
@@ -43,26 +45,11 @@
                     <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
                 </summary>
                 <div class="faq-item-body">
+                    {% block faq_why_it_exists %}
                     <p>
-                        Google maps is great, but it has missing features and a bunch of bugs. I made this after getting increasingly frustrated with google maps for urbex.
+                        UrbanLens is open-source software for organizing the places you explore: pins, photos, notes, and trips, with privacy controls you set.
                     </p>
-                    <ul>
-                        <li>On Google Maps, you don't own your data, and it's clunky to export any of it. Google sometimes changes the services they offer or the data they let you export, which makes me uncomfortable.</li>
-                        <li>If you pin a lot of things, your google map gets really cluttered, and it's hard to unclutter it.</li>
-                        <li>You can't reliably choose an icon for a pin. You can choose an icon for a saved list, but if it's in multiple lists, google just picks which icon to show for you.</li>
-                        <li>You can't search or filter pins by metadata, like whether you've visited it or not. You can try to get past this by making more saved lists, but things get really tedious really fast.</li>
-                        <li>If you save a pin to an existing google place, and that google place disappears, your pin breaks. It no longer shows details when you click on it, and you can never delete it. It's just on your map forever. So you have to make another pin next to it, and just live with 2 pins for the same place, one of which can't ever be clicked on.</li>
-                        <li>Sometimes searching for pins doesn't work reliably. It works reliably enough that you rely on it... and then it suddenly doesn't work when you're relying on it and it makes you scream.</li>
-                        <li>Sometimes saving a pin to a list doesn't actually save it. This works differently on mobile and desktop, and I've occasionally discovered that a pin just didn't save.</li>
-                        <li>When saving a bunch of pins to a list, one after another, there's some kind of memory leak that causes the map to get more and more sluggish the more pins you open and save, until you need to reload the page.</li>
-                        <li>When saving a bunch of pins, sometimes you click on a brand new pin, click the save to list button, and it shows that new pin already in the lists you put the last pin in... even though it's not. To get it to save, you need to remove it from those lists, and then add it back to them again. Sometimes this doesn't work. If you just close the dialog, it doesn't save at all.</li>
-                        <li>There's no way to make smaller maps of just a few pins in any meaningful way.</li>
-                        <li>You can't upload photos, documents, etc, to a pin without making them public to everyone.</li>
-                        <li>...and I could go on.</li>
-                    </ul>
-                    <p>
-                        Google maps worked just well enough for me to keep using it for years. But eventually, I had to make something that did the things I wanted, the way I wanted them.
-                    </p>
+                    {% endblock %}
                 </div>
             </details>
 
@@ -93,12 +80,11 @@
                     <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
                 </summary>
                 <div class="faq-item-body">
+                    {% block faq_is_it_free %}
                     <p>
-                        Yes, as in speech and beer; UrbanLens is free, and open source. It's run by one person, who pays for hosting, and every other expense out of pocket. Some external APIs are limited for that reason. You can check out the source code on our <a href="https://github.com/UrbanLens/UrbanLens">GitHub page</a>.
+                        Yes, as in speech and beer: UrbanLens is free and open source. Whoever runs this site decides how it is hosted and paid for, and whether any features are limited. The source code is on <a href="https://github.com/UrbanLens/UrbanLens">GitHub</a>.
                     </p>
-                    <p>
-                        The point is to make a tool for people, not to create a business. Features that are expensive to run may be limited, or offered only to some members, to keep the site affordable.
-                    </p>
+                    {% endblock %}
                 </div>
             </details>
 
@@ -108,15 +94,14 @@
                     <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
                 </summary>
                 <div class="faq-item-body">
+                    {% block faq_reliability %}
                     <p>
-                        Really? That's the standard for success? Come on.
+                        How reliable a site is depends on how the people who run it host and maintain it, so ask them.
                     </p>
                     <p>
-                        UrbanLens is still in beta, and I'm still working on it. I wrote the code all from scratch, and it's hosted on my own server that I built myself in my basement. I can't stress enough that I'm just one person.
+                        Keep a copy of anything you store on a site somewhere else too.
                     </p>
-                    <p>
-                        I promise to do my best to keep the site up and protect any data you store on it. But you should not store anything on this site that you don't have another copy of somewhere else, and you shouldn't give up any other tools you're currently using quite yet.
-                    </p>
+                    {% endblock %}
                 </div>
             </details>
 
@@ -126,14 +111,14 @@
                     <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
                 </summary>
                 <div class="faq-item-body">
+                    {% block faq_anonymous %}
                     <p>
-                        I've put a ton of work into ensuring that you can use the site anonymously until you make an intentional decision to be more public. If you want even more anonymity, you have three options:
+                        Your pins are private until you choose to share them, and you can use the site without sharing much about yourself.
                     </p>
-                    <ol class="faq-ordered-list">
-                        <li>You can run the code on your own hardware, and then your data will never leave your network. This requires some technical knowledge, but I've tried to make it easy, and I'm willing to help if you get stuck. You will not have any community features this way, unless you invite a bunch of friends to be your community.</li>
-                        <li>You can use this site, but register from a <a href="https://proton.me/mail">proton email address</a> and use a fake name. I go out of my way not to store information about you. You can verify that yourself by reading <a href="https://github.com/UrbanLens/UrbanLens">the code</a>.</li>
-                        <li>You can disable 3 groups of features during registration, which will really limit your experience, but if that's your thing, I support you. If you do that, you will be prevented from opting in to sharing your stuff, even if you try.</li>
-                    </ol>
+                    <p>
+                        If you want more anonymity, you can run UrbanLens on your own hardware, so your data never leaves your network. You can also ask the people who run this site what they store about you.
+                    </p>
+                    {% endblock %}
                 </div>
             </details>
 
@@ -179,27 +164,14 @@
                     <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
                 </summary>
                 <div class="faq-item-body">
+                    {% block faq_nobody_sees_pins %}
                     <p>
-                        Correct. Nobody. Not even me.
+                        Your privacy controls are built to apply to everyone, including the site admin. Whoever runs the server that stores your data can still be in a position to see it.
                     </p>
                     <p>
-                        The site is setup very carefully to ensure that no one has any special privileges to your data. The privacy controls you set apply to everyone, even the site admin. You can verify this by looking at our code. The version we're running shows at the bottom left of every page, and if you're not a programmer, someone you trust who is can help you verify your data is safe.
+                        Ask the people who run this site how they host it before you trust it with anything you can't afford to expose. If you want full control, run UrbanLens on your own machine, where nobody has access except you.
                     </p>
-                    <p>
-                        But let's also have a reality check, because I think setting good examples is important.
-                    </p>
-                    <p>
-                        Anytime someone else owns the hardware your data is stored on, there is a pathway for them to see your data. Even if your data is encrypted, the hardware owner could intercept the data before encryption, or brute force the encryption key. If any mapping site out there tells you they can't see your pins without telling you this caveat, they're lying to you.
-                    </p>
-                    <p>
-                        In order to get past this problem, I put a ton of time into designing something that didn't even store coordinates on my server. If you look back through the git history, you can probably find a bunch of notes I wrote about it. I experimented with several ideas, and got part of the way through designing a peer-to-peer network before I came to the conclusion that this problem might be intractable.
-                    </p>
-                    <p>
-                        So the best I can do is show you every line of code in my application, and promise that I won't hack into my own software in order to see your pins. And if you're worried about it, you should take my code and put it on your own machine, where nobody has access except you.
-                    </p>
-                    <p>
-                        Please don't trust anyone who doesn't explain this to you, and makes you assurances they can't keep.
-                    </p>
+                    {% endblock %}
                 </div>
             </details>
 
@@ -275,12 +247,16 @@
 
             <details class="faq-item">
                 <summary class="faq-item-summary">
-                    <span>Organizing my pins sounds tedious. Pretend this is a question.</span>
+                    {% block faq_organize_question %}
+                    <span>How can I organize my pins?</span>
+                    {% endblock %}
                     <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
                 </summary>
                 <div class="faq-item-body">
                     <p>
-                        I like automating things. So I automated things.
+                        {% block faq_organize_intro %}
+                        UrbanLens automates much of the work of organizing pins.
+                        {% endblock %}
                     </p>
                     <p>
                         There are lots of ways to make this easier.
@@ -291,8 +267,10 @@
                         {% plugin_slot "faq.import_tips" %}
                         <li>Importing your location history can automatically make pins for you, if you want it to. The location history file is deleted immediately, just like all the other stuff you import.</li>
                         <li>If you want to add friends, you can tag each other in trips you've been on, and that will make pins and mark things as visited for both of you. (You still have to click an "accept" button, because consent is a thing.)</li>
-                        <li>You can opt in to marking places as visited just by logging into the site while you're there. You have to have reception for this, and it doesn't really seem like the easiest way to do it, but it works.</li>
-                        <li>Group trips make pins. So do safety checkins. And as many other things as I could think of.</li>
+                        <li>You can opt in to marking places as visited just by using the map while you're there: with live-location visit tracking on and your browser allowed to share your location, pins near your position are marked as visited when the map finds you. You need reception for this, and it isn't the easiest way to do it, but it works.</li>
+                        {% block faq_organize_more %}
+                        <li>Group trips and safety check-ins make pins too, and so do many other things.</li>
+                        {% endblock %}
                         <li>Once you have your pins here, you can nest them into categories and tags in a whole bunch of configurations, which lets you search and filter in cool ways. Like... you could make your map only display pins that are in the "church" and "want to go" categories, but not in the "no entry" or "demolished" categories, and then you can keep adding filters onto that.</li>
                     </ul>
                 </div>
@@ -305,7 +283,9 @@
                 </summary>
                 <div class="faq-item-body">
                     <p>
-                        I'm just one person, and I bought a lot of hard drives, but I don't have unlimited space. I gave a few GB to people I've never met, and a little bit more to my friends. It adds up pretty fast.
+                        {% block faq_upload_limit_intro %}
+                        How much you can upload depends on the storage quota the people who run this site set.
+                        {% endblock %}
                     </p>
                     <p>
                         You can see how much space you have on your profile page. Uploaded images are automatically optimized to help you fit more within your quota without losing meaningful detail.
@@ -323,7 +303,9 @@
                         The site tries its best to pull in supplementary data, and filter out the junk that doesn't apply. So it can show things like Wikipedia summaries, historical imagery, weather, and relevant public datasets - to help you research a location before you visit.
                     </p>
                     <p>
-                        When these external APIs are contacted, we only send the minimum amount of data needed to get a relevant response. That usually means just the name of the place, or the coordinates.
+                        {% block faq_external_minimum %}
+                        When these external APIs are contacted, UrbanLens only sends the minimum data needed to get a relevant response. That usually means just the name of the place, or the coordinates.
+                        {% endblock %}
                     </p>
                     <p>
                         You can turn this off during registration, or from your settings page.
@@ -348,7 +330,9 @@
                 </summary>
                 <div class="faq-item-body">
                     <p>
-                        When you go to a new place, you're supposed to tell a trusted friend where you're going, and ask them to check in on you when you're supposed to be back... but oh gosh, I never got in that habit. Plus, what am I supposed to do when I'm going somewhere secret, and I don't want to advertise its location? I guess if I get hurt, I just die.
+                        {% block faq_safety_checkin_intro %}
+                        Telling a trusted friend where you're going, and asking them to check in on you when you're due back, is a good habit.
+                        {% endblock %}
                     </p>
                     <p>
                         A safety check-in lets you save all the details of the trip ahead of time, without sharing it with anyone until you don't come home. Only then are they contacted to help find you.
@@ -357,7 +341,9 @@
                         You should understand there are downsides to this approach, and you shouldn't rely on it as your only safety plan. Since your contacts aren't notified until after you're in trouble, they might be busy and just not see the message for hours, or days. Emails might end up in a spam folder. They could see that you sent a message to 3 other people, and assume one of the other 3 will do the job, so they can go to bed. The site could go down, and not send the notice out at all!
                     </p>
                     <p>
-                        I added this feature because I wanted it for me, and the people I care about, but you should keep doing the safety stuff you already do in addition to using this feature. This shouldn't replace the safety stuff you already do.
+                        {% block faq_safety_checkin_why %}
+                        Keep doing the safety steps you already take. A safety check-in is in addition to them, not a replacement.
+                        {% endblock %}
                     </p>
                     <p>
                         In addition, you should choose your contacts wisely, and make sure they'll do the thing you want them to do if they get a message. If you send a poorly worded message to your grandma, she's going to call the police on you after your phone dies.
@@ -401,37 +387,37 @@
                 </summary>
                 <div class="faq-item-body">
                     <p>
-                        Yes. Any data we store about you is visible on your own profile page or your account
-                        Settings - there's no hidden user data on UrbanLens that isn't displayed back to you.
-                        We don't even store your ip.
+                        {% block faq_see_stored_data %}
+                        Yes. Data the site stores about you is visible on your own profile page or your account Settings. The site does not keep hidden user data that is not displayed back to you.
+                        {% endblock %}
                     </p>
+                    {% block faq_ip_addresses %}
                     <p>
-                        But it's time for another reality check about ip addresses.
+                        Services the site relies on, like its web server and caching layer, can see details like your IP address because of how web traffic works. Those details can end up in log files, which the people who run this site keep. A VPN is a reasonable extra step if that matters to you.
                     </p>
-                    <p>
-                        UrbanLens relies on services from other open source software, too, like a web server to handle your web traffic, a caching layer to make the site fast, and more. Some of those services see details about you, like your ip address, just because of the nature of web traffic. Sometimes those details are put into log files. I rotate those log files regularly, and no one without access to my server could ever see them in the first place... but, that's no reason not to use a VPN. They cost like $3 a month.
-                    </p>
+                    {% endblock %}
                 </div>
             </details>
 
             <details class="faq-item">
                 <summary class="faq-item-summary">
-                    <span>What are you doing to protect my data?</span>
+                    {% block faq_protect_question %}
+                    <span>How is my data protected?</span>
+                    {% endblock %}
                     <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
                 </summary>
                 <div class="faq-item-body">
+                    {% block faq_protect_data %}
                     <p>
-                        The site data is stored on a RAID 10 array, so multiple drives need to fail before any data is lost. It's backed up as reasonably close to 3-2-1 as I can manage. The drives are encrypted on the server at rest, and only decrypted when the server is online. Any sensitive data in the database is also encrypted at rest on top of that. HTTPs also encrypts your data in transit, and direct messages are end-to-end encrypted on top of everything above.
+                        Whoever runs this site decides how its data is stored, backed up, and protected. UrbanLens encrypts sensitive values, like third-party API tokens, at rest, and direct messages are end-to-end encrypted.
                     </p>
                     <p>
-                        Regular database backups are run automatically and kept for a long time. Cloudflare, and other infrastructure, provide several additional protections for site reliability. The codebase has a rigorous CI/CD process that tests it for vulnerabilities every time it's changed, and it is automatically analyzed for issues that managed to sneak in.
+                        There's also an export tool, so you can keep your own copies and import them somewhere else any time you'd like.
                     </p>
                     <p>
-                        There's also an export tool, so you can make your own backups and import them somewhere else any time you'd like.
+                        Don't count on any site to store anything you can't bear to lose.
                     </p>
-                    <p>
-                        I could go on. I'm proud of it... but you still shouldn't count on it to store anything you can't bear to lose.
-                    </p>
+                    {% endblock %}
                 </div>
             </details>
 
@@ -441,13 +427,14 @@
                     <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
                 </summary>
                 <div class="faq-item-body">
+                    {% block faq_delete_account %}
                     <p>
-                        Yes. Account deletion is available from your profile settings and removes your personal
-                        data from UrbanLens. The site gets rid of all of it, and I really mean all of it.
+                        Yes. Account deletion is available from your profile settings and removes your personal data from UrbanLens.
                     </p>
                     <p>
-                        You have 1 week to undo the deletion, and during that time your data will still exist on our servers in a separate backup file that isn't visible on the site. If you don't undo the deletion, your data will be gone forever.
+                        After you delete your account, there is a one-week window to undo the deletion. During that time your data may still exist in backups kept by the people who run this site. If you don't undo the deletion, your data is gone for good.
                     </p>
+                    {% endblock %}
                     <p>
                         There's an export tool you can use to get a copy of your data before you do that.
                     </p>
@@ -470,7 +457,9 @@
                         The recovery key is a backup plan for the one situation your password can't cover: if you ever reset your password using the "forgot password" email link, the site can't use it to unlock your old key the normal way. Same thing if you signed up with Google or Discord and never set a password at all, and you're logging in from a brand new device. In both of those cases, the recovery key is what lets you keep reading your old encrypted messages instead of losing access to them.
                     </p>
                     <p>
-                        So... save it somewhere safe when the site shows it to you. A password manager is perfect for this. If you ever lose both your password-based access <em>and</em> your recovery key, there's genuinely no way for anyone, including me, to get your old encrypted messages back - that's the tradeoff for that level of privacy. You can always start fresh with a new key from Settings, you'll just lose access to messages sent before that point.
+                        {% block faq_recovery_key_save %}
+                        So... save it somewhere safe when the site shows it to you. A password manager is a good place for it. If you lose both your password-based access <em>and</em> your recovery key, nobody, including the people who run this site, can get your old encrypted messages back. That's the tradeoff for that level of privacy. You can always start fresh with a new key from Settings, but you'll lose access to messages sent before that point.
+                        {% endblock %}
                     </p>
                     <p>
                         One caveat: attachments like photos and shared maps in direct messages aren't encrypted yet, just the text of the messages themselves. Also... this only protects against someone getting a copy of the database - it doesn't protect you if someone in the real world steals your unlocked phone. Obviously.
@@ -484,12 +473,11 @@
                     <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
                 </summary>
                 <div class="faq-item-body">
+                    {% block faq_open_source %}
                     <p>
-                        Yes - the full source is on
-                        <a href="https://github.com/UrbanLens/UrbanLens">GitHub</a>. Contributions are welcome,
-                        and we just ask that any contributed code align with the principles on our
-                        <a href="{% url 'values' %}">Values</a> page.
+                        Yes - UrbanLens is open-source software, and the full source is on <a href="https://github.com/UrbanLens/UrbanLens">GitHub</a>.
                     </p>
+                    {% endblock %}
                 </div>
             </details>
 
@@ -499,10 +487,11 @@
                     <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
                 </summary>
                 <div class="faq-item-body">
+                    {% block faq_who_runs_this %}
                     <p>
-                        UrbanLens is built and maintained by one person, not a company. It started as a personal
-                        tool for me, then for a small circle of friends, and it's growing from there.
+                        UrbanLens is open-source software, built by its contributors and published on GitHub. The people who run this site can tell you how they run it.
                     </p>
+                    {% endblock %}
                 </div>
             </details>
         </div>

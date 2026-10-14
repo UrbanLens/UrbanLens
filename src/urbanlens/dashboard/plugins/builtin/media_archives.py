@@ -26,6 +26,10 @@ class WikimediaPlugin(UrbanLensPlugin):
 
     def setup(self, plugin: PluginContext) -> None:
         """Wikimedia Commons rate-limit defaults and media-gallery provider; the books and scans it finds go to Article > Sources."""
+        from urbanlens.dashboard.plugins.points import DATA_SOURCE_CREDITS, DataSourceCredit
+
+        plugin.add(DATA_SOURCE_CREDITS, DataSourceCredit(name="Wikimedia Commons", category="reference", url="https://commons.wikimedia.org/", note="Freely licensed photographs and media, matched to each site by name and coordinates."))
+
         from urbanlens.dashboard.plugins.points import PANEL_SOURCES, SERVICE_DEFAULTS
         from urbanlens.dashboard.services.apis.assets.wikimedia import WikimediaGateway
 

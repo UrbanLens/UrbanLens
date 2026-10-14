@@ -398,7 +398,7 @@ class OverpassGateway(Gateway, BoundaryProvider):
                 raise
             # Still non-fatal - callers treat an empty result as "no boundary data" - but a
             # sustained run of these now warrants a look. logger.warning (not .exception) so it
-            # doesn't read as a crash, matching GDELT's gateway, which handles its external failures
+            # doesn't read as a crash, matching the other public-source gateways, which handles its external failures
             # the same.
             logger.warning("Overpass query failed on all endpoints", exc_info=True)
             return []

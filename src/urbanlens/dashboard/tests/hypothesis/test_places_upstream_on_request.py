@@ -144,7 +144,6 @@ class NearbyPlacesTests(_PlacesCase):
         super().setUp()
         profile = self.user.profile
         profile.places_google_enabled = True
-        profile.places_nps_enabled = False
         profile.places_wikipedia_enabled = True
         profile.save()
 

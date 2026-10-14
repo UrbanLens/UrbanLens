@@ -9,6 +9,7 @@ SLOT_BODY_END = TemplateSlot("page.body_end", "Just before </body> on every page
 SLOT_ACCOUNT_MENU = TemplateSlot("page.account_menu", 'Items in the signed-in account menu, as ``<a class="nav-dropdown-item" role="menuitem">`` links.')
 SLOT_FOOTER_LINKS = TemplateSlot("page.footer_links", "Links in the page footer, each preceded by `` &middot; ``.")
 SLOT_SETTINGS_SECTIONS = TemplateSlot("settings.sections", "Sections at the end of the user settings page.")
+SLOT_SETTINGS_PLACES_LAYER = TemplateSlot("settings.places_layer", "Source toggles in the Places layer form on the settings page, between core's Google and Wikipedia toggles; render ``settings-field`` markup. ``request`` is in context.")
 SLOT_SETTINGS_TABS = TemplateSlot("settings.tabs", "Tab buttons on the user settings page, after core's own; render ``settings-tab`` buttons with ``data-tab`` matching a panel.")
 SLOT_SETTINGS_TAB_PANELS = TemplateSlot("settings.tab_panels", "Tab panels on the user settings page, after core's own; each is a ``settings-tab-panel`` with a ``data-tab-panel`` attribute.")
 SLOT_SITE_ADMIN_TABS = TemplateSlot("site_admin.tabs", "Tabs in the site-admin navigation.")
@@ -20,6 +21,7 @@ SLOT_FEATURE_LOCKED = TemplateSlot(
     "After a notice that the viewer lacks a site feature, such as how to get it. ``feature`` (a SiteFeature value) is in context.",
 )
 SLOT_LABEL_DIALOG_SUGGESTIONS = TemplateSlot("labels.dialog_suggestions", 'Above the label list in the Add Labels dialog; ``membership_route`` ("pin", "location"...) and ``obj_uuid`` (the pin or location slug) are in context.')
+SLOT_OWNERSHIP_WITHHELD = TemplateSlot("ownership.withheld", "Below the Ownership card's owner list, after its empty state, for owner records the viewer may not see; ``withheld_official_count`` is in context.")
 SLOT_PIN_PANELS = TemplateSlot("pin.panels", "Panels on the private pin page after core's own; ``pin`` is in context.")
 SLOT_WIKI_PANELS = TemplateSlot("wiki.panels", "Panels on the wiki page after core's own; ``wiki`` is in context.")
 SLOT_FAQ_IMPORT_TIPS = TemplateSlot("faq.import_tips", "List items in the FAQ's answer about importing, each an ``<li>``.")
@@ -46,7 +48,9 @@ __all__ = [
     "SLOT_IMPORT_PINS_HELP",
     "SLOT_LABEL_DIALOG_SUGGESTIONS",
     "SLOT_LINK_ACTIONS",
+    "SLOT_OWNERSHIP_WITHHELD",
     "SLOT_PIN_PANELS",
+    "SLOT_SETTINGS_PLACES_LAYER",
     "SLOT_SETTINGS_SECTIONS",
     "SLOT_SETTINGS_TABS",
     "SLOT_SETTINGS_TAB_PANELS",

@@ -39,7 +39,9 @@ def render_slot(name: str, page_context: dict[str, Any], request: HttpRequest | 
 @register.simple_tag(takes_context=True)
 def plugin_slot(context: Context, name: str) -> SafeString:
     """Render every template plugins contribute to slot ``name`` with this page's context; nothing when none do."""
-    return render_slot(name, context.flatten(), context.get("request"))
+    # Template variables are named by strings; flatten() is typed to admit other keys, which no fragment could read.
+    page_context = {key: value for key, value in context.flatten().items() if isinstance(key, str)}
+    return render_slot(name, page_context, context.get("request"))
 
 
 @register.simple_tag

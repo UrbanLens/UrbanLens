@@ -267,7 +267,7 @@ _WHITESPACE_RUN_PATTERN = re.compile(r"\s+")
 # Sources demoted to "fallback only": their candidates are dropped whenever any other source has a
 # meaningful candidate, and only considered when nothing else does.
 # Google Places names are frequently generic/noisy (parking lots, nearby businesses) compared to
-# purpose-built sources like Wikipedia or NPS.
+# purpose-built sources like Wikipedia.
 GOOGLE_PLACES_NAME_SOURCE = "google_places"
 FALLBACK_ONLY_NAME_SOURCES: frozenset[str] = frozenset({GOOGLE_PLACES_NAME_SOURCE})
 

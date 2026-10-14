@@ -26,18 +26,17 @@
         </p>
 
         <div class="attr-card-grid">
+            {% for credit in map_cards %}
             <article class="attr-card">
-                <div class="attr-card-icon"><i class="material-symbols-outlined">map</i></div>
-                <h3 class="attr-card-title"><a href="https://www.openstreetmap.org/copyright" rel="noopener noreferrer" target="_blank">Nominatim / OpenStreetMap</a></h3>
+                <div class="attr-card-icon"><i class="material-symbols-outlined">{{ credit.attribution.icon }}</i></div>
+                <h3 class="attr-card-title">{% if credit.url %}<a href="{{ credit.url }}" rel="noopener noreferrer" target="_blank">{{ credit.name }}</a>{% else %}{{ credit.name }}{% endif %}</h3>
                 <p class="attr-card-body">
-                    Community-maintained data used for the default street map and the Water &amp; Rail
-                    overlay, including active and lifecycle-tagged historic railways, rail trails,
-                    waterways, and canals. Viewport geometry is queried through Overpass; reverse
-                    geocoding and address lookup use Nominatim. © OpenStreetMap contributors, available under the
-                    <a href="https://opendatacommons.org/licenses/odbl/" rel="noopener noreferrer" target="_blank">Open Database License (ODbL)</a>.
+                    {{ credit.note }}
+                    {{ credit.attribution.text }}
+                    <a href="{{ credit.attribution.terms_url }}" rel="noopener noreferrer" target="_blank">{{ credit.attribution.terms_label }}</a>.
                 </p>
             </article>
-
+            {% endfor %}
             <article class="attr-card">
                 <div class="attr-card-icon"><i class="material-symbols-outlined">terrain</i></div>
                 <h3 class="attr-card-title"><a href="https://opentopomap.org/" rel="noopener noreferrer" target="_blank">OpenTopoMap</a></h3>
@@ -80,15 +79,6 @@
                 </p>
             </article>
 
-            <article class="attr-card">
-                <div class="attr-card-icon"><i class="material-symbols-outlined">cloud</i></div>
-                <h3 class="attr-card-title"><a href="https://openweathermap.org/" rel="noopener noreferrer" target="_blank">OpenWeatherMap</a></h3>
-                <p class="attr-card-body">
-                    Precipitation and cloud overlay tiles on the optional weather layer.
-                    Map data © OpenWeatherMap, subject to their
-                    <a href="https://openweathermap.org/terms" rel="noopener noreferrer" target="_blank">terms of use</a>.
-                </p>
-            </article>
         </div>
     </div>
 </section>
@@ -117,6 +107,7 @@
     </div>
 </section>
 
+{% if credit_groups or has_attributions %}
 <section class="attr-section">
     <div class="attr-section-inner">
         <div class="attr-section-label">External data &amp; APIs</div>
@@ -125,46 +116,26 @@
             Pin and location pages may fetch supplementary data from third-party services.
         </p>
 
+        {% for group in credit_groups %}
+        <h3 class="attr-subheading">{{ group.category.title }}</h3>
         <div class="attr-list">
+            {% for credit in group.credits %}
             <div class="attr-list-item">
                 <div class="attr-list-main">
-                    <h3><a href="https://developers.google.com/maps" rel="noopener noreferrer" target="_blank">Google Maps Platform</a></h3>
-                    <p>Places, geocoding, Street View imagery, and related location services.</p>
+                    <h3>{% if credit.url %}<a href="{{ credit.url }}" rel="noopener noreferrer" target="_blank">{{ credit.name }}</a>{% else %}{{ credit.name }}{% endif %}</h3>
+                    {% if credit.note %}<p>{{ credit.note }}</p>{% endif %}
                 </div>
-                <span class="attr-list-tag">Places</span>
             </div>
-            <div class="attr-list-item">
-                <div class="attr-list-main">
-                    <h3><a href="https://www.wikipedia.org/" rel="noopener noreferrer" target="_blank">Wikipedia / Wikimedia</a></h3>
-                    <p>Encyclopedia summaries and freely licensed media from Wikimedia Commons.</p>
-                </div>
-                <span class="attr-list-tag">Reference</span>
-            </div>
-            <div class="attr-list-item">
-                <div class="attr-list-main">
-                    <h3><a href="https://www.si.edu/" rel="noopener noreferrer" target="_blank">Smithsonian Institution</a></h3>
-                    <p>Historical photographs and collection records from Smithsonian open-access APIs.</p>
-                </div>
-                <span class="attr-list-tag">Archive</span>
-            </div>
-            <div class="attr-list-item">
-                <div class="attr-list-main">
-                    <h3><a href="https://www.nps.gov/subjects/digital/nps-data-api.htm" rel="noopener noreferrer" target="_blank">U.S. National Park Service</a></h3>
-                    <p>Park information and points of interest from NPS public data APIs.</p>
-                </div>
-                <span class="attr-list-tag">Parks</span>
-            </div>
+            {% endfor %}
+        </div>
+        {% endfor %}
+
+        <div class="attr-list">
             {% plugin_slot "thanks.attributions" %}
-            <div class="attr-list-item">
-                <div class="attr-list-main">
-                    <h3><a href="https://brave.com/search/api/" rel="noopener noreferrer" target="_blank">Brave Search</a></h3>
-                    <p>Web search results for the Private Pin pages.</p>
-                </div>
-                <span class="attr-list-tag">Search</span>
-            </div>
         </div>
     </div>
 </section>
+{% endif %}
 
 <section class="attr-section attr-section--muted">
     <div class="attr-section-inner">
@@ -250,9 +221,11 @@
             <div>
                 <h2 class="attr-note-title">Corrections welcome</h2>
                 <p class="attr-note-body">
-                    If we have missed attribution or misstated a license, please
-                    <a href="https://github.com/UrbanLens/UrbanLens/issues" rel="noopener noreferrer" target="_blank">open an issue on Github</a>
-                    so we can fix it!
+                    {% block thanks_corrections %}
+                    If you spot missed attribution or a misstated license, please
+                    <a href="https://github.com/UrbanLens/UrbanLens/issues" rel="noopener noreferrer" target="_blank">open an issue on GitHub</a>
+                    so it can be fixed.
+                    {% endblock %}
                 </p>
             </div>
         </div>

@@ -94,12 +94,7 @@ class CommentDensityTests(SimpleTestCase):
 
 class HistoryReferenceTests(SimpleTestCase):
     def test_each_kind_of_history_is_flagged(self) -> None:
-        maintainer = "J" + "ess"
         cases = {
-            f"Per {maintainer}, keep it.": "names the maintainer",
-            "C" + "laude wrote this.": "names the tool that wrote it",
-            "The previous agent left this half done.": "refers to machine-written work",
-            "See the handoff note for why.": "refers to machine-written work",
             "Restored in PR #111.": "cites a pull request or commit",
             "It used to read the whole table.": "narrates a change",
             "Before the fix, this leaked.": "narrates a change",
@@ -118,9 +113,7 @@ class HistoryReferenceTests(SimpleTestCase):
     def test_near_misses_are_not_flagged(self) -> None:
         for text in (
             "The key used to sign the token.",
-            "Sent with a descriptive User-Agent; a bare urllib agent is refused.",
             "The gateway is backed by a hosted provider's models.",
-            "An X-Accel hand-off, or a FileResponse.",
             'See other-project#286 ("articles name provider images").',
             "Since API version 2025-03-31 it lives elsewhere.",
             "Accepts ``2026-01-01`` or `2026-01-01T00:00`.",

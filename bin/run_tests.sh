@@ -29,7 +29,8 @@
 # --shuffle is opt-in; reproduce failures with the printed seed.
 #
 # Environment:
-#   UL_TEST_CONTAINER   test-runner container name (default urbanlens_development_main_test_runner)
+#   UL_TEST_CONTAINER   test-runner container name (default urbanlens_<UL_CONTAINER_NAME or UL_ENVIRONMENT>_test_runner,
+#                       read from the shell or .env; see bin/lib/compose_names.sh)
 #   UL_TEST_DB_NAME     test database name. Without --fast/--fresh-db, a unique one is
 #                       generated when unset (parallel runs collide otherwise, and the
 #                       channel-layer prefix derives from it). With --fast/--fresh-db the
@@ -37,7 +38,10 @@
 #                       always set this explicitly.
 set -euo pipefail
 
-CONTAINER="${UL_TEST_CONTAINER:-urbanlens_development_main_test_runner}"
+# shellcheck source=bin/lib/compose_names.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/compose_names.sh"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CONTAINER="${UL_TEST_CONTAINER:-$(ul_container_name "$ROOT" test_runner)}"
 VENV_FIX=1
 SYNC=1
 VERIFY_ONLY=0

@@ -31,7 +31,6 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
-    from urbanlens.dashboard.models.subscriptions import SiteFeature
     from urbanlens.dashboard.services.apis.assets.base import MediaProvider
     from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, SatelliteViewProvider, StreetViewProvider, StreetViewSlide
     from urbanlens.dashboard.services.geo.geo_boundary import GeoBoundary
@@ -178,7 +177,7 @@ def info_card(
         meta: Label/value rows, each ``{"label", "value", "href"?}``.
         header_link: ``{"url", "label"}`` for the card's header affordance.
         footer_link: ``{"url", "label"}`` for the card's "view on X" link.
-        image_url: A single representative image, for the panels that have one (NPS park photos, Nominatim's ``image`` tag).
+        image_url: A single representative image, for the panels that have one (park photos, Nominatim's ``image`` tag).
         description: A paragraph of prose, for the panels that have one.
 
     Returns:
@@ -238,7 +237,7 @@ class PanelSource(ABC):
             right now (which it also does whenever the data simply hasn't
             landed yet). See the module docstring for why the default is
             closed rather than a guess.
-        required_feature: The :class:`SiteFeature` a viewer must hold for this
+        required_feature: The site feature value (see ``site_feature_choices``) a viewer must hold for this
             source's data to be shown to them, or None when it is unrestricted
             (the overwhelming majority). Declared on the source rather than
             only at each call site so every surface - web tab strip, external
@@ -254,7 +253,7 @@ class PanelSource(ABC):
     outer_is_card: ClassVar[bool] = False
     queue: ClassVar[str] = Queue.PANEL_FETCH
     api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset()
-    required_feature: ClassVar[SiteFeature | None] = None
+    required_feature: ClassVar[str | None] = None
     #: Where this panel is fetched in a root pin's bootstrap (``services.pins.bootstrap``): panels that describe the
     #: property as a whole declare an order, lowest first; None leaves it out. It still passes its own gate.
     bootstrap_order: ClassVar[int | None] = None
@@ -265,6 +264,8 @@ class PanelSource(ABC):
     card_view: ClassVar[str] = ""
     #: Where the card sits among the others that name a ``card_view``, lowest first.
     card_order: ClassVar[int] = 100
+    #: Whether a failed fetch removes the panel quietly instead of saying the data is unavailable.
+    quiet_on_error: ClassVar[bool] = False
 
     def scope(self, pin: Pin) -> str:
         """
@@ -666,7 +667,7 @@ class InfoPanelSource(LocationCachePanelSource, ABC):
 
         Args:
             pin: The pin whose panel is being read (``render_context`` may
-                branch on it - see the CRIS plugin's site-scope handling).
+                branch on it - see the building plugin's site-scope handling).
             data: The ``LocationCache`` row's ``data`` dict.
 
         Returns:
@@ -1146,7 +1147,7 @@ class GatewayMediaPanelSource(GalleryMediaSource):
 
 
 class MediaPanelSource(NameSearchSource, GatewayMediaPanelSource):
-    """One provider of the combined Media gallery (Smithsonian, Wikimedia, LOC), searched by the place's names."""
+    """One provider of the combined Media gallery (Wikimedia, Yelp, Google Images), searched by the place's names."""
 
     judges_relevance: ClassVar[bool] = True
 

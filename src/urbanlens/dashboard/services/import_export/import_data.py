@@ -1280,7 +1280,7 @@ _SETTINGS_GROUPS: tuple[str, ...] = ("keyword_tagging", "photos", "places_layers
 _SETTINGS_GROUP_FIELDS: dict[str, frozenset[str]] = {
     "keyword_tagging": frozenset({"keyword_tagging_enabled", "keyword_label_tags", "keyword_label_categories", "keyword_label_statuses"}),
     "photos": frozenset({"generate_photo_keywords", "image_downscale_max_dimension", "video_downscale_max_height"}),
-    "places_layers": frozenset({"places_google_enabled", "places_nps_enabled", "places_wikipedia_enabled"}),
+    "places_layers": frozenset({"places_google_enabled", "places_wikipedia_enabled"}),
     "tracking": frozenset({"track_pin_visits", "track_routes", "track_geolocation"}),
     "community": frozenset({"community_enabled", "sync_rating_to_wiki", "sync_vulnerability_to_wiki", "sync_priority_to_wiki", "sync_danger_to_wiki"}),
 }

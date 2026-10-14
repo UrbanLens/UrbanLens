@@ -22,32 +22,19 @@ class SiteFeature(TextChoices):
 
     PLACES = "places", "Places layer (Google Places landmarks)"
     SEARCH = "search", "Web search engines"
-    # larger than photos, so admins grant this tier explicitly to manage
-    # storage cost rather than bundling it into every VIP subscription.
+    # Larger than photos, so admins grant this explicitly to manage storage rather than bundling it into every
+    # access role.
     VIDEO_UPLOADS = "video_uploads", "Video uploads"
     # Documents are converted to PDF and OCR'd on upload (see services.media.documents),
     # which costs meaningfully more CPU than a photo upload - kept as its own
     # grant for the same reason as VIDEO_UPLOADS.
     DOCUMENT_UPLOADS = "document_uploads", "Document uploads"
-    # Nearby-facility/feature research tabs on the Private Pin page - separate from each plugin's
-    # own unconditional "data about this exact pin" card, which everyone gets.
-    # This flag names the concept, not every panel that could plausibly use it - check each
-    # PanelSource.required_feature, don't assume from this comment.
-    NEARBY_RESEARCH = "nearby_research", "Nearby research data"
-    # Full incident history for a pin's block (up to 25 years back) - a deeper pull than the
-    # free "Reported Incidents" card everyone gets (last 3 years, top few rows only).
-    # Kept as its own flag rather than folded into NEARBY_RESEARCH: unlike a nearby-facility list, a
-    # block's multi-year crime-report history is sensitive enough that a site may want to manage
-    INCIDENT_HISTORY = "incident_history", "Historical incident data"
-    # Owner identity/contact details UrbanLens looked up *for* the user from county assessor records
-    # - the paid data feed, and the part of a property record that names a private
-    # individual.
+    # Official owner identity and contact details a plugin supplies: the part of a property record that names a
+    # private individual.
     PROPERTY_OWNERS = "property_owners", "Official property owner names & contact info"
-    # Automatic tag/category assignment from an external label-suggestion service: it matches a place against
-    # the user's own taxonomy, so the cost profile and the grant decision are
-    # different.
+    # Automatic tag/category assignment, which matches a place against the user's own taxonomy.
     AUTO_TAGGING = "auto_tagging", "Automatic tagging of pins"
-    # Gates access to features still under active development, but stable enough for general (VIP)
+    # Gates access to features still under active development, but stable enough for general access-role
     # use - a single flag reused across every in-progress feature, rather than one SiteFeature per
     # beta, so a feature can graduate out of beta by just removing its gate instead of touching this
     # enum.

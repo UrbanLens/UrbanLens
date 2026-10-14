@@ -86,6 +86,22 @@ class StorefrontPlugin(UrbanLensPlugin):
 A stylesheet or script a plugin builds is loaded on every page once it is added to `points.STYLESHEETS` or
 `points.SCRIPTS` by its static path, e.g. `plugin.add(points.STYLESHEETS, "storefront/storefront.css")`.
 
+### Replacing a core template
+
+A package plugin's own `templates/` is searched after core's, so it can add templates but not replace them. To replace
+one, put a file of the same name in the plugin's `template_overrides/` directory. It can extend the very template it
+replaces and override single blocks:
+
+```django
+{# template_overrides/dashboard/pages/faq/index.html #}
+{% extends "dashboard/pages/faq/index.html" %}
+{% block faq_who_runs_this %}<p>Run by the Storefront team.</p>{% endblock %}
+```
+
+Prefer a template slot where one exists: a replaced block stops following core's changes to it. An operator can do the
+same without a plugin through `UL_TEMPLATE_OVERRIDES_DIR`, which is searched first. Replace the legal pages
+(`dashboard/pages/legal/privacy.html` and `terms.html`) this way: core ships them as defaults, not as your policy.
+
 ### External services
 
 Every external service a plugin calls needs rate-limit defaults on `points.SERVICE_DEFAULTS`, including an
@@ -93,6 +109,11 @@ Every external service a plugin calls needs rate-limit defaults on `points.SERVI
 `deployed` ones are called by production and staging only, and `internal` ones are the deployment's own. A plugin whose
 service depends on another it calls (a feature and the provider behind it) can refine the decision through
 `points.EGRESS_DECISIONS`.
+
+A plugin that brings in data from a source credits it with a `DataSourceCredit` on `points.DATA_SOURCE_CREDITS`, under a
+category key; the home and credits pages list what the install draws on. Core registers its categories on
+`points.DATA_SOURCE_CATEGORIES`. A plugin whose sources fit one better registers the same key at a lower priority number
+to replace its title, icon and description.
 
 There are six kinds of seam:
 
@@ -193,6 +214,14 @@ it. Reversed by `manage.py plugins uninstall`, it drops the table.
 
 To move columns from a core table into a plugin's, copy them in a plugin data migration that declares `run_before` the
 core migration removing them.
+The copy happens only if the plugin is installed when core's migration runs; the migration drops the columns either way.
+
+### Bringing an older database forward
+
+`manage.py migrate` fires `points.BEFORE_MIGRATE` with the database alias before it reads the migration history or
+runs a system check. A plugin that carries an earlier, since consolidated history uses it to run what an older
+database lacks and record the current migrations in its place. Without such a plugin, the `dashboard.E014` check
+refuses a database that records migrations of our apps the code does not have.
 
 ## Testing
 

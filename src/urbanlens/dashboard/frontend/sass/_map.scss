@@ -3415,12 +3415,6 @@ div.container .addr-search-bar {
         filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .55));
     }
 
-    &--places-nps {
-        font-size: 26px;
-        color: $color-green-700;
-        filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .55));
-    }
-
     &--places-wiki {
         font-size: 26px;
         color: $color-blue-900;
@@ -5419,10 +5413,6 @@ div.container .addr-search-bar {
     // Places-layer markers only.
     .search-result-marker-wrap:not(.search-result-marker-wrap--temp) .search-result-marker-icon {
         color: var(--ul-grey-8);
-
-        &--places-nps {
-            color: $color-green-500;
-        }
 
         &--places-wiki {
             color: $color-blue-700;

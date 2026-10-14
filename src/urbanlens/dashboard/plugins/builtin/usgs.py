@@ -126,6 +126,13 @@ class UsgsPlugin(UrbanLensPlugin):
 
     def setup(self, plugin: PluginContext) -> None:
         """USGS rate-limit defaults and the USGS topo-map pin-detail panel."""
+        from urbanlens.dashboard.plugins.points import DATA_SOURCE_CREDITS, DataSourceCredit
+
+        plugin.add(
+            DATA_SOURCE_CREDITS,
+            DataSourceCredit(name="USGS Historical Topo Maps", category="archives", url="https://ngmdb.usgs.gov/topoview/", note="Historical topographic map sheets near a pin, from the USGS Historical Topographic Map Collection."),
+        )
+
         from urbanlens.dashboard.plugins.points import PANEL_SOURCES, SERVICE_DEFAULTS
 
         plugin.register_all(

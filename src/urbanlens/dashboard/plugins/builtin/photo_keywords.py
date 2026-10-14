@@ -1,6 +1,6 @@
 """
 Built-in photo keywording plugins.
-Three independent strategies, each storing its own ``ImageKeyword`` rows so they coexist and can be regenerated separately:"""
+Core ships the embedded-metadata strategy; other plugins register theirs the same way. Each stores its own ``ImageKeyword`` rows, so they coexist and can be regenerated separately:"""
 
 from __future__ import annotations
 

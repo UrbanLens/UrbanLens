@@ -38,6 +38,7 @@ from urbanlens.dashboard.services.core.counters import Outage
 from urbanlens.dashboard.services.core.json_safety import safe_json_for_script
 from urbanlens.dashboard.services.core.numbers import safe_int_or_none
 from urbanlens.dashboard.services.core.text_limits import column_max_length
+from urbanlens.dashboard.services.core.user_agent import USER_AGENT
 from urbanlens.dashboard.services.media.storage import StorageUnavailableError
 from urbanlens.dashboard.services.security.throttle import Rate
 
@@ -856,7 +857,6 @@ class SocialLinkVerifyView(LoginRequiredMixin, View):
     """
 
     _TIMEOUT_SECONDS = 5
-    _USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
 
     def get(self, request: HttpRequest) -> HttpResponse:
         """
@@ -902,7 +902,7 @@ class SocialLinkVerifyView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, open_public_url
 
         try:
-            with open_public_url("GET", url, timeout=self._TIMEOUT_SECONDS, total_deadline=self._TIMEOUT_SECONDS * 2, headers={"User-Agent": self._USER_AGENT}) as resp:
+            with open_public_url("GET", url, timeout=self._TIMEOUT_SECONDS, total_deadline=self._TIMEOUT_SECONDS * 2, headers={"User-Agent": USER_AGENT}) as resp:
                 status_code = resp.status_code
         except (RequestException, UnsafeUrlError):
             # Unreachable, or somewhere this server must not go: either way the link cannot be confirmed,

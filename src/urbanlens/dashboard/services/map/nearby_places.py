@@ -132,6 +132,28 @@ def expand_state_codes(states: str) -> str:
     return ", ".join(_US_STATE_CODES.get(code, code) for code in codes)
 
 
+@dataclass(frozen=True, slots=True)
+class PlaceSourceStyle:
+    """
+    How the map shows a Places layer source that core does not know by name.
+
+    Attributes:
+        label: The source's name in a popup.
+        icon: The Material icon on its markers.
+        marker_class: The modifier class of ``search-result-marker-icon`` that colours them; its stylesheet is the plugin's.
+        fallback_url: Where a place with no URL of its own links.
+        link_label: The popup's one link to the source.
+        hidden_type: A place type the popup leaves out because the source says it already.
+    """
+
+    label: str
+    icon: str
+    marker_class: str
+    fallback_url: str = ""
+    link_label: str = ""
+    hidden_type: str = ""
+
+
 class NearbyParksProvider(Protocol):
     """A catalogue of national parks that can be searched by position."""
 

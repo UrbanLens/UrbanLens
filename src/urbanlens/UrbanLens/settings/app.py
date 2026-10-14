@@ -7,16 +7,13 @@ from typing import Annotated, Any, Self
 
 from django import conf
 from django.conf import LazySettings
-from django.core.management.utils import get_random_secret_key
 from pydantic import Field, field_validator, model_validator
 from pydantic._internal._model_construction import ModelMetaclass
 from pydantic_core import Url
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from urbanlens.UrbanLens.egress import parse_share_overrides
-from urbanlens.UrbanLens.environments.base import BaseEnvironment
-from urbanlens.UrbanLens.environments.factory import select_environment
-from urbanlens.UrbanLens.environments.meta import DebugTypes, EnvironmentTypes, environment_from_env
+from urbanlens.UrbanLens.environments.meta import EnvironmentTypes, environment_from_env
 from urbanlens.UrbanLens.settings.meta.app import DEFAULT_PATH_PARENTS, DEFAULT_ROOT
 
 logger = logging.getLogger(__name__)
@@ -81,9 +78,6 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         validation_alias="UL_ENVIRONMENT",
         description="The deployment environment, read from UL_ENVIRONMENT exactly as settings.ENVIRONMENT_NAME is",
     )
-    debug_override: bool | None = Field(description="Whether or not to enable debugging", alias="DEBUG", default=None)
-    # default_factory so each instantiation gets a fresh key; never read as stable across processes.
-    secret_key: str = Field(default_factory=get_random_secret_key, description="The secret key")
     field_encryption_key: str | None = Field(
         default=None,
         description=(
@@ -105,18 +99,23 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         ),
     )
     root_urlconf: str = Field(default="urbanlens.UrbanLens.urls", description="The root urlconf")
-    admin_username: str = Field(default="Admin", description="The username to use for the admin user")
-    admin_email: str = Field(default="admin@yourdomain.com", description="The email to use for the admin user")
+    bootstrap_admin_email: str = Field(
+        default="",
+        description="If set, the account with this email (compared after email normalization) becomes the bootstrap site admin while the role is unclaimed, even if other accounts exist, and no other account can. Empty: the first account does.",
+    )
     allowed_hosts: Annotated[list[str], NoDecode] = Field(default_factory=_default_allowed_hosts, description="The allowed hosts")
     plugin_modules: Annotated[list[str], NoDecode] = Field(default_factory=list, description="Dotted module paths of additional UrbanLens plugins to load (comma-separated)")
     disabled_plugins: Annotated[list[str], NoDecode] = Field(default_factory=list, description="Names of discovered UrbanLens plugins to disable for this install (comma-separated)")
+    template_overrides_dir: str = Field(
+        default="",
+        description="A directory of templates that replace the bundled ones of the same relative name, for pages a deployment words its own way: the privacy policy, the FAQ, the about page. A replacement can {% extends %} the template it replaces and override single blocks. Empty uses the bundled templates.",
+    )
     language_code: str = Field(default="en-us", description="The language code")
-    time_zone: str = Field(default="EST", description="The time zone")
     use_i18n: bool = Field(default=True, description="Whether or not to use i18n")
     use_tz: bool = Field(default=True, description="Whether or not to use tz")
     email_backend: str = Field(default="django.core.mail.backends.console.EmailBackend", description="Django email backend class path")
     email_from: str = Field(default="noreply@yourdomain.com", description="The from email")
-    email_host: str = Field(default="smtp.gmail.com", description="The email host")
+    email_host: str = Field(default="", description="The email host")
     email_port: int = Field(default=587, description="The email port")
     email_user: str | None = Field(default=None, description="SMTP username / sending address")
     email_password: str | None = Field(default=None, description="SMTP password or app password")
@@ -177,7 +176,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     )
     s3_endpoint_url: str = Field(
         default="",
-        description=("Base URL of the S3-compatible API, e.g. http://garage-s3.garage.svc.cluster.local:3900. Required when UL_MEDIA_STORAGE_BACKEND is 's3'. Leave empty for real AWS S3, which boto3 derives from the region."),
+        description=("Base URL of the S3-compatible API, e.g. http://minio:9000. Required when UL_MEDIA_STORAGE_BACKEND is 's3'. Leave empty for real AWS S3, which boto3 derives from the region."),
     )
     s3_bucket_name: str = Field(default="", description="Bucket holding user uploads. Required when UL_MEDIA_STORAGE_BACKEND is 's3'.")
     s3_access_key_id: str | None = Field(default=None, description="Access key for the object store. Required when UL_MEDIA_STORAGE_BACKEND is 's3'.")
@@ -609,11 +608,11 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         description=(
             "This deployment's share (0-1) of every quota'd and billed external service's budget: each such "
             "service's per-minute, per-day and 30-day limits, and its share of a vendor's free tier. Unset takes "
-            "the UL_ENVIRONMENT default: production 0.9, staging 0.05, development and local 0, anything else 0. "
+            "the UL_ENVIRONMENT default: production 0.95, staging 0.05, development and local 0, anything else 0. "
             "0 keeps the deployment off every such service. First-party data services and the deployment's own hosts are not scaled; billed services "
             "are called only within their share, which development refuses by default; local and self-hosted services "
-            "run everywhere; email, SMS, push and writes to a third party are production's only. Every "
-            "host shares one address, so keep all deployments' shares at or below 1. See "
+            "run everywhere; email, SMS, push and writes to a third party are production's only. Where deployments "
+            "share an outbound address or API keys, keep their shares together at or below 1. See "
             "urbanlens.UrbanLens.egress."
         ),
     )
@@ -622,7 +621,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         description=(
             "Per-service shares that replace UL_ENVIRONMENT_SHARE for the named services, as "
             "'nominatim=0.02,google_geocoding=0.01'. The way to try a provider from development or staging. For "
-            "messaging (sms, whatsapp, unified_push) and public writes (wayback_save, google_calendar, and any plugin's paid checkout) any "
+            "messaging (sms, whatsapp, unified_push) and public writes (wayback_save, google_calendar, and any a plugin adds) any "
             "share above 0 opts the service in off production, and 0 turns it off on production. A billed service that "
             "development refuses can be tried there by name, as in UL_ENVIRONMENT_SHARE_OVERRIDES=google_geocoding=1. Logged "
             "at startup."
@@ -683,17 +682,6 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "is told the upstream is busy at once instead of waiting."
         ),
     )
-    historical_tile_upstream_concurrency: int = Field(
-        default=2,
-        ge=1,
-        description=(
-            "How many warped historical-map tiles one web process may be fetching from their service at "
-            "the same time. Its own count rather than the basemap one's, because an overlay "
-            "nobody has switched on must not be able to starve the base layer under it - and "
-            "because the service warps these on demand, so they are slower than a basemap tile rather "
-            "than faster. See basemap_tile_upstream_concurrency for why the bound exists at all."
-        ),
-    )
     basemap_tile_upstream_concurrency: int = Field(
         default=6,
         ge=1,
@@ -722,10 +710,6 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "its own database, seeded synthetically, and never against real data. Setting this true "
             "on an instance holding real user data would expose it."
         ),
-    )
-    official_site_host: str = Field(
-        default="",
-        description=("Host of the project's flagship instance, whose app name other instances are asked not to reuse. Empty means no instance is flagship: no app title is reserved and no notice is shown."),
     )
     demo_real_site_url: str = Field(
         default="",
@@ -776,7 +760,6 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     # APIs
     vendor_asset_base_url: Url | None = Field(default=None, description="Root of a mirror of the third-party JS/CSS assets; unset uses the public CDNs")
     google_unrestricted_api_key: str | None = Field(default=None, description="The google unrestricted api key")
-    google_domain_restricted_api_key: str | None = Field(default=None, description="The google domain restricted api key")
     google_public_api_key: str | None = Field(default=None, description="The google public api key")
     google_search_tenant: str | None = Field(default=None, description="The google search tenant")
     google_client_id: str | None = Field(default=None, description="The google client id")
@@ -817,9 +800,6 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     # Note: DATABASES is built directly in
     # settings/base.py from UL_DB_* environment variables
 
-    _secrets: dict | None = None
-    _environment: BaseEnvironment | None = None
-
     model_config = SettingsConfigDict(
         env_file=_ENV_FILE_PATHS,
         env_prefix="UL_",
@@ -827,32 +807,6 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         env_ignore_empty=True,
         extra="ignore",
     )
-
-    @property
-    def debug(self) -> bool:
-        """Whether debugging is enabled."""
-        if self._environment:
-            return self._environment.debug
-        # Only before the environment is set; afterwards it propagates there.
-        return self.debug_override or False
-
-    @debug.setter
-    def debug(self, value: bool) -> None:
-        """Set the debug value."""
-        self.debug_override = value
-
-        if self._environment:
-            self._environment.debug_override = DebugTypes.OVERRIDE_ON if value else DebugTypes.OVERRIDE_OFF
-
-    @property
-    def environment(self) -> BaseEnvironment | None:
-        """The environment."""
-        return self._environment
-
-    @property
-    def secrets(self) -> dict:
-        """The secrets."""
-        return self._secrets or {}
 
     @property
     def paths(self) -> dict[str, Path]:
@@ -1029,52 +983,6 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             except OSError:
                 # Report the path; a bare raise would hide which one failed.
                 logger.warning("Could not ensure path %s (%s); continuing without it.", key, value, exc_info=True)
-
-    def refresh_django(self):
-        """Refresh django.conf.settings with current values."""
-        for key, value in self.__dict__.items():
-            # Filter out settings we don't want to propogate back to django
-            if key.startswith("_") or key in ["model_config", "paths", "secrets", "databases", "logging", "django"]:
-                continue
-
-            const_name = key.upper()
-            setattr(conf.settings, const_name, value)
-
-        # Refresh properties as well
-        conf.settings.DEBUG = self.debug
-        conf.settings.ENVIRONMENT = self.environment
-
-        # Refresh django.conf
-        """
-        conf.settings.configure(
-            default_settings = self
-        )
-        """
-
-    def select_environment(self, new_environment_name: EnvironmentTypes | None = None) -> BaseEnvironment:
-        """
-        Select the environment.
-
-        Args:
-            new_environment_name: Environment to switch to, if any.
-
-        Returns:
-            The environment in use.
-        """
-        if self._environment is not None and self.environment_name == new_environment_name:
-            return self._environment
-
-        if new_environment_name:
-            self.environment_name = new_environment_name
-            logger.info("Switching to environment: %s", new_environment_name)
-        self._environment = select_environment(self.environment_name)
-
-        # If we set debug_override to any bool, propogate it to the new env
-        if self.debug_override is True or self.debug_override is False:
-            self._environment.debug_override = DebugTypes.OVERRIDE_ON if self.debug_override else DebugTypes.OVERRIDE_OFF
-
-        self.refresh_django()
-        return self._environment
 
     def __getattr__(self, name: str):
         """Resolve lowercase names from uppercase Django settings."""

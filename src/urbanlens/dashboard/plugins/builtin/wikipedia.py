@@ -363,6 +363,10 @@ class WikipediaPlugin(UrbanLensPlugin):
 
     def setup(self, plugin: PluginContext) -> None:
         """Wikipedia rate-limit defaults, the summary panel and article-images Media panel, the cached article title as a place-name candidate, and background article caching."""
+        from urbanlens.dashboard.plugins.points import DATA_SOURCE_CREDITS, DataSourceCredit
+
+        plugin.add(DATA_SOURCE_CREDITS, DataSourceCredit(name="Wikipedia", category="reference", url="https://www.wikipedia.org/", note="Encyclopedia summaries, matched to a pin by name and coordinates."))
+
         from urbanlens.dashboard.plugins.points import ENRICHMENT_SOURCES, NAME_PROVIDERS, PANEL_SOURCES, SERVICE_DEFAULTS
         from urbanlens.dashboard.services.apis.assets.wikipedia import WikipediaMediaGateway
 

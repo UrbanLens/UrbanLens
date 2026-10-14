@@ -1351,15 +1351,15 @@ def _scan_pending_upload(task, image: Image) -> bool:
         UploadStorageFailedError: Storage could not open or read the upload.
     """
     from urbanlens.dashboard.services.security.malware_scan import (
-        VIRUSTOTAL_ELIGIBLE_SOURCES,
         MalwareScanUnavailableError,
         malware_error_for_fetched_asset,
         malware_error_for_upload,
+        virustotal_eligible_sources,
     )
 
     try:
         with image.image.open("rb") as stored:
-            if image.source in VIRUSTOTAL_ELIGIBLE_SOURCES:
+            if image.source in virustotal_eligible_sources():
                 malware_error = malware_error_for_fetched_asset(stored, checksum=image.checksum)
             else:
                 malware_error = malware_error_for_upload(stored)
@@ -4204,8 +4204,8 @@ def classify_trivia_submission(question_id: int) -> None:
     """
     Classify one pending user-submitted Trivia question and record its verdict.
 
-    No Celery autoretry: each attempt consumes a paid call, and this is a background action with no user
-    waiting on it - if this task never runs (or the classifier can't reach its provider right now), the question
+    No Celery autoretry: each attempt may call an external service, and this is a background action with no user
+    waiting on it - if this task never runs (or that service can't be reached right now), the question
     simply stays PENDING_REVIEW (silently excluded from rotation, see
     services.trivia.submission.classify_and_update), no different from any other transient Celery
     outage.

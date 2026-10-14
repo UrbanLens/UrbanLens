@@ -8,7 +8,9 @@ from typing import TYPE_CHECKING
 
 from django.apps import apps
 from django.conf import settings
-from django.core.checks import Error, Warning as CheckWarning, register
+from django.core.checks import Error, Tags, Warning as CheckWarning, register
+from django.db import DatabaseError, connections
+from django.db.migrations.loader import MigrationLoader
 from django.db.models import FileField
 
 from urbanlens.dashboard.services.media.access import MEDIA_FAMILY_ATTR, registered_families
@@ -437,5 +439,66 @@ def check_a_channel_layer_is_configured(app_configs: Sequence[AppConfig] | None 
                 "variable at a reachable Dragonfly/Redis, or accept that this deployment has no live features."
             ),
             id="dashboard.W004",
+        ),
+    ]
+
+
+@register(Tags.database)
+def check_migration_history_is_known(app_configs: Sequence[AppConfig] | None = None, databases: Sequence[str] | None = None, **kwargs: object) -> list[CheckMessage]:
+    """
+    Refuse a database whose recorded migrations of our own apps this code does not have.
+
+    Django ignores a recorded migration it cannot find, so a database migrated under an earlier, since consolidated
+    history would otherwise look current while its schema is not. Runs where database checks run, which includes
+    ``migrate``.
+
+    Returns:
+        One error per such database.
+    """
+    labels = {config.label for config in apps.get_app_configs() if config.name.startswith(_OWN_APP_PREFIX)}
+    errors: list[CheckMessage] = []
+    for alias in databases or ():
+        try:
+            loader = MigrationLoader(connections[alias], ignore_no_migrations=True)
+        except DatabaseError:
+            continue
+        replaced = {key for migration in loader.disk_migrations.values() for key in migration.replaces}
+        unknown = sorted(key for key in loader.applied_migrations or {} if key[0] in labels and key not in loader.disk_migrations and key not in replaced)
+        if unknown:
+            errors.append(
+                Error(
+                    f"Database {alias!r} records {len(unknown)} migration(s) this code does not have, such as {unknown[0][0]}.{unknown[0][1]}, so its schema may not be the one these models expect.",
+                    hint=(
+                        "It was migrated under an earlier migration history that has since been consolidated. A plugin "
+                        "carrying that history brings such a database forward when migrate runs; without one, start "
+                        "from a fresh database or restore a backup taken under the current history."
+                    ),
+                    id="dashboard.E014",
+                ),
+            )
+    return errors
+
+
+@register()
+def check_broker_password_is_not_the_default(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
+    """
+    Warn when a deployment's broker still uses RabbitMQ's published default password.
+
+    Compose builds the broker URL from UL_RABBITMQ_USER and UL_RABBITMQ_PASS, defaulting the password to "guest". The
+    broker is reachable only inside the Compose network, so this is a warning rather than a refusal to start.
+    """
+    from urllib.parse import urlparse
+
+    from urbanlens.UrbanLens.environments.meta import EPHEMERAL_ENVIRONMENTS
+
+    if getattr(settings, "ENVIRONMENT_NAME", "") in EPHEMERAL_ENVIRONMENTS:
+        return []
+    if urlparse(getattr(settings, "CELERY_BROKER_URL", "") or "").password != "guest":  # noqa: S105
+        return []
+    return [
+        CheckWarning(
+            "The Celery broker's password is RabbitMQ's published default, 'guest'.",
+            hint="Set UL_RABBITMQ_PASS (Compose) or a UL_RABBITMQ_URL with a password of your own; see .env-sample.",
+            id="dashboard.W005",
         ),
     ]

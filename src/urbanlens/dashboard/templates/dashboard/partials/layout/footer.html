@@ -6,7 +6,9 @@
     <div class="page-footer__meta">
         <p class="page-footer__github">
             <i class="material-icons" aria-hidden="true">code</i>
-            <span class="page-footer__github-text">This project is open source. Check out our <a href="https://github.com/UrbanLens/UrbanLens">Github page</a>.</span>
+            {% block footer_github_text %}
+            <span class="page-footer__github-text">UrbanLens is open source. Check out the <a href="https://github.com/UrbanLens/UrbanLens">GitHub page</a>.</span>
+            {% endblock %}
         </p>
         <p class="page-footer__attribution" aria-live="polite">
             {% comment %}Map pages rewrite the span's text on every layer change, so the site links sit outside it.{% endcomment %}

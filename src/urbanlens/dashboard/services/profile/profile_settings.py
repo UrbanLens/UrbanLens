@@ -102,7 +102,6 @@ SETTINGS_FIELDS: tuple[str, ...] = (
     "markup_border_opacity",
     # Places layer (PlacesLayerForm) - gated behind SiteFeature.PLACES.
     "places_google_enabled",
-    "places_nps_enabled",
     "places_wikipedia_enabled",
     # Keyword tagging (KeywordTaggingSettingsForm).
     "disable_auto_tagging",
@@ -141,7 +140,6 @@ SETTINGS_FIELDS: tuple[str, ...] = (
 #: Fields only writable while the owning site feature is enabled for the user.
 _FEATURE_GATED_FIELDS: dict[str, SiteFeature] = {
     "places_google_enabled": SiteFeature.PLACES,
-    "places_nps_enabled": SiteFeature.PLACES,
     "places_wikipedia_enabled": SiteFeature.PLACES,
 }
 
@@ -190,10 +188,10 @@ def _groups_by_field() -> dict[str, SettingsGroup]:
 
 
 def _feature_label(feature: str) -> str:
-    """A site feature's display name, or its value when no plugin names it."""
-    from urbanlens.dashboard.plugins.points import SITE_FEATURES
+    """A site feature's display name, or its value when nothing names it."""
+    from urbanlens.dashboard.models.subscriptions.model import site_feature_choices
 
-    return SITE_FEATURES.label(feature) or feature
+    return dict(site_feature_choices()).get(feature, feature)
 
 
 def apply_settings_patch(profile: Profile, data: dict[str, Any], *, user: User) -> list[str]:

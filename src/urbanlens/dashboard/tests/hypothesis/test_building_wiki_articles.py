@@ -8,35 +8,23 @@ seeded the building's wiki from it: on dev, 11 of HRSH's child wikis opened with
 
 from __future__ import annotations
 
-import importlib
-import threading
-from unittest.mock import patch
-
 from django.contrib.auth.models import User
 from django.contrib.gis.geos import MultiPolygon, Polygon
-from django.db import transaction
-from django.test import override_settings
 from model_bakery import baker
 
-from urbanlens.core.tests.concurrency import run_concurrently
-from urbanlens.core.tests.testcase import TestCase, TransactionTestCase
+from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.article.model import (
-    EDIT_SUMMARY_IMAGES_LOCALIZED,
-    EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA,
     Article,
-    ArticleRevision,
 )
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.place.model import PlaceKind, PlaceRelation
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.wiki.articles import save_article, save_article_checked
+from urbanlens.dashboard.services.wiki.articles import save_article
 from urbanlens.dashboard.services.wiki.wiki_merge import reconcile_wiki_nesting
-from urbanlens.dashboard.services.wiki.wiki_seed import is_untouched_wikipedia_seed, seed_wiki_article_from_wikipedia
+from urbanlens.dashboard.services.wiki.wiki_seed import seed_wiki_article_from_wikipedia
 
 from .place_helpers import make_place
-
-migration = importlib.import_module("urbanlens.dashboard.migrations.0055_building_wikis_drop_wikipedia_seed")
 
 _LAT, _LNG = 41.7333, -73.9281
 _CAMPUS_ARTICLE = {
@@ -171,217 +159,3 @@ class NestingTests(_Campus):
         reconcile_wiki_nesting(self.root)
 
         self.assertTrue(Article.objects.filter(wiki=self.root).exists())
-
-
-class _ArticleRows(TestCase):
-    """Article rows written directly, as the migration finds them."""
-
-    def setUp(self) -> None:
-        super().setUp()
-        baker.make(User)
-        self.profile = baker.make(User).profile
-        self._seq = 0
-        self.campus = self.wiki()
-
-    def wiki(self, *, parent: Wiki | None = None, place=None) -> Wiki:
-        self._seq += 1
-        location = baker.make(
-            Location, latitude=f"{40.0 + self._seq * 0.01:.6f}", longitude="-74.000000", google_place=None
-        )
-        return Wiki.objects.create(location=location, place=place, name=f"Wiki {self._seq}", parent_wiki=parent)
-
-    def article(self, wiki: Wiki, revisions: list[tuple[object, str, str]], *, content: str | None = None) -> Article:
-        article = Article.objects.create(wiki=wiki, content=content if content is not None else revisions[-1][2])
-        for editor, summary, text in revisions:
-            ArticleRevision.objects.create(article=article, editor=editor, edit_summary=summary, content=text)
-        return article
-
-
-_LOCALIZED = _SEED.replace("_From", "![HRSH](/dashboard/map/media-copy/abc/)\n\n_From")
-_REMOTE = _SEED.replace("_From", "![HRSH](https://upload.wikimedia.org/hrsh.jpg)\n\n_From")
-
-
-class MigrationTests(_ArticleRows):
-    def _migrate(self) -> None:
-        migration.drop_building_wikipedia_seeds(_historical_apps(), None)
-
-    def test_an_untouched_seed_on_a_building_wiki_is_removed(self) -> None:
-        article = self.article(self.wiki(parent=self.campus), [(None, EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA, _SEED)])
-
-        self._migrate()
-
-        self.assertFalse(Article.objects.filter(pk=article.pk).exists())
-        self.assertFalse(ArticleRevision.objects.filter(article_id=article.pk).exists())
-
-    def test_a_seed_whose_images_were_only_stored_here_is_removed(self) -> None:
-        """Dev's 11: the seed, then the image-localising command's revision."""
-        article = self.article(
-            self.wiki(parent=self.campus),
-            [(None, EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA, _REMOTE), (None, EDIT_SUMMARY_IMAGES_LOCALIZED, _LOCALIZED)],
-        )
-
-        self._migrate()
-
-        self.assertFalse(Article.objects.filter(pk=article.pk).exists())
-
-    def test_a_seed_on_a_child_wiki_holding_a_building_is_removed(self) -> None:
-        parcel = make_place(PlaceKind.PARCEL, _square(39.0, -74.0, 0.002))
-        building = make_place(PlaceKind.BUILDING, _square(39.0, -74.0, 0.0002), parent=parcel)
-        make_place(PlaceKind.BUILDING, None, parent=parcel)
-        article = self.article(
-            self.wiki(parent=self.campus, place=building), [(None, EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA, _SEED)]
-        )
-
-        self._migrate()
-
-        self.assertFalse(Article.objects.filter(pk=article.pk).exists())
-
-    def test_human_content_is_kept(self) -> None:
-        building = self.wiki(parent=self.campus)
-        kept = [
-            self.article(
-                self.wiki(parent=self.campus),
-                [(None, EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA, _SEED), (self.profile, "Boiler house", _SEED + " More.")],
-            ),
-            # A person whose account was deleted since: no editor, and not a system summary.
-            self.article(
-                self.wiki(parent=self.campus),
-                [(None, EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA, _SEED), (None, "Fixed a typo", _SEED + " Typo.")],
-            ),
-            # The localising command's summary over text that changed beyond its images.
-            self.article(
-                self.wiki(parent=self.campus),
-                [
-                    (None, EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA, _REMOTE),
-                    (None, EDIT_SUMMARY_IMAGES_LOCALIZED, _LOCALIZED + "!"),
-                ],
-            ),
-            # Edited outside a revision.
-            self.article(
-                self.wiki(parent=self.campus), [(None, EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA, _SEED)], content=_SEED + " X"
-            ),
-            # Written by a person from the start.
-            self.article(self.wiki(parent=self.campus), [(self.profile, "", "A person's article.")]),
-        ]
-        last_edited = self.article(building, [(None, EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA, _SEED)])
-        Article.objects.filter(pk=last_edited.pk).update(last_edited_by=self.profile)
-        kept.append(last_edited)
-
-        self._migrate()
-
-        self.assertEqual(
-            set(Article.objects.filter(pk__in=[a.pk for a in kept]).values_list("pk", flat=True)), {a.pk for a in kept}
-        )
-
-    def test_a_seed_that_may_be_the_wikis_own_is_kept(self) -> None:
-        site_parcel = make_place(PlaceKind.PARCEL, _square(38.0, -74.0, 0.001))
-        house = make_place(PlaceKind.BUILDING, _square(37.0, -74.0, 0.0002), parent=make_place(PlaceKind.PARCEL, None))
-        kept = [
-            self.article(self.campus, [(None, EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA, _SEED)]),
-            self.article(
-                self.wiki(parent=self.campus, place=site_parcel), [(None, EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA, _SEED)]
-            ),
-            # The one building of an ordinary property.
-            self.article(
-                self.wiki(parent=self.campus, place=house), [(None, EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA, _SEED)]
-            ),
-        ]
-
-        self._migrate()
-
-        self.assertEqual(Article.objects.filter(pk__in=[a.pk for a in kept]).count(), 3)
-
-
-@override_settings(CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}})
-class MigrationRaceTests(TransactionTestCase):
-    """The migration and a person's edit at once, each in its own committed transaction."""
-
-    def setUp(self) -> None:
-        super().setUp()
-        enqueue = patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task")
-        enqueue.start()
-        self.addCleanup(enqueue.stop)
-        baker.make(User)  # absorbs the bootstrap site-admin promotion
-        self.profile = baker.make(User).profile
-        campus = Wiki.objects.create(
-            location=baker.make(Location, latitude="40.010000", longitude="-74.000000", google_place=None),
-            name="Campus",
-        )
-        self.building = Wiki.objects.create(
-            location=baker.make(Location, latitude="40.020000", longitude="-74.000000", google_place=None),
-            name="Building",
-            parent_wiki=campus,
-        )
-        self.article = Article.objects.create(wiki=self.building, content=_SEED)
-        self.seed = ArticleRevision.objects.create(
-            article=self.article, editor=None, edit_summary=EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA, content=_SEED
-        )
-        self.apps = _historical_apps()
-
-    def test_an_edit_saved_while_the_migration_runs_is_kept(self) -> None:
-        """The edit's transaction stays open until the migration returns, or for 1.5 s when the migration waits on it."""
-        saved, finished = threading.Event(), threading.Event()
-
-        def edit() -> None:
-            with transaction.atomic():
-                save_article_checked(
-                    editor=self.profile,
-                    content=_SEED + " More.",
-                    edit_summary="Boiler house",
-                    base_revision_id=self.seed.pk,
-                    wiki=self.building,
-                )
-                saved.set()
-                finished.wait(_HOLD_SECONDS)
-
-        def migrate() -> None:
-            try:
-                saved.wait(10)
-                with transaction.atomic():
-                    migration.drop_building_wikipedia_seeds(self.apps, None)
-            finally:
-                finished.set()
-
-        run_concurrently([edit, migrate])
-
-        self.assertEqual(Article.objects.get(pk=self.article.pk).content, _SEED + " More.")
-
-
-class RuntimeAgreesWithTheMigrationTests(_ArticleRows):
-    """``wiki_seed.is_untouched_wikipedia_seed`` and the migration's copy of it judge every case alike."""
-
-    def test_both_judge_alike(self) -> None:
-        cases = [
-            [(None, EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA, _SEED)],
-            [(None, EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA, _REMOTE), (None, EDIT_SUMMARY_IMAGES_LOCALIZED, _LOCALIZED)],
-            [
-                (None, EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA, _REMOTE),
-                (None, EDIT_SUMMARY_IMAGES_LOCALIZED, _LOCALIZED + "!"),
-            ],
-            [(None, EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA, _SEED), (self.profile, "Boiler house", _SEED + " More.")],
-            [(None, EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA, _SEED), (None, "Fixed a typo", _SEED + " Typo.")],
-            [(None, "", "A person's article.")],
-        ]
-        articles = [self.article(self.wiki(parent=self.campus), revisions) for revisions in cases]
-        untouched = {article.pk for article in articles if is_untouched_wikipedia_seed(article)}
-
-        migration.drop_building_wikipedia_seeds(_historical_apps(), None)
-
-        removed = {article.pk for article in articles} - set(Article.objects.values_list("pk", flat=True))
-        self.assertEqual(removed, untouched)
-        self.assertEqual(len(untouched), 2)
-
-
-_HISTORICAL_APPS = None
-
-
-def _historical_apps():
-    """The models as the migration sees them under ``migrate``."""
-    global _HISTORICAL_APPS  # noqa: PLW0603 - rendering the state takes seconds; one per test run
-    if _HISTORICAL_APPS is None:
-        from django.db import connection
-        from django.db.migrations.executor import MigrationExecutor
-
-        node = ("dashboard", migration.Migration.dependencies[0][1])
-        _HISTORICAL_APPS = MigrationExecutor(connection).loader.project_state(node).apps
-    return _HISTORICAL_APPS

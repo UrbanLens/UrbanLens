@@ -23,6 +23,18 @@ class BoundaryProvidersPlugin(UrbanLensPlugin):
 
     def setup(self, plugin: PluginContext) -> None:
         """Register the providers, spaced so a plugin's can slot in between."""
+        from urbanlens.dashboard.plugins.points import DATA_SOURCE_CREDITS, DataSourceCredit
+
+        plugin.add(
+            DATA_SOURCE_CREDITS,
+            DataSourceCredit(
+                name="OpenStreetMap",
+                category="open_map",
+                url="https://www.openstreetmap.org/copyright",
+                note="Map data © OpenStreetMap contributors, available under the Open Database License (ODbL). Property and building outlines are queried through Overpass.",
+            ),
+        )
+
         from urbanlens.dashboard.plugins.points import BOUNDARY_PROVIDERS
         from urbanlens.dashboard.services.apis.locations.boundaries.google_open_buildings import GoogleOpenBuildingsGateway
         from urbanlens.dashboard.services.apis.locations.boundaries.microsoft_buildings import MicrosoftBuildingFootprintsGateway

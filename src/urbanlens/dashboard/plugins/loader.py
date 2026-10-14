@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from importlib.metadata import entry_points
 import importlib.util
 import logging
+from pathlib import Path
 import pkgutil
 from typing import Literal
 
@@ -37,6 +38,9 @@ BUNDLED_PACKAGE = "urbanlens.plugins"
 
 #: The package whose modules are bundled module plugins.
 BUILTIN_PACKAGE = "urbanlens.dashboard.plugins.builtin"
+
+#: The directory in a package plugin whose templates replace core's of the same name.
+TEMPLATE_OVERRIDES_DIR = "template_overrides"
 
 Origin = Literal["bundled", "builtin", "settings", "entry-point"]
 
@@ -143,3 +147,32 @@ def plugin_apps(sources: list[PluginSource], disabled: list[str] | tuple[str, ..
         Each enabled package plugin's module path, in source order.
     """
     return [source.module for source in sources if source.is_package and source.name not in disabled]
+
+
+def template_override_dirs(sources: list[PluginSource], disabled: list[str] | tuple[str, ...] | frozenset[str]) -> list[str]:
+    """
+    The template directories through which enabled package plugins replace core templates.
+
+    A package plugin's own ``templates/`` is searched after core's, so it can only add templates. One that ships a
+    :data:`TEMPLATE_OVERRIDES_DIR` replaces any core template it holds a file of the same name for, and that file can
+    ``{% extends %}`` the core template it replaces to override single blocks.
+
+    Args:
+        sources: From :func:`find_plugin_sources`.
+        disabled: ``UL_DISABLED_PLUGINS``.
+
+    Returns:
+        Each such directory, in source order.
+    """
+    found: list[str] = []
+    for source in sources:
+        if not source.is_package or source.name in disabled:
+            continue
+        try:
+            spec = importlib.util.find_spec(source.module)
+        except (ImportError, ValueError):
+            continue
+        for location in (spec.submodule_search_locations or []) if spec else []:
+            if (directory := Path(location) / TEMPLATE_OVERRIDES_DIR).is_dir():
+                found.append(str(directory))
+    return found

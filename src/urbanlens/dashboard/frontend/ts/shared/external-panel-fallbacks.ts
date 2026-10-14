@@ -78,12 +78,13 @@ function onResponseError(event: Event): void {
     if (isAutoPanel(elt)) {
         event.stopImmediatePropagation();
         if (endsTab(elt, UNAVAILABLE)) return;
-        // Web search answers a non-subscriber with a real partial (the upsell) on its 403.
-        if (elt.id === "web-search-section" && xhr?.status === 403 && xhr.responseText) {
+        // A panel may answer an error with markup meant to replace it (why it is withheld), or ask to go quietly.
+        const onError = elt.getAttribute("data-ext-panel-error");
+        if (onError === "swap" && xhr?.responseText) {
             elt.outerHTML = xhr.responseText;
             return;
         }
-        if (elt.id === "loopnet-section") {
+        if (onError === "dismiss") {
             dismiss(elt);
             return;
         }

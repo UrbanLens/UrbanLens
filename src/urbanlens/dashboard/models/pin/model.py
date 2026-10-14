@@ -611,7 +611,7 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
                 independent terms an engine's relevance ranking can silently
                 deprioritize - see ``pin_web_search.web_search_query``, which
                 sets this for a name that is itself an address (other callers -
-                Wikipedia, LoopNet, NPS, GDELT, etc. - have their own tuned
+                Wikipedia, Nominatim, USGS, etc. - have their own tuned
                 per-service defaults and are left as-is).
         """
         if not scope.names:

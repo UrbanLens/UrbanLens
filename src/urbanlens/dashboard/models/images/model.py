@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 import posixpath
 import secrets
 from typing import TYPE_CHECKING, ClassVar
@@ -106,26 +107,33 @@ def pin_image_analysis_thumbnail_path(instance: Image, filename: str) -> str:
     return f"pin_images/analysis/{_random_upload_dir()}/{stem[:100]}{ext[:_UPLOAD_EXT_LIMIT]}"
 
 
+@dataclass(frozen=True, slots=True)
+class ImageSourceTraits:
+    """What core does with a source beyond its label."""
+
+    #: Media-gallery panel keys that name this source, where the key differs from the source value.
+    panel_keys: frozenset[str] = field(default_factory=frozenset)
+    #: Eligible for the VirusTotal fast path before ClamAV (see ``services.security.malware_scan``).
+    virus_total: bool = False
+
+
 class ImageSource(TextChoices):
-    """Where a photo originated; drives the Media section's per-source tabs."""
+    """
+    Core's photo origins; drives the Media section's per-source tabs.
+
+    Plugins add theirs through ``points.IMAGE_SOURCES`` and ``points.IMAGE_SOURCE_TRAITS``. Read the whole vocabulary
+    with :func:`image_source_choices`, and a member's traits with :func:`image_source_traits`.
+    """
 
     UPLOAD = "upload", "Upload"
     #: Pasted URL whose bytes were fetched and stored like an upload.
     LINKED_URL = "linked_url", "Linked URL"
-    YELP = "yelp", "Yelp"
-    GOOGLE_IMAGES = "google_images", "Google Images"
     GOOGLE_MAPS = "google_maps", "Google Maps"
     WIKIMEDIA = "wikimedia", "Wikimedia Commons"
     WIKIPEDIA_MEDIA = "wikipedia_media", "Wikipedia"
-    SMITHSONIAN = "smithsonian", "Smithsonian Open Access"
-    LIBRARY_OF_CONGRESS = "library_of_congress", "Library of Congress"
-    INTERNET_ARCHIVE = "internet_archive", "Internet Archive"
-    DIGITAL_COMMONWEALTH = "digital_commonwealth", "Digital Commonwealth"
     IMMICH = "immich", "Immich"
     FLICKR = "flickr", "Flickr"
     GOOGLE_PHOTOS = "google_photos", "Google Photos"
-    LOOPNET = "loopnet", "LoopNet"
-    CRIS = "cris", "NY Historic Preservation (CRIS)"
     EXTERNAL_API = "external_api", "External app"
     GOOGLE_STREET_VIEW = "google_street_view", "Google Street View"
     GOOGLE_SATELLITE = "google_satellite", "Google Satellite"
@@ -139,6 +147,46 @@ class ImageSource(TextChoices):
             The ``ImageSource`` values that denote the profile's own picture.
         """
         return frozenset({cls.UPLOAD, cls.IMMICH, cls.GOOGLE_PHOTOS, cls.FLICKR})
+
+    @classmethod
+    def valid(cls, choice_name: str) -> bool:
+        """Whether ``choice_name`` is a source in the whole vocabulary, core's and plugins'."""
+        return choice_name.lower() in image_source_values()
+
+    @classmethod
+    def invalid(cls, choice_name: str) -> bool:
+        """Whether ``choice_name`` is not a source in the whole vocabulary."""
+        return not cls.valid(choice_name)
+
+
+#: Core's own sources' traits. A plugin's come from ``points.IMAGE_SOURCE_TRAITS``.
+_CORE_SOURCE_TRAITS: dict[str, ImageSourceTraits] = {
+    ImageSource.LINKED_URL: ImageSourceTraits(panel_keys=frozenset({"external_url"}), virus_total=True),
+    ImageSource.GOOGLE_MAPS: ImageSourceTraits(virus_total=True),
+    ImageSource.WIKIMEDIA: ImageSourceTraits(virus_total=True),
+    ImageSource.WIKIPEDIA_MEDIA: ImageSourceTraits(virus_total=True),
+    ImageSource.GOOGLE_STREET_VIEW: ImageSourceTraits(virus_total=True),
+    ImageSource.GOOGLE_SATELLITE: ImageSourceTraits(virus_total=True),
+}
+
+
+def image_source_choices() -> list[tuple[str, str]]:
+    """Core's photo origins and those plugins contribute. Read lazily, since plugins are set up after models load."""
+    from urbanlens.dashboard.plugins.points import IMAGE_SOURCES
+
+    return [*ImageSource.choices, *((value, label) for value, label in IMAGE_SOURCES.choices() if value not in ImageSource.values)]
+
+
+def image_source_values() -> frozenset[str]:
+    """The value of every photo origin, core's and plugins'."""
+    return frozenset(value for value, _label in image_source_choices())
+
+
+def image_source_traits() -> dict[str, ImageSourceTraits]:
+    """Each source's traits, core's and plugins'. A plugin's entry overrides core's for the same value."""
+    from urbanlens.dashboard.plugins.points import IMAGE_SOURCE_TRAITS
+
+    return {**_CORE_SOURCE_TRAITS, **IMAGE_SOURCE_TRAITS.as_dict()}
 
 
 class MediaKind(TextChoices):
@@ -175,7 +223,7 @@ class Image(abstract.FrontendDashboardModel):
     filename_taken_at = DateTimeField(null=True, blank=True)
     media_type = CharField(max_length=10, choices=MediaKind.choices, default=MediaKind.PHOTO, db_index=True)
     # Media-gallery source tab.
-    source = CharField(max_length=30, choices=ImageSource.choices, default=ImageSource.UPLOAD)
+    source = CharField(max_length=30, choices=image_source_choices, default=ImageSource.UPLOAD)
     pin = ForeignKey(
         "dashboard.Pin",
         on_delete=SET_NULL,

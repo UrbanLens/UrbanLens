@@ -61,6 +61,8 @@ class QuietTestRunner(unittest.TextTestRunner):
 
 
 class TestRunner(DiscoverRunner):
+    _network_guard: LocalhostOnlyNetwork | None = None
+
     def setup_test_environment(self, **kwargs: Any) -> None:
         os.environ["DJANGO_TESTING"] = "1"
 

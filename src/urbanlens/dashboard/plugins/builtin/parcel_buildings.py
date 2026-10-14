@@ -77,7 +77,7 @@ def record_sources(building: dict[str, Any]) -> list[str]:
 def buildings_on_property(buildings: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
     The records that stand on this property, dropping the ones that don't.
-    A parcel inside a broad CRIS archaeological sensitivity zone gets every surveyed building in that zone - roughly a thousand acres' worth here - each flagged ``is_on_property: false`` precisely so a consumer can drop it.
+    A parcel inside a broad archaeological sensitivity zone gets every surveyed building in that zone - roughly a thousand acres' worth here - each flagged ``is_on_property: false`` precisely so a consumer can drop it.
 
     Args:
         buildings: Raw building records from either provider.

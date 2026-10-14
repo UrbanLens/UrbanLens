@@ -13,8 +13,8 @@ Per run:
     :data:`SWEEP_TIME_BUDGET_SECONDS`. Only the source that did not answer is asked, never the photo's other sources.
 
 Per source:
-    A source is not asked at all in four cases: this environment does not call it (development calls no hosted
-    provider), its API-limits switch is off, provider health has it backed off, or the sweep's own backoff for it is
+    A source is not asked at all in four cases: this environment does not call it (development calls no external
+    service), its service switch is off, provider health has it backed off, or the sweep's own backoff for it is
     running. A refusal stops the source for the rest of the run, and so do :data:`FAILURES_THAT_STOP_A_SOURCE`
     failures in a row: after one failure the run asks about one more photo when one is due, so one photo the source
     cannot answer does not pass for an outage while others wait. A run in which the source failed and answered nothing

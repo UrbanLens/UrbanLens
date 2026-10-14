@@ -589,7 +589,6 @@ def _export_settings(profile: Any, temp_dir: str, *, base_url: str = "") -> None
         },
         "places_layers": {
             "places_google_enabled": profile.places_google_enabled,
-            "places_nps_enabled": profile.places_nps_enabled,
             "places_wikipedia_enabled": profile.places_wikipedia_enabled,
         },
         "tracking": {

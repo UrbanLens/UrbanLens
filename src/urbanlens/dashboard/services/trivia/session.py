@@ -411,7 +411,8 @@ def submit_answer(round_: TriviaRound, profile: Profile, raw_answer: str) -> Tri
 
     question = round_.question
     is_correct = TriviaQuestion.normalize_answer(raw_answer) == question.answer_normalized
-    matched_via = TriviaAnswerMatchKind.EXACT
+    # A string, not just core's enum: plugins add match kinds, and a judge may return one of them.
+    matched_via: str = TriviaAnswerMatchKind.EXACT
     if not is_correct and (judgement := judge_answer(raw_answer, question.answer, profile=profile)) is not None and judgement.equivalent:
         is_correct = True
         matched_via = judgement.match_kind

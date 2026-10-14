@@ -208,7 +208,6 @@
   "src/urbanlens/dashboard/services/media/stored_field.py": 1,
   "src/urbanlens/dashboard/services/notifications/change_notifications.py": 1,
   "src/urbanlens/dashboard/services/photos/pin_photos.py": 1,
-  "src/urbanlens/dashboard/services/pins/news_query.py": 1,
   "src/urbanlens/dashboard/services/pins/source_documents.py": 1,
   "src/urbanlens/dashboard/services/sandbox/guard.py": 1,
   "src/urbanlens/dashboard/services/trips/trip_access.py": 1,

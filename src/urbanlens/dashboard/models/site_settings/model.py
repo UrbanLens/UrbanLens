@@ -145,7 +145,7 @@ class SiteSettings(abstract.FrontendDashboardModel):
 
     storage_quota_gb = IntegerField(
         default=10,
-        help_text="Storage quota (GB) for photo/video uploads per regular user. Subscription roles can override this with a larger quota. Set to 0 for unlimited.",
+        help_text="Storage quota (GB) for photo/video uploads per regular user. Access roles can override this with a larger quota. Set to 0 for unlimited.",
         verbose_name="Default storage quota (GB)",
         validators=[MinValueValidator(0), MaxValueValidator(1_000_000)],
     )
@@ -173,8 +173,8 @@ class SiteSettings(abstract.FrontendDashboardModel):
     )
     image_downscale_vip = BooleanField(
         default=False,
-        help_text="Also downscale/convert uploads from users with an active subscription. When off, subscribers keep their original files (unless they opt into downscaling themselves).",
-        verbose_name="Downscale subscriber uploads",
+        help_text="Also downscale/convert uploads from users with an active access grant. When off, users with access keep their original files (unless they opt into downscaling themselves).",
+        verbose_name="Downscale uploads from users with access",
     )
     max_upload_file_size_mb = IntegerField(
         default=250,
@@ -199,15 +199,15 @@ class SiteSettings(abstract.FrontendDashboardModel):
     )
     video_downscale_vip = BooleanField(
         default=False,
-        help_text="Also downscale video uploads from users with an active subscription. When off, subscribers keep their original video resolution (unless they opt into downscaling themselves).",
-        verbose_name="Downscale subscriber videos",
+        help_text="Also downscale video uploads from users with an active access grant. When off, users with access keep their original video resolution (unless they opt into downscaling themselves).",
+        verbose_name="Downscale videos from users with access",
     )
 
     external_data_cache_days = IntegerField(
         default=7,
         help_text=(
             "Minimum number of days to cache external API responses before they are considered stale and re-fetched. "
-            "Applies to every shared, Location-scoped external data source (Wikipedia, NPS, LoopNet, USGS, Nominatim, "
+            "Applies to every shared, Location-scoped external data source (Wikipedia, USGS, Nominatim, "
             "media archives, Google Places, web search, and satellite/street view imagery)."
         ),
         verbose_name="External data cache (days)",
@@ -219,7 +219,7 @@ class SiteSettings(abstract.FrontendDashboardModel):
     default_name_source_priority = CharField(
         max_length=500,
         blank=True,
-        default="nominatim,wikipedia,nps,google_places",
+        default="nominatim,wikipedia,google_places",
         help_text=("Comma-separated name-provider slugs, highest priority first, used to pick a location's official name from external candidates. Sources not listed rank last, in plugin order. Blank = plugin order only."),
         verbose_name="Name source priority",
     )
@@ -392,7 +392,7 @@ class SiteSettings(abstract.FrontendDashboardModel):
         default=60,
         help_text=(
             "How many days to cache a location's generated property/building boundary before refreshing it in the "
-            "background (county records, Overpass, Overture, Microsoft, Google). Parcel geometry rarely changes, and "
+            "background (Overpass, Overture, Microsoft, Google). Boundary geometry rarely changes, and "
             "upstream providers already cache it, so a long cache avoids unnecessary provider calls. A stale boundary is still "
             "served immediately while the refresh runs in the background."
         ),
@@ -436,19 +436,19 @@ class SiteSettings(abstract.FrontendDashboardModel):
 
     email_limit_per_hour = IntegerField(
         default=5,
-        help_text="Maximum user-triggered emails (invitations etc.) one user may send per hour. Subscription roles can raise this. 0 = unlimited.",
+        help_text="Maximum user-triggered emails (invitations etc.) one user may send per hour. Access roles can raise this. 0 = unlimited.",
         verbose_name="Email limit (per hour)",
         validators=[MinValueValidator(0), MaxValueValidator(100_000)],
     )
     email_limit_per_day = IntegerField(
         default=20,
-        help_text="Maximum user-triggered emails one user may send per day. Subscription roles can raise this. 0 = unlimited.",
+        help_text="Maximum user-triggered emails one user may send per day. Access roles can raise this. 0 = unlimited.",
         verbose_name="Email limit (per day)",
         validators=[MinValueValidator(0), MaxValueValidator(100_000)],
     )
     email_limit_per_month = IntegerField(
         default=100,
-        help_text="Maximum user-triggered emails one user may send per 30 days. Subscription roles can raise this. 0 = unlimited.",
+        help_text="Maximum user-triggered emails one user may send per 30 days. Access roles can raise this. 0 = unlimited.",
         verbose_name="Email limit (per month)",
         validators=[MinValueValidator(0), MaxValueValidator(100_000)],
     )
@@ -461,7 +461,7 @@ class SiteSettings(abstract.FrontendDashboardModel):
     default_features = CharField(
         max_length=500,
         blank=True,
-        help_text="Comma-separated SiteFeature values granted to every user, including those with no active subscription.",
+        help_text="Comma-separated SiteFeature values granted to every user, including those with no active access role.",
         verbose_name="Default features (everyone)",
     )
 

@@ -90,13 +90,7 @@
         <p class="po-panel-empty">No owner information yet.</p>
         {% endif %}
 
-        {% if withheld_official_count %}
-        <p class="po-panel-locked">
-            <i class="material-symbols-outlined">lock</i>
-            {{ withheld_official_count }} official owner record{{ withheld_official_count|pluralize }} on file from county
-            assessor data.{% with feature="property_owners" %}{% plugin_slot "features.locked" %}{% endwith %}
-        </p>
-        {% endif %}
+        {% plugin_slot "ownership.withheld" %}
 
         <form class="po-add-form" hidden
               hx-post="{% url url_add obj_slug %}"

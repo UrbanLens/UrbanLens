@@ -59,10 +59,10 @@ class ApiRateLimitAdmin(admin.ModelAdmin):
 class ApiCallLogAdmin(admin.ModelAdmin):
     """Admin for ApiCallLog - read-only view of API call history."""
 
-    list_display = ["service", "model", "created", "calls", "success", "status_code", "response_ms", "input_tokens", "output_tokens", "was_rate_limited", "was_geo_filtered", "was_rejected_input"]
-    list_filter = ["service", "model", "success", "status_code", "was_rate_limited", "was_geo_filtered", "was_rejected_input"]
-    search_fields = ["service", "endpoint", "model"]
-    readonly_fields = ["service", "endpoint", "model", "created", "updated", "calls", "success", "status_code", "response_ms", "input_tokens", "output_tokens", "was_rate_limited", "was_geo_filtered", "was_rejected_input"]
+    list_display = ["service", "created", "calls", "success", "status_code", "response_ms", "was_rate_limited", "was_geo_filtered", "was_rejected_input"]
+    list_filter = ["service", "success", "status_code", "was_rate_limited", "was_geo_filtered", "was_rejected_input"]
+    search_fields = ["service", "endpoint"]
+    readonly_fields = ["service", "endpoint", "created", "updated", "calls", "success", "status_code", "response_ms", "was_rate_limited", "was_geo_filtered", "was_rejected_input"]
     ordering = ["-created"]
 
     def has_add_permission(self, request: HttpRequest) -> bool:
@@ -101,7 +101,7 @@ class SiteSettingsAdmin(admin.ModelAdmin):
             "Google Places Layer",
             {
                 "fields": ["google_places_cache_days"],
-                "description": ("Controls the Places layer available to VIP users. Historical landmarks change rarely, so a long cache avoids unnecessary API calls."),
+                "description": ("Controls the Places layer available to users with access. Historical landmarks change rarely, so a long cache avoids unnecessary API calls."),
             },
         ),
         (
@@ -109,7 +109,7 @@ class SiteSettingsAdmin(admin.ModelAdmin):
             {
                 "fields": ["boundary_cache_days"],
                 "description": (
-                    "How long a location's generated property/building boundary is cached before a background refresh. Parcel geometry "
+                    "How long a location's generated property/building boundary is cached before a background refresh. Boundary geometry "
                     "rarely changes, so a long cache avoids unnecessary provider calls; a stale boundary is still shown immediately while "
                     "it refreshes."
                 ),

@@ -1,5 +1,5 @@
 """
-How many upstream fetches may be in flight: per process for a proxy, or fleet-wide per account.
+How many upstream fetches may be in flight: per process for a proxy, or per key (usually an account) across every process, leased in the shared cache.
 
 A tile viewport is ~30 tiles and the browser asks for all of them at once, so on a cold cache a
 proxy can hold every request thread in the process for as long as the upstream takes per tile -
@@ -100,7 +100,7 @@ _CACHE_ERRORS = (ConnectionError, OSError, RuntimeError, ValueError)
 
 class KeyedUpstreamSlots:
     """
-    A fleet-wide bound on how many fetches one key - usually one account - may have in flight.
+    A bound, shared by every process through the cache, on how many fetches one key - usually one account - may have in flight.
 
     :class:`UpstreamSlots` counts per process, so one account can hold its cap in every process at
     once. These slots are leases in the shared cache instead: ``limit()`` numbered keys per holder,

@@ -107,7 +107,7 @@ def declared_roles() -> tuple[DatabaseRole, ...]:
     """
     task_deadline = int(settings.CELERY_TASK_TIME_LIMIT)
     reads_stats = frozenset({"pg_read_all_stats"})
-    roles = (
+    roles: tuple[DatabaseRole, ...] = (
         # 3 gunicorn workers x 4 threads, each keeping its connection; the rest is headroom for timeout_utils' executor and more workers.
         DatabaseRole("web", 54, REQUEST_DEADLINE_SECONDS, reads_stats),
         # Channels runs every consumer's database call on one thread; the health probe is the other.

@@ -44,7 +44,7 @@ class EnvironmentShareTests(SimpleTestCase):
         self.assertLessEqual(sum(ENVIRONMENT_SHARE_DEFAULTS[environment] for environment in deployments), 1.0)
 
     def test_production_takes_the_bulk_and_staging_a_sliver(self) -> None:
-        self.assertEqual(ENVIRONMENT_SHARE_DEFAULTS["production"], 0.9)
+        self.assertEqual(ENVIRONMENT_SHARE_DEFAULTS["production"], 0.95)
         self.assertEqual(ENVIRONMENT_SHARE_DEFAULTS["staging"], 0.05)
         self.assertEqual(ENVIRONMENT_SHARE_DEFAULTS["development"], 0.0)
         self.assertEqual(ENVIRONMENT_SHARE_DEFAULTS["local"], 0.0)
@@ -52,7 +52,7 @@ class EnvironmentShareTests(SimpleTestCase):
 
     def test_the_environment_picks_the_default_outside_tests(self) -> None:
         for environment, share in (
-            ("production", 0.9),
+            ("production", 0.95),
             ("staging", 0.05),
             ("development", 0.0),
             ("someones-laptop", 0.0),
@@ -80,7 +80,7 @@ class EnvironmentShareTests(SimpleTestCase):
 
     def test_production_s_free_tier_ceiling_follows_its_default_share(self) -> None:
         with override_settings(TESTING=False, ENVIRONMENT_NAME="production"), _configured(None):
-            self.assertEqual(free_tier_ceiling("google_geocoding"), 3_600)
+            self.assertEqual(free_tier_ceiling("google_geocoding"), 3_800)
 
     def test_an_override_gives_one_billed_service_its_own_share(self) -> None:
         with (

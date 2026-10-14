@@ -175,7 +175,7 @@
             </div>
         </div>
 
-        {# Combined Media section: the pin's own photos + every external provider (Wikimedia, Smithsonian, ...) in one place. #}
+        {# Combined Media section: the pin's own photos + every external provider (Wikimedia, ...) in one place. #}
         <div id="media-gallery-section" class="media-gallery card card--secondary"
              data-media-view="all"
              data-media-sort="{{ profile.media_gallery_sort }}"
@@ -367,7 +367,7 @@
             hx-sync="#pin-panel-lane-3:queue all" class="web-search card card--secondary" data-ext-panel-204 hidden
             hx-get="{% url 'pin.web_search' pin.slug %}"
             hx-trigger="ul:lazy-load, ul:unhide" data-ul-lazy-section="pin:web-search"
-            hx-swap="outerHTML"
+            hx-swap="outerHTML" data-ext-panel-error="swap"
             data-collapse-scope="pin" data-collapse-section="web-search">
             <div class="card-header">
                 <i class="material-symbols-outlined">search</i>
@@ -442,7 +442,7 @@
             hx-sync="#pin-panel-lane-{% cycle '0' '1' '2' '3' %}:queue all" class="card card--secondary" data-ext-panel-204 hidden
             hx-get="{% url panel.card_view pin.slug %}"
             hx-trigger="ul:lazy-load, ul:unhide" data-ul-lazy-section="pin:{{ panel.key }}"
-            hx-swap="outerHTML"
+            hx-swap="outerHTML"{% if panel.quiet_on_error %} data-ext-panel-error="dismiss"{% endif %}
             data-collapse-scope="pin" data-collapse-section="{{ panel.key }}">
             <div class="card-header">
                 <i class="material-symbols-outlined">{{ panel.icon }}</i>

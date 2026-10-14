@@ -485,7 +485,6 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
 
     # Places layer source preferences (only relevant when the user has the PLACES feature).
     places_google_enabled = BooleanField(default=True, help_text="Show Google historical landmarks in the Places layer.")
-    places_nps_enabled = BooleanField(default=True, help_text="Show National Park Service locations in the Places layer.")
     places_wikipedia_enabled = BooleanField(default=True, help_text="Show Wikipedia-linked places in the Places layer.")
 
     # When off, wiki pages never render their cover-photo hero banner for this viewer, regardless of

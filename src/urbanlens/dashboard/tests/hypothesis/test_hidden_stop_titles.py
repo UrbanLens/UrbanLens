@@ -11,13 +11,11 @@ attributes), the external API (``title`` and ``effective_title``), the Google Ca
 from __future__ import annotations
 
 import datetime as dt
-import importlib
 import json
 import string
 from typing import Any
 from unittest import mock
 
-from django.apps import apps
 from django.contrib.auth.models import User
 from django.urls import reverse
 from django.utils import timezone
@@ -26,9 +24,7 @@ from hypothesis import given, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.calendar_sync.model import (
-    CalendarSyncDirection,
     GoogleCalendarAccount,
-    TripCalendarLink,
 )
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
@@ -49,7 +45,6 @@ _TYPED = "Meet at the gate"
 _IMPORTED_LOCATION = "123 Factory Rd, Utica, NY"
 _IMPORT_NOTE = "Location from the imported Google Calendar event."
 _WHEN = dt.datetime(2026, 11, 6, 9, 0, tzinfo=dt.UTC)
-_MIGRATION = importlib.import_module("urbanlens.dashboard.migrations.0069_calendar_privacy_followups")
 
 
 class _HiddenStopCase(TestCase):
@@ -487,38 +482,3 @@ class TheSurfacesAgreeTests(SimpleTestCase):
         else:
             self.assertEqual(shown, title or place)
             self.assertEqual(own, title)
-
-
-class BackfillTests(TestCase):
-    """
-    A located stop's stored title may be its place search's name, and cannot be told from a typed one, so it is taken
-    to be the place's until its author types one. A stop with no place has a place's name only from an import."""
-
-    def test_every_title_that_may_be_a_places_is_marked_and_no_other(self) -> None:
-        profile = User.objects.create_user(username="trip-backfill").profile
-        trip = Trip.objects.create(name="Old trip", creator=profile)
-        mill = Location.objects.create(latitude=42.38, longitude=-83.03)
-        located = TripActivity.objects.create(trip=trip, added_by=profile, location=mill, title="Meet at the gate")
-        typed = TripActivity.objects.create(trip=trip, added_by=profile, title="Drive home")
-        imported = TripActivity.objects.create(
-            trip=trip, added_by=profile, title=_IMPORTED_LOCATION, notes=_IMPORT_NOTE
-        )
-        timed_import = TripActivity.objects.create(
-            trip=trip, added_by=profile, title=_IMPORTED_LOCATION, notes="Bring boots"
-        )
-        GoogleCalendarAccount.objects.create(profile=profile, access_token="a", refresh_token="r")  # noqa: S106 - fixture value
-        TripCalendarLink.objects.create(
-            trip=trip,
-            activity=timed_import,
-            profile=profile,
-            google_event_id="evt",
-            direction=CalendarSyncDirection.IMPORTED,
-        )
-        blank = TripActivity.objects.create(trip=trip, added_by=profile, location=mill, title="  ")
-        untitled = TripActivity.objects.create(trip=trip, added_by=profile, location=mill, title=None)
-        rows = [located, typed, imported, timed_import, blank, untitled]
-
-        _MIGRATION.mark_stored_titles_as_possibly_the_places(apps, None)
-
-        flags = dict(TripActivity.objects.filter(pk__in=[row.pk for row in rows]).values_list("pk", "title_from_place"))
-        self.assertEqual([flags[row.pk] for row in rows], [True, False, True, True, False, False])

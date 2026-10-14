@@ -62,7 +62,6 @@ class NearbyPlacesLogTests(TestCase):
 
         user = baker.make(User)
         user.profile.places_google_enabled = True
-        user.profile.places_nps_enabled = False
         user.profile.places_wikipedia_enabled = False
         user.profile.save()
         self.client.force_login(user)

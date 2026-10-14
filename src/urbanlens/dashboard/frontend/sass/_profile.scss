@@ -667,12 +667,6 @@
 .settings-field {
     margin-bottom: 1.25rem;
 
-    &--inline {
-        display: flex;
-        flex-direction: column;
-        gap: 0.25rem;
-    }
-
     &--map-preview {
         max-width: 45rem;
     }

@@ -70,20 +70,15 @@
 {# Team #}
 <section class="about-section about-team-section">
     <div class="about-section-inner">
-        <div class="about-section-label">Who built it?</div>
-        <h2 class="about-section-title">One developer, not a company.</h2>
+        {% block about_team_heading %}
+        <div class="about-section-label">Who runs it?</div>
+        <h2 class="about-section-title">Run by the people who host it.</h2>
+        {% endblock %}
+        {% block about_team_body %}
         <p class="about-team-section-body">
-            UrbanLens is built and maintained by one person. It started as a personal
-            tool - a way to search, save, document, and share locations and research
-            with a small circle of friends - and grew into the platform it is now.
+            UrbanLens is open-source software. The people who run this site decide how it is hosted and backed up, and who maintains it.
         </p>
-        <p class="about-team-section-body">
-            The goal was never to launch a product. It was to make a place where one explorer
-            and their friends could search, document, save, and share what they'd found -
-            privately, deliberately, and on their own terms. That's still what UrbanLens is:
-            a tool made by an explorer, for the people they explore with. It just happens to
-            have room for you too.
-        </p>
+        {% endblock %}
     </div>
 </section>
 
@@ -106,8 +101,9 @@
                 <span class="about-value-num">02</span>
                 <h3 class="about-value-title">Hazard notes on every pin</h3>
                 <p class="about-value-body">
-                    Pins carry structural hazard notes and vulnerability ratings. We encourage users to record and share safety
-                    information, so they never explore alone.
+                    {% block about_value_hazards %}
+                    Pins carry structural hazard notes and vulnerability ratings, so people can record and share safety information.
+                    {% endblock %}
                 </p>
             </div>
             <div class="about-value-card">
@@ -137,16 +133,19 @@
             </div>
             <div class="about-value-card">
                 <span class="about-value-num">06</span>
-                <h3 class="about-value-title">No ads, no data sales</h3>
+                {% block about_value_no_sales %}
+                <h3 class="about-value-title">Your data</h3>
                 <p class="about-value-body">
-                    We don't sell location data or run ads. Pins, photos, and notes exist
-                    to run the platform - nothing else.
+                    Whoever runs this site decides whether it shows ads or shares data. Ask them before you rely on it.
+                {% endblock %}
                 </p>
             </div>
         </div>
 
         <p class="about-values-footnote">
-            Curious what's behind these choices? Read our <a href="{% url 'values' %}">values</a>.
+            {% block about_values_link %}
+            Read the <a href="{% url 'values' %}">values</a> UrbanLens is built around.
+            {% endblock %}
         </p>
     </div>
 </section>
@@ -289,7 +288,9 @@
 <section class="about-cta-section">
     <div class="about-cta-inner">
         <h2 class="about-cta-title">Start mapping your world.</h2>
-        <p class="about-cta-body">It's free, private, and built for people who explore with care.</p>
+        {% block about_cta_body %}
+        <p class="about-cta-body">UrbanLens is open-source software, built for people who explore with care.</p>
+        {% endblock %}
         {% if not user.is_authenticated %}
         <a href="{% url 'signup' %}" class="about-btn btn btn--primary btn--lg">
             <i class="material-symbols-outlined">rocket_launch</i> Create an account

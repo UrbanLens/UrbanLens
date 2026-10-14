@@ -98,26 +98,35 @@ class MaterializeMediaItemTests(TestCase):
         headers = mocked.call_args.kwargs.get("headers") or {}
         self.assertIn("UrbanLens", headers.get("User-Agent", ""))
 
-    def test_panel_key_loc_translates_to_library_of_congress(self) -> None:
-        """The "loc" panel key never matched ImageSource.LIBRARY_OF_CONGRESS's real value ("library_of_congress") - without the translation it would silently fall back to plain ImageSource.UPLOAD."""
+    def test_panel_key_external_url_translates_to_linked_url(self) -> None:
+        """The "external_url" panel key never matched ImageSource.LINKED_URL's real value ("linked_url") - without the translation it would silently fall back to plain ImageSource.UPLOAD."""
         with mock.patch(
             "urbanlens.dashboard.services.media.media_materialize.requests.get", return_value=_ok_response()
         ):
             image = materialize_media_item(
-                location=self.location, profile=self.profile, source="loc", url="https://example.test/photo.jpg"
+                location=self.location,
+                profile=self.profile,
+                source="external_url",
+                url="https://example.test/photo.jpg",
             )
-        self.assertEqual(image.source, ImageSource.LIBRARY_OF_CONGRESS)
+        self.assertEqual(image.source, ImageSource.LINKED_URL)
 
     def test_resending_a_translated_source_item_reuses_the_row_instead_of_duplicating(self) -> None:
-        """Regression: the dedupe filter used to compare against the raw panel key ("loc"), but rows are persisted with the *translated* ImageSource value ("library_of_congress") - for any source with a translation, that mismatch meant the dedupe lookup could never match, and every repeat "send to wiki"/"mark relevant" click re-downloaded and duplicated the row."""
+        """Regression: the dedupe filter used to compare against the raw panel key ("external_url"), but rows are persisted with the *translated* ImageSource value ("linked_url") - for any source with a translation, that mismatch meant the dedupe lookup could never match, and every repeat "send to wiki"/"mark relevant" click re-downloaded and duplicated the row."""
         with mock.patch(
             "urbanlens.dashboard.services.media.media_materialize.requests.get", return_value=_ok_response()
         ) as mocked:
             first = materialize_media_item(
-                location=self.location, profile=self.profile, source="loc", url="https://example.test/photo.jpg"
+                location=self.location,
+                profile=self.profile,
+                source="external_url",
+                url="https://example.test/photo.jpg",
             )
             second = materialize_media_item(
-                location=self.location, profile=self.profile, source="loc", url="https://example.test/photo.jpg"
+                location=self.location,
+                profile=self.profile,
+                source="external_url",
+                url="https://example.test/photo.jpg",
             )
         self.assertEqual(first.pk, second.pk)
         mocked.assert_called_once()
@@ -543,19 +552,3 @@ class MediaRelevanceMaterializesTests(TestCase):
         image = Image.objects.get(pk=data["image_id"])
         self.assertIsNone(image.latitude)
         self.assertIsNone(image.longitude)
-
-
-class PastedImageSourceMigrationTests(TestCase):
-    def test_an_earlier_pasted_image_becomes_a_linked_url_and_nothing_else_changes(self) -> None:
-        from importlib import import_module
-
-        from django.apps import apps
-
-        pasted = baker.make(Image, source=ImageSource.UPLOAD, media_source_key="external_url")
-        uploaded = baker.make(Image, source=ImageSource.UPLOAD, media_source_key="")
-
-        import_module("urbanlens.dashboard.migrations.0032_v0_8_0")._0116_mark_linked(apps, None)
-
-        pasted.refresh_from_db()
-        uploaded.refresh_from_db()
-        self.assertEqual((pasted.source, uploaded.source), (ImageSource.LINKED_URL, ImageSource.UPLOAD))

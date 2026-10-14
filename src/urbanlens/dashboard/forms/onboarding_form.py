@@ -6,6 +6,7 @@ from django import forms
 from django.utils import timezone
 
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.plugins.points import EXTERNAL_APIS_DISABLED
 
 CATEGORY_FIELDS = ("history_enabled", "community_enabled", "external_apis_enabled")
 
@@ -89,11 +90,12 @@ class WelcomeOnboardingForm(forms.ModelForm):
         instance.external_apis_enabled = self.cleaned_data["external_apis_enabled"]
         if not instance.external_apis_enabled:
             instance.places_google_enabled = False
-            instance.places_nps_enabled = False
             instance.places_wikipedia_enabled = False
 
         instance.tos_accepted_at = timezone.now()
 
         if commit:
             instance.save()
+            if not instance.external_apis_enabled:
+                EXTERNAL_APIS_DISABLED.fire(instance)
         return instance

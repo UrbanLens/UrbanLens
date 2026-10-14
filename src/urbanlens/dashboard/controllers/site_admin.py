@@ -1029,7 +1029,7 @@ class SiteAdminHomeView(LoginRequiredMixin, PermissionRequiredMixin, View):
         with contextlib.suppress(Exception):
             from urbanlens.dashboard.models.subscriptions import UserSubscription
 
-            total_subscriptions = UserSubscription.objects.not_revoked().count()
+            total_subscriptions = UserSubscription.objects.active().count()
 
         site_settings = SiteSettings.get_current()
 
@@ -1144,7 +1144,7 @@ class SiteAdminStatsKpiPartialView(_AdminPermissionMixin, View):
         with contextlib.suppress(Exception):
             from urbanlens.dashboard.models.subscriptions import UserSubscription
 
-            total_subscriptions = UserSubscription.objects.not_revoked().count()
+            total_subscriptions = UserSubscription.objects.active().count()
 
         total_site_admins = User.objects.filter(groups__name=SITE_ADMIN_GROUP_NAME).distinct().count()
 

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
 from unittest import mock
 import uuid
 
@@ -11,7 +10,7 @@ from django.db import IntegrityError, transaction
 from django.urls import reverse
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
+from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.device_scan.model import DeviceScanUpload
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
 from urbanlens.dashboard.models.friendship.model import Friendship
@@ -204,10 +203,3 @@ class DeviceScanReplayTests(TestCase):
         self._upload("")
         self._upload("")
         self.assertEqual(DeviceScanUpload.objects.filter(client_session_uuid="").count(), 2)
-
-
-class TheDedupeMigrationKeepsTheFirstTests(SimpleTestCase):
-    def test_later_rows_of_each_key_are_marked(self) -> None:
-        migration = importlib.import_module("urbanlens.dashboard.migrations.0032_v0_8_0")
-        rows = [(1, "a", 1), (2, "a", 1), (3, "a", 2), (4, "b", 1), (5, "b", 1), (6, "b", 1)]
-        self.assertEqual(migration._later_duplicates(iter(rows)), [2, 5, 6])

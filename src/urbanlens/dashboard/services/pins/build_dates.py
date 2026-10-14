@@ -33,7 +33,7 @@ SOURCE_BUILDING_RECORD = "building_record"
 SOURCE_HISTORIC_REGISTER = "historic_register"
 SOURCE_PROPERTY_RECORD = "property_record"
 
-#: A building record's ``year_built_basis`` for a year a source gave the building itself, such as a CRIS survey date.
+#: A building record's ``year_built_basis`` for a year a source gave the building itself, such as a survey date.
 YEAR_BASIS_BUILDING = "building"
 
 

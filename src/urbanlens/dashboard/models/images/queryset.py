@@ -11,7 +11,7 @@ from urbanlens.dashboard.models import abstract
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from urbanlens.dashboard.models.images.model import Image  # noqa: F401 - mypy needs these; ruff does not
+    from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.models.images.relevance import MediaRelevance  # noqa: F401 - mypy needs these; ruff does not
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.profile.model import Profile
@@ -321,6 +321,11 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet["Image"]):
         if "relevance_confidence" not in scored.query.annotations:
             scored = scored.annotate(relevance_confidence=Value(None, output_field=FloatField()))
         return scored
+
+    @staticmethod
+    def relevance_confidence_of(image: Image) -> float | None:
+        """The ``relevance_confidence`` a row from :meth:`with_relevance_confidence` carries, which the model doesn't declare."""
+        return image.__dict__.get("relevance_confidence")
 
     def most_relevant_first(self) -> ImageQuerySet:
         """Order by ``relevance_confidence`` (unscored last), then newest first."""

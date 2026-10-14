@@ -1,28 +1,22 @@
 """
-Downloading the image of an overlay that still draws only from an external ``image_url``, so migration
-0033_v0_8_0_indexes can run.
+Downloading the image of an overlay that still draws only from an external ``image_url``, so the upgrade can drop the column.
 
-The command runs against a database stopped at 0032_v0_8_0, where the column exists but the model no longer declares it.
-The command tests give the table that shape inside their own transaction; the last test walks the real migrations.
+The command tests give the table that shape inside their own transaction.
 """
 
 from __future__ import annotations
 
 from io import BytesIO, StringIO
-import re
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth.models import User
-from django.core.management import CommandError, call_command, get_commands
+from django.core.management import CommandError, call_command
 from django.db import connection
-from django.db.migrations.executor import MigrationExecutor
-from django.db.utils import ProgrammingError
 from model_bakery import baker
 from PIL import Image as PILImage
-import pytest
 import requests
 
-from urbanlens.core.tests.testcase import TestCase, TransactionTestCase
+from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
 
@@ -33,7 +27,6 @@ _PUBLIC_DNS_RESULT = [(2, 1, 6, "", ("93.184.216.34", 0))]
 _FETCH = "urbanlens.dashboard.services.media.media_materialize.fetch_with_revalidated_redirects"
 _ENQUEUE = "urbanlens.dashboard.services.core.celery.safely_enqueue_task"
 _TABLE = MapImageOverlay._meta.db_table
-_BEFORE_REFUSAL = ("dashboard", "0032_v0_8_0")
 
 
 def _png() -> bytes:
@@ -176,83 +169,3 @@ class AfterTheColumnIsGoneTests(TestCase):
         _run(fetch)
 
         fetch.assert_not_called()
-
-
-class TheMigrationNamesTheCommandTests(TestCase):
-    def test_the_command_the_refusal_tells_the_operator_to_run_exists(self) -> None:
-        import importlib
-
-        module = importlib.import_module("urbanlens.dashboard.migrations.0033_v0_8_0_indexes")
-        overlays = MagicMock()
-        overlays.objects.filter.return_value.values_list.return_value = [7]
-        registry = MagicMock()
-        registry.get_model.return_value = overlays
-
-        with self.assertRaises(RuntimeError) as raised:
-            module._0096_refuse_to_drop_url_only_overlays(registry, None)
-
-        named = re.search(r"manage\.py (\w+)", str(raised.exception))
-        if named is None:
-            self.fail("the refusal does not say what to run")
-        self.assertIn(named.group(1), get_commands())
-
-
-class TheOperatorsPathTests(TransactionTestCase):
-    """
-    0033 stops, the command runs against the 0032 schema with the current code, then 0033 applies and the
-    upload pipeline processes the image, as ``requeue_stalled_pending_uploads`` would have it do."""
-
-    @staticmethod
-    def _migrate(targets: list[tuple[str, str]]) -> None:
-        executor = MigrationExecutor(connection)
-        executor.loader.build_graph()
-        executor.migrate(targets)
-
-    def _restore(self, leaves: list[tuple[str, str]]) -> None:
-        with connection.cursor() as cursor:
-            if any(
-                column.name == "image_url" for column in connection.introspection.get_table_description(cursor, _TABLE)
-            ):
-                cursor.execute(f"""DELETE FROM "{_TABLE}" WHERE "image_id" IS NULL AND "tile_url_template" = ''""")
-        self._migrate(leaves)
-
-    @pytest.mark.slow
-    @pytest.mark.xfail(
-        strict=True,
-        raises=ProgrammingError,
-        reason="The command runs today's models on the 0032 schema, which lacks columns added since",
-    )
-    def test_the_migration_proceeds_once_the_command_has_run(self) -> None:
-        from urbanlens.dashboard.tasks import process_image_upload
-
-        profile = baker.make(User).profile
-        pin = baker.make_recipe("dashboard.pin", profile=profile)
-        leaves = MigrationExecutor(connection).loader.graph.leaf_nodes()
-        self._migrate([_BEFORE_REFUSAL])
-        self.addCleanup(self._restore, leaves)
-        historical = (
-            MigrationExecutor(connection)
-            .loader.project_state(_BEFORE_REFUSAL)
-            .apps.get_model("dashboard", "MapImageOverlay")
-        )
-        corners = {
-            f"{corner}_{axis}": value
-            for corner, pair in zip(("nw", "ne", "se", "sw"), _CORNERS, strict=True)
-            for axis, value in zip(("latitude", "longitude"), pair, strict=True)
-        }
-        pk = historical.objects.create(
-            name="Sanborn 1911", image_url=_URL, parent_pin_id=pin.pk, profile_id=profile.pk, **corners
-        ).pk
-
-        with self.assertRaisesRegex(RuntimeError, _COMMAND):
-            self._migrate(leaves)
-        _run(_download())
-        self._migrate(leaves)
-        image = Image.objects.get(map_overlays__pk=pk)
-        with patch("urbanlens.dashboard.tasks.update_task_progress"):
-            processed = process_image_upload(image.pk)
-
-        self.assertTrue(processed)
-        image.refresh_from_db()
-        self.assertFalse(image.pending_scan)
-        self.assertEqual(image.source_url, _URL)

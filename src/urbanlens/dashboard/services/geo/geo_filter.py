@@ -26,7 +26,7 @@ def require_usa(service: str, lat: float | None, lng: float | None) -> bool:
     Convenience wrapper for gateway methods that need to guard a USA-only call.
 
     Args:
-        service: The service key (e.g. ``"nps"``).
+        service: The service key (e.g. ``"google_places"``).
         lat: Latitude.
         lng: Longitude.
 

@@ -243,6 +243,19 @@ class NominatimPlugin(UrbanLensPlugin):
 
     def setup(self, plugin: PluginContext) -> None:
         """Nominatim rate-limit defaults, forward geocoding, the OpenStreetMap pin-detail panel, current and former OSM names, and background reverse-geocode caching."""
+        from urbanlens.dashboard.plugins.points import DATA_SOURCE_CREDITS, DataSourceCredit, MapAttribution
+
+        plugin.add(
+            DATA_SOURCE_CREDITS,
+            DataSourceCredit(
+                name="Nominatim",
+                category="open_map",
+                url="https://www.openstreetmap.org/copyright",
+                note="Community-maintained data used for the default street map and the Water & Rail overlay, including active and lifecycle-tagged historic railways, rail trails, waterways, and canals. Viewport geometry is queried through Overpass; reverse geocoding and address lookup use Nominatim.",
+                attribution=MapAttribution(icon="map", text="© OpenStreetMap contributors, available under the", terms_label="Open Database License (ODbL)", terms_url="https://opendatacommons.org/licenses/odbl/"),
+            ),
+        )
+
         from urbanlens.dashboard.plugins.points import ENRICHMENT_SOURCES, GEOCODERS, NAME_PROVIDERS, PANEL_SOURCES, SERVICE_DEFAULTS
         from urbanlens.dashboard.services.apis.locations.geocode_resolution import NominatimGeocoder
 

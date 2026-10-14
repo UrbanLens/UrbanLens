@@ -513,12 +513,6 @@ class PlacesLayerForm(ProfileSettingsForm):
         label="Google Historical Landmarks",
         help_text="Show cultural sites, monuments, and historic locations sourced from Google.",
     )
-    places_nps_enabled = forms.BooleanField(
-        required=False,
-        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
-        label="National Park Service",
-        help_text="Show US National Parks and monuments within 100 km of the map center.",
-    )
     places_wikipedia_enabled = forms.BooleanField(
         required=False,
         widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
@@ -528,7 +522,7 @@ class PlacesLayerForm(ProfileSettingsForm):
 
     class Meta:
         model = Profile
-        fields = ["places_google_enabled", "places_nps_enabled", "places_wikipedia_enabled"]
+        fields = ["places_google_enabled", "places_wikipedia_enabled"]
 
 
 class DeleteAccountForm(forms.Form):

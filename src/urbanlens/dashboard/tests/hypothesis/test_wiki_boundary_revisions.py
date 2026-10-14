@@ -8,11 +8,9 @@ the edit names them by id.
 
 from __future__ import annotations
 
-import importlib
 import json
 from unittest import mock
 
-from django.apps import apps
 from django.contrib.gis.geos import MultiPolygon, Polygon
 from django.urls import reverse
 from model_bakery import baker
@@ -134,28 +132,3 @@ class BoundaryHistoryTests(_WikiCase):
         response = self.client.get(reverse("location.wiki.history", args=[self.location.slug]))
 
         self.assertContains(response, "Drawn outline")
-
-
-class LegacyEditConversionTests(TestCase):
-    def test_the_migration_turns_inline_wkt_into_revisions(self) -> None:
-        convert = importlib.import_module("urbanlens.dashboard.migrations.0032_v0_8_0")._0101_convert_inline_boundaries
-        wiki = baker.make("dashboard.Wiki", location=baker.make(Location, latitude="40.0", longitude="-74.0"))
-        first = baker.make(
-            WikiEdit,
-            wiki=wiki,
-            changes={"bounding_box": {"from": None, "to": _square(0.001).wkt}, "name": {"from": "a", "to": "b"}},
-        )
-        second = baker.make(
-            WikiEdit, wiki=wiki, changes={"boundary_property": {"from": _square(0.001).wkt, "to": "not wkt"}}
-        )
-
-        convert(apps, None)
-
-        first.refresh_from_db()
-        second.refresh_from_db()
-        self.assertEqual(first.changes["name"], {"from": "a", "to": "b"})
-        self.assertNotIn("bounding_box", first.changes)
-        introduced = first.changes["boundary_property"]["to"]
-        self.assertTrue(BoundaryRevision.objects.get(pk=introduced).polygon.equals(_square(0.001)))
-        self.assertEqual(second.changes["boundary_property"], {"from": introduced, "to": None})
-        self.assertEqual(BoundaryRevision.objects.filter(wiki=wiki).count(), 1)

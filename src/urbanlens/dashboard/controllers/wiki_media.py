@@ -100,6 +100,7 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
     def _photos(self, request: HttpRequest, location: Location, wiki: Wiki, profile: Profile) -> HttpResponse:
         """Render photos intentionally shared to this wiki as votable Media tiles."""
         from urbanlens.dashboard.models.images.model import Image
+        from urbanlens.dashboard.models.images.queryset import ImageQuerySet
         from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
         from urbanlens.dashboard.services.apis.assets.base import MediaItem
 
@@ -130,7 +131,7 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
                     # from..." line - see pin_media_items.html and shared/media-lightbox.ts.
                     "is_mine": img.profile_id == profile.pk,
                     "copied_from_label": img.copied_from_label or "",
-                    "_relevance_confidence": img.relevance_confidence,
+                    "_relevance_confidence": ImageQuerySet.relevance_confidence_of(img),
                     "_created": img.created,
                 },
             )

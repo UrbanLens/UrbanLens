@@ -8,9 +8,11 @@ ARG UL_ENVIRONMENT=production
 # Ensure logging dir exists at /var/log/urbanlens
 RUN mkdir -p /var/log/urbanlens
 
+# Blank UL_LOG_DIR: console only, read with `docker compose logs`. Set it to /var/log/urbanlens to keep a file in the logs volume.
 ENV PYTHONUNBUFFERED=1 \
     UV_COMPILE_BYTECODE=1 \
-    PYTHONPATH=/app/src
+    PYTHONPATH=/app/src \
+    UL_LOG_DIR=
 
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive && \
     apt-get install -y --no-install-recommends ca-certificates curl gcc pkg-config gnupg && \
@@ -84,7 +86,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 RUN --mount=type=cache,target=/root/.cache/uv \
     bin/install_plugin_requirements.sh
 
-# Each plugin's build step, such as fetching the tokenizer encodings its requirements need.
+# Each plugin's build steps, if it declares any.
 RUN bin/run_plugin_build_steps.sh
 
 # Precompile the source tree.
@@ -112,9 +114,10 @@ RUN DJANGO_SECRET_KEY=build-time-placeholder-not-used-at-runtime \
     UL_RABBITMQ_URL=amqp://build.invalid:5672/ \
     gosu appuser python /app/bin/container_init.py --frontend-only
 
-# Git >= 2.35.2 refuses to run in directories not owned by the current user.
+# Git >= 2.35.2 refuses to run in directories not owned by the current user. Run from / so a checkout whose .git
+# is a worktree's pointer file, which means nothing inside the image, cannot fail the build.
 RUN if [ "$UL_ENVIRONMENT" = "development" ] || [ "$UL_ENVIRONMENT" = "local" ]; then \
-    git config --system safe.directory /app; \
+    cd / && git config --system safe.directory /app; \
     fi
 
 COPY docker-entrypoint.sh /docker-entrypoint.sh

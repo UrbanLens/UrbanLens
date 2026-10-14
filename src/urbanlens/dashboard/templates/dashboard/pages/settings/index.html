@@ -601,7 +601,7 @@
             <i class="material-symbols-outlined">sell</i>
             <div>
                 <h2 class="settings-section-title">Keyword Tagging</h2>
-                <p class="settings-section-desc">Free, local keyword matching that can auto-tag pins - no subscription needed.</p>
+                <p class="settings-section-desc">Free, local keyword matching that can auto-tag pins - no access role needed.</p>
             </div>
         </div>
 
@@ -764,7 +764,9 @@
                 </h4>
                 <p class="settings-help">
                     New messages between people who both use UrbanLens are end-to-end encrypted:
-                    only you and the person you're talking to can read them, not our servers.
+                    {% block settings_e2ee_server_note %}
+                    only you and the person you're talking to can read them, not the server that stores them.
+                    {% endblock %}
                     <a href="{% url 'faq' %}#faq-e2ee" target="_blank" rel="noopener">What's a recovery key, and why do I need one?</a>
                 </p>
                 <p class="settings-e2ee-status" id="e2ee-status">Checking status…</p>
@@ -1204,18 +1206,7 @@
                     {% endif %}
                 </div>
 
-                <div class="settings-field">
-                    <label class="settings-toggle-row">
-                        {{ places_layer_form.places_nps_enabled }}
-                        <span class="settings-toggle-label">
-                            <strong>{{ places_layer_form.places_nps_enabled.label }}</strong>
-                            <span class="settings-help">{{ places_layer_form.places_nps_enabled.help_text }}</span>
-                        </span>
-                    </label>
-                    {% if places_layer_form.places_nps_enabled.errors %}
-                    <p class="settings-error">{{ places_layer_form.places_nps_enabled.errors|join:", " }}</p>
-                    {% endif %}
-                </div>
+                {% plugin_slot "settings.places_layer" %}
 
                 <div class="settings-field">
                     <label class="settings-toggle-row">

@@ -170,25 +170,24 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
     ),
     "overpass": ServiceDefaults(
         display_name="Overpass API (OpenStreetMap)",
+        # The deployment's own Overpass instance (UL_OVERPASS_API_URL); the public instances it fails over to are
+        # budgeted separately, as overpass_public_mirror.
         category=EgressCategory.INTERNAL,
-        # OverpassGateway spreads every call across a pool of public instances and drops any that
-        # error out of rotation until the next day, so this limit governs our total load, not the
-        # load on any single instance.
-        # Each logical lookup may spend more than one call when it fails over.
         calls_per_minute=240,
         calls_per_day=24_000,
-        notes="Free API. Load is distributed across several public Overpass instances, and an instance that errors or times out is dropped for minutes, longer on each repeat, or for the wait it states. Each logical lookup may spend more than one call when it fails over.",
+        notes="Free: this deployment's own Overpass instance (UL_OVERPASS_API_URL). An endpoint that errors or times out is dropped for minutes, longer on each repeat, or for the wait it states, and each logical lookup may spend more than one call when it fails over.",
         # Free per this entry's own notes; see `ServiceDefaults.billable`.
         billable=False,
     ),
     "overpass_public_mirror": ServiceDefaults(
         display_name="Overpass API public mirrors (overpass-api.de, maps.mail.ru)",
         category=EgressCategory.QUOTA,
-        # Asked only when the self-hosted primary is down. The public instances allow a few concurrent slots and
-        # about 10,000 queries a day per address, and that address is shared with the operator's other services.
+        # Every Overpass lookup when no primary is configured, and the fallback when it is down. The public instances
+        # allow a few concurrent slots and about 10,000 queries a day per address, which other software on the same
+        # address also spends.
         calls_per_minute=10,
         calls_per_day=2_000,
-        notes="Free API: the public Overpass instances the self-hosted primary fails over to. Their limits are per address, shared by every deployment and the operator's other services.",
+        notes="Free API: the public Overpass instances, asked when no primary is configured or it is down. Their limits are per address, shared with everything else calling them from it.",
         billable=False,
     ),
     "apple_maps": ServiceDefaults(
@@ -375,7 +374,7 @@ def get_limit_config(service: str) -> Any:
     0068 for every earlier release's).
 
     Args:
-        service: The service key (e.g. ``"nps"``).
+        service: The service key (e.g. ``"google_places"``).
 
     Returns:
         An ``ApiRateLimit`` instance."""
@@ -526,10 +525,7 @@ def log_api_call(
     was_service_disabled: bool = False,
     status_code: int | None = None,
     was_rejected_input: bool = False,
-    model: str | None = None,
-    input_tokens: int | None = None,
-    output_tokens: int | None = None,
-) -> None:
+) -> int | None:
     """
     Record one API call in the ``ApiCallLog`` table.
     Failures are swallowed so that logging problems never break callers.
@@ -543,12 +539,13 @@ def log_api_call(
         was_geo_filtered: True if the call was skipped due to geo filtering.
         status_code: The upstream's HTTP status, when the caller holds the response.
         was_rejected_input: True if the call was refused before it was made because its input could not return data.
-        model: The model that answered, for a call that names one.
-        input_tokens: Input tokens the provider reported, if any.
-        output_tokens: Output tokens the provider reported, if any."""
+
+    Returns:
+        The pk of the row written, or None when the call was tallied or the row could not be written.
+    """
     from urbanlens.dashboard.models.api_call_log import ApiCallLog
 
-    if call_ledger(service) is CallLedger.TALLIED and model is None and input_tokens is None and output_tokens is None:
+    if call_ledger(service) is CallLedger.TALLIED:
         from urbanlens.dashboard.services.core import call_tally
 
         outcome = (
@@ -563,10 +560,10 @@ def log_api_call(
             else call_tally.Tallied.MADE
         )
         call_tally.record(service, outcome, endpoint=endpoint, success=success, status_code=status_code, response_ms=response_ms)
-        return
+        return None
 
     try:
-        ApiCallLog.objects.create(
+        entry = ApiCallLog.objects.create(
             service=service,
             profile_id=current_write_actor(),
             success=success,
@@ -577,12 +574,11 @@ def log_api_call(
             was_service_disabled=was_service_disabled,
             status_code=status_code,
             was_rejected_input=was_rejected_input,
-            model=model,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
         )
     except Exception:
         logger.exception("Failed to log API call for service %s", service)
+        return None
+    return entry.pk
 
 
 def _reserve_call(service: str, *, endpoint: str = "") -> int:
@@ -668,9 +664,6 @@ def _finalize_call(
     response_ms: int | None = None,
     status_code: int | None = None,
     endpoint: str | None = None,
-    model: str | None = None,
-    input_tokens: int | None = None,
-    output_tokens: int | None = None,
 ) -> None:
     """
     Update a reservation row created by ``_reserve_call`` with the request's outcome.
@@ -681,13 +674,10 @@ def _finalize_call(
         success: Whether the call succeeded (HTTP 2xx, no exception).
         response_ms: Round-trip time in milliseconds.
         status_code: The upstream's HTTP status; None when no response arrived.
-        endpoint: Replaces the reserved endpoint when given - a call can know its provider and model only once it is made.
-        model: The model that answered, for a call that names one.
-        input_tokens: Input tokens the provider reported, if any.
-        output_tokens: Output tokens the provider reported, if any."""
+        endpoint: Replaces the reserved endpoint when given - a call can know what it called only once it is made."""
     from urbanlens.dashboard.models.api_call_log import ApiCallLog
 
-    outcome: dict[str, Any] = {"success": success, "response_ms": response_ms, "status_code": status_code, "model": model, "input_tokens": input_tokens, "output_tokens": output_tokens}
+    outcome: dict[str, Any] = {"success": success, "response_ms": response_ms, "status_code": status_code}
     if endpoint is not None:
         outcome["endpoint"] = endpoint[:500]
     try:
@@ -718,23 +708,20 @@ class ApiCallSlot:
 
     Attributes:
         service: The service key the slot reserved.
+        entry_pk: The pk of the reserved ``ApiCallLog`` row, for code inside the slot to attach its own data to;
+            None when the call is tallied rather than recorded per row.
         success: Whether the call succeeded; left False, a call that raised is recorded as failed.
         status_code: The upstream's HTTP status, when there was one.
         endpoint: What was called, when that is only known once it is made; replaces the reserved endpoint.
-        model: The model that answered, for a call that names one.
-        input_tokens: Input tokens the provider reported, if any.
-        output_tokens: Output tokens the provider reported, if any.
         refused: The environment refused the call after the slot opened (the provider behind a feature), so
             nothing was sent and the reservation is released instead of recorded.
     """
 
     service: str = ""
+    entry_pk: int | None = None
     success: bool = False
     status_code: int | None = None
     endpoint: str | None = None
-    model: str | None = None
-    input_tokens: int | None = None
-    output_tokens: int | None = None
     refused: bool = False
 
 
@@ -781,7 +768,7 @@ def api_call_slot(service: str, *, endpoint: str = "") -> Iterator[ApiCallSlot]:
     tallied = call_ledger(service) is CallLedger.TALLIED
     admission = call_tally.admit(service, endpoint=endpoint) if tallied else None
     entry_pk = None if tallied else _reserve_call(service, endpoint=endpoint)
-    slot = ApiCallSlot(service=service)
+    slot = ApiCallSlot(service=service, entry_pk=entry_pk)
     started = time.monotonic()
     token = _CURRENT_SLOT.set(slot)
     try:
@@ -804,89 +791,45 @@ def api_call_slot(service: str, *, endpoint: str = "") -> Iterator[ApiCallSlot]:
                     response_ms=elapsed_ms,
                     status_code=slot.status_code,
                     endpoint=slot.endpoint,
-                    model=slot.model,
-                    input_tokens=slot.input_tokens,
-                    output_tokens=slot.output_tokens,
                 )
 
 
 # Session wrapper
 
+type CallObserver = Callable[[int, requests.Response | None], None]
 
-@dataclass(frozen=True, slots=True)
-class CallNotes:
-    """
-    What a gateway knows about its own request that the session cannot see.
-
-    Attributes:
-        model: The model the request asks, recorded on the row.
-        usage: Reads ``(input_tokens, output_tokens)`` from the response.
-    """
-
-    model: str | None = None
-    usage: Callable[[Any], tuple[int | None, int | None]] | None = None
-
-
-_CALL_NOTES: ContextVar[CallNotes | None] = ContextVar("api_call_notes", default=None)
+_CALL_OBSERVERS: ContextVar[tuple[CallObserver, ...]] = ContextVar("api_call_observers", default=())
 
 
 @contextmanager
-def annotate_calls(*, model: str | None = None, usage: Callable[[Any], tuple[int | None, int | None]] | None = None) -> Iterator[None]:
+def observe_calls(observer: CallObserver) -> Iterator[None]:
     """
-    Have the rate-limited session record a model and token counts on the rows of the requests made inside.
+    Call ``observer`` with the row and response of each request the rate-limited session makes inside.
+
+    While active, calls are recorded one row each and never tallied. Observers nest: every active one is told of
+    each call, the outermost first. An observer that raises is logged and does not fail the call or stop the others.
 
     Args:
-        model: The model the requests ask.
-        usage: Reads ``(input_tokens, output_tokens)`` from a response; a reader that fails records none.
+        observer: Called with the pk of the call's ``ApiCallLog`` row and the response, once the row is finalized;
+            the response is None when the request raised instead of answering.
 
+    Yields:
+        Nothing; the observer applies for the block.
     """
-    token = _CALL_NOTES.set(CallNotes(model=model, usage=usage))
+    token = _CALL_OBSERVERS.set((*_CALL_OBSERVERS.get(), observer))
     try:
         yield
     finally:
-        _CALL_NOTES.reset(token)
+        _CALL_OBSERVERS.reset(token)
 
 
-#: The largest value ``ApiCallLog.input_tokens`` and ``output_tokens`` hold.
-_MAX_TOKEN_COUNT = 2**31 - 1
-
-
-def valid_token_count(value: object) -> int | None:
-    """
-    A token count a provider reported, or None when it is not one the ledger can hold.
-
-    A value the column rejects would lose the whole row, so a garbled count is left out instead.
-
-    Args:
-        value: What the provider sent.
-
-    Returns:
-        The count, or None for anything but an integer from 0 to 2**31 - 1.
-    """
-    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= _MAX_TOKEN_COUNT:
-        return None
-    return value
-
-
-def _reported_usage(reader: Callable[[Any], tuple[int | None, int | None]] | None, response: Any) -> tuple[int | None, int | None]:
-    """
-    The ``(input, output)`` token counts a gateway reads from a response, or ``(None, None)``.
-
-    Args:
-        reader: The gateway's reader, or None when it passed none.
-        response: The upstream's response.
-
-    Returns:
-        Whatever the reader found; a reader that fails or answers in the wrong shape leaves the counts unrecorded, never the call failed.
-    """
-    if reader is None:
-        return None, None
-    try:
-        input_tokens, output_tokens = reader(response)
-    except Exception:
-        logger.debug("Could not read token usage from a response", exc_info=True)
-        return None, None
-    return valid_token_count(input_tokens), valid_token_count(output_tokens)
+def _notify_observers(observers: tuple[CallObserver, ...], entry_pk: int, response: requests.Response | None) -> None:
+    """Hand a finalized call to its observers; a failure is logged and never reaches the caller."""
+    for observer in observers:
+        try:
+            observer(entry_pk, response)
+        except Exception:
+            logger.exception("Call observer failed for API call log entry %s", entry_pk)
 
 
 class _RateLimitedSession:
@@ -945,9 +888,7 @@ class _RateLimitedSession:
             raise ExternalCallForbiddenError(f"{self._service_key}: {method}")
         # First: a refusal by environment is neither a rejected input, a throttle nor a provider's ill health.
         require_egress(self._service_key)
-        notes = _CALL_NOTES.get()
-        log_model = notes.model if notes else None
-        log_usage = notes.usage if notes else None
+        observers = _CALL_OBSERVERS.get()
         # Before the breaker and the reservation: an input no API can answer is "no data" whatever else is true.
         check_request_parameters(self._service_key, params=kwargs.get("params"), json=kwargs.get("json"))
         check_task_deadline()
@@ -961,7 +902,7 @@ class _RateLimitedSession:
         admission: call_tally.Admission | None = None
         entry_pk: int | None = None
         try:
-            if call_ledger(self._service_key) is CallLedger.TALLIED:
+            if call_ledger(self._service_key) is CallLedger.TALLIED and not observers:
                 admission = call_tally.admit(self._service_key, endpoint=endpoint)
             else:
                 entry_pk = _reserve_call(self._service_key, endpoint=endpoint)
@@ -978,11 +919,11 @@ class _RateLimitedSession:
         try:
             resp = self._session.request(method, url, **kwargs)
             elapsed_ms = int((time.monotonic() - t0) * 1000)
-            input_tokens, output_tokens = _reported_usage(log_usage, resp)
             if admission is not None:
                 admission.record(success=resp.ok, status_code=resp.status_code, response_ms=elapsed_ms)
             elif entry_pk is not None:
-                _finalize_call(entry_pk, success=resp.ok, response_ms=elapsed_ms, status_code=resp.status_code, model=log_model, input_tokens=input_tokens, output_tokens=output_tokens)
+                _finalize_call(entry_pk, success=resp.ok, response_ms=elapsed_ms, status_code=resp.status_code)
+                _notify_observers(observers, entry_pk, resp)
             if breaker is not None:
                 breaker.observe(str(url), kwargs.get("params"), resp)
             if is_unanswered_status(resp.status_code):
@@ -993,7 +934,8 @@ class _RateLimitedSession:
             if admission is not None:
                 admission.record(success=False, status_code=None, response_ms=elapsed_ms)
             elif entry_pk is not None:
-                _finalize_call(entry_pk, success=False, response_ms=elapsed_ms, model=log_model)
+                _finalize_call(entry_pk, success=False, response_ms=elapsed_ms)
+                _notify_observers(observers, entry_pk, None)
             record_unanswered(self._service_key)
             raise
 

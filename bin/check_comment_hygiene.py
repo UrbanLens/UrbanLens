@@ -39,14 +39,17 @@ import bisect
 from collections import Counter, defaultdict
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
+import functools
 import inspect
 import io
 import json
+import operator
 from pathlib import Path
 import re
 import subprocess
 import sys
 import tokenize
+import tomllib
 
 ROOT = Path(__file__).resolve().parent.parent
 BASELINE = ROOT / "bin" / "comment_hygiene_baseline.json"
@@ -71,22 +74,51 @@ EXCLUDED_PARTS = ("/docs/", "/migrations/", "/vendor/", "/node_modules/")
 PRAGMA = re.compile(r"#\s*(noqa\b|type:\s*ignore|pragma:|pyright:|fmt:|nosec\b|pylint:|mypy:|ruff:|isort:|NOSONAR|codeql)", re.IGNORECASE)
 
 # Each pattern says how the code came to be rather than what it does. Tracker ids and dates are
-# checked separately, since each needs an exception list. Tooling directories may name the tool that wrote them.
-TOOLING_DIRS = (".claude/",)
-HISTORY_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
-    ("names the maintainer", re.compile(r"\bJess\b")),
-    ("names the tool that wrote it", re.compile(r"(?<!Anthropic's )\bClaude\b(?! (?:Code|models?|API)\b)|\b(?:Opus|Sonnet|Haiku|Codex|Copilot|Qwen|opencode|Spark)\b")),
-    (
-        "refers to machine-written work",
-        re.compile(
-            r"\b(?:sub-?agents?|(?:coding|LLM|AI coding) agents?|(?:previous|earlier|another|cheaper) agents?"
-            r"|agents? (?:session|wrote|added|found|flagged|reported|introduced|edited|changed|suggested|missed|left))\b"
-            r"|\bhandoff (?:doc|note|reply|file)s?\b|\bhandoffs/",
-            re.IGNORECASE,
-        ),
+# checked separately, since each needs an exception list. Private patterns, which name people or tools,
+# are loaded from PRIVATE_TERMS_PATH and checked first.
+PRIVATE_TERMS_PATH = ROOT / "bin" / "comment_hygiene_private.toml"
+
+
+@dataclass(frozen=True)
+class HistoryPattern:
+    """
+    A label, the regex that flags it, and the path prefixes it does not apply to.
+    """
+
+    label: str
+    pattern: re.Pattern[str]
+    exempt_paths: tuple[str, ...] = ()
+
+
+def load_private_terms(path: Path) -> tuple[tuple[HistoryPattern, ...], tuple[str, ...]]:
+    """
+    Private history patterns and dated-observation paths from the TOML file at *path*, or nothing when it is absent.
+
+    Each ``[[history]]`` entry gives ``label`` and ``regex``, and may give ``flags`` (names from ``re``) and
+    ``exempt_paths``. ``dated_observation_paths`` lists paths whose dates describe an external source.
+    """
+    if not path.is_file():
+        return (), ()
+    data = tomllib.loads(path.read_text(encoding="utf-8"))
+    patterns = tuple(
+        HistoryPattern(
+            entry["label"],
+            re.compile(entry["regex"], functools.reduce(operator.or_, (re.RegexFlag[name] for name in entry.get("flags", [])), re.NOFLAG)),
+            tuple(entry.get("exempt_paths", [])),
+        )
+        for entry in data.get("history", [])
+    )
+    return patterns, tuple(data.get("dated_observation_paths", []))
+
+
+PRIVATE_HISTORY, DATED_OBSERVATIONS = load_private_terms(PRIVATE_TERMS_PATH)
+HISTORY_PATTERNS: tuple[HistoryPattern, ...] = (
+    *PRIVATE_HISTORY,
+    HistoryPattern(
+        "cites a pull request or commit",
+        re.compile(r"\b(?:PR|MR) ?#?\d+\b|\b(?:pull|merge) request #?\d+|\b(?:issue|ticket|bug) #\d+|(?<![\w/&])#\d{2,5}'s\b|\bcommit [0-9a-f]{7,40}\b"),
     ),
-    ("cites a pull request or commit", re.compile(r"\b(?:PR|MR) ?#?\d+\b|\b(?:pull|merge) request #?\d+|\b(?:issue|ticket|bug) #\d+|(?<![\w/&])#\d{2,5}'s\b|\bcommit [0-9a-f]{7,40}\b")),
-    (
+    HistoryPattern(
         "narrates a change",
         re.compile(
             r"\b(?:it|this|that|we|they|which|there) used to\b|\bused to be\b"
@@ -110,7 +142,6 @@ OPEN_IDS_TABLE = re.compile(r"^\|\s*([PT]\d+)\s*\|", re.MULTILINE)
 # one of these words, or in the place fixtures, dates an external source, which the code needs.
 ISO_DATE = re.compile(r"(?<![`\"'\w])(20\d\d-[01]\d-[0-3]\d)(?!\w|\.\d)")
 FIRST_HISTORY_DATE = "2023-01-01"
-DATED_OBSERVATIONS = ("tests/live_locations/",)
 DATE_CONTEXT = re.compile(r"\b(?:version|release|api|aerial|imagery|survey|snapshot|dataset|vintage|retrieved|accessed|published|dated)\b[^.;]{0,24}$", re.IGNORECASE)
 
 SECTION = re.compile(r"^\s*(Args|Arguments|Parameters|Params|Keyword Args|Keyword Arguments|Other Parameters|Returns|Return|Yields|Yield):\s*$", re.MULTILINE)
@@ -314,12 +345,12 @@ def history_in(path: str, line: int, text: str, open_ids: frozenset[str]) -> Vio
     """
     The first history reference in one line of comment or docstring text.
     """
-    for label, pattern in HISTORY_PATTERNS:
-        if label == "names the tool that wrote it" and path.startswith(TOOLING_DIRS):
+    for entry in HISTORY_PATTERNS:
+        if path.startswith(entry.exempt_paths):
             continue
-        match = pattern.search(text)
+        match = entry.pattern.search(text)
         if match:
-            return Violation(path, line, "history-reference", f"{label}: {match.group(0)!r}")
+            return Violation(path, line, "history-reference", f"{entry.label}: {match.group(0)!r}")
     for match in TRACKER_ID.finditer(text):
         if match.group(1) not in NOT_TRACKER_IDS and match.group(1) not in open_ids:
             return Violation(path, line, "history-reference", f"cites a retired tracker id: {match.group(1)!r}")

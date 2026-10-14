@@ -128,6 +128,7 @@ class PinPanelViewMixin:
                 "section_id": section_id,
                 "outer_class": source.outer_class,
                 "outer_is_card": source.outer_is_card,
+                "quiet_on_error": source.quiet_on_error,
                 "icon": source.icon,
                 "title": title or source.title,
                 "poll_url": request.path,

@@ -12,6 +12,7 @@ the bundled public providers registers below their default of 100.
 from urbanlens.dashboard.plugins.points.accounts import *  # noqa: F403
 from urbanlens.dashboard.plugins.points.admin import *  # noqa: F403
 from urbanlens.dashboard.plugins.points.contributions import *  # noqa: F403
+from urbanlens.dashboard.plugins.points.credits import *  # noqa: F403
 from urbanlens.dashboard.plugins.points.demo import *  # noqa: F403
 from urbanlens.dashboard.plugins.points.facts import *  # noqa: F403
 from urbanlens.dashboard.plugins.points.geo import *  # noqa: F403

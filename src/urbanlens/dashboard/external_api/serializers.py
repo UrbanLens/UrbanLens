@@ -836,7 +836,6 @@ class SettingsSerializer(ExtensibleSerializer):
     markup_border_opacity = serializers.IntegerField(read_only=True)
     # Places layer (feature-gated).
     places_google_enabled = serializers.BooleanField(read_only=True)
-    places_nps_enabled = serializers.BooleanField(read_only=True)
     places_wikipedia_enabled = serializers.BooleanField(read_only=True)
     disable_auto_tagging = serializers.BooleanField(read_only=True)
     # Keyword tagging.
@@ -941,7 +940,6 @@ class SettingsPatchSerializer(ExtensibleSerializer):
     markup_border_opacity = serializers.IntegerField(required=False, min_value=0, max_value=100)
     # Places layer (feature-gated - rejected with 400 while the feature is off).
     places_google_enabled = serializers.BooleanField(required=False)
-    places_nps_enabled = serializers.BooleanField(required=False)
     places_wikipedia_enabled = serializers.BooleanField(required=False)
     disable_auto_tagging = serializers.BooleanField(required=False)
     # Keyword tagging.

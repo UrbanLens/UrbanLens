@@ -40,8 +40,8 @@ server {
     # instead. Docker hands a stack a network from 172.16.0.0/12 or, once a
     # host has used those up, 192.168.0.0/16; an untrusted front door makes
     # every visitor one address and every per-address limit site-wide.
-    set_real_ip_from 172.16.0.0/12;
-    set_real_ip_from 192.168.0.0/16;
+    # Written at start from UL_TRUSTED_PROXY_CIDRS by 10-trusted-proxies.sh.
+    include /etc/nginx/conf.d/trusted_proxies.inc;
     real_ip_header X-Forwarded-For;
     real_ip_recursive on;
 

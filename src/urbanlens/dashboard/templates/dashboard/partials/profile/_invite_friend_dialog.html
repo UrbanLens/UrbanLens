@@ -22,15 +22,15 @@
                 placeholder="Add a message (optional)"></textarea>
             {% if perms.dashboard.view_site_admin %}
             <div class="invite-subscription-panel">
-                <label><i class="material-symbols-outlined">workspace_premium</i> Optional subscription</label>
+                <label><i class="material-symbols-outlined">workspace_premium</i> Optional access role</label>
                 {% subscription_role_choices as subscription_roles %}
-                <select name="subscription_role" aria-label="Subscription role">
-                    <option value="">No subscription</option>
+                <select name="subscription_role" aria-label="Access role">
+                    <option value="">No access role</option>
                     {% for role in subscription_roles %}
                     <option value="{{ role.slug }}">{{ role.name }}</option>
                     {% endfor %}
                 </select>
-                <select name="subscription_duration" aria-label="Subscription duration">
+                <select name="subscription_duration" aria-label="Access duration">
                     <option value="1">1 month</option>
                     <option value="3">3 months</option>
                     <option value="6">6 months</option>

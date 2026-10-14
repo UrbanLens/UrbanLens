@@ -1,6 +1,6 @@
 """
 Ask VirusTotal for an existing verdict on a file, by hash, before falling back to ClamAV.
-Only ever consulted for eligible externally-fetched assets - see ``malware_scan.VIRUSTOTAL_ELIGIBLE_SOURCES`` and ``malware_scan.malware_error_for_fetched_asset``."""
+Only ever consulted for eligible externally-fetched assets - see ``malware_scan.virustotal_eligible_sources()`` and ``malware_scan.malware_error_for_fetched_asset``."""
 
 from __future__ import annotations
 

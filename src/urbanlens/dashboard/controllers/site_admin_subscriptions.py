@@ -138,15 +138,15 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
         grant_subscription(user, role, granter, _parse_duration_months(self.request.POST.get("duration_months")))
         if self._is_htmx:
             return self._grants_list(toast=("success", f"Granted {role.name} to {user.username}."))
-        return self._redirect(saved="granted")
+        return self._redirect(saved="Access granted.")
 
     def _revoke(self, revoker: User) -> HttpResponse:
         subscription_id = safe_int_or_none(self.request.POST.get("subscription_id"))
         if UserSubscription.objects.not_revoked().filter(pk=subscription_id).update(revoked_at=timezone.now(), revoked_by=revoker):
             logger.info("Subscription grant %s revoked by user %s", subscription_id, revoker.pk)
         if self._is_htmx:
-            return self._grants_list(toast=("info", "Subscription revoked."))
-        return self._redirect(saved="revoked")
+            return self._grants_list(toast=("info", "Access revoked."))
+        return self._redirect(saved="Access revoked.")
 
     def _update_duration(self, editor: User) -> HttpResponse:
         grant = UserSubscription.objects.not_revoked().filter(pk=safe_int_or_none(self.request.POST.get("subscription_id"))).first()
@@ -155,8 +155,8 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
             grant.save(update_fields=["expires_at", "updated"])
             logger.info("Subscription grant %s duration changed by user %s", grant.pk, editor.pk)
         if self._is_htmx:
-            return self._grants_list(toast=("success", "Subscription updated."))
-        return self._redirect(saved="updated")
+            return self._grants_list(toast=("success", "Access updated."))
+        return self._redirect(saved="Access updated.")
 
     # Roles
 
@@ -166,7 +166,7 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
             return self._redirect(error="Role name is required.")
         description = self.request.POST.get("description", "").strip()[:255]
         role = SubscriptionRole.objects.create(slug=SubscriptionRole.unique_slug(name), name=name, description=description)
-        return self._redirect(saved=f'"{role.name}" role created')
+        return self._redirect(saved=f'"{role.name}" role created.')
 
     def _rename(self, role: SubscriptionRole) -> HttpResponse:
         name = self.request.POST.get("name", "").strip()[:100]
@@ -174,12 +174,12 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
             return self._redirect(error="Role name is required.")
         description = self.request.POST.get("description", "").strip()[:255]
         SubscriptionRole.objects.filter(pk=role.pk).update(name=name, description=description)
-        return self._redirect(saved="role renamed")
+        return self._redirect(saved="Role renamed.")
 
     def _delete(self, role: SubscriptionRole) -> HttpResponse:
         name = role.name
         role.delete()
-        return self._redirect(saved=f'"{name}" role deleted')
+        return self._redirect(saved=f'"{name}" role deleted.')
 
     def _set_quota(self, role: SubscriptionRole) -> HttpResponse:
         raw = (self.request.POST.get("storage_quota_gb") or "").strip()
@@ -190,7 +190,7 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
             except ValueError:
                 return self._failure(400, "Storage quota must be a whole number of GB.")
         SubscriptionRole.objects.filter(pk=role.pk).update(storage_quota_gb=quota)
-        return self._role_saved("role_quota", role.slug, "storage quota saved")
+        return self._role_saved("role_quota", role.slug, "Storage quota saved.")
 
     def _set_email_limits(self, role: SubscriptionRole) -> HttpResponse:
         updates: dict[str, int | None] = {}
@@ -201,15 +201,15 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
             except ValueError:
                 return self._failure(400, "Email limits must be whole numbers.")
         SubscriptionRole.objects.filter(pk=role.pk).update(**updates)
-        return self._role_saved("role_email_limits", role.slug, "email limits saved")
+        return self._role_saved("role_email_limits", role.slug, "Email limits saved.")
 
     def _set_features(self, role: SubscriptionRole) -> HttpResponse:
         SubscriptionRole.objects.filter(pk=role.pk).update(features=self._selected_features())
-        return self._role_saved("role_features", role.slug, "features saved")
+        return self._role_saved("role_features", role.slug, "Features saved.")
 
     def _set_default_features(self) -> HttpResponse:
         site_settings = SiteSettings.get_current()
         # save(), not update(): get_current() memoises the row for this request, and only post_save drops the memo.
         site_settings.default_features = self._selected_features()
         site_settings.save(update_fields=["default_features", "updated"])
-        return self._role_saved("default_features", "__default__", "default features saved")
+        return self._role_saved("default_features", "__default__", "Default features saved.")

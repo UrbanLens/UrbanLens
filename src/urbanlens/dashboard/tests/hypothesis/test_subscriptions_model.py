@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-from importlib import import_module
-
-from django.apps import apps as django_apps
 from django.contrib.auth.models import User
 from django.urls import reverse
 from model_bakery import baker
@@ -16,34 +13,18 @@ from urbanlens.dashboard.models.subscriptions import (
 )
 from urbanlens.dashboard.services.admin.site_admin import add_user_to_site_admin_group
 
-_seed_vip_role = import_module("urbanlens.dashboard.migrations.0020_seed_vip_subscription_role").seed_vip_role
-
 
 class VipRoleSeedTests(TestCase):
     """
-    The built-in "vip" role is seeded once by migration 0020, not recreated at runtime.
-
-    Each test seeds it itself: a TransactionTestCase earlier on the same worker flushes migration-seeded rows.
+    The built-in "vip" role is seeded once by the initial migration, not recreated at runtime.
     """
 
     def setUp(self) -> None:
         super().setUp()
         SubscriptionRole.objects.filter(slug="vip").delete()
 
-    def test_the_migration_seeds_it(self) -> None:
-        _seed_vip_role(django_apps, None)
-
-        self.assertTrue(SubscriptionRole.objects.filter(slug="vip", name="VIP").exists())
-
-    def test_the_migration_leaves_a_customised_row_alone(self) -> None:
-        baker.make(SubscriptionRole, slug="vip", name="Patrons", features="")
-
-        _seed_vip_role(django_apps, None)
-
-        self.assertEqual(list(SubscriptionRole.objects.filter(slug="vip").values_list("name", flat=True)), ["Patrons"])
-
     def test_deleting_it_is_permanent(self) -> None:
-        _seed_vip_role(django_apps, None)
+        baker.make(SubscriptionRole, slug="vip", name="VIP")
         SubscriptionRole.objects.get(slug="vip").delete()
         admin = baker.make(User)
         add_user_to_site_admin_group(admin)

@@ -6,9 +6,12 @@ account's?** Everything here is shaped by that being the question, rather than
 
 ```
 bin/run_perf_tests.sh --url http://localhost:21810 \
-    --provision-container urbanlens_development_main_app \
-    --db-container urbanlens_development_main_db --heavy-pins 20000
+    --provision-container "urbanlens_${UL_CONTAINER_NAME}_app" \
+    --db-container "urbanlens_${UL_CONTAINER_NAME}_db" --heavy-pins 20000
 ```
+
+Compose names the containers `urbanlens_<UL_CONTAINER_NAME>_<service>`. `UL_CONTAINER_NAME` is read from the shell or
+`.env`, falling back to `UL_ENVIRONMENT`, then `production`; see `bin/lib/compose_names.sh`.
 
 | file | what it is |
 |---|---|
@@ -31,8 +34,8 @@ table is a seeding step, not a scenario:
 
 ```
 bin/run_perf_tests.sh --url http://localhost:21810 \
-    --provision-container urbanlens_development_main_app \
-    --db-container urbanlens_development_main_db \
+    --provision-container "urbanlens_${UL_CONTAINER_NAME}_app" \
+    --db-container "urbanlens_${UL_CONTAINER_NAME}_db" \
     --heavy-pins 20000 --heavy-labels 50000
 ```
 
@@ -60,8 +63,8 @@ so a host is unavoidable, but which host is as immaterial to the cost as labels'
 
 ```
 bin/run_perf_tests.sh --url http://localhost:21810 \
-    --provision-container urbanlens_development_main_app \
-    --db-container urbanlens_development_main_db \
+    --provision-container "urbanlens_${UL_CONTAINER_NAME}_app" \
+    --db-container "urbanlens_${UL_CONTAINER_NAME}_db" \
     --heavy-pins 20000 --heavy-labels 50000 --heavy-search-relations 50000
 ```
 

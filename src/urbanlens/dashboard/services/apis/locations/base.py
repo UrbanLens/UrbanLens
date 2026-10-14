@@ -185,10 +185,14 @@ class SatelliteViewProvider(Gateway, ABC):
     @abstractmethod
     def _generate_satellite_slides(self, latitude: float, longitude: float, *, zoom: int = 17, width: int = 640, height: int = 400, limit: int = -1) -> Generator[SatelliteSlide | SlideSignal]: ...
 
+    def slide_cache_key(self, latitude: float, longitude: float) -> str:
+        """Where this provider's slides for a point are cached."""
+        return make_cache_key(f"satellite_view_{self.service_key}{self.slide_cache_version}", f"{latitude:.5f}", f"{longitude:.5f}")
+
     def get_satellite_slides(self, latitude: float, longitude: float, *, zoom: int = 17, width: int = 640, height: int = 400, limit: int = 5) -> SlideFetch:
         if not self.available():
             return SlideFetch([], from_cache=False, unavailable=True)
-        cache_key = make_cache_key(f"satellite_view_{self.service_key}{self.slide_cache_version}", f"{latitude:.5f}", f"{longitude:.5f}")
+        cache_key = self.slide_cache_key(latitude, longitude)
         cached = cache.get(cache_key, _CACHE_MISS)
         if cached is not _CACHE_MISS:
             return SlideFetch(cached, from_cache=True)
@@ -216,10 +220,14 @@ class StreetViewProvider(Gateway, ABC):
     @abstractmethod
     def _generate_street_view_slides(self, latitude: float, longitude: float, *, radius: float = 50, limit: int = 5) -> Generator[StreetViewSlide | SlideSignal]: ...
 
+    def slide_cache_key(self, latitude: float, longitude: float) -> str:
+        """Where this provider's slides for a point are cached."""
+        return make_cache_key(f"street_view_{self.service_key}", f"{latitude:.5f}", f"{longitude:.5f}")
+
     def get_street_view_slides(self, latitude: float, longitude: float, *, radius: float = 50, limit: int = 5) -> SlideFetch:
         if not self.available():
             return SlideFetch([], from_cache=False, unavailable=True)
-        cache_key = make_cache_key(f"street_view_{self.service_key}", f"{latitude:.5f}", f"{longitude:.5f}")
+        cache_key = self.slide_cache_key(latitude, longitude)
         cached = cache.get(cache_key, _CACHE_MISS)
         if cached is not _CACHE_MISS:
             return SlideFetch(cached, from_cache=True)

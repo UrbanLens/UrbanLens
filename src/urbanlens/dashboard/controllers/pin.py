@@ -19,7 +19,6 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import ParseError
 from rest_framework.viewsets import GenericViewSet
 
-from urbanlens.core.cache_keys import make_cache_key
 from urbanlens.dashboard.controllers.map_overlays import OVERLAY_UUID_PLACEHOLDER, overlay_payload
 from urbanlens.dashboard.controllers.pin_panels import PinPanelViewMixin
 from urbanlens.dashboard.controllers.temporal_imagery import TEMPORAL_YEAR_PLACEHOLDER
@@ -416,7 +415,7 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
         HTMX partial: captioned media items for the pin's location from a single provider.
 
         Backs the combined "Media" section on the Private Pin page. Each provider
-        (Smithsonian, Wikimedia Commons, Library of Congress, Yelp, Google
+        (Wikimedia Commons, Yelp, Google
         Images, Google Maps, ...) is fetched via its own HTMX request targeting
         the shared gallery grid (see ``media-gallery-section`` in the pin detail
         template), so a slow provider never blocks the others from appearing.
@@ -826,7 +825,7 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
             return render(
                 request,
                 "dashboard/pages/location/web_search.html",
-                {"pin": pin, "error": "Web search is available to VIP subscribers."},
+                {"pin": pin, "error": "Web search is not included in your access."},
                 status=403,
             )
 
@@ -866,7 +865,7 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
             return render(
                 request,
                 "dashboard/pages/location/web_search.html",
-                {"pin": pin, "error": "Web search is available to VIP subscribers."},
+                {"pin": pin, "error": "Web search is not included in your access."},
             )
 
         from urbanlens.dashboard.services.core.timeout_utils import EXTERNAL_CALL_DEADLINE, call_with_deadline
@@ -877,7 +876,7 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
                 continue
             try:
                 # Deadline-bounded: this is the one external fetch still made on the request path (interactive,
-                # VIP-gated, and cached below), so a slow search backend degrades to the error card instead of
+                # access-gated, and cached below), so a slow search backend degrades to the error card instead of
                 # holding the request open. search_web() tries every configured provider in priority order, so one
                 # unconfigured/rate-limited provider doesn't fail the whole request.
                 search_results = call_with_deadline(
@@ -1503,8 +1502,8 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
         Recent Seismic Activity, and any future plugin panel of this shape).
         A plugin ships a new simple info panel by contributing an
         ``InfoPanelSource`` subclass alone - no new route or controller method
-        needed. Panels with bespoke markup (Wikipedia, Yelp, NPS, Nominatim,
-        Azure Maps, LoopNet, USGS Topo, ...) keep their own dedicated methods.
+        needed. Panels with bespoke markup (Wikipedia, Yelp, Nominatim,
+        Azure Maps, USGS Topo, ...) keep their own dedicated methods.
 
         A source declaring ``required_feature`` is refused here as well as
         omitted from the page's tab strip - see :func:`_viewer_may_see_panel`.
@@ -1663,12 +1662,6 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
         }
         return render(request, "dashboard/partials/pins/pin_usgs_topo.html", context)
 
-    # Sources rendered via LocationCache on the Private Pin page (see the endpoints above).
-    _LOCATION_CACHE_DEBUG_SOURCES = ("wikipedia", "nominatim", "nps", "loopnet", "usgs_topo", "smithsonian", "wikimedia", "library_of_congress", "web_search")
-    # Gateway service_keys used by the satellite/street-view carousels (see satellite_view_carousell / street_view).
-    _SATELLITE_DEBUG_SERVICES = ("google_maps", "esri", "nasa_gibs", "mapbox", "bing_maps", "open_aerial_map")
-    _STREET_VIEW_DEBUG_SERVICES = ("google_maps", "mapillary", "kartaview")
-
     @action(detail=True, methods=["post"])
     def clear_debug_cache(self, request: HttpRequest, pin_slug: str):
         """
@@ -1692,19 +1685,21 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
 
         cleared = 0
         if pin.location:
-            cleared, _ = LocationCache.objects.filter(
-                location=pin.location,
-                source__in=self._LOCATION_CACHE_DEBUG_SOURCES,
-            ).delete()
+            from urbanlens.dashboard.plugins.points import PANEL_SOURCES
+            from urbanlens.dashboard.services.search.pin_web_search import WEB_SEARCH_SOURCE
+
+            # What this page shows from the cache: each panel's results and the web search. Location-wide caches it
+            # does not show (boundaries, name candidates) are left alone.
+            shown = {source for panel in PANEL_SOURCES if (source := getattr(panel, "cache_source", ""))} | {WEB_SEARCH_SOURCE}
+            cleared, _ = LocationCache.objects.filter(location=pin.location, source__in=shown).delete()
 
         lat = pin.effective_latitude
         lng = pin.effective_longitude
         if lat is not None and lng is not None:
-            lat_key, lng_key = f"{float(lat):.5f}", f"{float(lng):.5f}"
-            for service_key in self._SATELLITE_DEBUG_SERVICES:
-                cache.delete(make_cache_key(f"satellite_view_{service_key}", lat_key, lng_key))
-            for service_key in self._STREET_VIEW_DEBUG_SERVICES:
-                cache.delete(make_cache_key(f"street_view_{service_key}", lat_key, lng_key))
+            from urbanlens.dashboard.plugins.points import SATELLITE_PROVIDERS, STREET_VIEW_PROVIDERS
+
+            for factory in (*SATELLITE_PROVIDERS, *STREET_VIEW_PROVIDERS):
+                cache.delete(factory().slide_cache_key(float(lat), float(lng)))
 
         return JsonResponse({"cleared": cleared})
 

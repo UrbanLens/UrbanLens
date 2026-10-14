@@ -385,6 +385,8 @@ from urbanlens.dashboard.services.visits.visits import (
 from urbanlens.dashboard.services.wiki.wiki_access import wikis_hidden_by_pin_move
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from django.db.models import QuerySet
     from rest_framework.request import Request
     from rest_framework.serializers import Serializer
@@ -593,7 +595,9 @@ class ExternalApiView(ErrorEnvelopeMixin, APIView):
     #: All three apply together: the burst cap counts every request, while the
     #: read and write caps each count only their own tier (see ``throttling``).
     throttle_classes = [ExternalApiBurstThrottle, ExternalApiReadThrottle, ExternalApiWriteThrottle]
-    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {}
+    # Typed by name, not ApiKeyScope: plugins add scopes through points.API_KEY_SCOPES. Subclasses still declare
+    # ApiKeyScope members, so a misspelt core scope fails in mypy at its declaration.
+    required_scopes_by_method: ClassVar[Mapping[str, frozenset[str]]] = {}
 
     def initial(self, request, *args, **kwargs):
         """
@@ -611,7 +615,7 @@ class ExternalApiView(ErrorEnvelopeMixin, APIView):
         bind_write_source(source, actor=actor)
 
     @property
-    def required_scopes(self) -> frozenset[ApiKeyScope]:
+    def required_scopes(self) -> frozenset[str]:
         """The scopes the current request's HTTP method requires."""
         return self.required_scopes_by_method.get(self.request.method or "", frozenset())
 

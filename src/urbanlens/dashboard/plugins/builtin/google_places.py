@@ -148,10 +148,13 @@ class GooglePlacesPlugin(UrbanLensPlugin):
     order: ClassVar[int] = 10
 
     def setup(self, plugin: PluginContext) -> None:
-        """Google Places rate-limit defaults, place names, the Media-gallery photos provider, and background place linking and photo backfill."""
-        from urbanlens.dashboard.plugins.points import ENRICHMENT_SOURCES, NAME_PROVIDERS, PANEL_SOURCES, PLACES_PROVIDERS, SERVICE_DEFAULTS
+        """Google Places rate-limit defaults, place names, CID resolution, the Media-gallery photos provider, its credit, and background place linking and photo backfill."""
+        from urbanlens.dashboard.plugins.points import CID_RESOLVERS, DATA_SOURCE_CREDITS, ENRICHMENT_SOURCES, NAME_PROVIDERS, PANEL_SOURCES, PLACES_PROVIDERS, SERVICE_DEFAULTS, DataSourceCredit
+        from urbanlens.dashboard.services.apis.locations.cid_resolution import GoogleCidResolver
         from urbanlens.dashboard.services.apis.locations.places_resolution import GooglePlacesProvider
         from urbanlens.dashboard.services.photos.photo_enrichment import PlacePhotoEnrichmentSource
+
+        plugin.add(DATA_SOURCE_CREDITS, DataSourceCredit(name="Google Places", category="places", url="https://developers.google.com/maps", note="Address autocomplete, place names and place photos."))
 
         plugin.register_all(
             SERVICE_DEFAULTS,
@@ -171,6 +174,7 @@ class GooglePlacesPlugin(UrbanLensPlugin):
         )
 
         plugin.add(PLACES_PROVIDERS, GooglePlacesProvider(), priority=100)
+        plugin.add(CID_RESOLVERS, GoogleCidResolver(), priority=100)
 
         plugin.extend(NAME_PROVIDERS, [GooglePlacesNameProvider()])
 

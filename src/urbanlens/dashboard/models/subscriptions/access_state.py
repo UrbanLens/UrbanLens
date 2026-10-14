@@ -30,6 +30,7 @@ from urbanlens.core.versioned_cache import VersionedCache
 
 if TYPE_CHECKING:
     from django.contrib.auth.base_user import AbstractBaseUser
+    from django.db.models import Model
 
 #: The permission that makes an account a site admin, which grants every feature.
 SITE_ADMIN_PERMISSION = "dashboard.view_site_admin"
@@ -189,7 +190,7 @@ def connect_invalidation() -> None:
     from urbanlens.dashboard.models.subscriptions.model import SubscriptionRole, UserSubscription
     from urbanlens.dashboard.plugins.points import ACCESS_STATE_SENDERS
 
-    rows = (
+    rows: tuple[type[Model], ...] = (
         SiteSettings,
         UserSubscription,
         SubscriptionRole,

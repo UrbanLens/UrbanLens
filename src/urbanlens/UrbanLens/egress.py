@@ -1,9 +1,9 @@
 """
 Which external calls a deployment may make, by kind of service and by environment.
 
-A deployment's environments usually share one outbound address, and often one set of API keys. A keyless public
-API's per-address tolerance, and a billed API's free tier, are therefore one budget for all of them, and
-production is meant to spend most of it. Each external service is classified as one
+A deployment's environments may share one outbound address, and often one set of API keys. A keyless public
+API's per-address tolerance, and a billed API's free tier, are then one budget for all of them, and production is
+meant to spend most of it. Each external service is classified as one
 :class:`EgressCategory`, and this module decides per environment:
 
 ==============================  ===============  ===============  =========================
@@ -70,11 +70,13 @@ PRODUCTION_ONLY_CATEGORIES = frozenset({EgressCategory.MESSAGING, EgressCategory
 #: How a service no one has classified is treated: as a shared budget, so refused by default off production.
 UNCLASSIFIED_CATEGORY = EgressCategory.BILLED
 
+#: Staging's default share: enough to exercise every provider, little enough not to matter to production.
+_STAGING_SHARE = 0.05
 #: Each environment's share of every ``quota`` and ``billed`` budget when ``UL_ENVIRONMENT_SHARE`` does not say.
-#: Production, staging and development together stay at or below 1.
+#: Production, staging and development together stay at or below 1, so production takes what staging leaves.
 ENVIRONMENT_SHARE_DEFAULTS: Mapping[str, float] = {
-    EnvironmentTypes.PRODUCTION: 0.9,
-    EnvironmentTypes.STAGING: 0.05,
+    EnvironmentTypes.PRODUCTION: 1.0 - _STAGING_SHARE,
+    EnvironmentTypes.STAGING: _STAGING_SHARE,
     EnvironmentTypes.DEVELOPMENT: 0.0,
     EnvironmentTypes.LOCAL: 0.0,
     EnvironmentTypes.TESTING: 1.0,

@@ -4,15 +4,14 @@
 {% block page_title %}Setup - {{ settings.app_title }}{% endblock %}
 
 {% block content %}
-<div class="setup-wizard" data-setup-url="{% url 'setup' %}" data-profile-url="{% url 'profile.field.update' %}" data-media-origin="{{ media_origin }}"
-     data-suggested-title="{{ suggested_app_title }}"{% if title_reserved %} data-title-notice="{{ urbanlens_title_notice }}"{% else %} data-official="true"{% endif %}>
+<div class="setup-wizard" data-setup-url="{% url 'setup' %}" data-profile-url="{% url 'profile.field.update' %}" data-media-origin="{{ media_origin }}">
     <div class="setup-wizard__layout">
 
         {# -- Sidebar ------------------------------------------------------ #}
         <aside class="setup-wizard__sidebar">
             <div class="setup-wizard__brand">
                 <i class="material-icons brand-icon">explore</i>
-                <div class="brand-name" id="sidebar-title">{{ setup_app_title }}</div>
+                <div class="brand-name" id="sidebar-title">{{ settings.app_title }}</div>
                 <div class="brand-label">Setup Wizard</div>
             </div>
 
@@ -180,29 +179,10 @@
                 <div class="setup-title-row">
                     <label for="app-title-input">App name</label>
                     <input type="text" id="app-title-input" name="app_title"
-                           value="{{ setup_app_title }}" maxlength="100"
+                           value="{{ settings.app_title }}" maxlength="100"
                            placeholder="{{ suggested_app_title }}" autocomplete="off">
                     <span class="setup-save-status" id="title-save-status">✓ Saved</span>
                 </div>
-
-                {% if title_reserved %}
-                <div class="setup-title-notice" id="title-reserved-notice" hidden>
-                    <i class="material-icons setup-title-notice__icon" aria-hidden="true">info</i>
-                    <div>
-                        <p class="setup-title-notice__message" id="title-reserved-message"></p>
-                        <p class="setup-title-notice__label">Here are a few ideas:</p>
-                        <ul class="setup-title-notice__suggestions" id="title-suggestion-list">
-                            {% for suggestion in app_title_suggestions %}
-                            <li>
-                                <button type="button" class="setup-title-suggestion-btn" data-title="{{ suggestion }}">
-                                    {{ suggestion }}
-                                </button>
-                            </li>
-                            {% endfor %}
-                        </ul>
-                    </div>
-                </div>
-                {% endif %}
 
                 <div class="setup-title-preview">
                     <span class="preview-dot"></span>
@@ -210,7 +190,7 @@
                     <span class="preview-dot"></span>
                     <div class="preview-tab">
                         <i class="material-symbols-outlined">explore</i>
-                        <span id="title-preview-value">{{ setup_app_title }}</span>
+                        <span id="title-preview-value">{{ settings.app_title }}</span>
                     </div>
                 </div>
 
@@ -284,7 +264,7 @@
                     </div>
                     <h1 class="setup-complete__title">You're all set!</h1>
                     <p class="setup-complete__body">
-                        <strong id="done-app-title">{{ setup_app_title }}</strong> is ready to go.
+                        <strong id="done-app-title">{{ settings.app_title }}</strong> is ready to go.
                         Open Site Admin to finish configuring your site.
                     </p>
                     <div class="setup-complete--actions">

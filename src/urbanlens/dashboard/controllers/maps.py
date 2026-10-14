@@ -871,7 +871,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         """
         Return Places layer results near a given coordinate, aggregated from enabled sources.
 
-        VIP-only endpoint.
+        Requires the Places feature (granted through an access role).
 
         Returns:
             JsonResponse: ``{"places": [...], "cached": bool, "incomplete": [source, ...]}``
@@ -902,13 +902,17 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         except (TypeError, ValueError):
             zoom = 10
 
+        from urbanlens.dashboard.plugins.points import NEARBY_SOURCES
         from urbanlens.dashboard.services.map.nearby_places import LANDMARKS_MIN_ZOOM, NearbySources, find_nearby_places
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        sources = NearbySources(
-            landmarks=profile.places_google_enabled and zoom >= LANDMARKS_MIN_ZOOM,
-            parks=profile.places_nps_enabled,
-            wikipedia=profile.places_wikipedia_enabled,
+        sources = NEARBY_SOURCES.apply(
+            NearbySources(
+                landmarks=profile.places_google_enabled and zoom >= LANDMARKS_MIN_ZOOM,
+                parks=True,
+                wikipedia=profile.places_wikipedia_enabled,
+            ),
+            profile,
         )
         ttl = SiteSettings.get_current().google_places_cache_days * 86400
         found = find_nearby_places(lat, lng, radius=radius, sources=sources, caller=account_or_address(request), ttl=ttl)
@@ -919,7 +923,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         """
         Return Google Place details for a single place_id.
 
-        VIP-only endpoint.
+        Requires the Places feature (granted through an access role).
 
         Returns:
             JsonResponse: ``{"place": {...}}``

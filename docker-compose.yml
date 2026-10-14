@@ -22,12 +22,9 @@ x-app-env: &app-env
   UL_DISCORD_CLIENT_ID: ${UL_DISCORD_CLIENT_ID}
   UL_DISCORD_CLIENT_SECRET: ${UL_DISCORD_CLIENT_SECRET}
   UL_GOOGLE_UNRESTRICTED_API_KEY: ${UL_GOOGLE_UNRESTRICTED_API_KEY}
-  UL_GOOGLE_DOMAIN_RESTRICTED_API_KEY: ${UL_GOOGLE_DOMAIN_RESTRICTED_API_KEY}
   UL_GOOGLE_SEARCH_TENANT: ${UL_GOOGLE_SEARCH_TENANT}
   UL_GOOGLE_SEARCH_CX: ${UL_GOOGLE_SEARCH_CX:-${UL_GOOGLE_SEARCH_TENANT}}
   UL_OPENWEATHERMAP_API_KEY: ${UL_OPENWEATHERMAP_API_KEY}
-  UL_NPS_API_KEY: ${UL_NPS_API_KEY}
-  UL_SMITHSONIAN_API_KEY: ${UL_SMITHSONIAN_API_KEY}
   UL_DRAGONFLY_URL: ${UL_DRAGONFLY_URL:-redis://urbanlens_dragonfly:6379/0}
   UL_PROXY_CACHE_URL: ${UL_PROXY_CACHE_URL:-redis://urbanlens_tile_cache:6379/0}
   UL_CHANNEL_LAYER_URL: ${UL_CHANNEL_LAYER_URL:-redis://urbanlens_channel_layer:6379/0}
@@ -112,6 +109,13 @@ x-beat-env: &beat-env
   UL_MEDIA_BASE_URL: ${UL_MEDIA_BASE_URL:-}
   UL_MEDIA_COOKIE_DOMAIN: ${UL_MEDIA_COOKIE_DOMAIN:-}
   UL_MEDIA_CSP: ${UL_MEDIA_CSP:-}
+  # Beat builds its schedule at import from these: which entries the environment runs, and which plugins contribute any.
+  # Non-secret only; a setting the schedule starts to depend on belongs here too.
+  UL_BACKGROUND_TASKS_ALLOWLIST: ${UL_BACKGROUND_TASKS_ALLOWLIST:-}
+  UL_ENVIRONMENT_SHARE: ${UL_ENVIRONMENT_SHARE:-}
+  UL_ENVIRONMENT_SHARE_OVERRIDES: ${UL_ENVIRONMENT_SHARE_OVERRIDES:-}
+  UL_DISABLED_PLUGINS: ${UL_DISABLED_PLUGINS:-}
+  UL_PLUGIN_MODULES: ${UL_PLUGIN_MODULES:-}
 name: urbanlens-${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}
 
 services:
@@ -252,9 +256,11 @@ services:
       - media_volume:/app/src/urbanlens/media
       - ./src/urbanlens/config/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./src/urbanlens/config/nginx/django.conf.template:/etc/nginx/templates/django.conf.template:ro
+      - ./src/urbanlens/config/nginx/10-trusted-proxies.sh:/docker-entrypoint.d/10-trusted-proxies.sh:ro
       - /dev/null:/etc/nginx/conf.d/default.conf:ro
     environment:
       UL_APP_PORT: ${UL_APP_PORT:-21800}
+      UL_TRUSTED_PROXY_CIDRS: ${UL_TRUSTED_PROXY_CIDRS:-}
     ports:
       - "${UL_APP_PORT:-21800}:8080"
     depends_on:
@@ -294,9 +300,11 @@ services:
       - media_volume:/app/src/urbanlens/media:ro
       - ./src/urbanlens/config/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./src/urbanlens/config/nginx/media.conf.template:/etc/nginx/templates/media.conf.template:ro
+      - ./src/urbanlens/config/nginx/10-trusted-proxies.sh:/docker-entrypoint.d/10-trusted-proxies.sh:ro
       - /dev/null:/etc/nginx/conf.d/default.conf:ro
     environment:
       MEDIA_FRAME_ANCESTORS: ${UL_SITE_URL:-'none'}
+      UL_TRUSTED_PROXY_CIDRS: ${UL_TRUSTED_PROXY_CIDRS:-}
     ports:
       - "${UL_MEDIA_PORT:-21801}:8080"
     depends_on:
@@ -806,8 +814,10 @@ services:
     # 3.13, not 4.x: Celery/kombu's pyamqp transport declares its pidbox control
     # queue transient and non-exclusive, a combination RabbitMQ 4.0 deprecated
     # and now refuses outright (INTERNAL_ERROR 541) - crash-looping the worker.
-    # Verified against a real worker before pinning this.
-    image: rabbitmq:4.3-management-alpine
+    # Verified against a real worker before pinning this; a dependency bump to 4.3 was
+    # reproduced as the same crash with kombu 5.6.2 / celery 5.6.3, so do not bump the major
+    # until a worker starts against it.
+    image: rabbitmq:3.13-management-alpine
     restart: unless-stopped
     environment:
       # A task's delivery is unacknowledged through its countdown (at most 6 h), its wait for a pool slot and its run
@@ -924,7 +934,7 @@ services:
   test-rabbitmq:
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_test_rabbitmq
     profiles: ["test"]
-    image: rabbitmq:4.3-management-alpine
+    image: rabbitmq:3.13-management-alpine
     network_mode: service:test-runner
     depends_on:
       - test-runner

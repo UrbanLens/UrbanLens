@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from urbanlens.dashboard.plugins.extensions import ActionHook, FilterHook
+from urbanlens.dashboard.plugins.extensions import ActionHook, Choices, FilterHook, Registry
 
 if TYPE_CHECKING:
-    from urbanlens.dashboard.models.images.model import Image
+    from urbanlens.dashboard.models.images.model import Image, ImageSourceTraits
     from urbanlens.dashboard.models.images.queryset import ImageQuerySet
     from urbanlens.dashboard.models.profile.model import Profile
 
@@ -27,9 +27,19 @@ PHOTO_RELEVANCE_SCORES: FilterHook[ImageQuerySet, []] = FilterHook(
     "Annotates a photo queryset with ``relevance_confidence``: a float from 0 to 1, or null where the photo is unscored. Photos are ordered by it, best first, after the community's votes. Core annotates null where no callback does.",
 )
 
+IMAGE_SOURCES = Choices(
+    "media.image_sources",
+    "Where a photo can come from, as ``value -> label``. Core's are the ``ImageSource`` members; a plugin adds the sources it produces.",
+)
+
+IMAGE_SOURCE_TRAITS: Registry[str, ImageSourceTraits] = Registry(
+    "media.image_source_traits",
+    "What core does with a source beyond its label, keyed by ``ImageSource`` value: its Media-gallery panel keys and whether a VirusTotal scan may vet it.",
+)
+
 LABELS_SEEDED: ActionHook[[Profile]] = ActionHook(
     "labels.seeded",
     "Fired after a new profile's default labels were created in bulk, which sends no per-label save signals.",
 )
 
-__all__ = ["LABELS_SEEDED", "PHOTO_LOCATED", "PHOTO_RELEVANCE_SCORES", "PHOTO_RELEVANCE_VOTED"]
+__all__ = ["IMAGE_SOURCES", "IMAGE_SOURCE_TRAITS", "LABELS_SEEDED", "PHOTO_LOCATED", "PHOTO_RELEVANCE_SCORES", "PHOTO_RELEVANCE_VOTED"]

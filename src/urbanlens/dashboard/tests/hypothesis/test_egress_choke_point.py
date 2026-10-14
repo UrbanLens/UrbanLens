@@ -237,8 +237,8 @@ class BudgetsAreScaledTests(TestCase):
             ApiCallLog.objects.create(service=QUOTA, success=True)
             self.assertFalse(check_rate_limit(QUOTA))
 
-    def test_production_gets_nine_tenths(self) -> None:
-        ApiCallLog.objects.bulk_create([ApiCallLog(service=QUOTA, success=True) for _ in range(89)])
+    def test_production_gets_what_staging_leaves(self) -> None:
+        ApiCallLog.objects.bulk_create([ApiCallLog(service=QUOTA, success=True) for _ in range(94)])
         with deployment("production"):
             self.assertTrue(check_rate_limit(QUOTA))
             ApiCallLog.objects.create(service=QUOTA, success=True)

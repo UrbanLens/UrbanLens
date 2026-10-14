@@ -1,6 +1,6 @@
 """
 Photo keyword generation pipeline.
-Runs entirely in the background (a Celery task enqueued after every upload's ``process_image_upload``) so uploads are never slowed down."""
+Runs entirely in the background (a Celery task enqueued by ``process_image_upload`` for a photo whose uploader has keyword generation on) so uploads are never slowed down."""
 
 from __future__ import annotations
 

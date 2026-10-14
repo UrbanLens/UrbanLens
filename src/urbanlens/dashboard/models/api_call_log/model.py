@@ -49,22 +49,6 @@ class ApiCallLog(abstract.DashboardModel):
         blank=True,
         help_text="The upstream's HTTP status. Null when no response arrived (refused before sending, a network error) or the caller had none to record.",
     )
-    model = CharField(
-        max_length=200,
-        null=True,
-        blank=True,
-        help_text="The model that answered, as the provider names it. Null for a call that names no model, and for one refused before it was made.",
-    )
-    input_tokens = IntegerField(
-        null=True,
-        blank=True,
-        help_text="Input tokens, as the provider reported them or else counted locally. Null for a call with no tokens, or one that returned nothing to count.",
-    )
-    output_tokens = IntegerField(
-        null=True,
-        blank=True,
-        help_text="Output tokens, as the provider reported them or else counted locally. Null for a call with no tokens, or one that returned nothing to count.",
-    )
     was_rate_limited = BooleanField(
         default=False,
         help_text="True if this entry records a call that was blocked by rate limiting.",

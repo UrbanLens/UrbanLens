@@ -37,6 +37,7 @@ output=$(docker run --rm ${network} \
     -e UL_APP_PORT=21800 \
     -v "$PWD/$CONF_DIR/nginx.conf:/etc/nginx/nginx.conf:ro" \
     -v "$PWD/$CONF_DIR/django.conf.template:/etc/nginx/templates/django.conf.template:ro" \
+    -v "$PWD/$CONF_DIR/10-trusted-proxies.sh:/docker-entrypoint.d/10-trusted-proxies.sh:ro" \
     -v /dev/null:/etc/nginx/conf.d/default.conf:ro \
     "$IMAGE" nginx -t 2>&1) || true
 

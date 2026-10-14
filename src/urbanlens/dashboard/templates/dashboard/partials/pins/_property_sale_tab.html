@@ -23,11 +23,11 @@
         </div>
         <div class="po-sale-parties">
             <span class="po-sale-party">
-                {% for owner in row.previous_owners %}{{ owner.name }}{% if not forloop.last %}, {% endif %}{% empty %}{% if row.parties_withheld %}Subscribers only{% else %}Unknown{% endif %}{% endfor %}
+                {% for owner in row.previous_owners %}{{ owner.name }}{% if not forloop.last %}, {% endif %}{% empty %}{% if row.parties_withheld %}Access required{% else %}Unknown{% endif %}{% endfor %}
             </span>
             <i class="material-symbols-outlined po-sale-arrow">arrow_forward</i>
             <span class="po-sale-party">
-                {% for owner in row.new_owners %}{{ owner.name }}{% if not forloop.last %}, {% endif %}{% empty %}{% if row.parties_withheld %}Subscribers only{% else %}Unknown{% endif %}{% endfor %}
+                {% for owner in row.new_owners %}{{ owner.name }}{% if not forloop.last %}, {% endif %}{% empty %}{% if row.parties_withheld %}Access required{% else %}Unknown{% endif %}{% endfor %}
             </span>
         </div>
         {% if sale.notes %}<p class="po-sale-notes">{{ sale.notes|linebreaksbr }}</p>{% endif %}

@@ -68,7 +68,7 @@ class SharedImageCopyFidelityTests(TestCase):
         self.assertEqual(copied.media_type, MediaKind.VIDEO)
 
     def test_the_copy_belongs_to_the_recipient(self):
-        copied = self._share_image(source=ImageSource.YELP)
+        copied = self._share_image(source=ImageSource.WIKIMEDIA)
         self.assertEqual(copied.profile_id, self.recipient.pk)
 
     def test_attribution_travels_with_the_copy(self):

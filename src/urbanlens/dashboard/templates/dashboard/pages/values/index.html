@@ -6,17 +6,15 @@
 {# -- Hero ----------------------------------------------------------------- #}
 <section class="values-hero">
     <div class="values-hero-inner">
-        <p class="values-eyebrow">Our Ethos</p>
+        {% block values_eyebrow %}
+        <p class="values-eyebrow">Principles</p>
+        {% endblock %}
         <h1 class="values-title">Principles worth<br><em>building around.</em></h1>
+        {% block values_intro %}
         <p class="values-subtitle">
-            UrbanLens exists to help people explore responsibly. These are the values
-            that shape every feature we build, and every decision we make along the way -
-            for the people using the site, and for the people building it.
+            UrbanLens is open-source software for exploring responsibly. These are the principles its design follows. The people who run each site decide their own policies on top of them.
         </p>
-        <p class="values-subtitle">
-            If you want to contribute code to this project, we expect that code to
-            adhere to these principles, in addition to adhering to our contribution guidelines.
-        </p>
+        {% endblock %}
     </div>
 </section>
 
@@ -25,16 +23,17 @@
     <div class="values-section-inner">
         <div class="values-section-label">How to read this list</div>
         <h2 class="values-section-title">Order matters.</h2>
+        {% block values_ranking %}
         <p class="values-section-body">
             These principles are ranked by priority, not by chronology. When two of them pull in
             different directions, the higher priority wins; consent comes before privacy,
             privacy comes before convenience, and responsibility comes before growth.
         </p>
         <p class="values-section-body">
-            This isn't just a promise to the people who use UrbanLens. It's also a checklist for
-            anyone building it: if a new feature can't be squared with the principles above it,
-            the feature changes - not the principle.
+            It's also a checklist for anyone building UrbanLens: if a new feature can't be squared
+            with the principles above it, the feature changes - not the principle.
         </p>
+        {% endblock %}
     </div>
 </section>
 
@@ -47,14 +46,14 @@
             <div class="values-item-body">
                 <h3 class="values-item-title">Consent</h3>
                 <p class="values-item-principle">
-                    When something is unclear, we ask before we act.
+                    {% block values_consent_principle %}When something is unclear, the software asks before it acts.{% endblock %}
                 </p>
                 <p class="values-item-example">
-                    <strong>Example:</strong> Importing pins is ambiguous by nature - a new user
+                    {% block values_consent_example %}<strong>Example:</strong> Importing pins is ambiguous by nature - a new user
                     can't know in advance which pins will be imported or who will see them.
                     So the import flow shows every pin for review before anything is saved,
                     and never makes a pin public on its own. This results in an extra step for users,
-                    but it prioritizes consent over convenience.
+                    but it prioritizes consent over convenience.{% endblock %}
                 </p>
             </div>
         </div>
@@ -64,13 +63,13 @@
             <div class="values-item-body">
                 <h3 class="values-item-title">Privacy</h3>
                 <p class="values-item-principle">
-                    We do not collect or store data a user doesn't want to share, without exception.
+                    {% block values_privacy_principle %}The software does not collect or store data a user doesn't want to share.{% endblock %}
                 </p>
                 <p class="values-item-example">
-                    <strong>Example:</strong> By design, no user can discover other users
+                    {% block values_privacy_example %}<strong>Example:</strong> By design, no user can discover other users
                     on the site until they take an action to become visible. Even
                     friend requests do not reveal whether a user exists until after
-                    they accept the friend request.
+                    they accept the friend request.{% endblock %}
                 </p>
             </div>
         </div>
@@ -80,13 +79,12 @@
             <div class="values-item-body">
                 <h3 class="values-item-title">Transparency</h3>
                 <p class="values-item-principle">
-                    Users should know what data is shared and stored, so they can
-                    make informed decisions.
+                    {% block values_transparency_principle %}Users should know what data is shared and stored, so they can
+                    make informed decisions.{% endblock %}
                 </p>
                 <p class="values-item-example">
-                    <strong>Example:</strong> Any data we store about a user is visible to that
-                    user on their own profile page. No other user data exists on our site that is
-                    not displayed.
+                    {% block values_transparency_example %}<strong>Example:</strong> Data the site stores about a user is visible to that
+                    user on their own profile page.{% endblock %}
                 </p>
             </div>
         </div>
@@ -96,13 +94,12 @@
             <div class="values-item-body">
                 <h3 class="values-item-title">Security</h3>
                 <p class="values-item-principle">
-                    We work to keep data from leaking, and design every feature to limit
-                    the harm a data breach could cause.
+                    {% block values_security_principle %}Features are designed to keep data from leaking, and to limit
+                    the harm a data breach could cause.{% endblock %}
                 </p>
                 <p class="values-item-example">
-                    <strong>Example:</strong> We never store IP addresses, even though it's
-                    necessary for analytics. We opt out of analytics to ensure
-                    a future data breach can't possibly expose this information.
+                    {% block values_security_example %}<strong>Example:</strong> Sensitive values, like third-party API tokens, are
+                    encrypted at rest, so a copy of the database alone doesn't expose them.{% endblock %}
                 </p>
             </div>
         </div>
@@ -112,13 +109,13 @@
             <div class="values-item-body">
                 <h3 class="values-item-title">Responsibility</h3>
                 <p class="values-item-principle">
-                    We encourage behavior that protects people, locations, and the community - even
-                    when another option would be more popular.
+                    {% block values_responsibility_principle %}The software encourages behavior that protects people, locations, and the community - even
+                    when another option would be more popular.{% endblock %}
                 </p>
                 <p class="values-item-example">
-                    <strong>Example:</strong> We discourage large-scale pin sharing, even though it
-                    would help promote well-known locations that aren't vulnerable to harm. We encourage
-                    targetted information sharing, since it encourages responsible and safe exploring.
+                    {% block values_responsibility_example %}<strong>Example:</strong> Large-scale pin sharing is discouraged, even though it
+                    would help promote well-known locations that aren't vulnerable to harm. Targeted
+                    information sharing is encouraged, since it supports responsible and safe exploring.{% endblock %}
                 </p>
             </div>
         </div>
@@ -128,14 +125,14 @@
             <div class="values-item-body">
                 <h3 class="values-item-title">Reliability</h3>
                 <p class="values-item-principle">
-                    Research data should be trustworthy, because it shapes the
-                    decisions people make in the field.
+                    {% block values_reliability_principle %}Research data should be trustworthy, because it shapes the
+                    decisions people make in the field.{% endblock %}
                 </p>
                 <p class="values-item-example">
-                    <strong>Example:</strong> We prioritize up-to-date search results, so a user
-                    doesn't rely on stale information. We attempt to filter out unrelated information,
-                    and we attempt to provide information from as many sources as possible, so
-                    ommissions from one source aren't missed.
+                    {% block values_reliability_example %}<strong>Example:</strong> Up-to-date search results are prioritized, so a user
+                    doesn't rely on stale information. Unrelated information is filtered out,
+                    and information is gathered from as many sources as possible, so
+                    omissions from one source aren't missed.{% endblock %}
                 </p>
             </div>
         </div>
@@ -145,13 +142,13 @@
             <div class="values-item-body">
                 <h3 class="values-item-title">Functionality</h3>
                 <p class="values-item-principle">
-                    By including many tools in one place, we encourage good habits
-                    around research, exploration, and safety.
+                    {% block values_functionality_principle %}By including many tools in one place, the software encourages good habits
+                    around research, exploration, and safety.{% endblock %}
                 </p>
                 <p class="values-item-example">
-                    <strong>Example:</strong> A full set of research tools lives in one place, so
+                    {% block values_functionality_example %}<strong>Example:</strong> A full set of research tools lives in one place, so
                     researching a place before visiting it isn't a chore. Chores often get skipped,
-                    resulting in explorers making unsafe decisions.
+                    resulting in explorers making unsafe decisions.{% endblock %}
                 </p>
             </div>
         </div>
@@ -161,15 +158,12 @@
 {# -- CTA ------------------------------------------------------------------ #}
 <section class="values-cta-section">
     <div class="values-cta-inner">
-        <h2 class="values-cta-title">This is a living document.</h2>
+        {% block values_cta %}
+        <h2 class="values-cta-title">Ask the people who run this site.</h2>
         <p class="values-cta-body">
-            As UrbanLens grows, we measure new features against these principles - not the
-            other way around.
+            Each site sets its own principles. If a feature here troubles you, tell them, and they can decide what to change.
         </p>
-        <p class="values-cta-body">
-            If you feel like a feature we offer doesn't align with these principles, let us
-            know, and we'll change the feature.
-        </p>
+        {% endblock %}
         <a href="{% url 'about' %}" class="values-btn btn btn--primary btn--lg">
             <i class="material-symbols-outlined">arrow_back</i> Back to About
         </a>

@@ -8,6 +8,8 @@ import re
 from django.conf import settings
 from django.test import SimpleTestCase
 
+import urbanlens.dashboard
+
 #: The two templates every user-facing page extends.
 _THEME_TEMPLATES = ("dashboard/themes/base.html", "dashboard/themes/auth_base.html")
 
@@ -24,9 +26,8 @@ _EXTENDS = re.compile(r"{%\s*extends\s+[\"']([^\"']+)[\"']\s*%}")
 
 _BLOCK = re.compile(r"{%\s*block\s+([A-Za-z0-9_]+)")
 
-#: Templates root, for the whole-tree scan below. Taken from the loader's own
-#: DIRS rather than built from BASE_DIR, which points at the settings package.
-_TEMPLATES_ROOT = Path(settings.TEMPLATES[0]["DIRS"][0])
+#: Core's templates root, for the whole-tree scan below. Not DIRS[0]: operator and plugin override directories are searched first.
+_TEMPLATES_ROOT = Path(urbanlens.dashboard.__file__).resolve().parent / "templates"
 
 
 def _template_source(name: str) -> str:
