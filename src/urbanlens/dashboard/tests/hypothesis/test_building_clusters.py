@@ -54,7 +54,7 @@ class ClusterBuildingsTests(SimpleTestCase):
         self.assertEqual(len(cluster_buildings(records)), 1)
 
     def test_a_point_left_inside_a_sibling_footprint_stays_its_own_building(self) -> None:
-        """REData merges a footprint with the one point inside it unless both come from one source - then they are two."""
+        """A reconciling source merges a footprint with the one point inside it unless both come from one source - then they are two."""
         records = [
             record("county_gis:1", 0, 0, geometry=rect(0, 0, 80, 20)),
             record("county_gis:2", 0, 35, name="Ward block"),

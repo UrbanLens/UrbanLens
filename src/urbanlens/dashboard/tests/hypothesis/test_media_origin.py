@@ -41,10 +41,10 @@ class CookieDomainTests(SimpleTestCase):
     def test_derives_the_deepest_shared_domain(self) -> None:
         self.assertEqual(cookie_domain(), "example.com")
 
-    @override_settings(UL_MEDIA_BASE_URL="https://media.dev.urbanlens.org", SITE_URL="https://dev.urbanlens.org")
+    @override_settings(UL_MEDIA_BASE_URL="https://media.dev.example.com", SITE_URL="https://dev.example.com")
     def test_prefers_the_deeper_shared_domain_over_the_apex(self) -> None:
-        # Scoping this to urbanlens.org would hand the cookie to staging and production as well.
-        self.assertEqual(cookie_domain(), "dev.urbanlens.org")
+        # Scoping this to example.com would hand the cookie to staging and production as well.
+        self.assertEqual(cookie_domain(), "dev.example.com")
 
     @override_settings(UL_MEDIA_COOKIE_DOMAIN="explicit.example.net")
     def test_explicit_override_wins(self) -> None:

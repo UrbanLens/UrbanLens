@@ -1,4 +1,4 @@
-"""Drop the cached rows of the removed "Reference Documents" panel (P225); nothing reads them now."""
+"""Drop the cached rows of the removed "Reference Documents" panel; nothing reads them now."""
 
 from django.db import migrations
 

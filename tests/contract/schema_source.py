@@ -128,7 +128,7 @@ def not_an_undeclared_server_error(ctx, response, case) -> bool | None:
     """
     Schemathesis's ``not_a_server_error``, except for a 5xx other than 500 that the operation declares.
 
-    A declared 503 is a refusal the API documents, such as the assistant's while AI is turned off for the account,
+    A declared 503 is a refusal the API documents, such as a plugin's while its feature is turned off for the account,
     rather than a crash.
 
     Args:

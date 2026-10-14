@@ -18,6 +18,7 @@ from urbanlens.dashboard.models.album.queryset import AlbumItemQuerySet
 from urbanlens.dashboard.models.album.sort import ALBUM_SORT_SPECS, AlbumSort, album_sort_spec
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
+from urbanlens.dashboard.plugins.points import PHOTO_RELEVANCE_VOTED
 from urbanlens.dashboard.services.photos.albums import (
     add_images_to_album,
     album_cover,
@@ -522,11 +523,12 @@ class CacheMediaItemIntoAlbumTaskTests(TestCase):
 
     def test_files_the_materialized_image_into_the_album(self) -> None:
         fake_image = baker.make_recipe("dashboard.image", pin=self.pin, profile=self.pin.profile)
+        queue_vote = mock.Mock()
         with (
             mock.patch(
                 "urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=fake_image
             ),
-            mock.patch("urbanlens.dashboard.services.photos.redata_relevance.queue_relevance_vote") as queue_vote,
+            PHOTO_RELEVANCE_VOTED.overridden([queue_vote]),
         ):
             result = self._run()
 
@@ -583,11 +585,12 @@ class ExternalMediaAlbumAddTests(TestCase):
 
     def test_records_a_relevant_vote_and_caches(self) -> None:
         fake_image = baker.make_recipe("dashboard.image", pin=self.pin, profile=self.profile)
+        queue_vote = mock.Mock()
         with (
             mock.patch(
                 "urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=fake_image
             ) as materialize,
-            mock.patch("urbanlens.dashboard.services.photos.redata_relevance.queue_relevance_vote") as queue_vote,
+            PHOTO_RELEVANCE_VOTED.overridden([queue_vote]),
         ):
             result = self._call()
 
@@ -636,7 +639,7 @@ class ExternalMediaAlbumAddTests(TestCase):
             mock.patch(
                 "urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=fake_image
             ),
-            mock.patch("urbanlens.dashboard.services.photos.redata_relevance.queue_relevance_vote"),
+            PHOTO_RELEVANCE_VOTED.overridden([]),
         ):
             result = self._call()
 
@@ -679,7 +682,7 @@ class ExternalMediaAlbumAddTests(TestCase):
             mock.patch(
                 "urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=fake_image
             ),
-            mock.patch("urbanlens.dashboard.services.photos.redata_relevance.queue_relevance_vote"),
+            PHOTO_RELEVANCE_VOTED.overridden([]),
         ):
             result = self._call(policy=VotePolicy.EXPLICIT)
 

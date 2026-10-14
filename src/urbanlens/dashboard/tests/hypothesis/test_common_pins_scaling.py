@@ -3,7 +3,7 @@ Viewing a profile must not cost a query per place the two accounts share.
 
 ``common_pin_location_ids`` picks one representative ``Location`` per shared
 place, and picked it with a ``.first()`` per place - so the profile page ran a
-query per thing the two people had both pinned (N21 H30). The page also ran the
+query per thing the two people had both pinned. The page also ran the
 whole computation, plus two full-account visit scans, *before* checking whether
 the viewer is allowed to see the result, and the setting that decides defaults
 to friends-only - so the common case was paying for an answer it then threw

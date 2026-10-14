@@ -323,11 +323,11 @@ function noParcelDiagnosis(pin: CampusPin, visit: TriggerVisit | null): string {
     return (
         `No parcel geometry passed the size check within ${BOUNDARY_WAIT_MS / 60_000} minutes of opening the private pin page. The pin's boundary is ` +
         (pin.boundary
-            ? `a ${pin.boundary.type} of about ${area.toLocaleString()} m², outside ${EXPECTED_PARCEL_AREA_SQM.min.toLocaleString()}-${EXPECTED_PARCEL_AREA_SQM.max.toLocaleString()} m² (REData measures the parcel at ${MEASURED_PARCEL_AREA_SQM.toLocaleString()} m²).`
+            ? `a ${pin.boundary.type} of about ${area.toLocaleString()} m², outside ${EXPECTED_PARCEL_AREA_SQM.min.toLocaleString()}-${EXPECTED_PARCEL_AREA_SQM.max.toLocaleString()} m² (the county measures the parcel at ${MEASURED_PARCEL_AREA_SQM.toLocaleString()} m²).`
             : "null.") +
         ` ${describeVisit(visit)} Enrichment was started only by that visit, never by the external API's panels/boundary/ endpoint. Check, in order: ` +
         "that the page requested /boundary/ (controllers/boundary.py schedules the chain from it); the account's external_apis_enabled; " +
-        "REData configured (UL_REDATA_API_URL) on the deployment, whose environment allows it (D26); a Celery worker on the default queue; Location.place_id."
+        "a parcel data provider configured on the deployment, whose environment allows it; a Celery worker on the default queue; Location.place_id."
     );
 }
 

@@ -183,7 +183,7 @@ class _CalendarExportCase(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        self.user = User.objects.create_user(username="p334-exporter")
+        self.user = User.objects.create_user(username="exporter")
         self.profile = Profile.objects.get(user=self.user)
         self.account = GoogleCalendarAccount.objects.create(
             profile=self.profile,
@@ -352,7 +352,7 @@ class ClientAssignedEventIdTests(_CalendarExportCase):
     def test_ids_are_valid_google_ids_and_distinct_per_profile_and_activity(self) -> None:
         trip = self._trip(2)
         first, second = trip.activities.all()
-        other = User.objects.create_user(username="p334-mate").profile
+        other = User.objects.create_user(username="export-mate").profile
         ids = {
             trip_event_id(trip, self.profile, None),
             trip_event_id(trip, self.profile, first),

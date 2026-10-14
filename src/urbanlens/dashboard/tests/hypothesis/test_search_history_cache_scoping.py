@@ -1,4 +1,4 @@
-"""Regression tests for UL-239: localStorage search-history keys must be per-user."""
+"""Regression tests: localStorage search-history keys must be per-user."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from model_bakery import baker
 from urbanlens.core.tests.inline_scripts import rendered_config
 from urbanlens.core.tests.testcase import TestCase
 
-#: P92 moved this from an inline <script> into a bundled TS entry (P124) - the key-scoping
+#: The map code moved from an inline <script> into a bundled TS entry - the key-scoping
 #: code itself is static now, so it is checked against the source file, not a response body.
 _MAP_SCRIPT_SOURCE = (Path(__file__).resolve().parents[3] / "dashboard/frontend/ts/entries/map-page.ts").read_text()
 

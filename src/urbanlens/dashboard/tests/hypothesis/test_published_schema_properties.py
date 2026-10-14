@@ -147,7 +147,7 @@ class StableNameTests(SimpleTestCase):
     def test_no_choice_set_is_named_by_its_hash(self) -> None:
         """
         drf-spectacular names a colliding choice set by three hex digits of its hash, which change whenever its
-        choices do and rename a generated client's type (P310: alias kinds were ``KindA19Enum``)."""
+        choices do and rename a generated client's type (alias kinds were ``KindA19Enum``)."""
         names = list(_document().get("components", {}).get("schemas", {}))
 
         self.assertEqual([name for name in names if re.search(r"[0-9A-F]{3}Enum$", name)], [])

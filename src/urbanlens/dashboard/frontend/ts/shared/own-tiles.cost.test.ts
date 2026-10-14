@@ -8,7 +8,7 @@
  * requests, which are the same on any machine.
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { registerRedataLayers, resetRedataLayersCacheForTests, tileLayer } from "./map-layers";
+import { registerCatalogueLayers, resetCatalogueLayersCacheForTests, tileLayer } from "./map-layers";
 import { fetchOwnTile, resetOwnTileGateForTests } from "./own-tiles";
 
 /** Tiles in one cold viewport - the unit a user actually asks for. */
@@ -189,20 +189,20 @@ describe("a Leaflet viewport asked of a deployment that cannot serve it", () => 
     }
 
     beforeEach(async () => {
-        resetRedataLayersCacheForTests();
+        resetCatalogueLayersCacheForTests();
         globalThis.fetch = (() =>
             Promise.resolve({
                 ok: true,
                 json: () => Promise.resolve({ layers: [{ id: "street", source_type: "raster", url_template: TEMPLATE, attribution: "Attr" }] }),
             } as Response)) as unknown as typeof fetch;
-        await registerRedataLayers();
+        await registerCatalogueLayers();
         stubLeaflet();
         tileLayer("street", { errorTileUrl: PLACEHOLDER });
     });
 
     afterEach(() => {
         (globalThis as Record<string, unknown>).L = realL;
-        resetRedataLayersCacheForTests();
+        resetCatalogueLayersCacheForTests();
         createTile = null;
         layer = null;
     });

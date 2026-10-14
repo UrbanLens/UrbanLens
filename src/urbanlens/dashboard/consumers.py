@@ -1070,7 +1070,7 @@ class SafetyCheckinChatConsumer(SocketAllowanceMixin, InboundVolumeMixin, Creden
         if data is None:
             return
 
-        # The client's keep-alive (``ts/shared/live-socket.ts``): Cloudflare closes an idle tunnelled socket at around
+        # The client's keep-alive (``ts/shared/live-socket.ts``): a reverse proxy closes an idle proxied socket at around
         # 100 seconds.
         if data.get("type") == "ping":
             return
@@ -1442,7 +1442,7 @@ class _ParticipantSessionConsumer(SocketAllowanceMixin, InboundVolumeMixin, Cred
             return
 
         # The client's keep-alive - see ``ts/shared/live-socket.ts``, which every game client now opens its
-        # socket through, because Cloudflare closes an idle tunnelled socket at around 100 seconds and a lobby
+        # socket through, because a reverse proxy closes an idle proxied socket at around 100 seconds and a lobby
         # waiting on the host is idle by definition.
         if data.get("type") == "ping":
             return
@@ -1521,7 +1521,7 @@ class _ParticipantSessionConsumer(SocketAllowanceMixin, InboundVolumeMixin, Cred
 
 class GameSessionConsumer(_ParticipantSessionConsumer):
     """
-    Real-time sync for one SpotGuessr session, shared by every participant (UL-392).
+    Real-time sync for one SpotGuessr session, shared by every participant.
 
     Mounted at ``ws/spotguessr/session/<int:session_id>/``.
     ``_ParticipantSessionConsumer`` documents everything about this socket that isn't

@@ -1,7 +1,7 @@
 """
-Gateway for Overture Maps' public GeoParquet release, for coordinates outside REData's mirror.
+Gateway for Overture Maps' public GeoParquet release, for coordinates no regional mirror covers.
 
-Callers go through ``boundaries.overture.OvertureProvider``, which answers coordinates REData's mirror covers from REData.
+Callers go through ``boundaries.overture.OvertureProvider``, which answers coordinates a mirror covers from the mirror.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from urbanlens.dashboard.services.apis.locations.base import (
     create_bbox,
     validate_bbox,
 )
-from urbanlens.dashboard.services.apis.locations.boundaries.overture import served_by_redata
+from urbanlens.dashboard.services.apis.locations.boundaries.overture import overture_mirror_for
 
 # Adjust this import to wherever Gateway/Gateway actually live.
 from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRateLimitedError, GatewayRequestError
@@ -187,7 +187,7 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
     """
     Fetch Overture Maps theme data (buildings, addresses, places, ...) by bbox from the public release.
 
-    Refuses a bbox centred where :func:`~urbanlens.dashboard.services.apis.locations.boundaries.overture.served_by_redata` holds.
+    Refuses a bbox centred where a mirror covers (:func:`~urbanlens.dashboard.services.apis.locations.boundaries.overture.overture_mirror_for`).
 
     Attributes:
         release: Leave as None to always resolve the latest release via Overture's STAC catalog.
@@ -213,8 +213,8 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
         if bbox is not None:
             validate_bbox(bbox)
             min_lon, min_lat, max_lon, max_lat = bbox
-            if served_by_redata((min_lat + max_lat) / 2, (min_lon + max_lon) / 2):
-                raise ValueError("REData's Overture mirror covers this bbox; the public release is not read for it. Use OvertureProvider.")
+            if overture_mirror_for((min_lat + max_lat) / 2, (min_lon + max_lon) / 2) is not None:
+                raise ValueError("A regional Overture mirror covers this bbox; the public release is not read for it. Use OvertureProvider.")
         if _overture_geodataframe is None:
             raise ImportError(
                 "OvertureMapsGateway requires the 'overturemaps' package: `pip install overturemaps[geopandas]`.",
@@ -242,10 +242,10 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
         `self.session` entirely - the one place `Gateway` normally wires up rate limiting (see
         `Gateway.__post_init__`). Without this, nothing bounds how often enrichment reaches
         Overture in the first place, including the STAC index lookup in `_narrowed_files` -
-        the thing that actually earns the 429 that disables narrowing. See P110.
+        the thing that actually earns the 429 that disables narrowing.
 
         Goes through ``_reserve_call``/``_finalize_call`` (the same pair `_RateLimitedSession` uses)
-        rather than the simpler `check_rate_limit`+`log_api_call` pattern the AI services use for
+        rather than the simpler `check_rate_limit`+`log_api_call` pattern the one-call-per-task services use for
         their own `self.session` bypass: those are called once per task, but Overture is reached from
         per-pin enrichment fan-out - the exact concurrent-burst scenario - and a plain
         check-then-log gap would let concurrent callers all pass the check before any of them
@@ -259,7 +259,7 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
             completes.
 
         Raises:
-            EnvironmentRefusedError: This environment does not read the public release (D26).
+            EnvironmentRefusedError: This environment does not read the public release.
             GatewayRateLimitedError: This service is administratively disabled, or this service's own
                 request budget (``SERVICE_REGISTRY["overture_maps"]``) is exhausted for the
                 current window.
@@ -340,7 +340,7 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
         if resolved is None:
             _stac_unavailable_until = now + _STAC_COOLDOWN_SECONDS
             raise GatewayRateLimitedError(
-                "Overture's STAC index is unavailable, so a lookup would read the entire theme rather than the files intersecting this bbox. Refusing instead; see P110.",
+                "Overture's STAC index is unavailable, so a lookup would read the entire theme rather than the files intersecting this bbox. Refusing instead.",
             )
         return resolved
 

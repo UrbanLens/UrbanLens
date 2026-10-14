@@ -309,3 +309,7 @@ class TransactionTestCase(test.TransactionTestCase):
             cursor.execute(f"DO $teardown$ BEGIN {' '.join(statements)} END $teardown$")
         if self._post_migrate_rows(alias)[1::2] != before[1::2]:
             emit_post_migrate_signal(verbosity=0, interactive=False, db=alias)
+
+
+class LiveServerTestCase(TransactionTestCase, test.LiveServerTestCase):
+    """Django's ``LiveServerTestCase``, emptied after each test as :class:`TransactionTestCase` is."""

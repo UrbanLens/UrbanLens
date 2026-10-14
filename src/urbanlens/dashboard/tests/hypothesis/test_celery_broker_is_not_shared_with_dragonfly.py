@@ -1,10 +1,10 @@
 """
-H54 (P113): the Celery broker must not share Dragonfly's keyspace.
+The Celery broker must not share Dragonfly's keyspace.
 
-Before D16, Dragonfly held sessions, the Channels layer, the Django cache and the Celery broker in
+Before the broker moved to RabbitMQ, Dragonfly held sessions, the Channels layer, the Django cache and the Celery broker in
 one keyspace under ``volatile-lru``, and the broker's keys were the only ones with no TTL - so one
-account's task backlog was paid for by everyone else's session and cache traffic. D16 moved the
-broker to RabbitMQ (`settings/base.py`'s ``CELERY_BROKER_URL`` precedence:
+account's task backlog was paid for by everyone else's session and cache traffic. The broker moved to
+RabbitMQ (`settings/base.py`'s ``CELERY_BROKER_URL`` precedence:
 ``UL_CELERY_BROKER_URL or RABBITMQ_URL or DRAGONFLY_URL or "redis://localhost:6379/0"``), which
 removes the broker from the shared keyspace entirely rather than bounding it there. No regression
 test existed for this precedence when the fix landed; this backfills it.
@@ -85,8 +85,8 @@ class CeleryBrokerPrecedenceTests(SimpleTestCase):
         """
         The result backend is deliberately not moved: it wants a fast store, not a queue.
 
-        A regression here would look like an improvement (`H54, done, and the result backend
-        moved too`) but would put Celery's high-churn result/status writes back into the shared
+        A regression here would look like an improvement (moving the result backend along
+        with the broker) but would put Celery's high-churn result/status writes back into the shared
         keyspace this fix removes the broker from.
         """
         reloaded = self._reload_with(

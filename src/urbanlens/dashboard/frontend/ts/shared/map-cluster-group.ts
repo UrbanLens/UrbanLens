@@ -4,8 +4,7 @@
  *
  * **Nothing calls this yet.** `map-page.ts` and `map-annotations.ts` build
  * `createPinClusterGroup()` from `map-clusters.ts` against a raw `L.Map`, so this facade and its
- * MapLibre half run only under `bun test`. Fixing a bug here does not change what a browser draws;
- * `PL8` item 3 is where the porting work is tracked.
+ * MapLibre half run only under `bun test`. Fixing a bug here does not change what a browser draws.
  *
  * Leaflet gets this from the `leaflet.markercluster` plugin; MapLibre has no equivalent, so
  * `maplibre-cluster-group.ts` rebuilds it on `supercluster` - the same library MapLibre clusters

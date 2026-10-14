@@ -989,7 +989,7 @@ class PinSuggestionImmichThumbnailViewTests(TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_a_rate_limit_refusal_returns_502_not_a_500(self) -> None:
-        """P122: the handler already degrades `GatewayRequestError` to a 502; a refusal must reach it too."""
+        """The handler already degrades `GatewayRequestError` to a 502; a refusal must reach it too."""
         from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
 
         with mock.patch(

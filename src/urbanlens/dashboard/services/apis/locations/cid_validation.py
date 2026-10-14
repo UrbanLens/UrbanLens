@@ -5,8 +5,8 @@ A CID is an unsigned 64-bit integer. Above 2**53 a float64 cannot hold one exact
 went through one - a JavaScript ``Number``, ``float()``, ``Decimal(str(float))`` - comes back as the
 float's shortest round-trip digits padded with zeros.
 
-The rules match REData's ``google_places.cid_validation``, which applies them to every entry of
-``POST /places/resolve-cids/`` and reports a refusal with the same :class:`InvalidCidError` codes.
+A CID resolver that validates for itself should apply the same rules and report a refusal with the same
+:class:`InvalidCidError` codes.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ class InvalidCidError(ValueError):
     A value that cannot be a Google Maps CID, or one that has visibly lost precision.
 
     Attributes:
-        code: One of the ``CID_*`` codes in this module, as REData reports it.
+        code: One of the ``CID_*`` codes in this module, as a resolver reports it.
         message: Why, for a log line or an API error body.
     """
 

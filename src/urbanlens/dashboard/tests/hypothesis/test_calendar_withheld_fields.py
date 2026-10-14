@@ -163,7 +163,7 @@ class _TripWithAMateCase(_CalendarExportCase):
     def setUp(self) -> None:
         super().setUp()
         self.trip = self._trip(0)
-        self.mate = User.objects.create_user(username="p335-mate").profile
+        self.mate = User.objects.create_user(username="withheld-mate").profile
         TripMembership.objects.create(
             trip=self.trip, profile=self.mate, status=TripMembership.STATUS_JOINED, rsvp="yes"
         )

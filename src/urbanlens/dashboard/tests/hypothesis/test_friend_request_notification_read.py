@@ -1,4 +1,4 @@
-"""Tests for UL-240: viewing a pending friend request should mark its notification read."""
+"""Viewing a pending friend request marks its notification read."""
 
 from __future__ import annotations
 

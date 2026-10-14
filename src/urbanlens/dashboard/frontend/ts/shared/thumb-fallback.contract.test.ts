@@ -174,7 +174,7 @@ describe("the broken-thumbnail fallback", () => {
     });
 
     test("a tile's rendering of a proxied document is retried while the sandbox makes it", () => {
-        // REData documents are rendered at a tile's size (?preview=thumb) and at the lightbox's (?preview=1); either
+        // Proxied documents are rendered at a tile's size (?preview=thumb) and at the lightbox's (?preview=1); either
         // answers 503 until the sandbox has decoded it, which takes longer than two quick retries.
         for (const src of ["/dashboard/map/pin/cris/attachment/r/5/?preview=thumb", "/dashboard/map/pin/cris/attachment/r/5/?preview=1"]) {
             const delays: number[] = [];

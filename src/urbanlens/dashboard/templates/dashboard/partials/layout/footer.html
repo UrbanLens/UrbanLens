@@ -11,7 +11,7 @@
         <p class="page-footer__attribution" aria-live="polite">
             {% comment %}Map pages rewrite the span's text on every layer change, so the site links sit outside it.{% endcomment %}
             <span class="page-footer__attribution-text" id="page-footer-attribution-text">{{ map_attribution }}</span>
-            <a href="{% url 'thanks' %}" class="page-footer__attribution-more">More info</a>{% if public_costs_page_enabled %} &middot; <a href="{% url 'costs' %}" class="page-footer__attribution-more">Costs</a>{% endif %} &middot; <a href="{% url 'terms' %}" class="page-footer__attribution-more">Terms</a> &middot; <a href="{% url 'privacy' %}" class="page-footer__attribution-more">Privacy</a>
+            <a href="{% url 'thanks' %}" class="page-footer__attribution-more">More info</a>{% plugin_slot "page.footer_links" %} &middot; <a href="{% url 'terms' %}" class="page-footer__attribution-more">Terms</a> &middot; <a href="{% url 'privacy' %}" class="page-footer__attribution-more">Privacy</a>
         </p>
     </div>
 </footer>

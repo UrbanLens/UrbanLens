@@ -3,9 +3,8 @@ Notice when an external provider is refusing or failing this deployment, back of
 
 The rate limiter caps how often a provider is asked, and ``upstream_breaker`` honours a wait a provider names. Neither
 judges a provider by what it has *done*: a provider answering 500, timing out or refusing every call is called at the
-full budget until someone goes looking. REData was answering 503 to a quarter of the calls the dev
+full budget until someone goes looking. A first-party service was answering 503 to a quarter of the calls the dev
 deployment made to it, and nothing had said so.
-This is the UrbanLens half of REData's provider health (REData's PL13; this repository's PL10).
 
 ## How
 
@@ -64,6 +63,7 @@ from django.utils import timezone
 
 from urbanlens.core.cache_keys import make_cache_key
 from urbanlens.dashboard.models.provider_health.meta import BackoffCause, ProviderState
+from urbanlens.dashboard.plugins.points import PROVIDER_GROUPS
 from urbanlens.dashboard.services.core.background_work import is_background
 from urbanlens.dashboard.services.core.locks import beat_lock
 
@@ -122,12 +122,31 @@ ALERT_AFTER = timedelta(minutes=30)
 ALERT_REMIND_AFTER = timedelta(hours=24)
 #: When at least this share of the providers called in the last hour - and at least
 #: :data:`NETWORK_DOWN_MIN_PROVIDERS` of them - are failing at once, the digest says this deployment's own network is
-#: the likelier cause. REData's endpoints are counted apart (:data:`REDATA_PREFIX`), since REData being down fails
-#: all of them at once without saying anything about the network.
+#: the likelier cause. A provider that belongs to a :class:`ProviderGroup` is counted with its group instead, since the
+#: service behind a group being down fails all of them at once without saying anything about the network.
 NETWORK_DOWN_SHARE = 0.5
 NETWORK_DOWN_MIN_PROVIDERS = 5
-REDATA_PREFIX = "redata_"
-REDATA_DOWN_MIN_PROVIDERS = 3
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderGroup:
+    """
+    Providers that fail together because one service sits behind all of them.
+
+    Attributes:
+        name: What the service is called in an alert.
+        prefix: The start of every provider (rate-limiter service key) behind it.
+        min_providers: How many of them must be failing before the alert names the service rather than a count.
+    """
+
+    name: str
+    prefix: str
+    min_providers: int = 3
+
+    def covers(self, provider: str) -> bool:
+        """Whether ``provider`` is behind this group's service."""
+        return provider.startswith(self.prefix)
+
 
 #: HTTP statuses that mean the source said no.
 REFUSED_STATUSES = (401, 403, 429)
@@ -499,7 +518,7 @@ def _note_activity(row: ProviderHealth, counts: list[_Count]) -> None:
 
 
 def _note_failing(row: ProviderHealth, hour: Tally, step: _Step) -> None:
-    """What the network-down and REData-down subjects read about this provider, after its step."""
+    """What the network-down and group-down subjects read about this provider, after its step."""
     held_for_failing = row.state in (ProviderState.BACKED_OFF, ProviderState.PROBING) and row.cause == BackoffCause.FAILING
     step.active_in_hour = hour.attempts > 0 or held_for_failing
     step.failing_in_hour = held_for_failing or (hour.attempts >= MIN_SAMPLE and hour.answered <= ANSWERED_FLOOR * hour.attempts and hour.refused < REFUSAL_SHARE * hour.attempts)
@@ -642,14 +661,16 @@ def _alert_line(row: ProviderHealth, now: datetime) -> str:
 
 def _title(due: list[ProviderHealth], recovered: list[str], steps: dict[str, _Step]) -> str:
     """The digest's subject: the likeliest single cause when the failures share one, else a count."""
-    others = [step for provider, step in steps.items() if step.active_in_hour and not provider.startswith(REDATA_PREFIX)]
+    groups = list(PROVIDER_GROUPS)
+    others = [step for provider, step in steps.items() if step.active_in_hour and not any(group.covers(provider) for group in groups)]
     failing_others = [step for step in others if step.failing_in_hour]
     if len(others) >= NETWORK_DOWN_MIN_PROVIDERS and len(failing_others) >= NETWORK_DOWN_SHARE * len(others):
         return f"UrbanLens: {len(failing_others)} of {len(others)} providers failing at once - its outbound network may be down"
-    redata = [step for provider, step in steps.items() if step.active_in_hour and provider.startswith(REDATA_PREFIX)]
-    failing_redata = [step for step in redata if step.failing_in_hour]
-    if len(failing_redata) >= REDATA_DOWN_MIN_PROVIDERS and len(failing_redata) >= NETWORK_DOWN_SHARE * len(redata):
-        return f"UrbanLens: REData is failing - {len(failing_redata)} of the {len(redata)} REData services called in the last hour"
+    for group in groups:
+        called = [step for provider, step in steps.items() if step.active_in_hour and group.covers(provider)]
+        failing = [step for step in called if step.failing_in_hour]
+        if len(failing) >= group.min_providers and len(failing) >= NETWORK_DOWN_SHARE * len(called):
+            return f"UrbanLens: {group.name} is failing - {len(failing)} of the {len(called)} {group.name} services called in the last hour"
     if due:
         return f"UrbanLens: {len(due)} provider{'s' if len(due) != 1 else ''} refusing or failing" + (f", {len(recovered)} recovered" if recovered else "")
     return f"UrbanLens: {len(recovered)} provider{'s' if len(recovered) != 1 else ''} recovered"

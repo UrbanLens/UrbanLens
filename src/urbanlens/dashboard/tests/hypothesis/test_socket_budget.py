@@ -7,7 +7,7 @@ what stops one account opening fifty sockets", which is true of flooding from
 fifty and not of holding them. An idle socket sends nothing, so it is charged
 nothing, while still occupying one of nginx's `worker_connections` (1024 per
 worker, shared with every HTTP request) and a slot in the single daphne behind
-them (N21 H10).
+them.
 
 Two properties matter more than the count itself:
 

@@ -285,17 +285,6 @@ register_map_layer(
 )
 register_map_layer(
     MapLayerSpec(
-        key="landuse",
-        kind="custom",
-        label="Land Use",
-        aria_label="Show or hide land-use area boundaries",
-        tooltip="Military, prison, national park and campus boundaries around this pin",
-        icon="fence",
-        button_id="land-use-button",
-    )
-)
-register_map_layer(
-    MapLayerSpec(
         key="past_activities",
         kind="custom",
         label="Past Activities",
@@ -391,8 +380,11 @@ def map_layers_panel(  # noqa: PLR0917 - an inclusion tag: the template engine p
     Returns:
         Context for ``partials/map/_layers_panel.html``.
     """
+    from urbanlens.dashboard.plugins.points import PIN_MAP_LAYERS
+
+    known = {**{layer.spec.key: layer.spec for layer in PIN_MAP_LAYERS}, **MAP_LAYER_REGISTRY}
     keys = [k.strip() for k in layers.split(",") if k.strip()]
-    buttons = [MAP_LAYER_REGISTRY[k] for k in keys if k in MAP_LAYER_REGISTRY]
+    buttons = [known[k] for k in keys if k in known]
     buttons += [custom_layer_button(layer) for layer in (custom_layers or [])]
     return {
         "buttons": buttons,
@@ -759,7 +751,7 @@ def basemap_tile_catalogue(context: template.Context) -> SafeString:
 
     Rendered in ``themes/base.html`` immediately before ``core.js``, so ``map-layers.ts`` can read
     it synchronously at the moment it is asked for a tile source - before the first tile request
-    goes out. Fetching the same catalogue over HTTP instead (``registerRedataLayers()``) leaves a
+    goes out. Fetching the same catalogue over HTTP instead (``registerCatalogueLayers()``) leaves a
     window in which a map draws vendor tiles and swaps afterwards, by which point the vendor has
     already been told which coordinates the user is looking at.
 
@@ -777,7 +769,7 @@ def basemap_tile_catalogue(context: template.Context) -> SafeString:
     # it offers only the keyless layers, rather than proxy URLs the viewer may not be able to fetch.
     user = getattr(context.get("request"), "user", None)
     # allow_fetch=False: this runs on every page, map or not, and a cold cache must never put a
-    # REData round trip inside a page render. A miss renders nothing and the client asks instead.
+    # round trip to the catalogue's service inside a page render. A miss renders nothing and the client asks instead.
     layers = catalogue_for_viewer(authenticated=user is not None and bool(user.is_authenticated), allow_fetch=False)
     if not layers:
         # No element at all, rather than an empty one: absent means "ask over HTTP if you care",
@@ -804,3 +796,24 @@ def hosted_basemap_tiles() -> SafeString:
     if not template_url:
         return mark_safe("")
     return json_script({"tiles": template_url}, "ul-hosted-basemap")
+
+
+@register.inclusion_tag("dashboard/partials/layout/_overlay_sources.html", takes_context=True)
+def overlay_sources_lists(context: template.Context, trigger: str) -> dict[str, Any]:
+    """
+    The overlay manager's browse lists of georeferenced maps from the install's overlay sources.
+
+    Args:
+        context: The template context, read for the ``pin`` or else the ``location`` (a wiki's) whose map is being managed.
+        trigger: The htmx event that loads the lists.
+
+    Returns:
+        The context of ``_overlay_sources.html``; no sources when the page names neither or none is available.
+    """
+    from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.map.image_overlays import overlay_sources_for
+
+    owner = context.get("pin") or context.get("location")
+    sources = overlay_sources_for(owner) if isinstance(owner, Pin | Location) else []
+    return {"sources": sources, "trigger": trigger}

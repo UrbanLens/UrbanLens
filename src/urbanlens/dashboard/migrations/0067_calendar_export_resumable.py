@@ -1,4 +1,4 @@
-"""Let a trip's calendar export resume where it stopped, and give the calendar budget room for one whole trip (P334).
+"""Let a trip's calendar export resume where it stopped, and give the calendar budget room for one whole trip.
 
 ``TripCalendarLink.event_fingerprint`` records what was last written to each event, so an export skips the events
 that already match and an attempt the budget cut short is resumed rather than restarted. Existing links start blank,

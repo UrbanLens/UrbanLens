@@ -495,7 +495,7 @@ class MatchingVocabularyCachingTests(TestCase):
             tag_match_q("restaurant", "external_tags")
 
     def test_a_multi_word_query_reuses_one_cache_fill_across_every_term(self):
-        """The exact multiplication P87 describes: one matching_vocabulary() call per search word."""
+        """The exact multiplication under test: one matching_vocabulary() call per search word."""
         ExternalTagVocabularyEntry.objects.create(source=ExternalTagSource.OSM, key="amenity", value="restaurant")
         ExternalTagVocabularyEntry.objects.create(source=ExternalTagSource.OSM, key="amenity", value="cafe")
         matching_vocabulary("restaurant")  # warms the cache

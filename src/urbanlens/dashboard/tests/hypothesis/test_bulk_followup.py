@@ -1,8 +1,8 @@
 """
-One bulk action's per-row signals must not create one broker message per row (P109).
+One bulk action's per-row signals must not create one broker message per row.
 
 Importing 1,000 pins queued about 2,600 follow-on tasks - wiki creation, enrichment, category
-suggestion, reputation scoring, one set per pin - onto the same FIFO ``bulk`` queue every other
+suggestion, contribution scoring, one set per pin - onto the same FIFO ``bulk`` queue every other
 account's bulk jobs share, at low concurrency. A safety-escalation task queued behind ~2,640 of
 them, 220 minutes to clear. ``batching_follow_on_work`` bounds that: wrapped around a bulk action's
 per-row loop, it buffers ids and flushes chunk-shaped batch tasks instead of one task per row, so

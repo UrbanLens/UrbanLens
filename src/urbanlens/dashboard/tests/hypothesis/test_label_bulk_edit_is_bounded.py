@@ -5,7 +5,7 @@ The label bulk editor lets the request choose how much work it is.
 lists with no ceiling. Every (label, parent) pair then runs `_would_create_cycle`,
 which walks the label graph in the database, and every label saved fires the
 receiver that touches every pin carrying it - so the cost is the product of two
-numbers the caller picks (N21 H26).
+numbers the caller picks.
 
 Refused rather than trimmed, unlike the *filter* ceilings: a bulk edit that
 silently applied to some of the labels somebody selected is worse than one that

@@ -79,7 +79,7 @@ class MovingWithinTheParcelTests(TestCase):
         self.parcel = baker.make(Place, kind=PlaceKind.PARCEL, geometry=_box(0.003), area_sqm=470_000.0)
         self.location = baker.make(Location, latitude=LAT, longitude=LNG, place=self.parcel)
         LocationCache.set(
-            self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"provider": "redata", "buildings": [{"name": "Main"}]}
+            self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"provider": "records", "buildings": [{"name": "Main"}]}
         )
 
     def test_moving_onto_a_building_on_the_same_parcel_keeps_its_building_list(self) -> None:

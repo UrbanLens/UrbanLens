@@ -1,4 +1,4 @@
-"""Re-mint Location and Wiki slugs so they come only from a provider's name, or the uuid (P186).
+"""Re-mint Location and Wiki slugs so they come only from a provider's name, or the uuid.
 
 Rows predate ``Location.official_name_source``, so a name counts as a provider's only when stored provider data
 holds it: the linked GooglePlace's cached name, or a field a name provider reads from one of the Location's own

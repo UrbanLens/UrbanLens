@@ -97,7 +97,7 @@
                         Yes, as in speech and beer; UrbanLens is free, and open source. It's run by one person, who pays for hosting, and every other expense out of pocket. Some external APIs are limited for that reason. You can check out the source code on our <a href="https://github.com/UrbanLens/UrbanLens">GitHub page</a>.
                     </p>
                     <p>
-                        It's not out of the question that I'll offer subscriptions in the future to access some features that would cost me a lot of money to support. For instance: AI tools. If I do that, I won't ask anyone to pay for stuff that doesn't cost me money. The point is to make a tool for people, not to create a business.
+                        The point is to make a tool for people, not to create a business. Features that are expensive to run may be limited, or offered only to some members, to keep the site affordable.
                     </p>
                 </div>
             </details>
@@ -131,7 +131,7 @@
                     </p>
                     <ol class="faq-ordered-list">
                         <li>You can run the code on your own hardware, and then your data will never leave your network. This requires some technical knowledge, but I've tried to make it easy, and I'm willing to help if you get stuck. You will not have any community features this way, unless you invite a bunch of friends to be your community.</li>
-                        <li>You can use this site, but register from a <a href="https://proton.me/mail">proton email address</a> and use a fake name. I go out of my way not to store information about you. You can verify that yourself by asking your favorite AI to assess <a href="https://github.com/UrbanLens/UrbanLens">the code</a>.</li>
+                        <li>You can use this site, but register from a <a href="https://proton.me/mail">proton email address</a> and use a fake name. I go out of my way not to store information about you. You can verify that yourself by reading <a href="https://github.com/UrbanLens/UrbanLens">the code</a>.</li>
                         <li>You can disable 3 groups of features during registration, which will really limit your experience, but if that's your thing, I support you. If you do that, you will be prevented from opting in to sharing your stuff, even if you try.</li>
                     </ol>
                 </div>
@@ -183,7 +183,7 @@
                         Correct. Nobody. Not even me.
                     </p>
                     <p>
-                        The site is setup very carefully to ensure that no one has any special privileges to your data. The privacy controls you set apply to everyone, even the site admin. You can verify this by looking at our code. The version we're running shows at the bottom left of every page, and if you're not a programmer, AI tools can help you understand the codebase and verify your data is safe.
+                        The site is setup very carefully to ensure that no one has any special privileges to your data. The privacy controls you set apply to everyone, even the site admin. You can verify this by looking at our code. The version we're running shows at the bottom left of every page, and if you're not a programmer, someone you trust who is can help you verify your data is safe.
                     </p>
                     <p>
                         But let's also have a reality check, because I think setting good examples is important.
@@ -287,9 +287,8 @@
                     </p>
                     <ul>
                         <li>If your pins are in saved lists in Google Maps, you'll be given a chance to create different tags for each list that you import, so you don't have to redo the organizational system you already set up.</li>
-                        <li>During import, you can click a checkbox to have an AI help you tag them, too. It does its best. Try not to hurt its feelings.</li>
-                        <li>When you upload photos, you can have UrbanLens read GPS coordinates from the EXIF metadata and suggest a matching pin.</li>
-                        <li>A friend of mine had a loose text file of notes about places... so I support that, too. Upload a text file and an AI will help out. Your mileage may vary.</li>
+                                                <li>When you upload photos, you can have UrbanLens read GPS coordinates from the EXIF metadata and suggest a matching pin.</li>
+                        {% plugin_slot "faq.import_tips" %}
                         <li>Importing your location history can automatically make pins for you, if you want it to. The location history file is deleted immediately, just like all the other stuff you import.</li>
                         <li>If you want to add friends, you can tag each other in trips you've been on, and that will make pins and mark things as visited for both of you. (You still have to click an "accept" button, because consent is a thing.)</li>
                         <li>You can opt in to marking places as visited just by logging into the site while you're there. You have to have reception for this, and it doesn't really seem like the easiest way to do it, but it works.</li>
@@ -425,7 +424,7 @@
                         The site data is stored on a RAID 10 array, so multiple drives need to fail before any data is lost. It's backed up as reasonably close to 3-2-1 as I can manage. The drives are encrypted on the server at rest, and only decrypted when the server is online. Any sensitive data in the database is also encrypted at rest on top of that. HTTPs also encrypts your data in transit, and direct messages are end-to-end encrypted on top of everything above.
                     </p>
                     <p>
-                        Regular database backups are run automatically and kept for a long time. Cloudflare, and other infrastructure, provide several additional protections for site reliability. The codebase has a rigorous CI/CD process that tests it for vulnerabilities every time it's changed, and it's automatically run through an AI that tries to identify any issues that managed to sneak in.
+                        Regular database backups are run automatically and kept for a long time. Cloudflare, and other infrastructure, provide several additional protections for site reliability. The codebase has a rigorous CI/CD process that tests it for vulnerabilities every time it's changed, and it is automatically analyzed for issues that managed to sneak in.
                     </p>
                     <p>
                         There's also an export tool, so you can make your own backups and import them somewhere else any time you'd like.

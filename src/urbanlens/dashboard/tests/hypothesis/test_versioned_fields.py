@@ -80,7 +80,7 @@ class ResolutionTests(TestCase):
             Wiki.objects.filter(pk=self.wiki.pk).update(name="Enrichment Name", description="")
 
     def test_only_automatic_writes_resolve_by_default(self) -> None:
-        """The concealed baseline: what the row would say with no people involved."""
+        """The automatic baseline: what the row would say with no people involved."""
         with writing_as(WriteSource.USER, actor=self.stranger.pk):
             Wiki.objects.filter(pk=self.wiki.pk).update(name="Community Name")
 
@@ -206,9 +206,8 @@ class DirtyFieldTests(TestCase):
         """
         Recording all of them would re-attribute other people's work.
 
-        A concealed viewer resolves by author, so if an ordinary save stamped the saver onto every versioned
-        field, a friend saving the wiki for an unrelated reason would hand that viewer a stranger's
-        contribution."""
+        A viewer who resolves by author would be handed a stranger's contribution if an ordinary save stamped
+        the saver onto every versioned field and a friend saved the wiki for an unrelated reason."""
         from urbanlens.dashboard.models.abstract.versioning import WriteSource, writing_as
 
         with writing_as(WriteSource.USER, actor=self.stranger.pk):
@@ -224,8 +223,6 @@ class DirtyFieldTests(TestCase):
 
     def test_a_stranger_s_contribution_survives_a_friend_s_unrelated_save(self) -> None:
         """The consequence of the above, stated as the behaviour that matters."""
-        from urbanlens.dashboard.services.wiki.concealment import concealed_field_values
-
         with writing_as(WriteSource.USER, actor=self.stranger.pk):
             Wiki.objects.filter(pk=self.wiki.pk).update(description="How to get in")
 
@@ -243,9 +240,11 @@ class DirtyFieldTests(TestCase):
         viewer = baker.make(User).profile
         baker.make("dashboard.Friendship", from_profile=viewer, to_profile=self.friend, status="Accepted")
 
-        values = concealed_field_values(Wiki.objects.get(pk=self.wiki.pk), viewer)
+        values = resolve_fields(
+            Wiki.objects.get(pk=self.wiki.pk), sources=(WriteSource.AUTOMATIC,), actor_ids={viewer.pk, self.friend.pk}
+        )
 
-        self.assertNotEqual(values["description"], "How to get in")
+        self.assertNotEqual(values.get("description"), "How to get in")
 
     def test_saving_twice_does_not_re_record_an_unchanged_field(self) -> None:
         """The snapshot is refreshed after each save."""

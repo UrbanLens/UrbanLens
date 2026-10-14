@@ -1,4 +1,4 @@
-"""P224: turning "child pin details" on or off swaps the panels that read it in place, without reloading the page."""
+"""Turning "child pin details" on or off swaps the panels that read it in place, without reloading the page."""
 
 from __future__ import annotations
 

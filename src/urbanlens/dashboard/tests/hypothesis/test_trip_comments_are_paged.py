@@ -1,7 +1,7 @@
 """
 A trip thread must cost a page, not a thread.
 
-H43 and H52: ``build_comment_tree`` loads every top-level comment and every
+``build_comment_tree`` loads every top-level comment and every
 reply on a trip, renders each one's text, aggregates each one's reactions, and
 resolves each author's identity - and then the panel renders all of it while
 the API paginates the built list. page_size bounded the response body and

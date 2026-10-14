@@ -1,4 +1,4 @@
-"""Read-side queries for consumers of Facts: AI writing agents and Consensus's recheck-round selection."""
+"""Read-side queries for consumers of Facts: automated writers and Consensus's recheck-round selection."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ def get_trusted_facts(
     min_confidence: float = DEFAULT_MIN_CONFIDENCE,
 ) -> list[Fact]:
     """
-    Facts a consumer (e.g. an AI writing agent) should treat as trustworthy for this subject.
+    Facts a consumer (e.g. an automated writer) should treat as trustworthy for this subject.
 
     Args:
         wiki: Restrict to this wiki's facts.

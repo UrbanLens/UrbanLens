@@ -253,8 +253,8 @@
         (root || document).querySelectorAll('.ul-page-explainer').forEach(initExplainer);
     }
 
-    // Fired by assistant-overlay.ts when the model calls reopen_explainer
-    // for a kind:"explainer" dismissal. A no-op when the target isn't on the
+    // Fired by a plugin's overlay when it reopens
+    // a dismissed explainer. A no-op when the target isn't on the
     // current page (a spoofed id, or the user navigated away) - querySelector
     // simply finds nothing.
     document.addEventListener('ul:explainer-reopen', function (evt) {

@@ -305,6 +305,6 @@
     "path": "src/urbanlens/dashboard/services/core/upstream_breaker.py",
     "fingerprint": "78b85823bd726836:1",
     "language": "python",
-    "reason": "A 12-character SHA-256 fingerprint of the configured REData API key, a high-entropy secret, scoping a cache key so a new key is asked at once. Not password storage."
+    "reason": "A 12-character SHA-256 fingerprint of a configured upstream API key, a high-entropy secret, scoping a cache key so a new key is asked at once. Not password storage."
   }
 ]

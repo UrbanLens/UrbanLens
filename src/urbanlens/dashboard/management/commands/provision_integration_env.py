@@ -65,13 +65,13 @@ class Command(BaseCommand):
             "--heavy-labels",
             type=int,
             default=0,
-            help="Grow dashboard_labels to this many rows on the --heavy-role account, for P123's cross-account label-scan load test. Tops up rather than restarting.",
+            help="Grow dashboard_labels to this many rows on the --heavy-role account, for the cross-account label-scan load test. Tops up rather than restarting.",
         )
         parser.add_argument(
             "--heavy-search-relations",
             type=int,
             default=0,
-            help="Grow the five other to-many relations P123 generalised to (pin/wiki aliases, trip activities/comments, safety check-in messages) to this many rows each on the --heavy-role account. Tops up rather than restarting.",
+            help="Grow the five other to-many relations generalised to (pin/wiki aliases, trip activities/comments, safety check-in messages) to this many rows each on the --heavy-role account. Tops up rather than restarting.",
         )
         parser.add_argument(
             "--population",
@@ -87,7 +87,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--external-apis",
             action="store_true",
-            help="Leave outbound providers and AI enabled on these accounts. Off by default: every provider outside REData bills per call.",
+            help="Leave outbound providers enabled on these accounts. Off by default: every provider outside first-party data services bills per call.",
         )
         parser.add_argument("--out", default=None, help="Write the JSON manifest here instead of to stdout.")
         parser.add_argument("--format", choices=["json", "text"], default="json", help="Output format (default: json).")

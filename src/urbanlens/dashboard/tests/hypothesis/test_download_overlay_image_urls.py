@@ -220,7 +220,7 @@ class TheOperatorsPathTests(TransactionTestCase):
     @pytest.mark.xfail(
         strict=True,
         raises=ProgrammingError,
-        reason="P242: the command runs today's models on the 0032 schema, which lacks columns added since",
+        reason="The command runs today's models on the 0032 schema, which lacks columns added since",
     )
     def test_the_migration_proceeds_once_the_command_has_run(self) -> None:
         from urbanlens.dashboard.tasks import process_image_upload

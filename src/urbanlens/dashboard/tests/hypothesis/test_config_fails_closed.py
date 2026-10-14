@@ -228,7 +228,7 @@ class DeploymentDefaultsTests(_ReloadsSettings):
         )
 
     def test_staging_prints_mail_even_with_smtp_configured(self) -> None:
-        """D26: a staging clone holds real addresses, and development's relay bills per message."""
+        """A staging clone holds real addresses, and development's relay bills per message."""
         smtp = "django.core.mail.backends.smtp.EmailBackend"
         for environment in ("staging", "development"):
             with self.subTest(environment=environment):
@@ -258,7 +258,7 @@ class DeploymentDefaultsTests(_ReloadsSettings):
         self.assertEqual(reloaded.EMAIL_DELIVERY_BACKEND, "django.core.mail.backends.locmem.EmailBackend")
 
     def test_a_deployment_trusts_only_origins_it_serves(self) -> None:
-        """Previously trusted https://urbanlens.org and https://localhost:<port> on every install."""
+        """Previously trusted https://example.com and https://localhost:<port> on every install."""
         reloaded = self._reload("production", **_CONFIGURED)
         exact, wildcard = reloaded._derive_trusted_origins(
             reloaded.ALLOWED_HOSTS, "https://urbanlens.example", allow_http=False
@@ -391,7 +391,7 @@ class TheGuardsStandAsideForTestsTests(SimpleTestCase):
         for host in ("localhost", "LOCALHOST.", "127.0.0.1", "127.1.2.3", "::1", "app.localhost"):
             with self.subTest(host=host):
                 self.assertTrue(_env.is_loopback_host(host))
-        public: tuple[str | None, ...] = ("urbanlens.org", "localhost.example.com", "10.0.0.1", "", None)
+        public: tuple[str | None, ...] = ("example.com", "localhost.example.com", "10.0.0.1", "", None)
         for candidate in public:
             with self.subTest(host=candidate):
                 self.assertFalse(_env.is_loopback_host(candidate))

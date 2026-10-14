@@ -1,4 +1,4 @@
-"""Pins whose smart-list membership is owed a re-evaluation, drained off the request (N30, Batch 1)."""
+"""Pins whose smart-list membership is owed a re-evaluation, drained off the request."""
 
 from django.db import migrations, models
 import django.db.models.deletion

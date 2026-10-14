@@ -1,4 +1,4 @@
-"""PlaceMerge records duplicate building places merged into one, and building_child_count stops counting superseded buildings (P98).
+"""PlaceMerge records duplicate building places merged into one, and building_child_count stops counting superseded buildings.
 
 ``PlaceMerge`` is the audit row ``manage.py merge_duplicate_buildings`` writes per loser. ``PinMergeSuggestion`` gains the
 ``duplicate_building`` origin for the pin pairs such a merge leaves behind.

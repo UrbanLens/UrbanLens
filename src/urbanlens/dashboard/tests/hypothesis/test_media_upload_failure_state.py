@@ -314,7 +314,7 @@ class FailureCardViewTests(TestCase):
 
 
 class StalledSweepIndexTests(TestCase):
-    """The stalled-upload sweep's filter is the partial index's condition, failed rows excluded (G1-21)."""
+    """The stalled-upload sweep's filter is the partial index's condition, failed rows excluded."""
 
     def test_the_sweep_query_can_use_the_pending_index(self) -> None:
         from django.db import connection

@@ -10,7 +10,7 @@ longer hold. A push that finds nothing changed writes nothing to Google.
 
 A link deleted with the trip or activity it mirrors takes the only record of its event with it, so an event
 UrbanLens made is queued for deletion first (``CalendarEventDeletion``). An event an import linked from the user's
-own calendar is theirs, and stays. See UrbanLens#301 ("hidden location stays on an unreached calendar").
+own calendar is theirs, and stays.
 """
 
 from __future__ import annotations

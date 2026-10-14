@@ -33,7 +33,7 @@ class MixedAwarenessForecastTests(TestCase):
             return _build_activity_forecasts([self.activity])
 
     def test_an_offset_carrying_slot_does_not_raise(self) -> None:
-        """The REData-shaped case: fromisoformat preserved a +00:00 offset."""
+        """The offset-carrying case: fromisoformat preserved a +00:00 offset."""
         aware_slot = {"date": dt.datetime(2026, 6, 1, 12, 0, tzinfo=dt.UTC), "temp": 20}
 
         results = self._forecasts([aware_slot])

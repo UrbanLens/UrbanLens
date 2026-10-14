@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 #: Most place names the query ORs together.
 MAX_NAMES = 6
 
-#: REData's ceiling on a search query's length.
+#: The news search's ceiling on a query's length.
 MAX_QUERY_CHARACTERS = 500
 
 #: Shortest name worth sending; GDELT rejects very short keywords outright.
@@ -163,9 +163,9 @@ def _register_names(location: Location) -> list[str]:
 
     "Hudson River State Hospital, Main Building" names a building on the site; the part before the comma names the site.
     A one-word head is not kept: in "Roosevelt, Isaac, House" it is a surname, not a place. Which listings count is
-    :func:`~urbanlens.dashboard.services.locations.register_names.register_listing_names`'s call, the same one naming uses.
+    :func:`~urbanlens.dashboard.services.locations.historic_registers.register_listing_names`'s call, the same one naming uses.
     """
-    from urbanlens.dashboard.services.locations.register_names import register_listing_names
+    from urbanlens.dashboard.services.locations.historic_registers import register_listing_names
 
     names: list[str] = []
     for name in register_listing_names(location):
@@ -298,7 +298,7 @@ class NewsQuery:
         GDELT gives a headline and a domain, no body text, so the headline is what is judged.
 
         Args:
-            article: A normalized REData news result.
+            article: A normalized news result.
 
         Returns:
             True when the headline names the place or its locality and is in the requested script.

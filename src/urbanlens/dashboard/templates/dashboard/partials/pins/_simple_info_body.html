@@ -37,7 +37,7 @@
             {% if entry.href %}
             <dd>
                 <a href="{{ entry.href }}" target="_blank" rel="noopener noreferrer">{{ entry.value }}</a>
-                {% if entry.ai_extract %}{% include "dashboard/partials/pins/_ai_extract_button.html" with url=entry.href %}{% endif %}
+                {% if entry.extractable %}{% with url=entry.href %}{% plugin_slot "link.actions" %}{% endwith %}{% endif %}
             </dd>
             {% else %}
             <dd>{{ entry.value }}</dd>
@@ -52,6 +52,6 @@
         {{ footer_link.label }}
         <i class="material-symbols-outlined">arrow_forward</i>
     </a>
-    {% if footer_link.ai_extract %}{% include "dashboard/partials/pins/_ai_extract_button.html" with url=footer_link.url %}{% endif %}
+    {% if footer_link.extractable %}{% with url=footer_link.url %}{% plugin_slot "link.actions" %}{% endwith %}{% endif %}
     {% endif %}
 </div>

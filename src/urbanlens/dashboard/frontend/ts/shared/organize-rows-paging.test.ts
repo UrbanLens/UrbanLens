@@ -1,5 +1,5 @@
 /**
- * Paged Organize rows (P66): the parts of the page that need every row of a kind load the rest first.
+ * Paged Organize rows: the parts of the page that need every row of a kind load the rest first.
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";

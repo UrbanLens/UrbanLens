@@ -2,7 +2,7 @@
 Embedded photo keywords must be read in the sandbox, before the upload is rewritten.
 
 ``MetadataKeywordProvider.generate`` opened the stored file with Pillow in ``generate_image_keywords``, on the
-interactive worker that holds REData and OAuth credentials and has full egress (P116). It also ran after
+interactive worker that holds provider and OAuth credentials and has full egress. It also ran after
 ``process_image_upload`` had rewritten the file, and a rewrite keeps no XMP or IPTC, so a photo carrying an EXIF
 block - nearly every camera photo - had lost its keywords before the provider looked.
 """
@@ -22,13 +22,12 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.images import ImageKeyword
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.plugins.builtin.photo_keywords import MetadataKeywordProvider
+from urbanlens.dashboard.plugins.points import PHOTO_KEYWORD_PROVIDERS
 from urbanlens.dashboard.services.media.images import extract_embedded_keywords
 from urbanlens.dashboard.services.photos.photo_keywords import generate_keywords_for_image
 from urbanlens.dashboard.services.photos.uploads import attach_deduped_copy
 from urbanlens.dashboard.services.sandbox.guard import UnsandboxedParseError
 from urbanlens.dashboard.tasks import _process_photo_upload
-
-PROVIDERS = "urbanlens.dashboard.plugins.registry.plugin_registry.photo_keyword_providers"
 
 XMP = (
     b'<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">'
@@ -79,7 +78,7 @@ class EmbeddedKeywordsAreReadInTheSandboxTests(TestCase):
         image.refresh_from_db()
 
     def _stored_keywords(self, image: Image) -> set[str]:
-        with mock.patch(PROVIDERS, return_value=[MetadataKeywordProvider()]):
+        with PHOTO_KEYWORD_PROVIDERS.overridden([MetadataKeywordProvider()]):
             generate_keywords_for_image(image.pk)
         return set(ImageKeyword.objects.filter(image=image).values_list("keyword", flat=True))
 

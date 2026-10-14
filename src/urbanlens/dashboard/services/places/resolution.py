@@ -92,7 +92,7 @@ def refresh_area(place: Place) -> float | None:
         place.area_sqm = None
         return None
     measured = Place.objects.filter(pk=place.pk).annotate(computed_area=Area("geometry")).values_list("computed_area", flat=True).first()
-    area = float(measured.sq_m) if measured is not None else None  # type: ignore[attr-defined]  # an Area measure; django-stubs says float (P85)
+    area = float(measured.sq_m) if measured is not None else None  # type: ignore[attr-defined]  # an Area measure; django-stubs says float
     Place.objects.filter(pk=place.pk).update(area_sqm=area)
     place.area_sqm = area
     return area

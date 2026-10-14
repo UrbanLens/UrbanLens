@@ -1,4 +1,4 @@
-"""Regression test: a persistently unreachable REData must not retry forever."""
+"""Regression test: a persistently unreachable resolver must not retry forever."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard import tasks
 from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType
 from urbanlens.dashboard.models.notifications.model import NotificationLog
-from urbanlens.dashboard.services.apis.locations.cid_resolution import PROVIDER_REDATA, CidResolutionResult
+from urbanlens.dashboard.services.apis.locations.cid_resolution import CidResolutionResult
 
 #: Positions in retry()'s args list, counted from the start so appending a
 #: parameter cannot silently repoint them onto the wrong value.
@@ -36,7 +36,7 @@ class ResolveDeferredPinLocationsConsecutiveFailuresTests(TestCase):
         ]
 
     def _request_failed_result(self) -> CidResolutionResult:
-        return CidResolutionResult(provider=PROVIDER_REDATA, pending=[12345], request_failed=True)
+        return CidResolutionResult(provider="fake", pending=[12345], request_failed=True)
 
     def test_a_single_request_failure_still_retries(self) -> None:
         with (
@@ -72,7 +72,7 @@ class ResolveDeferredPinLocationsConsecutiveFailuresTests(TestCase):
                 self.profile.pk,
                 self.deferred_lists,
                 auto_tag=False,
-                consecutive_request_failures=tasks._MAX_CONSECUTIVE_REDATA_FAILURES - 1,
+                consecutive_request_failures=tasks._MAX_CONSECUTIVE_RESOLVER_FAILURES - 1,
                 started_at=(timezone.now() - timedelta(days=3)).isoformat(),
             )
 
@@ -84,8 +84,8 @@ class ResolveDeferredPinLocationsConsecutiveFailuresTests(TestCase):
         self.assertEqual(notification.importance, Importance.HIGH)
 
     def test_a_successful_response_resets_the_counter(self) -> None:
-        """A batch that's still pending on REData's own end (not a request failure) is real progress - it must not inherit whatever failure streak preceded it, or a REData instance that recovers after N-1 failures would still get cut off early by a stale counter."""
-        recovered = CidResolutionResult(provider=PROVIDER_REDATA, pending=[12345], request_failed=False)
+        """A batch that's still pending on the resolver's own end (not a request failure) is real progress - it must not inherit whatever failure streak preceded it, or a resolver that recovers after N-1 failures would still get cut off early by a stale counter."""
+        recovered = CidResolutionResult(provider="fake", pending=[12345], request_failed=False)
         with (
             mock.patch(
                 "urbanlens.dashboard.services.apis.locations.cid_resolution.resolve_cids", return_value=recovered
@@ -97,7 +97,7 @@ class ResolveDeferredPinLocationsConsecutiveFailuresTests(TestCase):
                 self.profile.pk,
                 self.deferred_lists,
                 auto_tag=False,
-                consecutive_request_failures=tasks._MAX_CONSECUTIVE_REDATA_FAILURES - 1,
+                consecutive_request_failures=tasks._MAX_CONSECUTIVE_RESOLVER_FAILURES - 1,
             )
 
         mock_retry.assert_called_once()

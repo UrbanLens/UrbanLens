@@ -178,10 +178,6 @@ class PrefetchFindsTheArticleForACoordinateOnlyPinTests(TestCase):
             mock.patch.object(WikipediaGateway, "_fetch_summary", return_value=_SUMMARY),
             mock.patch.object(WikipediaGateway, "_fill_full_extract"),
             mock.patch.object(WikipediaGateway, "_fetch_infobox", return_value=[]),
-            mock.patch(
-                "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured",
-                return_value=False,
-            ),
             self.captureOnCommitCallbacks(execute=True),
         ):
             tasks.prefetch_location_external_data(self.location.pk, profile_id=self.profile.pk, pin_id=self.pin.pk)
@@ -214,10 +210,6 @@ class PrefetchFindsTheArticleForACoordinateOnlyPinTests(TestCase):
             _no_address_lookup(),
             mock.patch.object(NominatimGateway, "reverse_geocode_admin", return_value=None),
             mock.patch.object(WikipediaGateway, "get_article_for_location", return_value=None),
-            mock.patch(
-                "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured",
-                return_value=False,
-            ),
             self.captureOnCommitCallbacks(execute=True),
         ):
             tasks.prefetch_location_external_data(self.location.pk)

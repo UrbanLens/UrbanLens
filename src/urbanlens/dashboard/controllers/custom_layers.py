@@ -58,7 +58,7 @@ def _resolve_layer_owner(request: HttpRequest, pin_slug: str | None, location_sl
     # Filtered by who created it, not hidden outright - the same rule controllers.markup applies to PinMarkup
     # and for the same reason: a layer you made yourself and then can't find in your own layers panel is a
     # malfunction, and a malfunction only some accounts get is a tell.
-    from urbanlens.dashboard.services.wiki.concealment import visible_rows
+    from urbanlens.dashboard.services.wiki.viewer_projection import visible_rows
 
     _location, wiki, profile = resolve_visible_wiki(request, location_slug)
     return wiki, visible_rows(CustomLayer.objects.for_wiki(wiki), wiki, profile)
@@ -382,8 +382,8 @@ class CustomLayerShareToWikiView(LoginRequiredMixin, View):
         else:
             # Deliberately identical whether this created a new wiki layer or reused a same-named one already
             # there: distinguishing the two would let a caller learn, from the toast alone, whether some other
-            # user had already created a same-named layer on this wiki - a name-existence oracle once viewer
-            # concealment is live.
+            # user had already created a same-named layer on this wiki - a name-existence oracle for layers the
+            # viewer is not shown.
             toast = {"level": "success", "message": f'"{layer.name}" is on the community wiki.'}
         triggers = json.loads(response["HX-Trigger"])
         triggers["showToast"] = toast

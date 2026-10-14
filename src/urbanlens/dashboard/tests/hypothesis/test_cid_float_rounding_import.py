@@ -21,11 +21,10 @@ from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard import tasks
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_import_failures.model import PinImportFailure
-from urbanlens.dashboard.services.apis.locations.cid_resolution import PROVIDER_REDATA, CidResolutionResult
+from urbanlens.dashboard.plugins.points import CID_RESOLVERS
+from urbanlens.dashboard.services.apis.locations.cid_resolution import CidResolutionResult, CidResolver
 from urbanlens.dashboard.services.apis.locations.cid_validation import MAX_CID, float_rounded
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway, confirmed_pin_cid
-from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import RedataCidGateway
-from urbanlens.UrbanLens.settings.app import settings
 
 #: Above 2**63, so a float64 cannot hold it: the browser hands back 14522379626423718000.
 TRUE_CID = 0xC989DB53CE5B1234
@@ -44,20 +43,20 @@ def _through_the_browser(payload: object) -> Any:
     )
 
 
-def _wire(payload: object) -> Any:
-    """*payload* as REData's JSON parser reads it."""
-    return json.loads(json.dumps(payload, cls=DjangoJSONEncoder))
+class _RecordingResolver(CidResolver):
+    """Answers every cid it is asked with the fixed coordinates, remembering what it was asked."""
 
+    key = "recording"
 
-def _fake_redata(entries: list[Any]) -> dict[str, Any]:
-    """REData's ``resolve-cids`` answer: a cid in a feature id wins over a claimed one, and keys the result."""
-    results: dict[str, Any] = {}
-    for raw in entries:
-        url = raw.get("url", "") if isinstance(raw, dict) else ""
-        claimed = raw.get("cid") if isinstance(raw, dict) else raw
-        cid = int(url.rsplit(":0x", 1)[1], 16) if ":0x" in url else int(claimed)
-        results[str(cid)] = {"lat": LAT, "lng": LNG} if cid == TRUE_CID else None
-    return {"results": results, "pending": []}
+    def __init__(self) -> None:
+        self.asked: list[int] = []
+
+    def available(self) -> bool:
+        return True
+
+    def resolve(self, cids: list[int], urls_by_cid: dict[int, str] | None = None) -> CidResolutionResult:
+        self.asked.extend(cids)
+        return CidResolutionResult(provider=self.key, resolved=dict.fromkeys(cids, (LAT, LNG)))
 
 
 class TakeoutCidSurvivesTheBrowserTests(TestCase):
@@ -101,30 +100,16 @@ class TakeoutCidSurvivesTheBrowserTests(TestCase):
             list(gateway.iter_confirmed_import_events(confirmed_lists, self.profile, auto_tag=False))
         deferred_lists = json.loads(json.dumps(enqueue.call_args.args[2]))  # Celery's JSON serializer.
 
-        posted: list[Any] = []
-
-        def post(_url: str, *, json: Any, **_kwargs: Any) -> mock.Mock:
-            body = _wire(json)
-            posted.extend(body["cids"])
-            return mock.Mock(status_code=200, json=mock.Mock(return_value=_fake_redata(body["cids"])))
-
-        session = mock.Mock(post=mock.Mock(side_effect=post))
+        resolver = _RecordingResolver()
         with (
-            mock.patch.object(settings, "redata_api_url", "https://redata.example.test"),
-            mock.patch.object(settings, "redata_api_key", "test-key"),
-            mock.patch(
-                "urbanlens.dashboard.services.apis.locations.cid_resolution.RedataCidGateway",
-                side_effect=lambda: RedataCidGateway(
-                    base_url="https://redata.example.test", api_key="test-key", session=session
-                ),
-            ),
+            CID_RESOLVERS.overridden([resolver]),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
             mock.patch.object(tasks.resolve_deferred_pin_locations, "retry") as retry,
         ):
             tasks.resolve_deferred_pin_locations(self.profile.pk, deferred_lists, auto_tag=False)
 
         retry.assert_not_called()
-        self.assertEqual([int(entry["cid"]) for entry in posted], [TRUE_CID])
+        self.assertEqual(resolver.asked, [TRUE_CID])
         pin = Pin.objects.get(profile=self.profile)
         self.assertAlmostEqual(float(pin.effective_latitude), LAT, places=5)
         self.assertEqual(pin.location.cid, TRUE_CID)
@@ -209,11 +194,9 @@ class DeferredLookupRejectionTests(TestCase):
     def _deferred(self, *pins: dict[str, Any]) -> list[dict[str, Any]]:
         return [{"stem": "", "create_category": False, "label_ids": [], "pins": list(pins)}]
 
-    def test_a_cid_reData_refuses_becomes_a_failure_at_once_and_is_not_retried(self) -> None:
+    def test_a_cid_the_resolver_refuses_becomes_a_failure_at_once_and_is_not_retried(self) -> None:
         url = "https://www.google.com/maps/place/X/data=!4m2!3m1!1s0x1:0x8"
-        result = CidResolutionResult(
-            provider=PROVIDER_REDATA, resolved={7: (LAT, LNG)}, rejected={8: "cid_conflicts_with_url"}
-        )
+        result = CidResolutionResult(provider="fake", resolved={7: (LAT, LNG)}, rejected={8: "cid_conflicts_with_url"})
         with (
             mock.patch("urbanlens.dashboard.services.apis.locations.cid_resolution.resolve_cids", return_value=result),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
@@ -231,7 +214,7 @@ class DeferredLookupRejectionTests(TestCase):
         with (
             mock.patch(
                 "urbanlens.dashboard.services.apis.locations.cid_resolution.resolve_cids",
-                return_value=CidResolutionResult(provider=PROVIDER_REDATA, resolved={TRUE_CID: (LAT, LNG)}),
+                return_value=CidResolutionResult(provider="fake", resolved={TRUE_CID: (LAT, LNG)}),
             ) as resolve_cids,
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
             mock.patch.object(tasks.resolve_deferred_pin_locations, "retry") as retry,

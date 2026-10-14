@@ -133,7 +133,7 @@ class RepairLegacyPinCoordinatesTests(TestCase):
         Link a CID to *location* without the live place-name lookup.
 
         Assigning ``location.cid`` goes through ``GooglePlaceService`` with ``fetch_if_missing=True``, which
-        calls REData's nearby-places search to name the coordinates - a real network call, so under the test
+        calls a provider's nearby-places search to name the coordinates - a real network call, so under the test
         harness's network block every test in this class died on a ``RuntimeError`` before reaching its own
         assertions."""
         from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService

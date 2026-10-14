@@ -141,7 +141,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
 
         site = SiteSettings.get_current()
         show_pin_count = site.show_dev_admin_features(request.user)
-        show_filtered_pin_count = user_has_feature(request.user, SiteFeature.AI)
+        show_filtered_pin_count = show_pin_count
         show_places_layer = user_has_feature(request.user, SiteFeature.PLACES)
 
         # New-user onboarding: offer a one-time dialog pointing at any pending pin suggestions (most commonly
@@ -344,8 +344,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         Returns an empty list with ``disabled: true`` when no API key is
         configured so the client can suppress the source gracefully.
         """
+        from urbanlens.dashboard.services.apis.locations import places_resolution
         from urbanlens.dashboard.services.map_pins.autocomplete import (
-            search_google_places,
+            search_places,
         )
 
         q = (request.GET.get("q") or "").strip()
@@ -355,12 +356,10 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         if not request.user.profile.external_apis_enabled:
             return JsonResponse({"results": [], "source": "places", "disabled": True})
 
-        api_key = settings.google_unrestricted_api_key
-        redata_configured = bool(settings.redata_api_url and settings.redata_api_key)
-        if not api_key and not redata_configured:
+        if not places_resolution.available():
             return JsonResponse({"results": [], "source": "places", "disabled": True})
 
-        found = search_google_places(q, api_key or "", caller=account_or_address(request))
+        found = search_places(q, caller=account_or_address(request))
         if not found.ok:
             return refusal_json(found, {"results": [], "source": "places"})
         return JsonResponse({"results": [r.to_dict() for r in found.value_or([])], "source": "places"})
@@ -385,8 +384,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         Coordinates are intentionally omitted from the autocomplete response to avoid a Places Details API
         call for every suggestion shown.
         """
+        from urbanlens.dashboard.services.apis.locations import places_resolution
         from urbanlens.dashboard.services.map_pins.autocomplete import (
-            resolve_google_place,
+            resolve_place,
         )
 
         place_id = (request.GET.get("place_id") or "").strip()
@@ -396,12 +396,10 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         if not request.user.profile.external_apis_enabled:
             return JsonResponse({"error": "disabled"}, status=403)
 
-        api_key = settings.google_unrestricted_api_key
-        redata_configured = bool(settings.redata_api_url and settings.redata_api_key)
-        if not api_key and not redata_configured:
+        if not places_resolution.available():
             return JsonResponse({"error": "no_api_key"}, status=503)
 
-        resolved = resolve_google_place(place_id, api_key or "", caller=account_or_address(request))
+        resolved = resolve_place(place_id, caller=account_or_address(request))
         if not resolved.ok or resolved.value is None:
             return refusal_json(resolved, {"error": "unavailable"})
         lat, lng, name = resolved.value
@@ -660,7 +658,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         )
         streamed["X-Map-Document"] = "miss"
         # nginx buffering is deliberately left on: a streamed response holds its database connection to the last
-        # byte, so unbuffered a slow client would decide how long a worker and a backend are occupied. See D12.
+        # byte, so unbuffered a slow client would decide how long a worker and a backend are occupied.
         if map_document.MapDocumentCache.ttl() > 0 and documents.claim_build():
             # Claimed, so several tabs missing at once schedule one build rather
             # than one each; and skipped entirely when there is no cache to fill.
@@ -855,7 +853,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             new_ids = set(new_labels.values_list("pk", flat=True))
             removed = pin.labels.filter(kind__in={KIND_TAG, KIND_CATEGORY, KIND_STATUS}).exclude(pk__in=new_ids)
             for label in removed:
-                # Tombstone first: keyword/AI auto-tagging can otherwise silently
+                # Tombstone first: auto-tagging can otherwise silently
                 # reattach a label a user just removed via the map's quick-edit dialog.
                 PinAutoRemoval.objects.record(pin=pin, kind=AutoRemovalKind.LABEL, value=str(label.pk))
             pin.labels.set(new_labels)
@@ -938,17 +936,15 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         if not place_id:
             return JsonResponse({"error": "missing place_id"}, status=400)
 
-        api_key = settings.google_unrestricted_api_key
-        redata_configured = bool(settings.redata_api_url and settings.redata_api_key)
-        if not api_key and not redata_configured:
-            return JsonResponse({"error": "no_api_key"}, status=503)
-
         from urbanlens.dashboard.services.apis.locations import places_resolution
         from urbanlens.dashboard.services.apis.request_upstreams import PlaceDetailsUpstream
 
+        if not places_resolution.available():
+            return JsonResponse({"error": "no_api_key"}, status=503)
+
         ttl = SiteSettings.get_current().google_places_cache_days * 86400
         found = PlaceDetailsUpstream.call(
-            lambda: places_resolution.get_place_details_full(place_id, api_key=api_key or ""),
+            lambda: places_resolution.get_place_details_full(place_id),
             key=f"{places_resolution.active_provider()}:{place_id}",
             ttl=ttl,
             caller=account_or_address(request),

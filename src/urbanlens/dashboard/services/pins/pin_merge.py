@@ -33,7 +33,6 @@ from urbanlens.dashboard.models.floorplans.model import Floorplan
 from urbanlens.dashboard.models.images.attachment import ImageAttachment
 from urbanlens.dashboard.models.images.issues import PhotoUploadFailure
 from urbanlens.dashboard.models.images.model import Image
-from urbanlens.dashboard.models.link_extraction.model import LinkExtraction
 from urbanlens.dashboard.models.links.model import PinLink
 from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
 from urbanlens.dashboard.models.markup.meta import MarkupType
@@ -49,6 +48,7 @@ from urbanlens.dashboard.models.property_owner.model import PinOwner, PinPropert
 from urbanlens.dashboard.models.reviews.model import Review
 from urbanlens.dashboard.models.trips.model import TripActivity
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
+from urbanlens.dashboard.plugins.points import PIN_ABSORBING
 from urbanlens.dashboard.services.core.row_merge import column_field, repoint_references
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_NOTE_LENGTH
 
@@ -1049,7 +1049,7 @@ def merge_pins(survivor: Pin, loser: Pin, profile: Profile, resolutions: dict[st
         Image.objects.filter(pin=loser).update(pin=survivor)
         PinLink.objects.filter(pin=loser).update(pin=survivor)
         PinPropertySale.objects.filter(pin=loser).update(pin=survivor)
-        LinkExtraction.objects.filter(pin=loser).update(pin=survivor)
+        PIN_ABSORBING.fire(survivor, loser)
         Comment.objects.filter(pin=loser).update(pin=survivor)
         PinMarkup.objects.filter(parent_pin=loser).update(parent_pin=survivor)
         MarkupMap.objects.filter(pin=loser).update(pin=survivor)

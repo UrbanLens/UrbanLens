@@ -242,7 +242,7 @@ class GetArticleMediaTests(SimpleTestCase):
 
 class WikipediaCampusFallbackTests(TestCase):
     """
-    UL-354: a building whose own coordinates find no article retries from the
+    A building whose own coordinates find no article retries from the
     places it stands in (campus-aware search).
 
     A large campus has one article geotagged at a single point (usually the

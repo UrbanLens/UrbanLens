@@ -7,7 +7,7 @@
 
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { resetHostedBasemapForTests } from "./hosted-basemap";
-import { BASE_ERROR_TILE_COLOR, createMapLayers, registerRedataLayers, resetRedataLayersCacheForTests } from "./map-layers";
+import { BASE_ERROR_TILE_COLOR, createMapLayers, registerCatalogueLayers, resetCatalogueLayersCacheForTests } from "./map-layers";
 import { createMaplibreMapLayers, isMaplibreMap } from "./maplibre-layers";
 import { parseContributors, resetEsriAttributionForTests, seedEsriCoveragesForTests } from "./esri-attribution";
 import type { Map as MaplibreMap } from "maplibre-gl";
@@ -598,26 +598,26 @@ describe("attribution", () => {
 
     /**
      * Crediting whoever drew the bytes on screen is a licence obligation, not decoration. Where
-     * REData serves a base layer itself, the vendor it replaced must not keep the credit - the
+     * the catalogue serves a base layer itself, the vendor it replaced must not keep the credit - the
      * Leaflet engine reads the live `TILE_DEFS` entry for exactly this reason and this engine has
      * to as well, since `attributionControl` is off on every page that uses it.
      */
-    describe("with a REData-registered raster layer", () => {
+    describe("with a catalogue-registered raster layer", () => {
         const realFetch = globalThis.fetch;
 
         afterEach(() => {
             globalThis.fetch = realFetch;
-            resetRedataLayersCacheForTests();
+            resetCatalogueLayersCacheForTests();
         });
 
         async function registerRaster(id: string, attribution: string): Promise<void> {
-            resetRedataLayersCacheForTests();
+            resetCatalogueLayersCacheForTests();
             globalThis.fetch = (() =>
                 Promise.resolve({
                     ok: true,
-                    json: () => Promise.resolve({ layers: [{ id, source_type: "raster", url_template: "https://redata.example/{z}/{x}/{y}.png", attribution }] }),
+                    json: () => Promise.resolve({ layers: [{ id, source_type: "raster", url_template: "https://tiles.example/{z}/{x}/{y}.png", attribution }] }),
                 } as Response)) as unknown as typeof fetch;
-            await registerRedataLayers();
+            await registerCatalogueLayers();
         }
 
         test("credits the deployment's own catalogue, not the vendor it replaced", async () => {
@@ -771,7 +771,7 @@ describe("createMapLayers engine dispatch", () => {
 describe("vector base layers", () => {
     const realFetch = globalThis.fetch;
 
-    const STYLE_URL = "https://redata.example/styles/street/style.json";
+    const STYLE_URL = "https://tiles.example/styles/street/style.json";
     const CATALOGUE_URL = "/dashboard/map/basemap-tiles/sources/";
 
     const styleDocument = {
@@ -809,17 +809,17 @@ describe("vector base layers", () => {
     }
 
     beforeEach(() => {
-        resetRedataLayersCacheForTests();
+        resetCatalogueLayersCacheForTests();
     });
 
     afterEach(() => {
         globalThis.fetch = realFetch;
-        resetRedataLayersCacheForTests();
+        resetCatalogueLayersCacheForTests();
     });
 
     test("draws the style's own layers, under everything the page already had", async () => {
         stubFetch({ layers: [vectorEntry("street")] });
-        await registerRedataLayers();
+        await registerCatalogueLayers();
         const map = makeMap(["page-pins"]);
         createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
 
@@ -834,7 +834,7 @@ describe("vector base layers", () => {
 
     test("keeps the error-background layer beneath the vector style's own layers too", async () => {
         stubFetch({ layers: [vectorEntry("street")] });
-        await registerRedataLayers();
+        await registerCatalogueLayers();
         const map = makeMap();
         createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
 
@@ -847,7 +847,7 @@ describe("vector base layers", () => {
 
     test("resolves the style's relative tile template against the style's own address", async () => {
         stubFetch({ layers: [vectorEntry("street")] });
-        await registerRedataLayers();
+        await registerCatalogueLayers();
         const map = makeMap();
         createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
 
@@ -855,26 +855,26 @@ describe("vector base layers", () => {
         await settle();
 
         expect(map.sources.get("ul-layers-vector-street-omt")).toMatchObject({
-            tiles: ["https://redata.example/data/{z}/{x}/{y}.pbf"],
+            tiles: ["https://tiles.example/data/{z}/{x}/{y}.pbf"],
         });
     });
 
     test("applies the style's glyphs and sprite, which are document-level and have no layer to carry them", async () => {
         stubFetch({ layers: [vectorEntry("street")] });
-        await registerRedataLayers();
+        await registerCatalogueLayers();
         const map = makeMap();
         createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
 
         map.finishStyleLoad();
         await settle();
 
-        expect(map.glyphs).toBe("https://redata.example/fonts/{fontstack}/{range}.pbf");
-        expect(map.sprites.get("default")).toBe("https://redata.example/styles/street/sprites/street");
+        expect(map.glyphs).toBe("https://tiles.example/fonts/{fontstack}/{range}.pbf");
+        expect(map.sprites.get("default")).toBe("https://tiles.example/styles/street/sprites/street");
     });
 
     test("hides every raster base, since a vector style is a whole basemap of its own", async () => {
         stubFetch({ layers: [vectorEntry("street")] });
-        await registerRedataLayers();
+        await registerCatalogueLayers();
         const map = makeMap();
         createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
 
@@ -889,7 +889,7 @@ describe("vector base layers", () => {
 
     test("keeps the borders overlay drawing above the vector basemap", async () => {
         stubFetch({ layers: [vectorEntry("street")] });
-        await registerRedataLayers();
+        await registerCatalogueLayers();
         const map = makeMap();
         createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false, initialOverlays: ["borders"] });
 
@@ -902,7 +902,7 @@ describe("vector base layers", () => {
 
     test("credits the deployment's own attribution rather than the vendor it replaced", async () => {
         stubFetch({ layers: [vectorEntry("street")] });
-        await registerRedataLayers();
+        await registerCatalogueLayers();
         const seen: string[] = [];
         const map = makeMap();
         createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false, onAttribution: (text) => seen.push(text) });
@@ -915,7 +915,7 @@ describe("vector base layers", () => {
 
     test("takes the whole style off the map when a raster base is selected", async () => {
         stubFetch({ layers: [vectorEntry("street")] });
-        await registerRedataLayers();
+        await registerCatalogueLayers();
         const map = makeMap();
         const engine = createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
         map.finishStyleLoad();
@@ -933,7 +933,7 @@ describe("vector base layers", () => {
 
     test("puts it back when the vector base is selected again", async () => {
         stubFetch({ layers: [vectorEntry("street")] });
-        await registerRedataLayers();
+        await registerCatalogueLayers();
         const map = makeMap();
         const engine = createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
         map.finishStyleLoad();
@@ -950,7 +950,7 @@ describe("vector base layers", () => {
 
     test("swaps one vector style for another rather than stacking them", async () => {
         stubFetch({ layers: [vectorEntry("street"), vectorEntry("terrain")] });
-        await registerRedataLayers();
+        await registerCatalogueLayers();
         const map = makeMap();
         const engine = createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
         map.finishStyleLoad();
@@ -967,7 +967,7 @@ describe("vector base layers", () => {
     test("draws the dark layer's own style when dark mode is on", async () => {
         // Street is raster here, so the light map draws no style of its own before dark mode is turned on.
         stubFetch({ layers: [vectorEntry("dark"), { id: "street", source_type: "raster", url_template: "/dashboard/map/basemap-tiles/street/{z}/{x}/{y}/", attribution: "Attr" }] });
-        await registerRedataLayers();
+        await registerCatalogueLayers();
         const map = makeMap();
         const engine = createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false, darkMode: "light" });
         map.finishStyleLoad();
@@ -983,7 +983,7 @@ describe("vector base layers", () => {
 
     test("falls back to the raster layer when the style document cannot be had", async () => {
         const calls = stubFetch({ layers: [vectorEntry("street")], styleOk: false });
-        await registerRedataLayers();
+        await registerCatalogueLayers();
         const map = makeMap();
         createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
 
@@ -999,7 +999,7 @@ describe("vector base layers", () => {
 
     test("stops asking for a style that could not be had, rather than re-fetching on every toggle", async () => {
         const calls = stubFetch({ layers: [vectorEntry("street")], styleOk: false });
-        await registerRedataLayers();
+        await registerCatalogueLayers();
         const map = makeMap();
         const engine = createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
         map.finishStyleLoad();
@@ -1018,7 +1018,7 @@ describe("vector base layers", () => {
         const calls = stubFetch({
             layers: [{ id: "street", source_type: "raster", url_template: "/dashboard/map/basemap-tiles/street/{z}/{x}/{y}/", attribution: "Attr" }],
         });
-        await registerRedataLayers();
+        await registerCatalogueLayers();
         const map = makeMap();
         createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
 
@@ -1031,7 +1031,7 @@ describe("vector base layers", () => {
 
     test("an installation with no catalogue draws OpenFreeMap's keyless style, and credits it", async () => {
         const calls = stubFetch({ layers: [] });
-        await registerRedataLayers();
+        await registerCatalogueLayers();
         const map = makeMap();
         const credits: string[] = [];
         createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false, onAttribution: (text) => credits.push(text) });
@@ -1046,12 +1046,12 @@ describe("vector base layers", () => {
 
     describe("drawing the basemap's tiles from Protomaps' hosted API", () => {
         const HOSTED = "https://api.protomaps.com/tiles/v4/{z}/{x}/{y}.mvt?key=pk_test";
-        const OWN = "https://tiles.urbanlens.org/basemap/{z}/{x}/{y}";
+        const OWN = "https://tiles.example.com/basemap/{z}/{x}/{y}";
         const SOURCE = "ul-layers-vector-street-protomaps";
         const protomapsStyle = {
             version: 8,
             sources: { protomaps: { type: "vector", tiles: [OWN], maxzoom: 15 } },
-            glyphs: "https://tiles.urbanlens.org/fonts/{fontstack}/{range}.pbf",
+            glyphs: "https://tiles.example.com/fonts/{fontstack}/{range}.pbf",
             layers: [{ id: "water", type: "fill", source: "protomaps", "source-layer": "water" }],
         };
 
@@ -1085,7 +1085,7 @@ describe("vector base layers", () => {
         test("only the tile source moves - glyphs stay our own - and a refusal puts our own tiles back", async () => {
             embedHostedTiles();
             stubFetch({ layers: [{ ...vectorEntry("street"), attribution: "© OpenStreetMap contributors © Protomaps" }], style: protomapsStyle });
-            await registerRedataLayers();
+            await registerCatalogueLayers();
             const map = makeMap();
             const credits: string[] = [];
             const engine = createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false, onAttribution: (text) => credits.push(text) });
@@ -1093,7 +1093,7 @@ describe("vector base layers", () => {
             await settle();
 
             expect(map.sources.get(SOURCE)).toMatchObject({ tiles: [HOSTED], maxzoom: 15 });
-            expect(map.glyphs).toBe("https://tiles.urbanlens.org/fonts/{fontstack}/{range}.pbf");
+            expect(map.glyphs).toBe("https://tiles.example.com/fonts/{fontstack}/{range}.pbf");
             expect(credits.at(-1)).toContain("Protomaps © OpenStreetMap");
 
             canSetTiles(map, SOURCE);
@@ -1109,7 +1109,7 @@ describe("vector base layers", () => {
 
         test("without the embed the style's own tiles are drawn and nothing listens for errors", async () => {
             stubFetch({ layers: [vectorEntry("street")], style: protomapsStyle });
-            await registerRedataLayers();
+            await registerCatalogueLayers();
             const map = makeMap();
             createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
             map.finishStyleLoad();
@@ -1122,7 +1122,7 @@ describe("vector base layers", () => {
         test("stops watching when another base replaces the vector one", async () => {
             embedHostedTiles();
             stubFetch({ layers: [vectorEntry("street")], style: protomapsStyle });
-            await registerRedataLayers();
+            await registerCatalogueLayers();
             const map = makeMap();
             const engine = createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
             map.finishStyleLoad();
@@ -1138,7 +1138,7 @@ describe("vector base layers", () => {
 
     test("abandons an in-flight style when the engine is destroyed", async () => {
         const calls = stubFetch({ layers: [vectorEntry("street")] });
-        await registerRedataLayers();
+        await registerCatalogueLayers();
         const map = makeMap();
         const engine = createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
         map.finishStyleLoad();

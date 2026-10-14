@@ -457,10 +457,10 @@ window.map = map;
 window.pin = null;
 
 // Kicked off now (not awaited until the base layers are actually built, far
-// below) so this deployment's REData tile catalogue fetch runs in parallel
+// below) so this deployment's tile catalogue fetch runs in parallel
 // with the rest of this module's synchronous setup rather than stalling it -
-// see MapLayers.registerRedataLayers()'s own docstring.
-const _redataLayersPromise = MapLayers.registerRedataLayers();
+// see MapLayers.registerCatalogueLayers()'s own docstring.
+const _catalogueLayersPromise = MapLayers.registerCatalogueLayers();
 
 // Show cached location dot immediately; live read updates it later. Independent of _MAP_CENTER_MODE — location awareness is useful on every map.
 if (_cachedUserLoc) {
@@ -2374,7 +2374,7 @@ function _renderMapAttribution(): void {
 
 // -- Layers: shared engine (ts/shared/map-layers.ts) ------------------------
 // Tile layers, flyout panel, dark mode, persistence, loading feedback, attribution. This page adds custom toggles (pins, places).
-await _redataLayersPromise;
+await _catalogueLayersPromise;
 _mapLayers = MapLayers.create(map, {
     root: document.getElementById("map-layers-panel"),
     apiKey: MAP_CFG.openweathermapApiKey,

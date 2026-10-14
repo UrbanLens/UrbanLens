@@ -11,7 +11,7 @@
 #       --provision-container urbanlens_development_main_app \
 #       --db-container urbanlens_development_main_db --heavy-pins 20000
 #
-#   bin/run_perf_tests.sh --url https://perf.dev.urbanlens.org --manifest /tmp/perf.json
+#   bin/run_perf_tests.sh --url https://perf.dev.example.com --manifest /tmp/perf.json
 #
 # Anything after `--` is handed to `k6 run` unchanged.
 
@@ -50,12 +50,12 @@ usage() {
 		  --db-container NAME        Sample pg_stat_activity here during the run.
 		  --heavy-pins N             Pins to seed the heavy account to (default: ${HEAVY_PINS}).
 		  --heavy-labels N           Rows to grow dashboard_labels to on the heavy account, for
-		                             P123's cross-account label-scan reproduction (default:
+		                             the cross-account label-scan reproduction (default:
 		                             ${HEAVY_LABELS}, i.e. off - the neighbour's search endpoints
 		                             still run, they just measure whatever the table already holds).
 		  --heavy-search-relations N Rows to grow pin/wiki aliases, trip activities/comments, and
 		                             safety check-in messages to (each) on the heavy account, for
-		                             P123's other five to-many-crossing search paths (default:
+		                             the other five to-many-crossing search paths (default:
 		                             ${HEAVY_SEARCH_RELATIONS}, i.e. off).
 		  --rate N                   Neighbour requests per second (default: ${RATE}).
 		  --budget-ms N              Skip the baseline pass and use this p95 ceiling.
@@ -108,12 +108,12 @@ if [[ -z "${BASE_URL}" ]]; then
 	exit 2
 fi
 
-# Allow-list: only *.dev.urbanlens.org is definitely safe.
+# Allow-list: only *.dev.example.com is definitely safe.
 case "${BASE_URL}" in
 	*staging*) refuse "${BASE_URL} names staging." ;;
 	*prod*) refuse "${BASE_URL} names production." ;;
-	*.dev.urbanlens.org*) ;;
-	*urbanlens.org*) refuse "${BASE_URL} is on urbanlens.org but is not a *.dev.urbanlens.org environment." ;;
+	*.dev.example.com*) ;;
+	*example.com*) refuse "${BASE_URL} is on example.com but is not a *.dev.example.com environment." ;;
 esac
 
 for container in "${PROVISION_CONTAINER}" "${DB_CONTAINER}"; do

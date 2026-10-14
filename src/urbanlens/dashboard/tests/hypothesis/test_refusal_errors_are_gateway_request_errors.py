@@ -1,12 +1,12 @@
 """
-P122: a refused call must be catchable everywhere a failed one already is.
+A refused call must be catchable everywhere a failed one already is.
 
 `rate_limiter._reserve_call` refuses a call by raising `RequestCancelledError` (or one of its three
 subclasses) - the family every ordinary gateway call passes through via `_RateLimitedSession`. That
 family subclassed only `DashboardError`, not `GatewayRequestError`, so a view or service that
 degrades gracefully on `except GatewayRequestError` - the contract every other gateway failure
 raises - let a refusal escape as an unhandled 500 instead. Refusals are routine: development and the
-demo refuse most services outright, and R29 fires `RateLimiterUnavailableError` whenever `ul_web` is
+demo refuse most services outright, and the limiter fires `RateLimiterUnavailableError` whenever `ul_web` is
 at its connection limit.
 """
 
@@ -72,7 +72,7 @@ class UpstreamThrottledErrorTests(SimpleTestCase):
     def setUp(self) -> None:
         super().setUp()
         self.retry_after = UPSTREAM_BUSY_DEFAULT_SECONDS + 7
-        self.exc = UpstreamThrottledError("redata_places", retry_after=self.retry_after)
+        self.exc = UpstreamThrottledError("example_places", retry_after=self.retry_after)
 
     def test_it_is_caught_by_every_family_it_belongs_to(self) -> None:
         for family in (
@@ -89,7 +89,7 @@ class UpstreamThrottledErrorTests(SimpleTestCase):
         self.assertEqual(self.exc.retry_after, self.retry_after)
 
     def test_its_message_and_service_name_the_throttled_upstream(self) -> None:
-        message = f"'redata_places' is throttled upstream for another {self.retry_after}s"
+        message = f"'example_places' is throttled upstream for another {self.retry_after}s"
         self.assertEqual(str(self.exc), message)
         self.assertEqual(self.exc.args, (message,))
-        self.assertEqual(self.exc.service, "redata_places")
+        self.assertEqual(self.exc.service, "example_places")

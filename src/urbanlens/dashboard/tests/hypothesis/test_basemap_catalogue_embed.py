@@ -22,11 +22,10 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.services.core import single_flight
 from urbanlens.dashboard.services.map.basemap_vendors import VENDOR_TILES
-from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
+from urbanlens.dashboard.tests.hypothesis.tile_catalogue_fake import FakeCatalogueMixin, catalogue_off, catalogue_on
 
 _MODULE = "urbanlens.dashboard.services.map.basemap_catalogue"
-_GATEWAY = "urbanlens.dashboard.services.apis.locations.redata_basemap_tiles_gateway.RedataBasemapTilesGateway"
-_CONFIGURED = "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured"
+_GATEWAY = "urbanlens.dashboard.tests.hypothesis.tile_catalogue_fake.FakeTileCatalogue"
 
 _RASTER = {
     "id": "street",
@@ -35,7 +34,7 @@ _RASTER = {
     "attribution": "Esri, HERE, Garmin",
     "min_zoom": 0,
     "max_zoom": 19,
-    "url_template": "https://redata.example/api/v1/tiles/street/{z}/{x}/{y}/",
+    "url_template": "https://catalogue.example/api/v1/tiles/street/{z}/{x}/{y}/",
 }
 _VECTOR = {
     "id": "terrain",
@@ -57,7 +56,7 @@ def _warm(sources: list[dict[str, object]]) -> None:
     """
     from urbanlens.dashboard.services.map.basemap_catalogue import basemap_tile_catalogue
 
-    with mock.patch(_CONFIGURED, return_value=True), mock.patch(f"{_GATEWAY}.list_sources", return_value=sources):
+    with catalogue_on(), mock.patch(f"{_GATEWAY}.list_sources", return_value=sources):
         basemap_tile_catalogue()
 
 
@@ -73,7 +72,7 @@ def _embedded(html: str) -> list[dict[str, object]]:
     return json.loads(match.group(1))
 
 
-class BasemapCatalogueEmbedTests(RedataConfiguredMixin, TestCase):
+class BasemapCatalogueEmbedTests(FakeCatalogueMixin, TestCase):
     def setUp(self) -> None:
         super().setUp()
         cache.clear()
@@ -100,7 +99,9 @@ class BasemapCatalogueEmbedTests(RedataConfiguredMixin, TestCase):
 
         self.assertEqual(layers[0]["esri_service"], "World_Street_Map")
         self.assertEqual(layers[1]["esri_service"], "World_Topo_Map", "a vector entry's raster half is Esri's too")
-        self.assertNotIn("esri_service", layers[2], "REData fetches this one, so there is no Esri service to name")
+        self.assertNotIn(
+            "esri_service", layers[2], "the catalogue fetches this one, so there is no Esri service to name"
+        )
 
     def test_a_signed_out_viewer_is_offered_no_raster_layer(self) -> None:
         """The raster proxy is login-required, so offering one here would swap a working vendor layer for a grid of 404s on exactly the pages a signed-out visitor sees - a public share."""
@@ -113,12 +114,12 @@ class BasemapCatalogueEmbedTests(RedataConfiguredMixin, TestCase):
         )
 
     def test_nothing_is_emitted_when_this_deployment_offers_no_layers(self) -> None:
-        """A self-hosted install with no REData must get no element at all, not an empty one: absent is what tells the client to ask over HTTP instead, and an empty array is an answer."""
-        with mock.patch(_CONFIGURED, return_value=False):
+        """A self-hosted install with no the catalogue must get no element at all, not an empty one: absent is what tells the client to ask over HTTP instead, and an empty array is an answer."""
+        with catalogue_off():
             self.assertEqual(_render(self.user).strip(), "")
 
     def test_a_hostile_attribution_cannot_break_out_of_the_script_block(self) -> None:
-        """Attribution is whatever REData's upstream vendor publishes - it reaches this template unreviewed."""
+        """Attribution is whatever the catalogue's upstream vendor publishes - it reaches this template unreviewed."""
         _warm([dict(_RASTER, attribution="</script><img src=x onerror=alert(1)>")])
 
         html = _render(self.user)
@@ -134,7 +135,7 @@ class BasemapCatalogueEmbedTests(RedataConfiguredMixin, TestCase):
         """core.js installs window.MapLayers, and map-layers.ts reads this element the first time it is asked for a tile source. Emitted after that script, it would still be parsed in time today - but the ordering is the invariant that keeps it so, not a coincidence to rely on."""
         _warm([_RASTER])
 
-        with mock.patch(_CONFIGURED, return_value=True):
+        with catalogue_on():
             self.client.force_login(self.user)
             response = self.client.get("/dashboard/map/")
 
@@ -145,19 +146,19 @@ class BasemapCatalogueEmbedTests(RedataConfiguredMixin, TestCase):
         self.assertNotEqual(core_at, -1)
         self.assertLess(embed_at, core_at, "the catalogue must be in the document before core.js runs")
 
-    def test_a_cold_cache_renders_nothing_rather_than_calling_redata_mid_render(self) -> None:
-        """The embed is in themes/base.html, so it renders on every page - a profile, a settings form, anything with no map on it at all. A REData call costs ~1.45s (P131), and putting that inside a page render once per cache expiry would be a slow page nobody could explain."""
+    def test_a_cold_cache_renders_nothing_rather_than_calling_the_catalogue_mid_render(self) -> None:
+        """The embed is in themes/base.html, so it renders on every page - a profile, a settings form, anything with no map on it at all. A the catalogue call costs ~1.45s, and putting that inside a page render once per cache expiry would be a slow page nobody could explain."""
         with (
-            mock.patch(_CONFIGURED, return_value=True),
+            catalogue_on(),
             mock.patch(f"{_GATEWAY}.list_sources", return_value=[_RASTER]) as list_sources,
         ):
             rendered = _render(self.user)
 
         self.assertEqual(rendered.strip(), "", "a cold cache must produce no embed")
-        self.assertEqual(list_sources.call_count, 0, "rendering a page must never reach REData")
+        self.assertEqual(list_sources.call_count, 0, "rendering a page must never reach the catalogue")
 
     def test_a_layer_id_the_proxy_route_cannot_carry_is_skipped_rather_than_raising(self) -> None:
-        """The route captures ``<slug:layer>``, so an id outside that alphabet has no URL to build and ``reverse()`` answers with ``NoReverseMatch``. Unhandled, one such entry from REData takes the whole catalogue - and with it every map's layer strip - down with it."""
+        """The route captures ``<slug:layer>``, so an id outside that alphabet has no URL to build and ``reverse()`` answers with ``NoReverseMatch``. Unhandled, one such entry from the catalogue takes the whole catalogue - and with it every map's layer strip - down with it."""
         _warm([dict(_RASTER, id="street.v2"), {**_RASTER, "id": "good"}, dict(_RASTER, id=None)])
 
         layers = _embedded(_render(self.user))
@@ -168,7 +169,7 @@ class BasemapCatalogueEmbedTests(RedataConfiguredMixin, TestCase):
         """The other half of the cold path: the embed goes missing, the client falls back to its own fetch, and that request is the one allowed to pay for the refill - it is an XHR, not a page render."""
         self.client.force_login(self.user)
         with (
-            mock.patch(_CONFIGURED, return_value=True),
+            catalogue_on(),
             mock.patch(f"{_GATEWAY}.list_sources", return_value=[_RASTER]) as list_sources,
         ):
             response = self.client.get("/dashboard/map/basemap-tiles/sources/")
@@ -183,11 +184,11 @@ class BasemapCatalogueEmbedTests(RedataConfiguredMixin, TestCase):
         self.assertEqual(list_sources.call_count, 1, "the render must have come from the cache the view filled")
 
 
-class TheCatalogueIsFetchedOncePerColdWindowTests(RedataConfiguredMixin, TestCase):
+class TheCatalogueIsFetchedOncePerColdWindowTests(FakeCatalogueMixin, TestCase):
     """
     The catalogue is cached for a day with no jitter, so it goes cold at one moment for
-    everybody. Every authenticated page load's `registerRedataLayers()` XHR misses in the ~1.5s
-    that refill takes (P131), and each miss holds a request thread for the whole of it: production
+    everybody. Every authenticated page load's `registerCatalogueLayers()` XHR misses in the ~1.5s
+    that refill takes, and each miss holds a request thread for the whole of it: production
     runs 6 workers x 4 threads, so 24 concurrent misses is the whole site. The tile proxy got a
     concurrency bound for exactly this shape; the catalogue it advertises did not."""
 
@@ -198,21 +199,21 @@ class TheCatalogueIsFetchedOncePerColdWindowTests(RedataConfiguredMixin, TestCas
         cache.delete(basemap_catalogue.CATALOGUE_CACHE_KEY)
         cache.delete(basemap_catalogue.CATALOGUE_FETCH_KEY)
 
-    def test_a_second_caller_arriving_mid_fetch_does_not_ask_redata_too(self) -> None:
+    def test_a_second_caller_arriving_mid_fetch_does_not_ask_the_catalogue_too(self) -> None:
         from urbanlens.dashboard.services.map.basemap_catalogue import basemap_tile_catalogue
 
         second: list[list[dict]] = []
 
         def answer_slowly(_self) -> list[dict]:
             if not second:
-                # A second request lands while this one is still waiting on REData. It cannot be
+                # A second request lands while this one is still waiting on the catalogue. It cannot be
                 # served here - nothing else runs until this returns - so it waits and degrades,
                 # which is the point: it does not make a second call.
                 second.append(basemap_tile_catalogue())
             return [_RASTER]
 
         with (
-            mock.patch(_CONFIGURED, return_value=True),
+            catalogue_on(),
             # Nothing can publish while the winner is blocked on this very call, so the wait only
             # costs the test time.
             mock.patch(f"{_MODULE}.CATALOGUE_WAIT_SECONDS", 0.05),
@@ -220,7 +221,7 @@ class TheCatalogueIsFetchedOncePerColdWindowTests(RedataConfiguredMixin, TestCas
         ):
             first = basemap_tile_catalogue()
 
-        self.assertEqual(list_sources.call_count, 1, "the second caller made its own REData call")
+        self.assertEqual(list_sources.call_count, 1, "the second caller made its own the catalogue call")
         self.assertEqual([entry["id"] for entry in first], ["street"])
         self.assertEqual(second, [[]], "a caller that did not fetch must degrade, not invent layers")
 
@@ -238,7 +239,7 @@ class TheCatalogueIsFetchedOncePerColdWindowTests(RedataConfiguredMixin, TestCas
             """Stands in for the holder finishing while this caller is asleep."""
             if not published:
                 with (
-                    mock.patch(_CONFIGURED, return_value=True),
+                    catalogue_on(),
                     mock.patch(f"{_GATEWAY}.list_sources", return_value=[_RASTER]),
                 ):
                     single_flight.release(basemap_catalogue.CATALOGUE_FETCH_KEY)
@@ -279,7 +280,7 @@ class TheCatalogueIsFetchedOncePerColdWindowTests(RedataConfiguredMixin, TestCas
         from urbanlens.dashboard.services.map.basemap_catalogue import basemap_tile_catalogue
 
         with (
-            mock.patch(_CONFIGURED, return_value=True),
+            catalogue_on(),
             mock.patch(f"{_GATEWAY}.list_sources", return_value=[_RASTER]) as list_sources,
         ):
             basemap_tile_catalogue()
@@ -290,13 +291,11 @@ class TheCatalogueIsFetchedOncePerColdWindowTests(RedataConfiguredMixin, TestCas
 
     def test_a_failed_fetch_releases_the_reservation(self) -> None:
         """An outage must not lock the catalogue cold for the reservation's whole lifetime."""
-        from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
+        from urbanlens.dashboard.services.core.gateway import ProviderUnavailableError
         from urbanlens.dashboard.services.map.basemap_catalogue import basemap_tile_catalogue
 
-        with mock.patch(_CONFIGURED, return_value=True):
-            with mock.patch(
-                f"{_GATEWAY}.list_sources", side_effect=LocationContextUnavailableError("source_error", "down")
-            ):
+        with catalogue_on():
+            with mock.patch(f"{_GATEWAY}.list_sources", side_effect=ProviderUnavailableError("down")):
                 self.assertEqual(basemap_tile_catalogue(), [])
             with mock.patch(f"{_GATEWAY}.list_sources", return_value=[_RASTER]) as recovered:
                 self.assertEqual([entry["id"] for entry in basemap_tile_catalogue()], ["street"])
@@ -307,7 +306,7 @@ class TheCatalogueIsFetchedOncePerColdWindowTests(RedataConfiguredMixin, TestCas
 class TheProxyTemplateSurvivesTheLayerIdTests(TestCase):
     """
     The template is built by reversing the route with sentinel coordinates and swapping those
-    for `{z}/{x}/{y}`. A layer id comes from REData and the route's alphabet is `[-a-zA-Z0-9_]`,
+    for `{z}/{x}/{y}`. A layer id comes from the catalogue and the route's alphabet is `[-a-zA-Z0-9_]`,
     so there is no numeric sentinel an id cannot contain."""
 
     def test_an_id_carrying_a_sentinel_is_not_rewritten(self) -> None:

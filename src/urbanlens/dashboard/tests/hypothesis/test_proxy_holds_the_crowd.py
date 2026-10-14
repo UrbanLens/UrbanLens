@@ -12,7 +12,7 @@ from django.test import SimpleTestCase
 
 from urbanlens.core.tests.nginx_config import NGINX_DIR, directive_arguments
 
-#: D15's eventual target. Connections cost nginx a few kilobytes each, so there is no reason to size it for less.
+#: The eventual concurrent-user target. Connections cost nginx a few kilobytes each, so there is no reason to size it for less.
 CONCURRENT_USERS = 10_000
 
 #: The notification socket's pair, held for the life of the page, and a pair for a request in flight beside it.

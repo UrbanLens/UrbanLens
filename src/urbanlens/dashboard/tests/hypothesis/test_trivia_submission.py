@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from model_bakery import baker
 
@@ -10,7 +10,8 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trivia.model import TriviaQuestion, TriviaQuestionSource, TriviaQuestionStatus
-from urbanlens.dashboard.services.trivia.classifier import ClassifierVerdict
+from urbanlens.dashboard.plugins.points import TRIVIA_QUESTION_MODERATORS
+from urbanlens.dashboard.services.trivia.moderation import ModerationVerdict, TriviaQuestionModerator
 from urbanlens.dashboard.services.trivia.submission import classify_and_update, submit_user_question
 
 
@@ -47,6 +48,18 @@ class SubmitUserQuestionTests(TestCase):
         self.assertEqual(len(question.answer), 255)
 
 
+class _Moderator(TriviaQuestionModerator):
+    def __init__(self, verdict: ModerationVerdict | None) -> None:
+        self.verdict = verdict
+        self.asked = Mock()
+
+    def moderate(
+        self, prompt: str, answer: str, location: Location, *, profile: Profile | None
+    ) -> ModerationVerdict | None:
+        self.asked(prompt, answer, location, profile=profile)
+        return self.verdict
+
+
 class ClassifyAndUpdateTests(TestCase):
     def setUp(self) -> None:
         self.profile = _make_profile()
@@ -60,40 +73,49 @@ class ClassifyAndUpdateTests(TestCase):
             answer="1937",
         )
 
-    def test_approved_verdict_flips_status_to_approved(self) -> None:
-        with patch(
-            "urbanlens.dashboard.services.trivia.classifier.classify_trivia_question",
-            return_value=ClassifierVerdict(approved=True),
-        ):
+    def _classify(self, *moderators: TriviaQuestionModerator) -> None:
+        with TRIVIA_QUESTION_MODERATORS.overridden(moderators):
             classify_and_update(self.question)
         self.question.refresh_from_db()
+
+    def test_approved_verdict_flips_status_to_approved(self) -> None:
+        self._classify(_Moderator(ModerationVerdict(approved=True)))
         self.assertEqual(self.question.status, TriviaQuestionStatus.APPROVED)
         self.assertIsNone(self.question.rejection_reason)
 
     def test_rejected_verdict_flips_status_to_rejected_with_reason(self) -> None:
-        with patch(
-            "urbanlens.dashboard.services.trivia.classifier.classify_trivia_question",
-            return_value=ClassifierVerdict(approved=False, reason="person"),
-        ):
-            classify_and_update(self.question)
-        self.question.refresh_from_db()
+        self._classify(_Moderator(ModerationVerdict(approved=False, reason="person")))
         self.assertEqual(self.question.status, TriviaQuestionStatus.REJECTED)
         self.assertEqual(self.question.rejection_reason, "person")
 
-    def test_ai_unavailable_leaves_question_pending(self) -> None:
-        """A classifier outage must never mass-reject submissions - see classify_and_update's docstring."""
-        with patch(
-            "urbanlens.dashboard.services.trivia.classifier.classify_trivia_question",
-            return_value=ClassifierVerdict(approved=False, reason="ai_unavailable"),
-        ):
-            classify_and_update(self.question)
-        self.question.refresh_from_db()
+    def test_an_abstaining_moderator_leaves_the_question_pending(self) -> None:
+        """A moderator that cannot decide must never mass-reject submissions - see classify_and_update's docstring."""
+        self._classify(_Moderator(None))
         self.assertEqual(self.question.status, TriviaQuestionStatus.PENDING_REVIEW)
+
+    def test_no_moderator_leaves_the_question_pending(self) -> None:
+        self._classify()
+        self.assertEqual(self.question.status, TriviaQuestionStatus.PENDING_REVIEW)
+
+    def test_the_next_moderator_decides_when_the_first_abstains(self) -> None:
+        abstains, approves = _Moderator(None), _Moderator(ModerationVerdict(approved=True))
+        self._classify(abstains, approves)
+        self.assertEqual(self.question.status, TriviaQuestionStatus.APPROVED)
+
+    def test_the_first_verdict_is_final(self) -> None:
+        rejects, approves = (
+            _Moderator(ModerationVerdict(approved=False, reason="person")),
+            _Moderator(ModerationVerdict(approved=True)),
+        )
+        self._classify(rejects, approves)
+        self.assertEqual(self.question.status, TriviaQuestionStatus.REJECTED)
+        approves.asked.assert_not_called()
 
     def test_already_decided_question_is_a_no_op(self) -> None:
         self.question.status = TriviaQuestionStatus.APPROVED
         self.question.save(update_fields=["status"])
 
-        with patch("urbanlens.dashboard.services.trivia.classifier.classify_trivia_question") as mock_classify:
-            classify_and_update(self.question)
-        mock_classify.assert_not_called()
+        moderator = _Moderator(ModerationVerdict(approved=False, reason="person"))
+        self._classify(moderator)
+        moderator.asked.assert_not_called()
+        self.assertEqual(self.question.status, TriviaQuestionStatus.APPROVED)

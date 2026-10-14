@@ -24,11 +24,11 @@
 
     <div class="api-limits-grid">
     {% for entry in plugins %}
-    <section class="site-admin-card ul-section card stats-service-card plugin-card{% if not entry.enabled %} is-disabled{% endif %}"
+    <section class="site-admin-card ul-section card stats-service-card plugin-card{% if not entry.info.is_active %} is-disabled{% endif %}"
              data-plugin="{{ entry.plugin.name }}">
         <div class="card-header stats-service-card__header">
             <div class="stats-service-card__title">
-                <i class="material-icons api-state-icon">{% if entry.enabled %}extension{% else %}extension_off{% endif %}</i>
+                <i class="material-icons api-state-icon">{% if entry.info.is_active %}extension{% else %}extension_off{% endif %}</i>
                 <div>
                     <span class="api-limit-service-name">{{ entry.plugin.verbose_name|default:entry.plugin.name }}</span>
                     <code class="api-limit-service-key">{{ entry.plugin.name }}</code>
@@ -36,11 +36,11 @@
             </div>
             <div class="api-limit-header-actions">
                 <span class="ul-chip" title="Discovery source">
-                    <i class="material-symbols-outlined">{% if entry.source == 'builtin' %}inventory_2{% elif entry.source == 'entry-point' %}deployed_code{% else %}settings{% endif %}</i>
-                    {{ entry.source }}
+                    <i class="material-symbols-outlined">{% if entry.info.source.origin == 'bundled' or entry.info.source.origin == 'builtin' %}inventory_2{% elif entry.info.source.origin == 'entry-point' %}deployed_code{% else %}settings{% endif %}</i>
+                    {{ entry.info.source.origin }}
                 </span>
-                {% if not entry.enabled %}
-                <span class="ul-badge ul-badge--danger">disabled</span>
+                {% if not entry.info.is_active %}
+                <span class="ul-badge ul-badge--danger" title="{{ entry.info.detail }}">{{ entry.info.state }}</span>
                 {% endif %}
             </div>
         </div>
@@ -56,18 +56,14 @@
             {% if entry.plugin.author %}
             <span class="ul-chip"><i class="material-symbols-outlined">person</i>{{ entry.plugin.author }}</span>
             {% endif %}
-            {% if entry.panel_count %}
-            <span class="ul-chip"><i class="material-symbols-outlined">dashboard</i>{{ entry.panel_count }} panel{{ entry.panel_count|pluralize }}</span>
-            {% endif %}
-            {% if entry.satellite_count %}
-            <span class="ul-chip"><i class="material-symbols-outlined">globe</i>satellite imagery</span>
-            {% endif %}
-            {% if entry.street_count %}
-            <span class="ul-chip"><i class="material-symbols-outlined">streetview</i>street imagery</span>
-            {% endif %}
-            {% for source in entry.name_sources %}
-            <span class="ul-chip" title="Provides place-name candidates as '{{ source }}'"><i class="material-symbols-outlined">badge</i>names: {{ source }}</span>
+            {% for contribution in entry.contributions %}
+            <span class="ul-chip" title="{{ contribution.seam.description }}"><i class="material-symbols-outlined">power</i>{{ contribution.seam.name }}{% if contribution.count > 1 %} &times;{{ contribution.count }}{% endif %}</span>
             {% endfor %}
+            {% if entry.migrations and entry.migrations.has_migrations %}
+            <span class="ul-chip" title="{{ entry.migrations.applied|length }} applied{% if entry.migrations.pending %}; pending: {{ entry.migrations.pending|join:', ' }}{% endif %}">
+                <i class="material-symbols-outlined">database</i>{% if entry.migrations.is_current %}tables current{% else %}{{ entry.migrations.pending|length }} migration{{ entry.migrations.pending|length|pluralize }} pending{% endif %}
+            </span>
+            {% endif %}
         </div>
 
         {% if entry.services %}
@@ -82,7 +78,7 @@
         </div>
         {% endif %}
 
-        <code class="plugin-card__module" title="Defining module">{{ entry.module }}</code>
+        <code class="plugin-card__module" title="Module">{{ entry.info.source.module }}</code>
     </section>
     {% endfor %}
     </div>

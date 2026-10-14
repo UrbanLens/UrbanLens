@@ -164,7 +164,7 @@ describe("createPinClusterGroup", () => {
     });
 
     /**
-     * P92: the main map (entries/map-page.ts) used to build its own
+     * The main map (entries/map-page.ts) used to build its own
      * L.markerClusterGroup by hand instead of calling this shared helper, so
      * its badge markup could silently drift from every other map's. Its own
      * chunking options (needed for accounts with thousands of pins, unlike a

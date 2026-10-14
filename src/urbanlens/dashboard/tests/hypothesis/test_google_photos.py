@@ -259,7 +259,7 @@ class PinGooglePhotosSessionTests(TestCase):
         self.assertEqual(response.context["session_id"], "sess1")
 
     def test_a_rate_limit_refusal_does_not_500_the_session_create_view(self) -> None:
-        """P122: the view's `except GatewayRequestError` must also catch a refusal, not just a real failure."""
+        """The view's `except GatewayRequestError` must also catch a refusal, not just a real failure."""
         from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
 
         with mock.patch.object(
@@ -345,7 +345,7 @@ class ImportGooglePhotosTaskTests(TestCase):
         # Omitting source= defaults the row to UPLOAD, which is indistinguishable
         # from the upload form to every source-keyed consumer: the Media gallery's
         # per-source tabs, achievements' UPLOAD-filtered counts, and the
-        # UPLOAD-gated reputation rules all silently miscount these.
+        # UPLOAD-gated contribution rules all silently miscount these.
         self.assertEqual(image.source, ImageSource.GOOGLE_PHOTOS)
 
     def test_skips_item_already_imported_by_checksum(self) -> None:

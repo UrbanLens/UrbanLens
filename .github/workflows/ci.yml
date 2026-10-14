@@ -30,11 +30,6 @@ env:
   UL_DRAGONFLY_URL: redis://localhost:6379/0
   UL_RABBITMQ_URL: amqp://urbanlens:ci-placeholder@localhost:5672/urbanlens
   UL_UNSAFE_ALLOW_HTTP: "True"
-  # Gateway requires configuration; intentionally unroutable and checked for presence before requests.
-  # Network guard blocks real sockets, so a placeholder is required here
-  # and a real credential must never be set.
-  UL_REDATA_API_URL: http://redata.invalid/api/
-  UL_REDATA_API_KEY: ci-placeholder-not-a-real-key
   UL_ENVIRONMENT: testing
 
 jobs:
@@ -94,6 +89,7 @@ jobs:
       - name: Install Python dependencies
         run: |
           uv sync --frozen
+          bin/install_plugin_requirements.sh
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Ruff lint
@@ -118,7 +114,7 @@ jobs:
       - name: Signal subscriptions are reachable
         run: python3 bin/check_signal_reachable.py
       - name: A wiki resolved for reading is never saved
-        run: python3 bin/check_concealed_writes.py
+        run: python3 bin/check_projected_writes.py
       - name: No template reads a photo's file without checking it is there
         run: python3 bin/check_image_file_reads.py
       - name: Location and Label rows are created only through their get-or-create helpers
@@ -134,10 +130,6 @@ jobs:
 
       - name: A private pin's fields never reach a community wiki
         run: python3 bin/check_pin_not_published_to_wiki.py
-      - name: Code cites only docs/ paths that exist
-        run: python3 bin/check_docs_refs.py
-      - name: docs/adr/ and the docs index follow their numbering rules
-        run: python3 bin/check_docs_index.py
       - name: Every TypeScript file belongs to a tsconfig project
         run: python3 bin/check_typescript_coverage.py
       - name: Every var() names a custom property something defines
@@ -206,24 +198,6 @@ jobs:
         run: bun run sass
       - name: Every BEM modifier a template applies has a rule that styles it
         run: python3 bin/check_bem_modifiers.py
-
-  docs:
-    name: Documentation build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v7
-
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          enable-cache: true
-
-      - name: Install Python dependencies
-        run: uv sync --frozen
-      - name: Build the documentation
-        run: uv run python bin/build_docs.py
 
   docker:
     name: Docker image build

@@ -16,15 +16,16 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from urbanlens.dashboard.external_api.serializers import PinSummarySerializer
+from urbanlens.dashboard.plugins.drf import ExtensibleSerializer
 
 
-class PinBulkDeleteSerializer(serializers.Serializer):
+class PinBulkDeleteSerializer(ExtensibleSerializer):
     """Validates a bulk pin-delete request."""
 
     uuids = serializers.ListField(child=serializers.UUIDField(), min_length=1, max_length=500)
 
 
-class PinBulkDeleteResponseSerializer(serializers.Serializer):
+class PinBulkDeleteResponseSerializer(ExtensibleSerializer):
     """
     The outcome of a bulk delete (schema-only).
 
@@ -41,7 +42,7 @@ class PinBulkDeleteResponseSerializer(serializers.Serializer):
     undo_uuid = serializers.UUIDField(read_only=True)
 
 
-class PinBulkMergeSerializer(serializers.Serializer):
+class PinBulkMergeSerializer(ExtensibleSerializer):
     """
     Validates a bulk pin-merge request.
 
@@ -53,7 +54,7 @@ class PinBulkMergeSerializer(serializers.Serializer):
     source_uuids = serializers.ListField(child=serializers.UUIDField(), min_length=1, max_length=500)
 
 
-class PinBulkMergeResponseSerializer(serializers.Serializer):
+class PinBulkMergeResponseSerializer(ExtensibleSerializer):
     """The outcome of a bulk merge (schema-only)."""
 
     target = PinSummarySerializer(read_only=True)
@@ -63,7 +64,7 @@ class PinBulkMergeResponseSerializer(serializers.Serializer):
     skipped_uuids = serializers.ListField(child=serializers.UUIDField(), read_only=True)
 
 
-class PinBulkEditSerializer(serializers.Serializer):
+class PinBulkEditSerializer(ExtensibleSerializer):
     """
     Validates a bulk pin-edit request. Every field but ``uuids`` is optional.
 
@@ -85,7 +86,7 @@ class PinBulkEditSerializer(serializers.Serializer):
     parent_uuid = serializers.UUIDField(required=False, allow_null=True)
 
 
-class PinBulkEditResponseSerializer(serializers.Serializer):
+class PinBulkEditResponseSerializer(ExtensibleSerializer):
     """The outcome of a bulk edit (schema-only)."""
 
     count = serializers.IntegerField(read_only=True)

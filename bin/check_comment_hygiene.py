@@ -21,7 +21,8 @@ reason, e.g. ``# hygiene: allow history - the county renamed the field then``.
 Existing violations are recorded per rule and file in ``BASELINE``. A file may
 not gain violations, and a file that loses some fails until the baseline is
 lowered with ``--update-baseline``, which refuses to raise any rule's total, so
-the totals only go down.
+the totals only go down. A baseline entry for a file this checkout does not have is
+ignored, so a tree that omits some files still passes.
 
 Usage:
     bin/check_comment_hygiene.py                    whole tree (CI)
@@ -49,6 +50,8 @@ import tokenize
 
 ROOT = Path(__file__).resolve().parent.parent
 BASELINE = ROOT / "bin" / "comment_hygiene_baseline.json"
+PLUGINS = "src/urbanlens/plugins/"
+PLUGIN_BASELINE_NAME = "comment_hygiene_baseline.json"
 
 PARALLEL_THRESHOLD = 64
 
@@ -68,13 +71,13 @@ EXCLUDED_PARTS = ("/docs/", "/migrations/", "/vendor/", "/node_modules/")
 PRAGMA = re.compile(r"#\s*(noqa\b|type:\s*ignore|pragma:|pyright:|fmt:|nosec\b|pylint:|mypy:|ruff:|isort:|NOSONAR|codeql)", re.IGNORECASE)
 
 # Each pattern says how the code came to be rather than what it does. Tracker ids and dates are
-# checked separately, since each needs an exception list. Agent tooling may name its agent.
-AGENT_TOOLING = (".claude/",)
+# checked separately, since each needs an exception list. Tooling directories may name the tool that wrote them.
+TOOLING_DIRS = (".claude/",)
 HISTORY_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("names the maintainer", re.compile(r"\bJess\b")),
-    ("names a coding agent", re.compile(r"(?<!Anthropic's )\bClaude\b(?! (?:Code|models?|API)\b)|\b(?:Opus|Sonnet|Haiku|Codex|Copilot|Qwen|opencode|Spark)\b")),
+    ("names the tool that wrote it", re.compile(r"(?<!Anthropic's )\bClaude\b(?! (?:Code|models?|API)\b)|\b(?:Opus|Sonnet|Haiku|Codex|Copilot|Qwen|opencode|Spark)\b")),
     (
-        "refers to agent work",
+        "refers to machine-written work",
         re.compile(
             r"\b(?:sub-?agents?|(?:coding|LLM|AI coding) agents?|(?:previous|earlier|another|cheaper) agents?"
             r"|agents? (?:session|wrote|added|found|flagged|reported|introduced|edited|changed|suggested|missed|left))\b"
@@ -97,7 +100,7 @@ HISTORY_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ),
 )
 
-# P-numbers and G-numbers are retired PROBLEMS ids; the open ones are still listed in docs/internal/PROBLEMS.md.
+# P-numbers and G-numbers are retired tracker ids; the open ones are listed in the problems table read by open_tracker_ids().
 # P0 is a severity, and P256/P384/P521 are curves.
 TRACKER_ID = re.compile(r"\b(P\d{1,4}|G\d{1,2}-\d{1,3})\b")
 NOT_TRACKER_IDS = frozenset({"P0", "P256", "P384", "P521"})
@@ -299,7 +302,7 @@ def dense_functions(path: str, functions: list[ast.FunctionDef | ast.AsyncFuncti
 
 def open_tracker_ids(root: Path) -> frozenset[str]:
     """
-    Ids that docs/internal/PROBLEMS.md still maps to an open issue.
+    Tracker ids that the problems table still maps to an open issue.
     """
     try:
         return frozenset(OPEN_IDS_TABLE.findall((root / "docs" / "internal" / "PROBLEMS.md").read_text(encoding="utf-8")))
@@ -312,7 +315,7 @@ def history_in(path: str, line: int, text: str, open_ids: frozenset[str]) -> Vio
     The first history reference in one line of comment or docstring text.
     """
     for label, pattern in HISTORY_PATTERNS:
-        if label == "names a coding agent" and path.startswith(AGENT_TOOLING):
+        if label == "names the tool that wrote it" and path.startswith(TOOLING_DIRS):
             continue
         match = pattern.search(text)
         if match:
@@ -567,6 +570,15 @@ def counts(violations: list[Violation]) -> dict[str, dict[str, int]]:
     return {rule: dict(sorted(table[rule].items())) for rule in RULES}
 
 
+def baseline_file(path: str) -> Path:
+    """
+    The baseline that records *path*: its plugin's own, so a plugin's directory can be left out of a tree.
+    """
+    if path.startswith(PLUGINS):
+        return ROOT / PLUGINS / path.removeprefix(PLUGINS).split("/", 1)[0] / PLUGIN_BASELINE_NAME
+    return BASELINE
+
+
 def load_baseline(path: Path) -> dict[str, dict[str, int]]:
     """
     The recorded counts; a missing file records none.
@@ -575,6 +587,27 @@ def load_baseline(path: Path) -> dict[str, dict[str, int]]:
         return {rule: {} for rule in RULES}
     data = json.loads(path.read_text(encoding="utf-8"))
     return {rule: data.get(rule, {}) for rule in RULES}
+
+
+def load_all_baselines() -> dict[str, dict[str, int]]:
+    """
+    The core baseline merged with every plugin's.
+    """
+    merged = load_baseline(BASELINE)
+    for plugin_file in sorted((ROOT / PLUGINS).glob(f"*/{PLUGIN_BASELINE_NAME}")):
+        for rule, files in load_baseline(plugin_file).items():
+            merged[rule].update(files)
+    return merged
+
+
+def measured_baseline(baseline: dict[str, dict[str, int]], root: Path, tracked: list[str]) -> dict[str, dict[str, int]]:
+    """
+    *baseline* without the files this checkout does not have.
+
+    A file the tree omits (a private file on the public mirror) would otherwise read as having lost all its violations.
+    """
+    present = {path for path in tracked if (root / path).is_file()}
+    return {rule: {path: n for path, n in files.items() if path in present} for rule, files in baseline.items()}
 
 
 def compare(current: dict[str, dict[str, int]], baseline: dict[str, dict[str, int]], paths: list[str] | None) -> tuple[list[tuple[str, str, int, int]], list[tuple[str, str, int, int]]]:
@@ -595,18 +628,46 @@ def compare(current: dict[str, dict[str, int]], baseline: dict[str, dict[str, in
     return gained, lost
 
 
-def update_baseline(current: dict[str, dict[str, int]], path: Path, *, allow_increase: bool) -> int:
+def update_baseline(
+    current: dict[str, dict[str, int]],
+    path: Path = BASELINE,
+    *,
+    allow_increase: bool,
+    tracked: list[str] | None = None,
+    root: Path = ROOT,
+) -> int:
     """
     Write *current* as the baseline unless that raises a rule's total.
+
+    The tree's own baseline is split: a plugin's files go to its own baseline file. Any other *path* takes everything.
+    With *tracked*, totals are compared without the files *root* does not have, as ``main`` does, so the budget of an
+    omitted file cannot absorb an increase in a present one.
     """
-    old = load_baseline(path)
+    split = path == BASELINE
+    old = load_all_baselines() if split else load_baseline(path)
+    if tracked is not None:
+        old = measured_baseline(old, root, tracked)
     raised = [rule for rule in RULES if sum(current[rule].values()) > sum(old[rule].values())]
     if raised and not allow_increase and path.is_file():
         for rule in raised:
             print(f"refusing: {rule} would rise from {sum(old[rule].values())} to {sum(current[rule].values())}")
         print("Fix the new violations, or pass --allow-increase if the maintainer has accepted them.")
         return 1
-    path.write_text(json.dumps(current, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+
+    def home(file: str) -> Path:
+        return baseline_file(file) if split else path
+
+    targets: dict[Path, dict[str, dict[str, int]]] = {path: {rule: {} for rule in RULES}}
+    for rule in RULES:
+        for file in {**old[rule], **current[rule]}:
+            targets.setdefault(home(file), {rule_: {} for rule_ in RULES})
+        for file, count in current[rule].items():
+            targets[home(file)][rule][file] = count
+    for target, table in targets.items():
+        if target != path and not any(table.values()):
+            target.unlink(missing_ok=True)
+            continue
+        target.write_text(json.dumps(table, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     for rule in RULES:
         print(f"{rule}: {sum(old[rule].values())} -> {sum(current[rule].values())}")
     return 0
@@ -632,7 +693,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--allow-increase", action="store_true", help="with --update-baseline, accept a higher total")
     args = parser.parse_args(argv)
 
-    paths = _given_paths(args.files) if args.files else tracked_paths(ROOT)
+    tracked = tracked_paths(ROOT)
+    paths = _given_paths(args.files) if args.files else tracked
     violations = scan(ROOT, paths)
     current = counts(violations)
 
@@ -640,7 +702,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.files:
             print("--update-baseline reads the whole tree; drop the file arguments.")
             return 2
-        return update_baseline(current, BASELINE, allow_increase=args.allow_increase)
+        return update_baseline(current, BASELINE, allow_increase=args.allow_increase, tracked=tracked)
 
     if args.list:
         for violation in violations:
@@ -649,20 +711,21 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{rule}: {sum(current[rule].values())}")
         return 0
 
-    gained, lost = compare(current, load_baseline(BASELINE), paths if args.files else None)
+    gained, lost = compare(current, measured_baseline(load_all_baselines(), ROOT, tracked), paths if args.files else None)
     for rule, path, now, recorded in gained:
         print(f"{path}: {rule}: {now} (baseline {recorded})")
         for violation in violations:
             if violation.path == path and violation.rule == rule:
                 print(f"  {violation}")
     if gained:
-        print("\nNew comment or docstring violations: shorten or remove them (docs/TOOLING.md).")
+        print("\nNew comment or docstring violations: shorten or remove them.")
         print("If a file only moved, its count moves with it: run --update-baseline.")
     if lost:
         for rule, path, now, recorded in lost:
             print(f"{path}: {rule}: {now} (baseline {recorded})")
+        changed = sorted({baseline_file(path).relative_to(ROOT).as_posix() for _, path, _, _ in lost})
         print("\nFewer violations than the baseline records. Lock that in:")
-        print("  python3 bin/check_comment_hygiene.py --update-baseline && git add bin/comment_hygiene_baseline.json")
+        print(f"  python3 bin/check_comment_hygiene.py --update-baseline && git add {' '.join(changed)}")
     return 1 if gained or lost else 0
 
 

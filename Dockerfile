@@ -65,10 +65,6 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-install-project; \
     fi
 
-ENV TIKTOKEN_CACHE_DIR=/app/.tiktoken
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv run --no-project python -c "import tiktoken; tiktoken.get_encoding('o200k_base'); tiktoken.get_encoding('cl100k_base')"
-
 COPY package.json bun.lock ./
 RUN --mount=type=cache,target=/root/.bun/install/cache \
     bun install --frozen-lockfile
@@ -83,6 +79,13 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     else \
     uv sync --frozen; \
     fi
+
+# Packages only the bundled package plugins need, after the sync, which would remove them.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    bin/install_plugin_requirements.sh
+
+# Each plugin's build step, such as fetching the tokenizer encodings its requirements need.
+RUN bin/run_plugin_build_steps.sh
 
 # Precompile the source tree.
 RUN gosu appuser python -m compileall -q -j 0 /app/src || echo "compileall reported errors; continuing"

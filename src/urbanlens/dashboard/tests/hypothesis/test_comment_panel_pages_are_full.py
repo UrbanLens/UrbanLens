@@ -6,7 +6,7 @@ the visibility gates were only answerable there. A viewer who could not see
 most of a thread got a page of two where the page size is eight, and paging
 back gave them more short pages rather than the rest of what they could read.
 
-That is the same defect as H47's on the external API, just with the symptom
+That is the same defect as the external API's, just with the symptom
 showing in the page rather than in the cost: a filter applied after the cut
 makes the cut mean nothing. ``Comment.objects.visible_to`` moves it before.
 """

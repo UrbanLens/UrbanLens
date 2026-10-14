@@ -12,70 +12,10 @@ import pytest
 
 from urbanlens.dashboard.baker_recipes import _make_profile
 from urbanlens.dashboard.controllers.pin import PinController
-from urbanlens.dashboard.models.site_settings.model import SiteSettings
-from urbanlens.dashboard.models.subscriptions import SiteFeature
-from urbanlens.dashboard.services.ai.factory import get_gateway
 from urbanlens.dashboard.services.pins.external_data import schedule_panel_fetch
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
-
-
-@pytest.mark.django_db
-def test_get_gateway_returns_none_when_profile_external_apis_disabled() -> None:
-    profile = _make_profile(ai_enabled=True, external_apis_enabled=False)
-
-    assert get_gateway(profile=profile) is None
-
-
-@pytest.mark.django_db
-def test_get_gateway_returns_none_when_profile_ai_disabled() -> None:
-    profile = _make_profile(ai_enabled=False, external_apis_enabled=True)
-
-    assert get_gateway(profile=profile) is None
-
-
-def _grant_ai_to_everyone() -> None:
-    settings_obj = SiteSettings.get_current()
-    SiteSettings.objects.filter(pk=settings_obj.pk).update(default_features=SiteFeature.AI)
-
-
-@pytest.mark.django_db
-def test_get_gateway_allows_when_profile_fully_enabled() -> None:
-    _grant_ai_to_everyone()
-    profile = _make_profile(ai_enabled=True, external_apis_enabled=True)
-
-    with mock.patch("urbanlens.dashboard.services.ai.cloudflare.CloudflareGateway") as gateway_cls:
-        get_gateway(profile=profile)
-
-    gateway_cls.assert_called_once()
-
-
-@pytest.mark.django_db
-def test_get_gateway_returns_none_when_profile_lacks_ai_feature() -> None:
-    """
-    A profile with both preferences on, but no ``SiteFeature.AI`` grant (the default for a fresh account with no subscription), gets no gateway.
-
-    A throwaway user is created first to absorb the "first user in a fresh test database becomes bootstrap site
-    admin" promotion (which would otherwise grant every ``SiteFeature`` to the profile under test)."""
-    from model_bakery import baker
-
-    baker.make("auth.User")
-    profile = _make_profile(ai_enabled=True, external_apis_enabled=True)
-
-    with mock.patch("urbanlens.dashboard.services.ai.cloudflare.CloudflareGateway") as gateway_cls:
-        assert get_gateway(profile=profile) is None
-
-    gateway_cls.assert_not_called()
-
-
-@pytest.mark.django_db
-def test_get_gateway_ignores_profile_check_when_no_profile_given() -> None:
-    """Site-wide/no-profile callers (e.g. admin tooling) are unaffected."""
-    with mock.patch("urbanlens.dashboard.services.ai.cloudflare.CloudflareGateway") as gateway_cls:
-        get_gateway()
-
-    gateway_cls.assert_called_once()
 
 
 @pytest.mark.django_db
@@ -118,9 +58,9 @@ def test_fast_panel_dispatches_to_the_panel_fetch_queue() -> None:
     pin: Pin = baker.make_recipe("dashboard.pin")
 
     with mock.patch("urbanlens.dashboard.tasks.fetch_panel_source") as fetch_task:
-        schedule_panel_fetch("photon", pin)
+        schedule_panel_fetch("wikipedia", pin)
 
-    fetch_task.apply_async.assert_called_once_with(args=("photon", pin.pk, mock.ANY), kwargs={}, queue="panel_fetch")
+    fetch_task.apply_async.assert_called_once_with(args=("wikipedia", pin.pk, mock.ANY), kwargs={}, queue="panel_fetch")
 
 
 @pytest.mark.django_db
@@ -169,7 +109,7 @@ def test_cpu_heavy_panels_stay_on_the_prefork_queue() -> None:
     down every other panel sharing it, so they opt out via PanelSource.queue.
 
     The interactive class, not bulk and not the bare default: somebody is looking
-    at the panel while it loads, and since D13 the default queue is drained by the
+    at the panel while it loads, and since the default queue is drained by the
     slow pool rather than by the general worker."""
     from urbanlens.dashboard.services.pins.external_data import BoundaryPanelSource, get_panel_source
     from urbanlens.dashboard.services.sandbox.queues import Queue
@@ -231,7 +171,7 @@ def test_resolve_place_blocked_when_external_apis_disabled() -> None:
     request = RequestFactory().get(reverse("map.resolve_place"), {"place_id": "abc123"})
     request.user = profile.user
 
-    with mock.patch("urbanlens.dashboard.services.map_pins.autocomplete.resolve_google_place") as mocked_resolve:
+    with mock.patch("urbanlens.dashboard.services.map_pins.autocomplete.resolve_place") as mocked_resolve:
         response = maps_module.MapController.as_view({"get": "resolve_place"})(request)
 
     mocked_resolve.assert_not_called()

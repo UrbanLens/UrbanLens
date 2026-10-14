@@ -19,7 +19,7 @@ GITHUB_REPO_SLUG = f"{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}"
 GITHUB_REPO_URL = f"https://github.com/{GITHUB_REPO_SLUG}"
 _GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO_SLUG}/contributors"
 
-_USER_AGENT = "UrbanLens/1.0 (https://github.com/UrbanLens/UrbanLens; hello@urbanlens.org) python-requests"
+_USER_AGENT = "UrbanLens/1.0 (+https://github.com/UrbanLens/UrbanLens) python-requests"
 _CACHE_KEY = make_cache_key("github_contributors", GITHUB_REPO_SLUG)
 _CACHE_TTL_SECONDS = 86_400
 _PAGE_SIZE = 100

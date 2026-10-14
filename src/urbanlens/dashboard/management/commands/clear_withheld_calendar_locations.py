@@ -3,12 +3,11 @@ Rewrite the Google Calendar events that may still hold a location or title now w
 
 An export without auto-sync is never pushed, so an event keeps what it was last given until its owner exports the
 trip again. Exports made under 0.8.0 left a stop's address on the event, and its place's name in the title, after the
-stop was hidden or its adder restricted who may see it (P335). This rewrites, once, each such event whose link does
+stop was hidden or its adder restricted who may see it. This rewrites, once, each such event whose link does
 not already vouch for the body it would now get: the location is cleared and the title masked as the activities panel
 masks it. That covers the trip's own event and each stop's, scheduled or not (an unscheduled stop's event gets only
 its location and title rewritten). An event with nothing withheld is not touched and an event the user deleted is not
-recreated. See UrbanLens#301 ("hidden location stays on an unreached calendar") and UrbanLens#333 ("the rollout
-command misses unscheduled and imported events").
+recreated.
 
 An event an import linked is the user's own. Only when its link's fingerprint shows UrbanLens last wrote the body that
 held what is now withheld is anything sent: its location and title, each only where the event still holds what

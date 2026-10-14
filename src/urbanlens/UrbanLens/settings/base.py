@@ -66,12 +66,12 @@ SECRET_KEY = require_deployment_setting(
     reason=(
         "Without it every process derives its own random key, which breaks sessions across workers and "
         "permanently orphans anything already written to an encrypted field. Generate one with: "
-        'python -c "import secrets; print(secrets.token_urlsafe(64))" - see .env-sample and docs/DATA_ENCRYPTION.md.'
+        'python -c "import secrets; print(secrets.token_urlsafe(64))" - see .env-sample.'
     ),
 )
 
 
-# The environment the egress policy applies (D26): the test suite takes production's terms, since it mocks the network.
+# The environment the egress policy applies: the test suite takes production's terms, since it mocks the network.
 EGRESS_ENVIRONMENT = policy_environment(ENVIRONMENT_NAME, testing=TESTING)
 
 DEBUG = env_bool("DJANGO_DEBUG", _is_dev)
@@ -111,6 +111,13 @@ INSTALLED_APPS = [
     # Swagger UI served from this site, where script-src admits it.
     "drf_spectacular_sidecar",
 ]
+
+# Package plugins are apps, so their models, migrations, templates, static files and tasks load like core's.
+# After dashboard, so a plugin never overrides a core template by sharing its name.
+from urbanlens.dashboard.plugins.loader import find_plugin_sources, plugin_apps  # noqa: E402
+
+UL_PLUGIN_SOURCES = find_plugin_sources(_app_settings.plugin_modules)
+INSTALLED_APPS += plugin_apps(UL_PLUGIN_SOURCES, _app_settings.disabled_plugins)
 
 # Prometheus counters, only on processes that serve /metrics.
 UL_METRICS_ENABLED = _app_settings.metrics_enabled
@@ -256,7 +263,7 @@ DATABASES = {
             "application_name": f"urbanlens-{os.getenv('UL_PROCESS_ROLE', 'unknown')}",
             # Parameters go to the server rather than into the SQL text, which is what lets one
             # statement be prepared once and reused. Both keys are needed: without the threshold
-            # Django leaves preparation off and this buys nothing (X27).
+            # Django leaves preparation off and this buys nothing.
             "server_side_binding": True,
             "prepare_threshold": prepare_threshold(),
         },
@@ -398,19 +405,12 @@ CELERY_TASK_ANNOTATIONS = ("urbanlens.dashboard.services.core.task_limits.QueueT
 CELERY_WORKER_MAX_TASKS_PER_CHILD = int(os.getenv("UL_CELERY_WORKER_MAX_TASKS_PER_CHILD", "200"))
 CELERY_WORKER_MAX_MEMORY_PER_CHILD = int(os.getenv("UL_CELERY_WORKER_MAX_MEMORY_PER_CHILD", str(512 * 1024)))  # KiB
 
-# Sandbox tier; see services/sandbox/guard.py and docs/MEDIA_PIPELINE.md.
+# Sandbox tier; see services/sandbox/guard.py.
 UL_PROCESS_ROLE = _app_settings.process_role
 # Threshold for RequestTelemetryMiddleware's slow-request log. See settings/app.py.
 UL_SLOW_REQUEST_MS = _app_settings.slow_request_ms
 UL_SANDBOX_ENABLED = _app_settings.sandbox_enabled
 UL_UNTRUSTED_PARSE_POLICY = _app_settings.untrusted_parse_policy
-# AI inference sandbox tier - see services/sandbox/guard.py's
-# DirectInferencePolicy and docs/AI_PIPELINE.md for the deployment topology.
-UL_AI_INFERENCE_URL = _app_settings.ai_inference_url
-UL_AI_INFERENCE_TOKEN = _app_settings.ai_inference_token
-UL_AI_INFERENCE_TIMEOUT_SECONDS = _app_settings.ai_inference_timeout_seconds
-UL_DIRECT_INFERENCE_POLICY = _app_settings.direct_inference_policy
-UL_AI_WORKER_ENABLED = _app_settings.ai_worker_enabled
 # Backup defaults, overridable in the database-backed settings UI.
 UL_BACKUP_ENABLED = env_bool("UL_BACKUP_ENABLED", default=True)
 UL_BACKUP_FREQUENCY_HOURS = int(os.getenv("UL_BACKUP_FREQUENCY_HOURS", "24"))
@@ -435,24 +435,11 @@ FULL_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.run_scheduled_enrichment",
         "schedule": crontab(minute=12),
     },
-    "scheduled-trivia-generation": {
-        "task": "urbanlens.dashboard.tasks.run_scheduled_trivia_generation",
-        "schedule": crontab(minute=17),
-    },
-    "scheduled-trivia-wiki-incorporation": {
-        "task": "urbanlens.dashboard.tasks.run_scheduled_trivia_wiki_incorporation",
-        "schedule": crontab(minute=22),
-    },
     # Unconditional, like every entry above: the task itself checks UL_DEMO_MODE
-    # and returns immediately everywhere else. See docs/DEMO.md.
+    # and returns immediately everywhere else.
     "scheduled-demo-account-purge": {
         "task": "urbanlens.dashboard.tasks.run_scheduled_demo_account_purge",
         "schedule": crontab(minute=27),
-    },
-    # Unconditional too - see run_scheduled_redata_public_locations_sync.
-    "scheduled-redata-public-locations-sync": {
-        "task": "urbanlens.dashboard.tasks.run_scheduled_redata_public_locations_sync",
-        "schedule": crontab(minute=32, hour="*/6"),
     },
     "spotguessr-stall-sweep": {
         "task": "urbanlens.dashboard.tasks.sweep_stalled_spotguessr_sessions",
@@ -470,11 +457,6 @@ FULL_BEAT_SCHEDULE = {
     "achievements-sweep": {
         "task": "urbanlens.dashboard.tasks.sweep_achievements",
         "schedule": crontab(hour=3, minute=10),
-    },
-    # Recovers scoring rows lost to broker blips.
-    "reputation-sweep": {
-        "task": "urbanlens.dashboard.tasks.sweep_reputation",
-        "schedule": crontab(hour=6, minute=10),
     },
     "safety-checkin-due-reminders": {
         "task": "urbanlens.dashboard.tasks.send_due_checkin_reminders",
@@ -592,7 +574,7 @@ FULL_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.backfill_image_marker_thumbnails",
         "schedule": crontab(minute=34),
     },
-    # Analysis-copy backfill; gates AI keywording, so not merely cosmetic.
+    # Analysis-copy backfill; photo keyword sources read this copy, so it is not merely cosmetic.
     "image-analysis-thumbnail-backfill": {
         "task": "urbanlens.dashboard.tasks.backfill_image_analysis_thumbnails",
         "schedule": crontab(minute=19),
@@ -612,7 +594,7 @@ FULL_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.roll_up_api_call_tallies",
         "schedule": 60,
     },
-    # Daily; retention follows the costs page's 12-month chart.
+    # Daily; keeps a year of usage history.
     "api-call-log-pruning": {
         "task": "urbanlens.dashboard.tasks.prune_api_call_logs",
         "schedule": crontab(hour=5, minute=40),
@@ -641,7 +623,7 @@ FULL_BEAT_SCHEDULE = {
         "schedule": crontab(minute="13,28,43,58"),
     },
 }
-# Off production, only work that stays inside this deployment, plus UL_BACKGROUND_TASKS_ALLOWLIST (D26).
+# Off production, only work that stays inside this deployment, plus UL_BACKGROUND_TASKS_ALLOWLIST.
 # Plugins' entries join this schedule at Celery startup (urbanlens.UrbanLens.celery).
 CELERY_BEAT_SCHEDULE = scheduled_beat_entries(FULL_BEAT_SCHEDULE, EGRESS_ENVIRONMENT, _app_settings.background_tasks_allowlist)
 
@@ -758,7 +740,6 @@ EXTERNAL_MEDIA_DAILY_BYTES = _app_settings.external_media_daily_bytes
 MARKUP_MAX_GEOMETRY_POINTS = _app_settings.markup_max_geometry_points
 MARKUP_MAX_ITEMS_PER_RESPONSE = _app_settings.markup_max_items_per_response
 MARKUP_MAX_SHAPES_PER_SNAPSHOT = _app_settings.markup_max_shapes_per_snapshot
-PUBLIC_COSTS_PAGE_CACHE_SECONDS = _app_settings.public_costs_page_cache_seconds
 IMMICH_MAX_THUMBNAIL_BYTES = _app_settings.immich_max_thumbnail_bytes
 IMMICH_MAX_JSON_BYTES = _app_settings.immich_max_json_bytes
 IMMICH_THUMBNAIL_DEADLINE_SECONDS = _app_settings.immich_thumbnail_deadline_seconds
@@ -826,14 +807,14 @@ _CSP_DIRECTIVES: dict[str, list[str]] = {
         "https://unpkg.com",
     ],
     "font-src": ["'self'", "data:", "https://fonts.gstatic.com", "https://cdnjs.cloudflare.com"],
-    # Third-party pictures are served from this site's copies (P165), so only these load from elsewhere.
+    # Third-party pictures are served from this site's copies, so only these load from elsewhere.
     # tests/hypothesis/test_csp_image_hosts.py reads the hosts out of the code that configures them.
     "img-src": [
         "'self'",
         "data:",
         "blob:",
         # Tiles the browser fetches itself (TILE_DEFS in frontend/ts/shared/map-layers.ts): the borders and weather
-        # overlays, and each base layer REData's catalogue does not replace, which is all of them when signed out.
+        # overlays, and each base layer a tile catalogue does not replace, which is all of them when signed out.
         "https://server.arcgisonline.com",
         "https://services.arcgisonline.com",
         "https://tile.openweathermap.org",
@@ -857,7 +838,7 @@ _CSP_DIRECTIVES: dict[str, list[str]] = {
         "https://nominatim.openstreetmap.org",
         "https://en.wikipedia.org",
         "https://maps.googleapis.com",
-        # MapLibre fetches the tiles Leaflet draws as <img> (PL8 item 9), so these mirror img-src's tile hosts.
+        # MapLibre fetches the tiles Leaflet draws as <img>, so these mirror img-src's tile hosts.
         "https://server.arcgisonline.com",
         "https://services.arcgisonline.com",
         "https://tile.openweathermap.org",
@@ -942,8 +923,8 @@ def allow_basemap_style_origins(directives: dict[str, list[str]], base_urls: str
     Admit the origins a vector basemap is served from.
 
     A raster basemap needs nothing here: it is proxied, so the browser only ever talks to this
-    origin. A vector one is the opposite - REData publishes a ``style_url`` and the browser fetches
-    the style, its glyphs, its sprite and the tile archive itself directly (REData's ``D11``).
+    origin. A vector one is the opposite - the catalogue publishes a ``style_url`` and the browser fetches
+    the style, its glyphs, its sprite and the tile archive itself directly.
     MapLibre fetches all four with ``fetch``/XHR, so ``connect-src`` names them; ``img-src`` does
     too, because MapLibre loads a raster source the style names as ``<img>`` whenever it is not
     refreshing expired tiles, and decodes a sprite through one where ``createImageBitmap`` is
@@ -1194,7 +1175,7 @@ SOCIAL_AUTH_NEW_USER_REDIRECT_URL = "/accounts/post-login/"
 # domains, impossible Gmail names such as the integration suite's) and hands the rest to UL_EMAIL_BACKEND.
 EMAIL_BACKEND = "urbanlens.dashboard.services.security.mail_guard.RecipientGuardEmailBackend"
 # Production defaults to SMTP, which fails loudly when unconfigured rather than dropping safety alerts into a log.
-# Everywhere else prints mail to the log unless UL_EMAIL_SEND_OUTSIDE_PRODUCTION is set (D26): staging holds a
+# Everywhere else prints mail to the log unless UL_EMAIL_SEND_OUTSIDE_PRODUCTION is set: staging holds a
 # clone of real addresses, and development's relay bills per message.
 EMAIL_DELIVERY_BACKEND = email_delivery_backend(
     EGRESS_ENVIRONMENT,
@@ -1293,7 +1274,6 @@ REST_FRAMEWORK = {
         # Per-activity upstream calls on the request path.
         "external_api_calendar": "30/hour",
         # Billed multi-round-trip chat turns.
-        "external_api_assistant_message": "60/hour",
         # Foreground tracking cadence, not ordinary writes.
         "external_api_safety_location": "360/hour",
     },
@@ -1376,7 +1356,6 @@ OAUTH2_PROVIDER = {
         "undo:read": "Read your recent delete history available to undo",
         "undo:write": "Restore a previously deleted item",
         "panels:read": "Read pin-detail enrichment panels (boundaries and other plugin-contributed data)",
-        "assistant:write": "Chat with your AI assistant, including creating trips and trip activities it suggests",
         "device_scans:read": "Read nearby expected devices and their signal info",
         "device_scans:write": "Upload wireless device scan data",
     },

@@ -1,4 +1,4 @@
-{% comment %}Boundary-vote dialog: side-by-side mini maps of every candidate official boundary (REData county parcel vs.{% endcomment %}
+{% comment %}Boundary-vote dialog: side-by-side mini maps of every candidate official boundary (a county parcel against an OpenStreetMap one, say).{% endcomment %}
 {% if boundary_vote %}
 <dialog id="boundary-vote-dialog" class="ul-dialog boundary-vote-dialog" aria-labelledby="dialog-title-which-boundary-looks-right"
         data-vote-url="{% url 'location.wiki.boundary_vote' location.slug %}" data-dismiss-key="ul_boundary_vote_dismissed_{{ location.slug }}"{% if boundary_vote.auto_open %} data-auto-open{% endif %}>

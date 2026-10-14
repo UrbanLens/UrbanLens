@@ -1,4 +1,4 @@
-"""Drop CRIS rows cached under the old site choice, so each is fetched again (P234).
+"""Drop CRIS rows cached under the old site choice, so each is fetched again.
 
 A site-scope row listed only the buildings inside one site record's boundary, at most 40, and that record could be a
 neighbouring district. A row whose district excludes the point names a neighbour as the place's site.

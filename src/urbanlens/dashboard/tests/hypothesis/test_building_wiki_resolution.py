@@ -1,5 +1,5 @@
 """
-A location standing on one of its campus's buildings opens that building's wiki, never the campus's (P261).
+A location standing on one of its campus's buildings opens that building's wiki, never the campus's.
 
 A building with no place of its own resolves onto its parcel, whose wiki another location holds, so
 ``Wiki.objects.existing_for_location`` used to hand every such location the campus's wiki.
@@ -70,7 +70,7 @@ def _geojson(latitude: float, longitude: float, half: float) -> dict:
 
 
 def _record(ref: str, point: tuple[float, float], *, footprint: float | None = None, parent: str = "") -> dict:
-    record = {"ref": ref, "name": f"Building {ref}", "latitude": point[0], "longitude": point[1], "source": "redata"}
+    record = {"ref": ref, "name": f"Building {ref}", "latitude": point[0], "longitude": point[1], "source": "registry"}
     if footprint is not None:
         record["geometry"] = _geojson(*point, footprint)
     if parent:

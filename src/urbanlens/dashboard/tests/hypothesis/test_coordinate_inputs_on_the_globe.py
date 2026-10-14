@@ -1,5 +1,5 @@
 """
-P282: a coordinate a form posts is a finite number on the globe before anything is placed at it.
+A coordinate a form posts is a finite number on the globe before anything is placed at it.
 
 Filing a photo as a new pin and placing an import failure by hand parsed the posted latitude and longitude with a bare
 ``float()``, which reads ``inf``, ``nan`` and ``1e999``, and stored whatever came out, a latitude past the poles too.

@@ -115,7 +115,7 @@ def render(summary: ActivitySummary) -> str:
         lines.append(f"  {summary.pressured_seconds}s spent at or above {PRESSURE_FRACTION:.0%} of max_connections.")
         if summary.idle_share_at_peak >= 0.5:
             lines.append(
-                f"  {summary.idle_share_at_peak:.0%} of the peak's backends were IDLE - connections held open by processes that were not using them. That is P104's shape, not a busy database.",
+                f"  {summary.idle_share_at_peak:.0%} of the peak's backends were IDLE - connections held open by processes that were not using them. That is the signature of connection pool exhaustion, not a busy database.",
             )
     else:
         lines.append(f"  {summary.idle_share_at_peak:.0%} idle at the peak; the pool was never close to full.")

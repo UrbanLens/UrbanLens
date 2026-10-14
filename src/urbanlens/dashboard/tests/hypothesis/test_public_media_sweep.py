@@ -36,7 +36,6 @@ from urbanlens.dashboard.tests.hypothesis.test_media_place_relevance import (
     ITEMS,
     NAMED,
     ON_CAMPUS,
-    GoogleImagesTests,
     _commons,
     _HrshTestCase,
 )
@@ -126,14 +125,6 @@ class SharedRowTests(_SweepCase):
         sweep_public_media()
 
         self.assertEqual(self.cached_urls(source="wikipedia_media"), [IN_BINGHAMTON.url, ANCESTRY.url])
-
-    def test_google_images_results_are_judged_like_the_rest(self) -> None:
-        results = [GoogleImagesTests.ARTWORK, GoogleImagesTests.MOVIE, GoogleImagesTests.ABOUT_THE_PLACE]
-        LocationCache.set(self.location, "google_images", {"items": results}, query_key="138 Hudson View Dr")
-
-        sweep_public_media()
-
-        self.assertEqual(self.cached_urls(source="google_images"), [GoogleImagesTests.ABOUT_THE_PLACE["thumbnail"]])
 
     def test_a_result_that_is_not_a_media_item_is_kept(self) -> None:
         self.cache(ITEMS)

@@ -1,4 +1,4 @@
-"""Drop the cached Historic Registers rows, which predate keeping each row's reference number and position (P228, P230)."""
+"""Drop the cached Historic Registers rows, which predate keeping each row's reference number and position."""
 
 from django.db import migrations
 

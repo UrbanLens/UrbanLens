@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 
     from django.db.backends.utils import CursorWrapper
 
-PASSWORD = "p104-test-password"
+PASSWORD = "role-test-password"
 
 
 @contextmanager
@@ -102,10 +102,10 @@ class DeclaredRolesTests(TestCase):
             cursor.execute("SELECT count(*) FROM django_migrations")
             cursor.execute("UPDATE django_migrations SET app = app WHERE id = -1")
             for statement in (
-                "CREATE TABLE p104_probe (id int)",
+                "CREATE TABLE role_probe (id int)",
                 "DROP TABLE django_migrations",
                 "TRUNCATE django_migrations",
-                "CREATE ROLE p104_probe",
+                "CREATE ROLE role_probe",
             ):
                 with self.subTest(statement=statement), self.assertRaises(ProgrammingError), transaction.atomic():
                     cursor.execute(statement)
@@ -113,10 +113,10 @@ class DeclaredRolesTests(TestCase):
     def test_tables_a_later_migration_creates_are_usable_without_reapplying(self) -> None:
         """Migrations run as the owner, between one db-setup and the next."""
         with connection.cursor() as cursor:
-            cursor.execute("CREATE TABLE p104_later (id serial PRIMARY KEY, value int)")
+            cursor.execute("CREATE TABLE role_later (id serial PRIMARY KEY, value int)")
         with _as_role("ul_worker") as cursor:
-            cursor.execute("INSERT INTO p104_later (value) VALUES (1)")
-            cursor.execute("SELECT count(*) FROM p104_later")
+            cursor.execute("INSERT INTO role_later (value) VALUES (1)")
+            cursor.execute("SELECT count(*) FROM role_later")
             self.assertEqual(cursor.fetchone(), (1,))
 
     def test_only_the_tiers_that_serve_the_health_probe_can_see_other_sessions(self) -> None:
@@ -160,11 +160,11 @@ class DeclaredRolesTests(TestCase):
 
     def test_a_tier_no_longer_declared_can_no_longer_log_in(self) -> None:
         with connection.cursor() as cursor:
-            cursor.execute(f'CREATE ROLE ul_p104_retired LOGIN IN ROLE "{GROUP_ROLE}"')
+            cursor.execute(f'CREATE ROLE ul_role_retired LOGIN IN ROLE "{GROUP_ROLE}"')
 
         apply_database_roles(declared_roles(), PASSWORD)
 
-        self.assertEqual(_rows("SELECT rolcanlogin FROM pg_roles WHERE rolname = 'ul_p104_retired'"), [(False,)])
+        self.assertEqual(_rows("SELECT rolcanlogin FROM pg_roles WHERE rolname = 'ul_role_retired'"), [(False,)])
 
     # The command refuses to hand the owner's password to the tiers in a deployed environment, and an unset
     # UL_ENVIRONMENT - a worktree with no `.env` - reads as production. Pinned so the runner's cannot decide it.
@@ -179,22 +179,22 @@ class DeclaredRolesTests(TestCase):
 class RefusedRolesTests(TestCase):
     def test_a_budget_the_server_cannot_hold_creates_nothing(self) -> None:
         with self.assertRaises(ConnectionBudgetExceededError):
-            apply_database_roles((DatabaseRole("p104_greedy", 10_000, 60),), PASSWORD)
-        self.assertEqual(_rows("SELECT 1 FROM pg_roles WHERE rolname = 'ul_p104_greedy'"), [])
+            apply_database_roles((DatabaseRole("role_greedy", 10_000, 60),), PASSWORD)
+        self.assertEqual(_rows("SELECT 1 FROM pg_roles WHERE rolname = 'ul_role_greedy'"), [])
 
     def test_a_predefined_role_outside_the_allowlist_creates_nothing(self) -> None:
         """``pg_execute_server_program`` would hand a tier a shell on the database host."""
         with self.assertRaises(DatabaseRoleError):
             apply_database_roles(
-                (DatabaseRole("p104_shell", 1, 60, frozenset({"pg_execute_server_program"})),), PASSWORD
+                (DatabaseRole("role_shell", 1, 60, frozenset({"pg_execute_server_program"})),), PASSWORD
             )
-        self.assertEqual(_rows("SELECT 1 FROM pg_roles WHERE rolname = 'ul_p104_shell'"), [])
+        self.assertEqual(_rows("SELECT 1 FROM pg_roles WHERE rolname = 'ul_role_shell'"), [])
 
 
 class PooledRolesTests(TestCase):
     """
     Behind a transaction-mode pooler the pooler is the budget, and a per-role limit counts its idle server
-    connections rather than the tier's real concurrency (the infrastructure repo's 0.8.0 deploy findings, item 10)."""
+    connections rather than the tier's real concurrency."""
 
     def test_the_settings_it_reads_exist(self) -> None:
         self.assertTrue(hasattr(settings, "UL_DB_ROLES_POOLED"))

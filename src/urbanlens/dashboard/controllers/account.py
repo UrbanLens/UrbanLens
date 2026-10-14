@@ -563,7 +563,7 @@ class ResetPasswordWithApiKeyChoiceForm(DerivedCredentialPolicyMixin, SetPasswor
 
 class SsoAwarePasswordResetForm(PasswordResetForm):
     """
-    PasswordResetForm that tells SSO-only accounts how to sign in (UL-257).
+    PasswordResetForm that tells SSO-only accounts how to sign in.
 
     Django's stock ``get_users()`` silently drops any account with ``has_usable_password() == False`` -
     correct for building a raw-password reset link, but the view shows the same generic "check your

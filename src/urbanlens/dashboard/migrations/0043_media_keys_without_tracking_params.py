@@ -1,4 +1,4 @@
-"""Re-key media marks and copies made while an item's URL carried ``utm_`` parameters (P215).
+"""Re-key media marks and copies made while an item's URL carried ``utm_`` parameters.
 
 ``media_item_key`` now hashes a URL without them. A relevance mark has no URL of its own, so its old key is matched
 against the URLs in its location's cached results; a copied photo is matched the same way, and by the URL it was

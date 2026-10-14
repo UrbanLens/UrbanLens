@@ -1,4 +1,4 @@
-"""Web Mercator ground resolution, and the deepest zoom a source's own resolution supports (P232)."""
+"""Web Mercator ground resolution, and the deepest zoom a source's own resolution supports."""
 
 from __future__ import annotations
 

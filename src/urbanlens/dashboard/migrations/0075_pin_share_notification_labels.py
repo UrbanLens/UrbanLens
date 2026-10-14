@@ -1,6 +1,6 @@
-"""Stored pin-share notifications stop naming the sender's own pin (P210).
+"""Stored pin-share notifications stop naming the sender's own pin.
 
-Until P193, ``create_pin_share`` wrote ``"{sender} shared {pin.display_label} with you."``: the sender's private name for
+Until the share-label fix, ``create_pin_share`` wrote ``"{sender} shared {pin.display_label} with you."``: the sender's private name for
 the pin, which a share without ``shared_name`` never consents to pass on. New rows use ``PinShare.safe_place_label``;
 this rewrites the label in rows already stored, keeping the sender as it was resolved for the recipient and any
 sentence after the first. The label logic is a copy of ``PinShare.safe_place_label`` as of this migration, since a

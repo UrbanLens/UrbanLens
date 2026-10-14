@@ -38,7 +38,7 @@ class KeywordOutcome(StrEnum):
     UNANSWERED = "unanswered"
     #: Refused for now before anything was sent: over a limit, or backed off. Nothing is held against the photo.
     BUSY = "busy"
-    #: Refused for good here before anything was sent: switched off, or not called in this environment (D26).
+    #: Refused for good here before anything was sent: switched off, or not called in this environment.
     OFF = "off"
     #: The photo's analysis copy is missing or unreadable, so the source was not asked.
     NO_INPUT = "no_input"
@@ -237,7 +237,7 @@ def generate_keywords_for_image(image_id: int) -> dict[str, int]:
     Returns:
         Mapping of provider slug to number of keywords stored (for logs/tests)."""
     from urbanlens.dashboard.models.images.model import Image
-    from urbanlens.dashboard.plugins.registry import plugin_registry
+    from urbanlens.dashboard.plugins.points import PHOTO_KEYWORD_PROVIDERS
     from urbanlens.dashboard.services.photos import keyword_retry
 
     image = Image.objects.select_related("profile__user").filter(pk=image_id).first()
@@ -249,7 +249,7 @@ def generate_keywords_for_image(image_id: int) -> dict[str, int]:
         return {}
 
     counts: dict[str, int] = {}
-    for provider in plugin_registry.photo_keyword_providers():
+    for provider in PHOTO_KEYWORD_PROVIDERS:
         if not provider.slug:
             continue
         outcome, stored = run_keyword_provider(image, provider)

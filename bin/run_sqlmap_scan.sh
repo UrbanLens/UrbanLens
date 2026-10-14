@@ -14,7 +14,7 @@
 # and OS/file/shell flags are refused outright. Otherwise permissive by default; manual only, no --docker.
 #
 # Usage:
-#   bin/run_sqlmap_scan.sh --url https://s1.dev.urbanlens.org
+#   bin/run_sqlmap_scan.sh --url https://s1.dev.example.com
 #   bin/run_sqlmap_scan.sh --url ... --accounts-file /tmp/e2e.json
 #   bin/run_sqlmap_scan.sh --url ... --accounts-file /tmp/e2e.json --all-tiers
 #   bin/run_sqlmap_scan.sh --url ... --fail-on-findings
@@ -96,8 +96,7 @@ usage() {
 		                         (each via sqlmap's own --openapi target derivation
 		                         against the published schema), and a real signed-in
 		                         session (--crawl/--forms against the HTML/HTMX
-		                         dashboard, which the API key cannot reach at all - see
-		                         docs/INTEGRATION_TESTS.md). A tier that can't be set up
+		                         dashboard, which the API key cannot reach at all). A tier that can't be set up
 		                         (no restricted key provisioned, no Node for the session
 		                         login) is skipped with a warning rather than failing.
 		  --risk N               sqlmap --risk, 1-3 (default ${RISK}). Deliberately
@@ -117,7 +116,7 @@ usage() {
 		  --crawl-depth N        Session tier's --crawl depth (default ${CRAWL_DEPTH}).
 		  --fail-on-findings     Exit non-zero if sqlmap confirmed an injection in any
 		                         tier. Off by default - same posture as run_nuclei_scan.sh
-		                         and the audit tooling in docs/TOOLING.md: a finding here
+		                         and the audit tooling: a finding here
 		                         is a lead to triage, not automatically a broken build.
 		  -- ARGS...             Everything after this goes to \`sqlmap\`, for every tier,
 		                         except the flags this wrapper refuses - see the header
@@ -129,8 +128,8 @@ usage() {
 		artifact upload.
 
 		Refuses to run against anything but an allowed dev-container host
-		(UL_SQLMAP_ALLOWED_HOSTS, default ".dev.urbanlens.org,localhost,127.0.0.1").
-		staging.urbanlens.org is NOT on that list on purpose - override with
+		(UL_SQLMAP_ALLOWED_HOSTS, default ".dev.example.com,localhost,127.0.0.1").
+		staging.example.com is NOT on that list on purpose - override with
 		UL_SQLMAP_ALLOW_ANY_HOST=1 only once you have confirmed the target database is
 		genuinely disposable.
 	EOF
@@ -225,7 +224,7 @@ hostname_of() {
 }
 
 # Allowlist (not denylist): leading "." matches a domain suffix, anything else must match exactly.
-DEFAULT_ALLOWED_HOSTS=".dev.urbanlens.org,localhost,127.0.0.1"
+DEFAULT_ALLOWED_HOSTS=".dev.example.com,localhost,127.0.0.1"
 ALLOWED_HOSTS="${UL_SQLMAP_ALLOWED_HOSTS:-${DEFAULT_ALLOWED_HOSTS}}"
 ALLOW_ANY_HOST="${UL_SQLMAP_ALLOW_ANY_HOST:-0}"
 TARGET_HOST="$(hostname_of "${BASE_URL}")"
@@ -253,9 +252,9 @@ if [[ "${ALLOW_ANY_HOST}" != "1" ]] && ! host_is_allowed "${TARGET_HOST}"; then
 		hosts by default (UL_SQLMAP_ALLOWED_HOSTS, currently "${ALLOWED_HOSTS}") -
 		sqlmap actively exploits an injection rather than just detecting one, which is
 		only safe against a database that can be rebuilt from nothing.
-		staging.urbanlens.org is deliberately NOT on that list.
+		staging.example.com is deliberately NOT on that list.
 
-		Point --url at a dev container (e.g. https://s1.dev.urbanlens.org), or set
+		Point --url at a dev container (e.g. https://s1.dev.example.com), or set
 		UL_SQLMAP_ALLOW_ANY_HOST=1 if you have genuinely confirmed this target's
 		database is disposable and mean to scan it anyway.
 	EOF

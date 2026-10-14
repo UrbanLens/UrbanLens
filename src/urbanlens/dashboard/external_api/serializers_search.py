@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
+from urbanlens.dashboard.plugins.drf import ExtensibleSerializer
 from urbanlens.dashboard.services.global_search.results import RESULT_TYPES
 
 #: The longest query this endpoint will consider. Far above anything a search box produces, and low enough that
@@ -29,7 +30,7 @@ MAX_QUERY_LENGTH = 250
 MAX_SECTION_LIMIT = 50
 
 
-class GlobalSearchQuerySerializer(serializers.Serializer):
+class GlobalSearchQuerySerializer(ExtensibleSerializer):
     """
     Validates the ``q``/``types``/``limit`` query parameters.
 
@@ -65,7 +66,7 @@ def parse_result_types(raw: str | None) -> frozenset[str] | None:
     return frozenset(requested & RESULT_TYPES.keys())
 
 
-class SearchResultSerializer(serializers.Serializer):
+class SearchResultSerializer(ExtensibleSerializer):
     """One search hit (schema-only)."""
 
     #: One of the ``RESULT_TYPES`` slugs; equal to the enclosing group's ``type``.
@@ -88,7 +89,7 @@ class SearchResultSerializer(serializers.Serializer):
     object_uuid = serializers.CharField(read_only=True, allow_null=True)
 
 
-class SearchGroupSerializer(serializers.Serializer):
+class SearchGroupSerializer(ExtensibleSerializer):
     """One result section: a type and its hits (schema-only)."""
 
     type = serializers.CharField(read_only=True)
@@ -97,7 +98,7 @@ class SearchGroupSerializer(serializers.Serializer):
     results = SearchResultSerializer(many=True, read_only=True)
 
 
-class GlobalSearchResponseSerializer(serializers.Serializer):
+class GlobalSearchResponseSerializer(ExtensibleSerializer):
     """The full global-search payload (schema-only)."""
 
     #: The query exactly as submitted, echoed so a client rendering results

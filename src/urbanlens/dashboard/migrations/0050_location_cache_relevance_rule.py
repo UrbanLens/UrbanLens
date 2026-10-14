@@ -1,4 +1,4 @@
-"""Record the relevance rule each cached row was swept under, so the public-media sweep finds what it has not judged (P233)."""
+"""Record the relevance rule each cached row was swept under, so the public-media sweep finds what it has not judged."""
 
 from django.db import migrations, models
 

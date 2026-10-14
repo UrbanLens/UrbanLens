@@ -38,7 +38,7 @@ class HealthEndpointTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content, b"Okay!")
 
-    @override_settings(ALLOWED_HOSTS=["urbanlens.org"])
+    @override_settings(ALLOWED_HOSTS=["example.com"])
     def test_localhost_host_is_rejected_when_missing_from_allowed_hosts(self) -> None:
         """Reproduce the staging failure mode: healthcheck Host is localhost."""
         client = Client(SERVER_NAME="localhost")
@@ -136,7 +136,7 @@ class DefaultAllowedHostsTests(SimpleTestCase):
             hosts = _default_allowed_hosts()
         self.assertIn("localhost", hosts)
         self.assertIn("127.0.0.1", hosts)
-        self.assertIn("urbanlens.org", hosts)
+        self.assertEqual(hosts, ["localhost", "127.0.0.1"])
 
     def test_production_default_includes_localhost(self) -> None:
         with mock.patch.dict(os.environ, {"UL_ENVIRONMENT": "production"}, clear=False):
@@ -225,7 +225,7 @@ class TheProbeDeadlineTests(TestCase):
     """
     The probes cap their own queries so a slow database cannot hold a worker until nginx gives up.
     Nothing asserted that the cap was applied, which made it free to drop: a ``SET LOCAL`` with a
-    bound parameter is a syntax error under psycopg3's server-side binding (X27), and the probes
+    bound parameter is a syntax error under psycopg3's server-side binding, and the probes
     catch ``DatabaseError``, so the whole thing degrades to "database unreachable" rather than
     raising. The five tests above do fail on that, but on the symptom, and none of them would notice
     a deadline that was quietly removed or left session-wide."""

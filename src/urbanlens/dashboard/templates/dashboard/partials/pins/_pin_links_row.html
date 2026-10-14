@@ -22,7 +22,7 @@
                 </a>
                 {% endif %}
             </span>
-            {% include "dashboard/partials/pins/_ai_extract_button.html" with url=link.url %}
+            {% with url=link.url %}{% plugin_slot "link.actions" %}{% endwith %}
             <button type="button" class="pin-link-chip-remove"
                     hx-delete="{% url delete_url_name owner_slug link.id %}"
                     hx-target="#{{ row_id }}" hx-swap="outerHTML"

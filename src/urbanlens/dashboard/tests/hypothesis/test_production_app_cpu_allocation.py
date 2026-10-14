@@ -112,7 +112,7 @@ class ProductionGetsMoreAppCpuTests(SimpleTestCase):
     def test_production_sample_env_exists(self) -> None:
         self.assertTrue(
             _PRODUCTION_SAMPLE_PATH.exists(),
-            "production.sample.env is missing - P125 needs production's app tier to differ from "
+            "production.sample.env is missing - production's app tier needs to differ from "
             "the shared default, and nothing else should carry that override",
         )
 
@@ -122,7 +122,7 @@ class ProductionGetsMoreAppCpuTests(SimpleTestCase):
         self.assertGreaterEqual(
             float(production["CPU_LIMIT__APP"]),
             _PRODUCTION_APP_CPU_MINIMUM,
-            f"production's CPU_LIMIT__APP={production.get('CPU_LIMIT__APP')} is below the P125 floor "
+            f"production's CPU_LIMIT__APP={production.get('CPU_LIMIT__APP')} is below the floor "
             f"of {_PRODUCTION_APP_CPU_MINIMUM}",
         )
 
@@ -134,7 +134,7 @@ class ProductionGetsMoreAppCpuTests(SimpleTestCase):
             int(production["WEB_CONCURRENCY"]),
             _PRODUCTION_WEB_CONCURRENCY_MINIMUM,
             f"production's WEB_CONCURRENCY={production.get('WEB_CONCURRENCY')} leaves fewer request "
-            f"threads than the {_PRODUCTION_WEB_CONCURRENCY_MINIMUM} workers P125 measured",
+            f"threads than the {_PRODUCTION_WEB_CONCURRENCY_MINIMUM} workers that were measured",
         )
 
     def test_production_has_memory_for_those_workers(self) -> None:
@@ -163,10 +163,10 @@ class ProductionGetsMoreAppCpuTests(SimpleTestCase):
         self.assertLessEqual(
             float(staging["CPU_LIMIT__APP"]),
             _SHARED_APP_CPU_DEFAULT,
-            "staging's app CPU limit rose above the shared default - P125 asked for production only",
+            "staging's app CPU limit rose above the shared default - production only",
         )
         self.assertLess(
             float(staging["CPU_LIMIT__APP"]),
             float(production["CPU_LIMIT__APP"]),
-            "staging must keep losing to production under contention, same as P114",
+            "staging must keep losing to production under contention",
         )

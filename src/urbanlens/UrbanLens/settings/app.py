@@ -55,7 +55,7 @@ def _encryption_key_weakness(key: str) -> str | None:
 
 def _default_allowed_hosts() -> list[str]:
     """Default ALLOWED_HOSTS, including localhost for container healthchecks."""
-    return ["urbanlens.org", "localhost", "127.0.0.1"]
+    return ["localhost", "127.0.0.1"]
 
 
 class AppSettingsMeta(ModelMetaclass):
@@ -202,7 +202,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "Seconds the object store may go silent mid-request before the attempt is abandoned. An upload request "
             "makes two storage calls (a name check and the write), so with UL_S3_MAX_ATTEMPTS this bounds how long a "
             "stalled store can hold it: keep 2 x attempts x (connect + read) plus the 20 s upload reservation wait "
-            "well under the proxy's own timeout (Cloudflare gives up at 100 s)."
+            "well under the proxy's own timeout (a typical proxy gives up at 100 s)."
         ),
     )
     s3_max_attempts: int = Field(
@@ -222,8 +222,8 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     process_role: str = Field(
         default="unspecified",
         description=(
-            "What this process is: web, websocket, worker, bulk, panels, sandbox, ai, inference, beat, metrics, or "
-            "setup. Set per service in docker-compose.yml, which also logs each in to Postgres as ul_<role>. "
+            "What this process is: web, websocket, worker, bulk, panels, sandbox, beat, metrics, or "
+            "setup, or a role a plugin declares. Set per service in docker-compose.yml, which also logs each in to Postgres as ul_<role>. "
             "Only 'sandbox' may hand untrusted uploaded bytes to a parser (Pillow, ffmpeg, "
             "LibreOffice, GDAL, zipfile); see UL_UNTRUSTED_PARSE_POLICY."
         ),
@@ -346,15 +346,6 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         ge=1,
         description=("How many Immich thumbnails one account may be fetching at once across every web process, leased in the shared cache. The per-process cap alone lets one account pointed at a slow server hold that cap in every process at once."),
     )
-    public_costs_page_cache_seconds: int = Field(
-        default=600,
-        description=(
-            "How long the public costs page reuses its computed figures. The page is anonymous and every number on "
-            "it is a trailing thirty-day or monthly aggregate - including one that joins every user against every "
-            "pin they own - so recomputing per request buys freshness nobody can perceive. Only the figures are "
-            "cached, never the response, so turning the page off still takes effect immediately."
-        ),
-    )
     markup_max_shapes_per_snapshot: int = Field(
         default=2_000,
         description=(
@@ -388,7 +379,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     organize_rows_page_size: int = Field(
         default=100,
         gt=0,
-        description=("How many label cards one page of an Organize tab renders; the rest arrive as the list scrolls, or all at once when a filter, the tree view or select-all needs them. Rendering costs about 3 ms a card (P66)."),
+        description=("How many label cards one page of an Organize tab renders; the rest arrive as the list scrolls, or all at once when a filter, the tree view or select-all needs them. Rendering costs about 3 ms a card."),
     )
     max_smart_lists_per_sync: int = Field(
         default=25,
@@ -466,15 +457,6 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "processes uploads - without the isolation. Set UL_SANDBOX_ENABLED=false only where no media-worker runs."
         ),
     )
-    ai_worker_enabled: bool = Field(
-        default=False,
-        description=(
-            "Whether an ai-worker container is deployed to drain the 'ai' Celery queue. Unlike "
-            "UL_SANDBOX_ENABLED, this has no degrade-to-default-queue fallback: when false, the assistant "
-            "is simply unavailable (see services.ai.access.assistant_available), because the default "
-            "worker holds REData/OAuth credentials the assistant's tool loop must never run alongside."
-        ),
-    )
     untrusted_parse_policy: str = Field(
         default="warn",
         description=(
@@ -482,15 +464,6 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "'deny' raises, 'warn' logs and proceeds, 'allow' disables the check. Production should be 'deny'; "
             "'warn' exists to collect violations during a rollout, and the test settings force 'allow' because the "
             "suite calls the parsers directly."
-        ),
-    )
-    direct_inference_policy: str = Field(
-        default="warn",
-        description=(
-            "How a process reacts when it is about to call an AI provider directly, in-process, instead of "
-            "through ai-inference: 'deny' raises, 'warn' logs and proceeds, 'allow' disables the check. Production "
-            "should be 'deny'; a local checkout with no UL_PROCESS_ROLE set is always allowed regardless of this "
-            "setting, since it has no ai-inference container to talk to. See services.sandbox.guard.check_direct_inference."
         ),
     )
     allow_dev_toolbar_for_non_admins: bool = Field(
@@ -561,7 +534,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "per-sender budget; safety check-in and game session chat are scoped per conversation, "
             "so handling two at once does not throttle either. People send single emoji or split a "
             "sentence into several messages, so this sits above what a person sends and well below "
-            "the ~15-30/s that one sender needs to saturate daphne (X31). 0 disables it."
+            "the ~15-30/s that one sender needs to saturate daphne. 0 disables it."
         ),
     )
     message_burst: int = Field(
@@ -623,7 +596,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         default="",
         description=(
             "Comma-separated CIDRs (IPv4 or IPv6) permitted to read /metrics, e.g. "
-            "'10.2.0.0/24,127.0.0.1/32'. Empty disables the network check. The client address is "
+            "'10.0.0.0/24,127.0.0.1/32'. Empty disables the network check. The client address is "
             "resolved the same way the rate limiters resolve it, honouring UL_TRUSTED_PROXY_COUNT, so "
             "a forged X-Forwarded-For cannot spoof its way into the allowlist. Combine with "
             "UL_METRICS_TOKEN for defense in depth; either alone satisfies the startup check."
@@ -637,11 +610,11 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "This deployment's share (0-1) of every quota'd and billed external service's budget: each such "
             "service's per-minute, per-day and 30-day limits, and its share of a vendor's free tier. Unset takes "
             "the UL_ENVIRONMENT default: production 0.9, staging 0.05, development and local 0, anything else 0. "
-            "0 keeps the deployment off every such service. REData and our own hosts are not scaled; hosted AI "
-            "(Cloudflare Workers AI, OpenAI, Anthropic) is called from production and staging only, and local models "
-            "such as Ollama everywhere; email, SMS, push and writes to a third party are production's only. Every "
+            "0 keeps the deployment off every such service. First-party data services and the deployment's own hosts are not scaled; billed services "
+            "are called only within their share, which development refuses by default; local and self-hosted services "
+            "run everywhere; email, SMS, push and writes to a third party are production's only. Every "
             "host shares one address, so keep all deployments' shares at or below 1. See "
-            "urbanlens.UrbanLens.egress (D26)."
+            "urbanlens.UrbanLens.egress."
         ),
     )
     environment_share_overrides: Annotated[dict[str, float], NoDecode] = Field(
@@ -650,9 +623,8 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "Per-service shares that replace UL_ENVIRONMENT_SHARE for the named services, as "
             "'nominatim=0.02,google_geocoding=0.01'. The way to try a provider from development or staging. For "
             "messaging (sms, whatsapp, unified_push) and public writes (wayback_save, google_calendar, and any plugin's paid checkout) any "
-            "share above 0 opts the service in off production, and 0 turns it off on production. The same for hosted "
-            "AI, which development and local refuse: name an AI feature (trivia_generation, assistant, link_extraction, "
-            "document_pin_import, ...) or a provider (ai_cloudflare, ai_openai, ai_anthropic) to try it there. Logged "
+            "share above 0 opts the service in off production, and 0 turns it off on production. A billed service that "
+            "development refuses can be tried there by name, as in UL_ENVIRONMENT_SHARE_OVERRIDES=google_geocoding=1. Logged "
             "at startup."
         ),
     )
@@ -679,10 +651,10 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "deployment's own mirror. The browser fetches them directly: the key is written into the "
             "page, which is how Protomaps keys are meant to be used, so restrict its allowed origins in "
             "the Protomaps dashboard. Only the tile source moves - the style, glyphs and sprites stay the "
-            "ones REData publishes - and the client falls back to the style's own tiles for the session "
+            "ones the tile catalogue publishes - and the client falls back to the style's own tiles for the session "
             "when the hosted ones fail. The CSP admits https://api.protomaps.com to connect-src whenever "
             "the key is handed out. Read on production and staging only: development and local ignore it "
-            "and draw the self-hosted tiles (D26). Leave it empty and every environment does."
+            "and draw the self-hosted tiles. Leave it empty and every environment does."
         ),
     )
     basemap_style_base_url: str = Field(
@@ -695,12 +667,9 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "connect-src and img-src, and nothing else: it is not where tiles are fetched "
             "from by this server, it is where the *browser* is allowed to fetch them from. A "
             "raster layer is proxied same-origin and needs no exception, so a deployment whose "
-            "REData offers only raster layers can leave this unset. "
-            "Set it to the origin in REData's published style_url. For example, https://tiles.example.com, which serves the style documents, the glyphs and "
-            "sprites they name, and the Protomaps planet archive behind them - measured "
-            "2026-09-20: styles/street.json, styles/dark.json and styles/terrain.json all answer "
-            "anonymously, with access-control-allow-origin: * and Content-Range exposed for the "
-            "archive's range reads. Without this the browser is refused all four."
+            "tile catalogue offers only raster layers can leave this unset. "
+            "Set it to the origin in the catalogue's published style_url, which must answer the style documents, glyphs, "
+            "sprites and tile archive anonymously, with access-control-allow-origin and Content-Range exposed for range reads."
         ),
     )
     request_upstream_concurrency: int = Field(
@@ -708,7 +677,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         ge=1,
         description=(
             "How many fetches one web process may have in flight to each upstream a page calls while the user "
-            "waits: place search, nearby places, trip forecasts, the historical-map list, REData media, Flickr "
+            "waits: place search, nearby places, trip forecasts, the historical-map list, proxied media, Flickr "
             "albums. Each upstream has its own count (services.core.request_upstream). Below gunicorn's "
             "`--threads 4`, so one slow upstream cannot hold every thread in a process; over the cap the caller "
             "is told the upstream is busy at once instead of waiting."
@@ -718,10 +687,10 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         default=2,
         ge=1,
         description=(
-            "How many warped historical-map tiles one web process may be fetching from REData at "
+            "How many warped historical-map tiles one web process may be fetching from their service at "
             "the same time. Its own count rather than the basemap one's, because an overlay "
             "nobody has switched on must not be able to starve the base layer under it - and "
-            "because REData warps these on demand, so they are slower than a basemap tile rather "
+            "because the service warps these on demand, so they are slower than a basemap tile rather "
             "than faster. See basemap_tile_upstream_concurrency for why the bound exists at all."
         ),
     )
@@ -751,8 +720,12 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "This deployment IS the public demo instance. Enables the demo-login endpoint and the "
             "demo banner. Isolation is the deployment boundary itself - a demo instance runs against "
             "its own database, seeded synthetically, and never against real data. Setting this true "
-            "on an instance holding real user data would expose it: see docs/DEMO.md."
+            "on an instance holding real user data would expose it."
         ),
+    )
+    official_site_host: str = Field(
+        default="",
+        description=("Host of the project's flagship instance, whose app name other instances are asked not to reuse. Empty means no instance is flagship: no app title is reserved and no notice is shown."),
     )
     demo_real_site_url: str = Field(
         default="",
@@ -789,7 +762,6 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     test_runner: str = Field(default="urbanlens.core.tests.runner.TestRunner", description="The test runner")
 
     # Urls
-    deployment_name: str | None = Field(default=None, description="K3s site/node name, if any. Used to distinguish between deployments.")
     login_url: str = Field(default="login", description="The login url")
     static_url: str = Field(default="static/", description="The static url")
 
@@ -803,28 +775,6 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
 
     # APIs
     vendor_asset_base_url: Url | None = Field(default=None, description="Root of a mirror of the third-party JS/CSS assets; unset uses the public CDNs")
-    cloudflare_ai_endpoint: Url | None = Field(default=None, description="The cloudflare ai endpoint")
-    cloudflare_worker_ai_endpoint: Url | None = Field(default=None, description="The cloudflare worker ai endpoint")
-    cloudflare_ai_api_key: str | None = Field(default=None, description="The cloudflare ai key")
-    openai_api_key: str | None = Field(default=None, description="The openai key")
-    anthropic_api_key: str | None = Field(default=None, description="The anthropic (claude) key")
-    ai_inference_url: str | None = Field(
-        default=None,
-        description=(
-            "Base URL of the sandboxed ai-inference service (e.g. http://ai-inference:8002). When set, "
-            "LLMGateway calls providers through it instead of in-process; when unset, it falls back to "
-            "calling the provider SDKs directly here (LocalInferenceClient) - the pre-sandbox behavior, "
-            "gated by UL_DIRECT_INFERENCE_POLICY so a deployed container can't silently take this path."
-        ),
-    )
-    ai_inference_token: str | None = Field(
-        default=None,
-        description=("Shared bearer secret presented to ai-inference. Must match that service's own copy of the same variable exactly - it is the same credential, not two."),
-    )
-    ai_inference_timeout_seconds: float = Field(
-        default=90.0,
-        description=("How long to wait for a single ai-inference HTTP call before giving up. Comfortably above that service's own worst case (a 30s provider timeout, one retry) so this client is never the one that times out first."),
-    )
     google_unrestricted_api_key: str | None = Field(default=None, description="The google unrestricted api key")
     google_domain_restricted_api_key: str | None = Field(default=None, description="The google domain restricted api key")
     google_public_api_key: str | None = Field(default=None, description="The google public api key")
@@ -837,8 +787,6 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     usgs_api_key: str | None = Field(default=None, description="The USGS M2M application token (from EarthExplorer account settings)")
     usgs_username: str | None = Field(default=None, description="The USGS EarthExplorer username (required alongside usgs_api_key for M2M auth)")
     azure_maps_subscription_key: str | None = Field(default=None, description="The Azure Maps subscription key (Azure Portal -> Azure Maps account -> Authentication)")
-    ollama_base_url: str | None = Field(default=None, description="Base URL of a self-hosted Ollama server (e.g. http://localhost:11434) for local, free AI photo-keyword generation")
-    ollama_vision_model: str = Field(default="llava", description="Ollama vision model name used for photo keyword generation")
     openweathermap_api_key: str | None = Field(default=None, description="The openweathermap key")
     osrm_base_url: str | None = Field(
         default=None,
@@ -850,8 +798,6 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "either way."
         ),
     )
-    redata_api_url: str | None = Field(default=None, description="Base URL of the REData property-records service (e.g. https://redata.example.com), no trailing slash needed")
-    redata_api_key: str | None = Field(default=None, description="Bearer API key for REData's external API - needs at least the parcels:read scope")
     virustotal_api_key: str | None = Field(
         default=None,
         description=(

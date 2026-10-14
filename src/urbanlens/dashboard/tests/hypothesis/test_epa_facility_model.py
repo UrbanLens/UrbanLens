@@ -105,7 +105,7 @@ class RecordDetailResultTests(TestCase):
         self.assertEqual(entry.longitude, -75.0)
 
     def test_coordinate_less_detail_is_recorded_but_never_clobbers_real_coordinates(self) -> None:
-        """A REData row with no coordinates for a facility still marks it as detail-fetched - it can never be an exact-site match, and recording that fact saves re-fetching it for every nearby pin - but its None coordinates must not erase a search-derived latitude or a previous richer detail's coordinates."""
+        """A provider row with no coordinates for a facility still marks it as detail-fetched - it can never be an exact-site match, and recording that fact saves re-fetching it for every nearby pin - but its None coordinates must not erase a search-derived latitude or a previous richer detail's coordinates."""
         EpaFacility.record_search_result("R1", name="Test", address="1 Main St", latitude=40.0, data={})
         entry = EpaFacility.record_detail_result(
             "R1", name="Test", address="1 Main St", latitude=None, longitude=None, data={}

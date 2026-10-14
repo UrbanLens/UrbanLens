@@ -22,11 +22,13 @@ from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.celery_inline import tasks_run_inline
+from urbanlens.core.tests.provider_fakes import FakeWeatherProvider, hold_providers
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.cache.recorded_weather import RecordedWeatherDay
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
+from urbanlens.dashboard.plugins.points import WEATHER_PROVIDERS
 from urbanlens.dashboard.services.apis import request_upstreams
 from urbanlens.dashboard.services.locations.visit_weather import cached_records, recorded_days_at, weather_cell
 from urbanlens.dashboard.services.trips.trip_errors import TripValidationError
@@ -70,22 +72,12 @@ class _TripCase(TestCase):
 class HistoryIsReadNotFetchedTests(_TripCase):
     def setUp(self) -> None:
         super().setUp()
-        configured = patch(
-            "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured", return_value=True
-        )
-        configured.start()
-        self.addCleanup(configured.stop)
+        hold_providers(self, WEATHER_PROVIDERS, [FakeWeatherProvider()])
 
-    def test_with_no_redata_nothing_is_queued_or_awaited(self) -> None:
+    def test_with_no_history_provider_nothing_is_queued_or_awaited(self) -> None:
         self._activity(timezone.make_aware(dt.datetime(2024, 5, 1, 12, 0)))
 
-        with (
-            patch(
-                "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured",
-                return_value=False,
-            ),
-            patch(_ENQUEUE) as enqueue,
-        ):
+        with WEATHER_PROVIDERS.overridden([FakeWeatherProvider(history=False)]), patch(_ENQUEUE) as enqueue:
             resp = self.client_.get(self.url)
 
         enqueue.assert_not_called()
@@ -182,18 +174,17 @@ class RecordedDaysAreRowsTests(TestCase):
 
     def test_the_old_documents_move_to_rows(self) -> None:
         location = baker.make("dashboard.Location", latitude=41.73, longitude=-73.92)
+        migration = importlib.import_module("urbanlens.dashboard.migrations.0032_v0_8_0")
         LocationCache.objects.create(
             location=location,
-            source="redata_weather_history",
+            source=migration._SOURCE,
             data={"2024-05-01": _history_row("2024-05-01"), "junk": 1},
         )
-        migration = importlib.import_module("urbanlens.dashboard.migrations.0032_v0_8_0")
-
         migration._0091__move_to_day_rows(django_apps, None)
 
         row = RecordedWeatherDay.objects.get()
         self.assertEqual((row.cell_lat, row.cell_lng, row.day), (4173, -7392, dt.date(2024, 5, 1)))
-        self.assertFalse(LocationCache.objects.filter(source="redata_weather_history").exists())
+        self.assertFalse(LocationCache.objects.filter(source=migration._SOURCE).exists())
 
 
 class ForecastTests(_TripCase):

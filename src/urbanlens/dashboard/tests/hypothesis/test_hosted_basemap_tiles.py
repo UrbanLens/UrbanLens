@@ -100,7 +100,7 @@ class TheEmbedTests(SimpleTestCase):
 
 
 class TheCatalogueKeepsOurOwnStyleTests(SimpleTestCase):
-    """Only the tile source moves, and it moves in the browser: the style, glyphs and sprites stay REData's."""
+    """Only the tile source moves, and it moves in the browser: the style, glyphs and sprites stay the catalogue's."""
 
     @staticmethod
     def _sources() -> list[dict[str, object]]:
@@ -112,24 +112,24 @@ class TheCatalogueKeepsOurOwnStyleTests(SimpleTestCase):
                 "attribution": "© OpenStreetMap contributors © Protomaps",
                 "min_zoom": 0,
                 "max_zoom": 15,
-                "style_url": "https://tiles.urbanlens.org/styles/street.json",
-                "url_template": "https://redata.example.test/tiles/street/{z}/{x}/{y}/",
+                "style_url": "https://tiles.example.com/styles/street.json",
+                "url_template": "https://catalogue.example.test/tiles/street/{z}/{x}/{y}/",
             },
             {
                 "id": "dark",
                 "name": "Dark",
                 "source_type": "vector",
                 "attribution": "© OpenStreetMap contributors © Protomaps",
-                "style_url": "https://tiles.urbanlens.org/styles/dark.json",
+                "style_url": "https://tiles.example.com/styles/dark.json",
             },
         ]
 
-    def test_every_environment_publishes_redatas_style(self) -> None:
+    def test_every_environment_publishes_the_catalogues_style(self) -> None:
         for environment in ("production", "staging", "development"):
             with self.subTest(environment=environment), _environment(environment), _key(_KEY):
                 offered = {entry["id"]: entry for entry in _offered_layers(self._sources())}
-                self.assertEqual(offered["street"]["style_url"], "https://tiles.urbanlens.org/styles/street.json")
-                self.assertEqual(offered["dark"]["style_url"], "https://tiles.urbanlens.org/styles/dark.json")
+                self.assertEqual(offered["street"]["style_url"], "https://tiles.example.com/styles/street.json")
+                self.assertEqual(offered["dark"]["style_url"], "https://tiles.example.com/styles/dark.json")
                 # The catalogue is cached for a day and served to every viewer; the key is never in it.
                 self.assertNotIn("pk_test", repr(offered))
 

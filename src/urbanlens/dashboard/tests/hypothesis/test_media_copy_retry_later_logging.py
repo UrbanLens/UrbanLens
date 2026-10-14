@@ -1,4 +1,4 @@
-"""media-copy's "not yet" 503 is an answer, not an error; a real failure on the same view still is one (P204)."""
+"""media-copy's "not yet" 503 is an answer, not an error; a real failure on the same view still is one."""
 
 from __future__ import annotations
 

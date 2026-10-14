@@ -1,4 +1,4 @@
-"""A user's own input that does not fit gets a refusal or a clamp, never a 500 (Spark P397)."""
+"""A user's own input that does not fit gets a refusal or a clamp, never a 500."""
 
 from __future__ import annotations
 

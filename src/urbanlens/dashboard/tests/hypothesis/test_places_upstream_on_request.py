@@ -1,7 +1,7 @@
 """
 Place search, place details and the Places layer call their upstreams under the request-path policy.
 
-N29 G5-25, G5-28, G6-1. Before: autocomplete called Google/REData on every keystroke with no cache,
+Before: autocomplete called the places provider on every keystroke with no cache,
 throttle or deadline; a nearby-places miss called three sources one after another (about 70 s worst
 case) and cached whatever came back, a failure included, for 90 days; the radius was part of the cache
 key, so any integer made a miss.
@@ -29,7 +29,6 @@ _RESOLVE = "urbanlens.dashboard.services.apis.locations.places_resolution.resolv
 _DETAILS = "urbanlens.dashboard.services.apis.locations.places_resolution.get_place_details_full"
 _LANDMARKS = "urbanlens.dashboard.services.apis.locations.places_resolution.search_nearby_landmarks"
 _WIKIPEDIA = "urbanlens.dashboard.services.apis.assets.wikipedia.WikipediaGateway"
-_PARKS = "urbanlens.dashboard.services.apis.locations.redata_national_parks_gateway.RedataNationalParksGateway"
 
 _UPSTREAMS = [
     request_upstreams.PlacesAutocompleteUpstream,
@@ -53,8 +52,6 @@ class _PlacesCase(TestCase):
         self.addCleanup(self.release.set)
         for patcher in (
             mock.patch.object(app_settings, "google_unrestricted_api_key", "test-key"),
-            mock.patch.object(app_settings, "redata_api_url", ""),
-            mock.patch.object(app_settings, "redata_api_key", ""),
             mock.patch("urbanlens.dashboard.models.subscriptions.user_has_feature", return_value=True),
         ):
             patcher.start()

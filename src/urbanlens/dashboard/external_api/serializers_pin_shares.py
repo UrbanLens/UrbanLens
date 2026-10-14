@@ -13,18 +13,20 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
+from urbanlens.dashboard.plugins.drf import ExtensibleSerializer
+
 #: The two decisions a recipient can make. Kept as a module constant so the
 #: serializer and any future caller agree on the vocabulary.
 PIN_SHARE_ACTIONS = ("accept", "reject")
 
 
-class PinShareRespondSerializer(serializers.Serializer):
+class PinShareRespondSerializer(ExtensibleSerializer):
     """Validates a recipient's accept/reject decision on a pending share."""
 
     action = serializers.ChoiceField(choices=PIN_SHARE_ACTIONS)
 
 
-class PinShareRespondResultSerializer(serializers.Serializer):
+class PinShareRespondResultSerializer(ExtensibleSerializer):
     """The outcome of responding to a share (schema-only)."""
 
     #: The share's status after the decision - ``"accepted"`` or ``"rejected"``.

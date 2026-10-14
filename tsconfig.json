@@ -1,5 +1,8 @@
 {
     "compilerOptions": {
+    "paths": {
+      "@core/*": ["./src/urbanlens/dashboard/frontend/ts/*"]
+    },
         "target": "ES2022",
         "module": "ESNext",
         "moduleResolution": "bundler",

@@ -1,4 +1,4 @@
-"""Report, and on request delete, the files under ``pin_images/`` that no Image row names (P14)."""
+"""Report, and on request delete, the files under ``pin_images/`` that no Image row names."""
 
 from __future__ import annotations
 

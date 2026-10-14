@@ -1,6 +1,6 @@
 """
 Merging one community wiki into another when both turn out to describe the same building.
-Two building places that were one real building each grew a wiki (REData P98's drifting Overture refs, see ``services.places.building_merge``). One page has to go, but nothing written on it may:
+Two building places that were one real building each grew a wiki (a source's drifting building refs, see ``services.places.building_merge``). One page has to go, but nothing written on it may:
 
 - Article: the kept page's article stays live; every revision of the other moves into its history, and the other's text, when it differs, is appended as a "Merged from <name>" section in one new revision attributed to that article's last human editor.
 - Columns (name, description, security, dates, ...): the kept page keeps its own; one it lacks is taken from the other.
@@ -16,9 +16,10 @@ from dataclasses import dataclass, field
 import logging
 from typing import TYPE_CHECKING, Any
 
-from django.db import IntegrityError, transaction
+from django.db import transaction
 from django.db.models.fields.files import FieldFile
 
+from urbanlens.dashboard.plugins.points import WIKI_ABSORBING
 from urbanlens.dashboard.services.core.row_merge import column_field, remaining_references, repoint_references, snapshot_row
 
 if TYPE_CHECKING:
@@ -118,16 +119,19 @@ def _merge_columns(kept: Wiki, absorbed: Wiki, result: WikiMergeResult) -> None:
         result.dropped["columns"] = differing
 
 
-def _concealed_base(article: Article, wiki: Wiki, editor: Profile | None) -> str:
+def _editor_base(article: Article, wiki: Wiki, editor: Profile | None) -> str:
     """
     The article text *editor* could see, which is all a revision attributed to them may carry.
-    With concealment off (or for an editor it does not apply to) that is the live text.
+    For an editor whose projection of the wiki changes nothing that is the live text.
     """
-    from urbanlens.dashboard.services.wiki.concealment import concealment_active, visible_rows
+    from urbanlens.dashboard.services.wiki.viewer_projection import viewer_projection
 
-    if editor is None or not concealment_active(wiki, editor):
+    if editor is None:
         return article.content
-    newest = visible_rows(article.revisions.all(), wiki, editor).order_by("-created", "-pk").first()
+    projection = viewer_projection(wiki, editor)
+    if not projection.active:
+        return article.content
+    newest = projection.newest_revision(article)
     return newest.content if newest is not None else ""
 
 
@@ -155,7 +159,7 @@ def _merge_article(kept: Wiki, absorbed: Wiki, result: WikiMergeResult) -> None:
     editor_id = article_merge.live_text_editor_id(absorbed_article if differs else kept_article)
     editor = Profile.objects.filter(pk=editor_id).first() if editor_id is not None else None
     # Read before the history moves: once it does, the absorbed article's own revisions are visible to their editor too.
-    base = _concealed_base(kept_article, kept, editor)
+    base = _editor_base(kept_article, kept, editor)
     article_merge.record_live_text(kept_article)
     result.moved["article_revisions"] = article_merge.adopt_history(kept_article, absorbed_article)
     Article.objects.filter(pk=absorbed_article.pk).delete()
@@ -231,20 +235,6 @@ def _merge_boundaries(kept: Wiki, absorbed: Wiki, result: WikiMergeResult) -> di
     return changes
 
 
-def _merge_one_to_ones(kept: Wiki, absorbed: Wiki, result: WikiMergeResult) -> None:
-    """The trivia sweep's per-wiki bookkeeping: moved when the kept page has none, else snapshotted."""
-    from urbanlens.dashboard.models.trivia.model import TriviaGenerationAttempt
-
-    attempt = TriviaGenerationAttempt.objects.filter(wiki=absorbed).first()
-    if attempt is None:
-        return
-    if TriviaGenerationAttempt.objects.filter(wiki=kept).exists():
-        result.drop("trivia_generation_attempt", snapshot_row(attempt))
-        attempt.delete()
-    else:
-        TriviaGenerationAttempt.objects.filter(pk=attempt.pk).update(wiki=kept)
-
-
 def _merge_albums(kept: Wiki, absorbed: Wiki) -> None:
     """Move the absorbed page's albums, re-slugging on a ``uq_album_wiki_slug`` collision - both hold real photos."""
     from urbanlens.dashboard.models.album.model import Album
@@ -256,20 +246,6 @@ def _merge_albums(kept: Wiki, absorbed: Wiki) -> None:
             album.slug = ""
         album.save()
         taken.add(album.slug)
-
-
-def _repoint_reputation_targets(kept: Wiki, absorbed: Wiki) -> None:
-    """Ledger rows name a wiki by id as well as by FK; point the id at the kept page where that stays unique."""
-    from urbanlens.dashboard.models.reputation.meta import TargetKind
-    from urbanlens.dashboard.models.reputation.model import ReputationEvent
-
-    for pk in ReputationEvent.objects.filter(target_kind=TargetKind.WIKI, target_id=absorbed.pk).values_list("pk", flat=True):
-        try:
-            with transaction.atomic():
-                ReputationEvent.objects.filter(pk=pk).update(target_id=kept.pk)
-        except IntegrityError:
-            # The same award already exists for the kept page; this row stays as the record it was.
-            continue
 
 
 def _untangle_nesting(kept: Wiki, absorbed: Wiki, result: WikiMergeResult) -> None:
@@ -319,6 +295,7 @@ def merge_duplicate_wiki(kept: Wiki, absorbed: Wiki) -> WikiMergeResult:
     from urbanlens.dashboard.models.aliases.model import WikiAlias
     from urbanlens.dashboard.models.wiki.model import Wiki as WikiModel
     from urbanlens.dashboard.models.wiki_edit.model import WikiEdit
+    from urbanlens.dashboard.plugins.points import WIKIS_MERGED
 
     if kept.pk == absorbed.pk:
         raise ValueError("Cannot merge a wiki into itself")
@@ -331,7 +308,7 @@ def merge_duplicate_wiki(kept: Wiki, absorbed: Wiki) -> WikiMergeResult:
         _merge_article(kept, absorbed, result)
         _merge_columns(kept, absorbed, result)
         # Provenance of the absorbed page's own columns: moving it would make its writes resolve as the kept page's
-        # current values for a concealed viewer, so it is kept in the record instead.
+        # current values when read for a viewer, so it is kept in the record instead.
         revisions = list(absorbed.field_revisions.all().order_by("pk"))
         if revisions:
             result.dropped["field_revisions"] = [snapshot_row(revision) for revision in revisions]
@@ -339,9 +316,9 @@ def merge_duplicate_wiki(kept: Wiki, absorbed: Wiki) -> WikiMergeResult:
         _merge_facts(kept, absorbed, result)
         _merge_stat_votes(kept, absorbed, result)
         boundary_changes = _merge_boundaries(kept, absorbed, result)
-        _merge_one_to_ones(kept, absorbed, result)
+        WIKI_ABSORBING.fire(kept, absorbed, result)
         _merge_albums(kept, absorbed)
-        _repoint_reputation_targets(kept, absorbed)
+        WIKIS_MERGED.fire(kept, absorbed)
         kept.labels.add(*absorbed.labels.all())
 
         result.moved["relations"] = {name: len(rows) for name, rows in remaining_references(absorbed).items()}

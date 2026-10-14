@@ -1,4 +1,4 @@
-"""A URL's tracking parameters never change what it identifies (P215)."""
+"""A URL's tracking parameters never change what it identifies."""
 
 from __future__ import annotations
 

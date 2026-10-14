@@ -3,7 +3,7 @@
  */
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { resetHostedBasemapForTests } from "./hosted-basemap";
-import { BASE_ERROR_TILE_COLOR, baseLayer, createMapLayers, normalizeBase, rasterSourceFor, registerRedataLayers, resetRedataLayersCacheForTests, resetWorldMosaicsForTests, templateTileLayer, tileLayer, vectorStyleFor, worldMosaicTiles } from "./map-layers";
+import { BASE_ERROR_TILE_COLOR, baseLayer, createMapLayers, normalizeBase, rasterSourceFor, registerCatalogueLayers, resetCatalogueLayersCacheForTests, resetWorldMosaicsForTests, templateTileLayer, tileLayer, vectorStyleFor, worldMosaicTiles } from "./map-layers";
 import { acquireOwnTileSlot, ownTileRetriesAreSuspended, recordOwnTileOutcome, resetOwnTileGateForTests } from "./own-tiles";
 import albanyFixture from "../testing/esri-attribution-albany.json";
 import { parseContributors, resetEsriAttributionForTests, seedEsriCoveragesForTests } from "./esri-attribution";
@@ -199,7 +199,7 @@ describe("rasterSourceFor opacity", () => {
     });
 });
 
-describe("registerRedataLayers", () => {
+describe("registerCatalogueLayers", () => {
     const realFetch = globalThis.fetch;
 
     function stubFetch(response: { ok?: boolean; body?: unknown } | "reject"): { calls: string[] } {
@@ -216,12 +216,12 @@ describe("registerRedataLayers", () => {
     }
 
     beforeEach(() => {
-        resetRedataLayersCacheForTests();
+        resetCatalogueLayersCacheForTests();
     });
 
     afterEach(() => {
         globalThis.fetch = realFetch;
-        resetRedataLayersCacheForTests();
+        resetCatalogueLayersCacheForTests();
     });
 
     test("registers a raster layer's url_template under its own id", async () => {
@@ -230,7 +230,7 @@ describe("registerRedataLayers", () => {
                 layers: [{ id: "custom", source_type: "raster", url_template: "https://x/{z}/{x}/{y}.png", attribution: "Attr", min_zoom: 1, max_zoom: 18 }],
             },
         });
-        expect(await registerRedataLayers()).toEqual(["custom"]);
+        expect(await registerCatalogueLayers()).toEqual(["custom"]);
 
         const state = stubLeaflet();
         tileLayer("custom");
@@ -238,11 +238,11 @@ describe("registerRedataLayers", () => {
         expect(state.calls[0]?.options.attribution).toBe("Attr");
     });
 
-    test("aliases REData's terrain id to this site's topographic key", async () => {
+    test("aliases the catalogue's terrain id to this site's topographic key", async () => {
         stubFetch({
             body: { layers: [{ id: "terrain", source_type: "raster", url_template: "https://terrain/{z}/{x}/{y}.png", attribution: "Attr" }] },
         });
-        expect(await registerRedataLayers()).toEqual(["topographic"]);
+        expect(await registerCatalogueLayers()).toEqual(["topographic"]);
 
         // tileLayer("topographic") - not tileLayer("terrain") - is what createMapLayers() actually
         // calls, so the registered override must land under that key to ever take effect.
@@ -261,12 +261,12 @@ describe("registerRedataLayers", () => {
         stubFetch({
             body: { layers: [{ id: "terrain", source_type: "raster", url_template: "https://terrain/{z}/{x}/{y}.png", attribution: "Attr", max_zoom: 19 }] },
         });
-        await registerRedataLayers();
+        await registerCatalogueLayers();
         const overridden = stubLeaflet();
         tileLayer("topographic");
         expect(overridden.calls[0]?.url).toBe("https://terrain/{z}/{x}/{y}.png");
 
-        resetRedataLayersCacheForTests();
+        resetCatalogueLayersCacheForTests();
 
         const restored = stubLeaflet();
         tileLayer("topographic");
@@ -278,9 +278,9 @@ describe("registerRedataLayers", () => {
         stubFetch({
             body: { layers: [{ id: "custom", source_type: "raster", url_template: "https://x/{z}/{x}/{y}.png", attribution: "Attr" }] },
         });
-        await registerRedataLayers();
+        await registerCatalogueLayers();
 
-        resetRedataLayersCacheForTests();
+        resetCatalogueLayersCacheForTests();
 
         // An unknown key falls back to street, so the registered entry is really gone.
         const state = stubLeaflet();
@@ -294,7 +294,7 @@ describe("registerRedataLayers", () => {
                 layers: [{ id: "street", source_type: "vector", style_url: "https://x/style.json", attribution: "Attr", min_zoom: 0, max_zoom: 15 }],
             },
         });
-        expect(await registerRedataLayers()).toEqual(["street"]);
+        expect(await registerCatalogueLayers()).toEqual(["street"]);
         expect(vectorStyleFor("street")).toEqual({ styleUrl: "https://x/style.json", attribution: "Attr", minZoom: 0, maxZoom: 15 });
 
         // Leaflet has no vector renderer, so "street" must still resolve to a raster template there
@@ -316,7 +316,7 @@ describe("registerRedataLayers", () => {
 
         async function streetBase(webgl2: boolean): Promise<{ bridged: unknown[]; raster: LeafletStub }> {
             stubFetch({ body: { layers: [{ id: "street", source_type: "vector", style_url: "https://x/style.json", attribution: "Attr" }] } });
-            await registerRedataLayers();
+            await registerCatalogueLayers();
             const raster = stubLeaflet();
             const bridged: unknown[] = [];
             Object.assign((globalThis as Record<string, unknown>).L as object, {
@@ -351,7 +351,7 @@ describe("registerRedataLayers", () => {
     describe("the keyless public vector tier", () => {
         test("street and dark draw OpenFreeMap's styles where the catalogue offers nothing", async () => {
             stubFetch({ body: { layers: [] } });
-            await registerRedataLayers();
+            await registerCatalogueLayers();
 
             expect(vectorStyleFor("street")).toMatchObject({ styleUrl: "https://tiles.openfreemap.org/styles/positron", builtIn: true });
             expect(vectorStyleFor("dark")).toMatchObject({ styleUrl: "https://tiles.openfreemap.org/styles/dark", builtIn: true });
@@ -364,23 +364,23 @@ describe("registerRedataLayers", () => {
         });
 
         test("this deployment's own style wins over it", async () => {
-            stubFetch({ body: { layers: [{ id: "street", source_type: "vector", style_url: "https://tiles.urbanlens.org/styles/street.json", attribution: "Attr" }] } });
-            await registerRedataLayers();
+            stubFetch({ body: { layers: [{ id: "street", source_type: "vector", style_url: "https://tiles.example.com/styles/street.json", attribution: "Attr" }] } });
+            await registerCatalogueLayers();
 
-            expect(vectorStyleFor("street")?.styleUrl).toBe("https://tiles.urbanlens.org/styles/street.json");
+            expect(vectorStyleFor("street")?.styleUrl).toBe("https://tiles.example.com/styles/street.json");
             expect(vectorStyleFor("street")?.builtIn).toBeUndefined();
         });
 
         test("so does a raster layer this deployment serves itself", async () => {
             stubFetch({ body: { layers: [{ id: "street", source_type: "raster", url_template: "/dashboard/map/basemap-tiles/street/{z}/{x}/{y}/", attribution: "Attr" }] } });
-            await registerRedataLayers();
+            await registerCatalogueLayers();
 
             expect(vectorStyleFor("street")).toBeNull();
         });
 
         test("an overlay or an unknown key is not answered with the street style", async () => {
             stubFetch({ body: { layers: [] } });
-            await registerRedataLayers();
+            await registerCatalogueLayers();
 
             // The attribution line asks after "borders" for its own credit; Positron's would replace Esri's.
             for (const kind of ["borders", "weather", "foo", "", "toString", "constructor"]) {
@@ -390,7 +390,7 @@ describe("registerRedataLayers", () => {
 
         test("a key in another case, or a legacy alias, names its own style", async () => {
             stubFetch({ body: { layers: [] } });
-            await registerRedataLayers();
+            await registerCatalogueLayers();
 
             expect(vectorStyleFor("Dark")?.styleUrl).toBe("https://tiles.openfreemap.org/styles/dark");
             expect(vectorStyleFor("DARK")?.styleUrl).toBe("https://tiles.openfreemap.org/styles/dark");
@@ -398,12 +398,12 @@ describe("registerRedataLayers", () => {
         });
 
         test("nor is an unknown key answered with the catalogue's street style", async () => {
-            stubFetch({ body: { layers: [{ id: "street", source_type: "vector", style_url: "https://tiles.urbanlens.org/styles/street.json", attribution: "Attr" }] } });
-            await registerRedataLayers();
+            stubFetch({ body: { layers: [{ id: "street", source_type: "vector", style_url: "https://tiles.example.com/styles/street.json", attribution: "Attr" }] } });
+            await registerCatalogueLayers();
 
             expect(vectorStyleFor("borders")).toBeNull();
-            expect(vectorStyleFor("osm")?.styleUrl).toBe("https://tiles.urbanlens.org/styles/street.json");
-            expect(vectorStyleFor("Street")?.styleUrl).toBe("https://tiles.urbanlens.org/styles/street.json");
+            expect(vectorStyleFor("osm")?.styleUrl).toBe("https://tiles.example.com/styles/street.json");
+            expect(vectorStyleFor("Street")?.styleUrl).toBe("https://tiles.example.com/styles/street.json");
         });
     });
 
@@ -411,13 +411,13 @@ describe("registerRedataLayers", () => {
         stubFetch({
             body: { layers: [{ id: "terrain", source_type: "vector", style_url: "https://x/terrain.json", attribution: "Attr" }] },
         });
-        expect(await registerRedataLayers()).toEqual(["topographic"]);
+        expect(await registerCatalogueLayers()).toEqual(["topographic"]);
         expect(vectorStyleFor("topo")?.styleUrl).toBe("https://x/terrain.json");
     });
 
     test("skips a vector entry with no style_url", async () => {
         stubFetch({ body: { layers: [{ id: "street", source_type: "vector", attribution: "Attr" }] } });
-        expect(await registerRedataLayers()).toEqual([]);
+        expect(await registerCatalogueLayers()).toEqual([]);
         // The catalogue said nothing usable about street, so the keyless public built-in stands.
         expect(vectorStyleFor("street")?.builtIn).toBe(true);
     });
@@ -426,21 +426,21 @@ describe("registerRedataLayers", () => {
         stubFetch({
             body: { layers: [{ id: "street", source_type: "vector", style_url: "https://x/style.json", attribution: "Attr" }] },
         });
-        await registerRedataLayers();
+        await registerCatalogueLayers();
 
-        resetRedataLayersCacheForTests();
+        resetCatalogueLayersCacheForTests();
 
         expect(vectorStyleFor("street")?.styleUrl).toBe("https://tiles.openfreemap.org/styles/positron");
     });
 
-    test("registers both shapes of a D15 entry, so Leaflet stops falling back to a vendor CDN", async () => {
+    test("registers both shapes of a dual-shape catalogue entry, so Leaflet stops falling back to a vendor CDN", async () => {
         stubFetch({
             body: {
                 layers: [
                     {
                         id: "street",
                         source_type: "vector",
-                        style_url: "https://tiles.urbanlens.org/styles/street.json",
+                        style_url: "https://tiles.example.com/styles/street.json",
                         url_template: "/dashboard/map/basemap-tiles/street/{z}/{x}/{y}/",
                         attribution: "OSM/Protomaps",
                         min_zoom: 0,
@@ -453,15 +453,15 @@ describe("registerRedataLayers", () => {
             },
         });
         // One entry, registered once, even though it now fills two tables.
-        expect(await registerRedataLayers()).toEqual(["street"]);
-        expect(vectorStyleFor("street")?.styleUrl).toBe("https://tiles.urbanlens.org/styles/street.json");
+        expect(await registerCatalogueLayers()).toEqual(["street"]);
+        expect(vectorStyleFor("street")?.styleUrl).toBe("https://tiles.example.com/styles/street.json");
 
         const state = stubLeaflet();
         tileLayer("street");
         expect(state.calls[0]?.url).toBe("/dashboard/map/basemap-tiles/street/{z}/{x}/{y}/");
     });
 
-    test("credits a D15 entry's raster half to the raster half's own source, at its own depth", async () => {
+    test("credits a dual-shape entry's raster half to the raster half's own source, at its own depth", async () => {
         // The style is Protomaps at z15; the proxied tiles are Esri at z19. Showing one layer's
         // credit over the other's bytes is a licence error, and publishing one's ceiling lets a
         // Leaflet map stop drawing four zoom levels early.
@@ -483,7 +483,7 @@ describe("registerRedataLayers", () => {
                 ],
             },
         });
-        await registerRedataLayers();
+        await registerCatalogueLayers();
 
         expect(vectorStyleFor("street")?.attribution).toBe("OSM/Protomaps");
         expect(vectorStyleFor("street")?.maxZoom).toBe(15);
@@ -495,13 +495,13 @@ describe("registerRedataLayers", () => {
         expect(state.calls[0]?.options.minZoom).toBe(2);
     });
 
-    test("falls back to the entry's own attribution and zooms when a D15 entry omits the fallback fields", async () => {
+    test("falls back to the entry's own attribution and zooms when a dual-shape entry omits the fallback fields", async () => {
         stubFetch({
             body: {
                 layers: [{ id: "street", source_type: "vector", style_url: "https://x/s.json", url_template: "/proxy/street/{z}/{x}/{y}/", attribution: "Only one", min_zoom: 1, max_zoom: 14 }],
             },
         });
-        await registerRedataLayers();
+        await registerCatalogueLayers();
 
         const state = stubLeaflet();
         tileLayer("street");
@@ -510,63 +510,63 @@ describe("registerRedataLayers", () => {
         expect(state.calls[0]?.options.minZoom).toBe(1);
     });
 
-    test("the pre-D15 catalogue's shape leaves Leaflet's default base layer on a vendor CDN", async () => {
-        // REData's production catalogue, with `url_template` already rewritten to
+    test("the older catalogue shape leaves Leaflet's default base layer on a vendor CDN", async () => {
+        // A hosted catalogue, with `url_template` already rewritten to
         // this deployment's proxy the way `basemap_catalogue.py` hands it to a browser. street and
         // dark went vector-only; the other three stayed raster.
         stubFetch({
             body: {
                 layers: [
-                    { id: "street", source_type: "vector", style_url: "https://tiles.urbanlens.org/styles/street.json", attribution: "OSM/Protomaps", min_zoom: 0, max_zoom: 15 },
-                    { id: "dark", source_type: "vector", style_url: "https://tiles.urbanlens.org/styles/dark.json", attribution: "OSM/Protomaps", min_zoom: 0, max_zoom: 15 },
+                    { id: "street", source_type: "vector", style_url: "https://tiles.example.com/styles/street.json", attribution: "OSM/Protomaps", min_zoom: 0, max_zoom: 15 },
+                    { id: "dark", source_type: "vector", style_url: "https://tiles.example.com/styles/dark.json", attribution: "OSM/Protomaps", min_zoom: 0, max_zoom: 15 },
                     { id: "terrain", source_type: "raster", url_template: "/dashboard/map/basemap-tiles/terrain/{z}/{x}/{y}/", attribution: "Attr", min_zoom: 0, max_zoom: 17 },
                     { id: "satellite", source_type: "raster", url_template: "/dashboard/map/basemap-tiles/satellite/{z}/{x}/{y}/", attribution: "Attr", min_zoom: 0, max_zoom: 19 },
                     { id: "borders", source_type: "raster", url_template: "/dashboard/map/basemap-tiles/borders/{z}/{x}/{y}/", attribution: "Attr", min_zoom: 0, max_zoom: 19 },
                 ],
             },
         });
-        await registerRedataLayers();
+        await registerCatalogueLayers();
 
-        expect(vectorStyleFor("street")?.styleUrl).toBe("https://tiles.urbanlens.org/styles/street.json");
-        expect(vectorStyleFor("dark")?.styleUrl).toBe("https://tiles.urbanlens.org/styles/dark.json");
+        expect(vectorStyleFor("street")?.styleUrl).toBe("https://tiles.example.com/styles/street.json");
+        expect(vectorStyleFor("dark")?.styleUrl).toBe("https://tiles.example.com/styles/dark.json");
 
-        // A layer REData publishes as vector has no proxied raster left to fall back to, so Leaflet
+        // A layer the catalogue publishes as vector has no proxied raster left to fall back to, so Leaflet
         // keeps the built-in vendor template: a direct browser-to-vendor fetch rather than this
         // deployment's proxy - Esri's, the same bytes the proxy would have fetched.
         const base = stubLeaflet();
         tileLayer("street");
         expect(base.calls[0]?.url).toContain("World_Street_Map");
 
-        // A layer REData still serves as raster does go through the proxy, so the fallback above is
+        // A layer the catalogue still serves as raster does go through the proxy, so the fallback above is
         // the vector entries' doing rather than the catalogue failing to register at all.
         const raster = stubLeaflet();
         tileLayer("topographic");
         expect(raster.calls[0]?.url).toBe("/dashboard/map/basemap-tiles/terrain/{z}/{x}/{y}/");
     });
 
-    test("treats a missing source_type as raster, matching a REData deployment that predates D11", async () => {
+    test("treats a missing source_type as raster, matching a catalogue that predates the source_type field", async () => {
         stubFetch({
             body: { layers: [{ id: "custom", url_template: "https://x/{z}/{x}/{y}.png", attribution: "Attr" }] },
         });
-        expect(await registerRedataLayers()).toEqual(["custom"]);
+        expect(await registerCatalogueLayers()).toEqual(["custom"]);
     });
 
     test("skips a raster entry with no url_template", async () => {
         stubFetch({ body: { layers: [{ id: "custom", source_type: "raster", attribution: "Attr" }] } });
-        expect(await registerRedataLayers()).toEqual([]);
+        expect(await registerCatalogueLayers()).toEqual([]);
     });
 
     /**
      * The catalogue says where a layer's tiles come from. How this site draws that layer - which
-     * pane it sits in, how opaque it is, what a failed tile looks like - is not REData's to
-     * change, and REData serves a layer called `borders`, so this is not hypothetical.
+     * pane it sits in, how opaque it is, what a failed tile looks like - is not the catalogue's to
+     * change, and a catalogue may serve a layer called `borders`, so this is not hypothetical.
      */
     describe("a registered override keeps the layer's own presentation", () => {
         test("borders stays a translucent overlay in the overlay pane", async () => {
             stubFetch({
                 body: { layers: [{ id: "borders", source_type: "raster", url_template: "/dashboard/map/basemap-tiles/borders/{z}/{x}/{y}/", attribution: "Attr" }] },
             });
-            await registerRedataLayers();
+            await registerCatalogueLayers();
 
             const state = stubLeaflet();
             tileLayer("borders");
@@ -581,7 +581,7 @@ describe("registerRedataLayers", () => {
             stubFetch({
                 body: { layers: [{ id: "street", source_type: "raster", url_template: "/dashboard/map/basemap-tiles/street/{z}/{x}/{y}/", attribution: "Attr" }] },
             });
-            await registerRedataLayers();
+            await registerCatalogueLayers();
 
             const state = stubLeaflet();
             tileLayer("street");
@@ -592,7 +592,7 @@ describe("registerRedataLayers", () => {
             stubFetch({
                 body: { layers: [{ id: "custom", source_type: "raster", url_template: "https://x/{z}/{x}/{y}.png", attribution: "Attr" }] },
             });
-            await registerRedataLayers();
+            await registerCatalogueLayers();
 
             const state = stubLeaflet();
             tileLayer("custom");
@@ -650,7 +650,7 @@ describe("registerRedataLayers", () => {
                     ],
                 },
             });
-            await registerRedataLayers();
+            await registerCatalogueLayers();
             const state = stubLeaflet();
             tileLayer("street", { errorTileUrl: PLACEHOLDER });
             return state;
@@ -960,7 +960,7 @@ describe("registerRedataLayers", () => {
         });
 
         test("is registered synchronously, before anything can request a tile", () => {
-            embed([{ id: "street", source_type: "raster", url_template: "/dashboard/map/basemap-tiles/street/{z}/{x}/{y}/", attribution: "REData" }]);
+            embed([{ id: "street", source_type: "raster", url_template: "/dashboard/map/basemap-tiles/street/{z}/{x}/{y}/", attribution: "Example Tiles" }]);
             const fetched = stubFetch({ body: { layers: [] } });
 
             // No await anywhere: the very first tileLayer() call already resolves to this
@@ -976,7 +976,7 @@ describe("registerRedataLayers", () => {
             embed([]);
             const fetched = stubFetch({ body: { layers: [{ id: "street", source_type: "raster", url_template: "https://x/{z}/{x}/{y}.png", attribution: "Attr" }] } });
 
-            expect(await registerRedataLayers()).toEqual([]);
+            expect(await registerCatalogueLayers()).toEqual([]);
 
             // An empty embed means "this deployment offers no extra layers", which is an answer.
             // Asking again over HTTP would re-introduce the very round trip the embed removes.
@@ -988,7 +988,7 @@ describe("registerRedataLayers", () => {
 
         test("falls back to the fetch when the page carried no embed at all", async () => {
             const fetched = stubFetch({ body: { layers: [{ id: "custom", source_type: "raster", url_template: "https://x/{z}/{x}/{y}.png", attribution: "Attr" }] } });
-            expect(await registerRedataLayers()).toEqual(["custom"]);
+            expect(await registerCatalogueLayers()).toEqual(["custom"]);
             expect(fetched.calls).toEqual(["/dashboard/map/basemap-tiles/sources/"]);
         });
 
@@ -1000,7 +1000,7 @@ describe("registerRedataLayers", () => {
             document.body.appendChild(el);
             const fetched = stubFetch({ body: { layers: [] } });
 
-            expect(await registerRedataLayers()).toEqual([]);
+            expect(await registerCatalogueLayers()).toEqual([]);
             expect(fetched.calls).toEqual(["/dashboard/map/basemap-tiles/sources/"]);
         });
 
@@ -1013,16 +1013,16 @@ describe("registerRedataLayers", () => {
 
     /**
      * The self-hosting contract: this project ships to people running their own instance with no
-     * REData configured at all, not only to the hosted deployment. `BasemapTileCatalogueView`
-     * answers `{"layers": []}` for an unconfigured deployment (see `test_unconfigured_redata_yields_no_layers`
+     * a catalogue configured at all, not only to the hosted deployment. `BasemapTileCatalogueView`
+     * answers `{"layers": []}` for an unconfigured deployment (see `test_unconfigured_catalogue_yields_no_layers`
      * in `test_basemap_tile_proxy.py`) - the same shape as a configured-but-empty catalogue - so
      * this is the one client-side test standing for every self-hosted deployment: every built-in
      * base layer and the borders overlay must keep resolving to their free, keyless vendor (Esri)
-     * exactly as before REData existed, not silently break or go blank.
+     * exactly as before any catalogue existed, not silently break or go blank.
      */
-    test("every built-in layer still resolves to its free vendor when REData is unconfigured (self-hosting)", async () => {
+    test("every built-in layer still resolves to its free vendor when no catalogue is configured (self-hosting)", async () => {
         stubFetch({ body: { layers: [] } });
-        expect(await registerRedataLayers()).toEqual([]);
+        expect(await registerCatalogueLayers()).toEqual([]);
 
         for (const kind of ["street", "dark", "topographic", "satellite", "borders"]) {
             const state = stubLeaflet();
@@ -1033,14 +1033,14 @@ describe("registerRedataLayers", () => {
 
     test("memoizes - a second call does not issue a second fetch", async () => {
         const state = stubFetch({ body: { layers: [] } });
-        await registerRedataLayers();
-        await registerRedataLayers();
+        await registerCatalogueLayers();
+        await registerCatalogueLayers();
         expect(state.calls).toHaveLength(1);
     });
 
     test("returns [] and leaves built-ins untouched when the fetch rejects", async () => {
         stubFetch("reject");
-        expect(await registerRedataLayers()).toEqual([]);
+        expect(await registerCatalogueLayers()).toEqual([]);
 
         const state = stubLeaflet();
         tileLayer("street");
@@ -1049,7 +1049,7 @@ describe("registerRedataLayers", () => {
 
     test("returns [] when the response is not ok", async () => {
         stubFetch({ ok: false, body: { layers: [{ id: "custom", url_template: "https://x/{z}/{x}/{y}.png", attribution: "Attr" }] } });
-        expect(await registerRedataLayers()).toEqual([]);
+        expect(await registerCatalogueLayers()).toEqual([]);
     });
 });
 
@@ -1407,7 +1407,7 @@ describe("createMapLayers asks for no raster underlay under a vector base", () =
         delete (globalThis as Record<string, unknown>).matchMedia;
         document.body.innerHTML = "";
         resetWorldMosaicsForTests();
-        resetRedataLayersCacheForTests();
+        resetCatalogueLayersCacheForTests();
     });
 
     /** Opens a map whose street and dark bases are vector styles MapLibre can draw, recording every image asked for. */
@@ -1415,7 +1415,7 @@ describe("createMapLayers asks for no raster underlay under a vector base", () =
         base: string,
         darkMode: "light" | "dark" = "light",
     ): { map: FakeMap; layers: ReturnType<typeof createMapLayers>; requested: string[]; vectorBases: { style: string }[] } {
-        resetRedataLayersCacheForTests();
+        resetCatalogueLayersCacheForTests();
         const catalogue = document.createElement("script");
         catalogue.type = "application/json";
         catalogue.id = "ul-basemap-tiles";
@@ -1745,7 +1745,7 @@ describe("createMapLayers destroy()", () => {
     test("credits the layer actually drawn, not the vendor the built-in def happened to name", async () => {
         // Once the catalogue replaces a def, the hardcoded credit names a vendor whose bytes are no
         // longer on screen - which is a licence error, not a cosmetic one.
-        resetRedataLayersCacheForTests();
+        resetCatalogueLayersCacheForTests();
         globalThis.fetch = (() =>
             Promise.resolve({
                 ok: true,
@@ -1754,7 +1754,7 @@ describe("createMapLayers destroy()", () => {
                         layers: [{ id: "street", source_type: "vector", style_url: "https://x/s.json", url_template: "/proxy/street/{z}/{x}/{y}/", attribution: "OSM/Protomaps", fallback_attribution: "Esri World Street Map" }],
                     }),
             } as Response)) as unknown as typeof fetch;
-        await registerRedataLayers();
+        await registerCatalogueLayers();
 
         stubLeafletForMapLayers();
         // Runs the callback rather than queueing it, so the credit is readable in the test.
@@ -1773,7 +1773,7 @@ describe("createMapLayers destroy()", () => {
         expect(credits.at(-1)).not.toContain("CARTO");
 
         // TILE_DEFS is module state; leaving this registered would follow the other tests around.
-        resetRedataLayersCacheForTests();
+        resetCatalogueLayersCacheForTests();
     });
 
     test("cancels a pending attribution animation frame and stops scheduling new ones after destroy", () => {
@@ -1814,7 +1814,7 @@ describe("the attribution line", () => {
         delete (globalThis as Record<string, unknown>).matchMedia;
         document.body.innerHTML = "";
         window.requestAnimationFrame = realRAF;
-        resetRedataLayersCacheForTests();
+        resetCatalogueLayersCacheForTests();
     });
 
     function creditFor(options: Parameters<typeof createMapLayers>[1] = {}): string {
@@ -1975,7 +1975,7 @@ describe("the attribution line", () => {
     });
 
     test("a proxied layer is credited by the Esri service the catalogue says it is", async () => {
-        resetRedataLayersCacheForTests();
+        resetCatalogueLayersCacheForTests();
         globalThis.fetch = (() =>
             Promise.resolve({
                 ok: true,
@@ -1984,7 +1984,7 @@ describe("the attribution line", () => {
                         layers: [{ id: "satellite", source_type: "raster", url_template: "/dashboard/map/basemap-tiles/satellite/{z}/{x}/{y}/", attribution: "Esri, Maxar, Earthstar Geographics, and the GIS User Community", esri_service: "World_Imagery" }],
                     }),
             } as Response)) as unknown as typeof fetch;
-        await registerRedataLayers();
+        await registerCatalogueLayers();
         seedAlbany();
 
         const { seen } = creditsOn(albanyMap(), { defaultBase: "satellite" });
@@ -1994,13 +1994,13 @@ describe("the attribution line", () => {
     });
 
     test("a catalogue service name that is not one is not used to build a request", async () => {
-        resetRedataLayersCacheForTests();
+        resetCatalogueLayersCacheForTests();
         globalThis.fetch = (() =>
             Promise.resolve({
                 ok: true,
                 json: () => Promise.resolve({ layers: [{ id: "satellite", source_type: "raster", url_template: "/x/{z}/{x}/{y}/", attribution: "Somebody", esri_service: "../../x" }] }),
             } as Response)) as unknown as typeof fetch;
-        await registerRedataLayers();
+        await registerCatalogueLayers();
 
         expect(creditFor({ defaultBase: "satellite" })).toBe("Somebody · Leaflet");
     });
@@ -2072,7 +2072,7 @@ describe("the default marker's artwork", () => {
  */
 describe("the Leaflet bridge and Protomaps' hosted tiles", () => {
     const HOSTED = "https://api.protomaps.com/tiles/v4/{z}/{x}/{y}.mvt?key=pk_test";
-    const OWN = "https://tiles.urbanlens.org/basemap/{z}/{x}/{y}";
+    const OWN = "https://tiles.example.com/basemap/{z}/{x}/{y}";
     const OWN_CREDIT = "© OpenStreetMap contributors © Protomaps";
     const realFetch = globalThis.fetch;
     const realMaplibregl = (globalThis as Record<string, unknown>).maplibregl;
@@ -2096,7 +2096,7 @@ describe("the Leaflet bridge and Protomaps' hosted tiles", () => {
     }
 
     beforeEach(() => {
-        resetRedataLayersCacheForTests();
+        resetCatalogueLayersCacheForTests();
         resetHostedBasemapForTests();
         const el = document.createElement("script");
         el.type = "application/json";
@@ -2113,7 +2113,7 @@ describe("the Leaflet bridge and Protomaps' hosted tiles", () => {
         window.requestAnimationFrame = realRAF;
         document.body.innerHTML = "";
         sessionStorage.clear();
-        resetRedataLayersCacheForTests();
+        resetCatalogueLayersCacheForTests();
         resetHostedBasemapForTests();
     });
 
@@ -2121,9 +2121,9 @@ describe("the Leaflet bridge and Protomaps' hosted tiles", () => {
         globalThis.fetch = (() =>
             Promise.resolve({
                 ok: true,
-                json: () => Promise.resolve({ layers: [{ id: "street", source_type: "vector", style_url: "https://tiles.urbanlens.org/styles/street.json", attribution: OWN_CREDIT }] }),
+                json: () => Promise.resolve({ layers: [{ id: "street", source_type: "vector", style_url: "https://tiles.example.com/styles/street.json", attribution: OWN_CREDIT }] }),
             } as Response)) as unknown as typeof fetch;
-        await registerRedataLayers();
+        await registerCatalogueLayers();
 
         stubLeafletForMapLayers();
         const glMaps: Array<ReturnType<typeof fakeGlMap>> = [];

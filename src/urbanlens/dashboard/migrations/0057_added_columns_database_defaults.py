@@ -1,4 +1,4 @@
-"""Give the columns added since v0.8.0 their database defaults where they were added without one (P291).
+"""Give the columns added since v0.8.0 their database defaults where they were added without one.
 
 Their ``AddField`` operations now carry ``db_default``, so an install upgrading from v0.8.0 gets it as each column is
 added. A database that applied them before that has the columns without a default, and this sets it. It is the same

@@ -34,7 +34,7 @@ def resolve_visible_identity(
         Dict with ``display_name``, ``display_avatar_url`` (str or None), ``display_profile_url`` (str or None), and ``is_masked`` (bool).
 
     Note:
-        Deliberately does not resolve the supporter badge - ``Profile.display_supporter_badge`` is a live property callers can read straight off ``subject`` after masking is applied, but only once they've also checked ``is_masked``: a masked identity's..."""
+        Deliberately does not resolve the member badge - ``Profile.display_member_badge`` is a live property callers can read straight off ``subject`` after masking is applied, but only once they've also checked ``is_masked``: a masked identity's..."""
     can_view = subject.pk in visible_pks if visible_pks is not None else subject.can_view_profile(viewer)
     if can_view:
         from django.urls import reverse

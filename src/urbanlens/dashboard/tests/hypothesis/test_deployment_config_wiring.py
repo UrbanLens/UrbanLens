@@ -31,7 +31,7 @@ def _default(value: str) -> str:
 
 
 class TheChannelLayerIsProvisionedTests(SimpleTestCase):
-    """G4-21: the Channels layer shared a raise-on-full Dragonfly with the cache."""
+    """The Channels layer gets a store of its own, not the cache's raise-on-full Dragonfly."""
 
     def test_compose_runs_an_instance_for_it(self) -> None:
         services = _services()

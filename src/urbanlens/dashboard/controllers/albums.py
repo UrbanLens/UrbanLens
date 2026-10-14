@@ -152,7 +152,7 @@ def _resolve_album_owner(request: HttpRequest, pin_slug: str | None, location_sl
         raise Http404
     # Filtered by who created it, not hidden outright - an album is a named grouping like a CustomLayer, and the
     # same "your own work back is not a leak" reasoning applies (see custom_layers._resolve_layer_owner).
-    from urbanlens.dashboard.services.wiki.concealment import visible_rows
+    from urbanlens.dashboard.services.wiki.viewer_projection import visible_rows
 
     _location, wiki, profile = resolve_visible_wiki(request, location_slug)
     return wiki, visible_rows(Album.objects.for_wiki(wiki), wiki, profile)

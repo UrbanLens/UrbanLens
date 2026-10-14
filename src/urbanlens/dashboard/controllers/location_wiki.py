@@ -27,7 +27,7 @@ from urbanlens.dashboard.models.wiki_stat_vote import WikiStatField, WikiStatVot
 from urbanlens.dashboard.services.core.numbers import safe_int_or_none
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.core.request_body import posted_fields
-from urbanlens.dashboard.services.geo.boundary_voting import BoundaryVoteError, boundary_vote_context, cast_boundary_vote
+from urbanlens.dashboard.services.geo.boundary_voting import BoundaryVoteError, cast_boundary_vote
 from urbanlens.dashboard.services.locations import site_scope
 from urbanlens.dashboard.services.locations.temporal_imagery import temporal_slider_years
 from urbanlens.dashboard.services.pins.public_pins import (
@@ -36,11 +36,10 @@ from urbanlens.dashboard.services.pins.public_pins import (
     VoteNotOpenError,
     VoterNotPinnedError,
     cast_public_vote,
-    public_vote_context,
 )
 from urbanlens.dashboard.services.places.ambiguity import competing_wiki_locations
 from urbanlens.dashboard.services.places.scope import scope_badge
-from urbanlens.dashboard.services.wiki.concealment import visible_rows
+from urbanlens.dashboard.services.wiki.viewer_projection import project_wiki, viewer_projection, visible_rows, writable_wiki
 from urbanlens.dashboard.services.wiki.wiki_access import canonical_location_slug, locate_visible_wiki, resolve_visible_wiki, visible_parent_wiki
 from urbanlens.dashboard.services.wiki.wiki_edits import WikiEditConflictError, WikiEditValidationError, apply_wiki_edit, revert_edit_fields, revert_wiki_edit, save_edited_fields, wiki_revision_marker
 
@@ -51,6 +50,7 @@ if TYPE_CHECKING:
 
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.wiki.model import Wiki
+    from urbanlens.dashboard.services.wiki.viewer_projection import ViewerProjection
 
 logger = logging.getLogger(__name__)
 
@@ -88,15 +88,14 @@ WIKI_STAT_FIELD_META = {
 }
 
 
-def _wiki_stat_context(wiki: Wiki, field: str, profile: Profile | None, *, conceal: bool = False) -> dict:
+def _wiki_stat_context(projection: ViewerProjection, field: str, profile: Profile | None) -> dict:
     """
     Build the template context for one community stat item.
 
     Args:
-        wiki: The wiki the vote/composite belongs to.
+        projection: How the viewing profile reads the wiki the vote/composite belongs to.
         field: One of :class:`WikiStatField`'s values.
         profile: The viewing profile, used to look up their own vote.
-        conceal: Whether this viewer sees the concealed form of the wiki.
 
     Returns:
         Dict with the composite, the viewer's own vote, and that field's label/help/modifier/wide
@@ -104,8 +103,8 @@ def _wiki_stat_context(wiki: Wiki, field: str, profile: Profile | None, *, conce
     """
     return {
         "field": field,
-        "my_vote": WikiStatVote.objects.my_vote(wiki, field, profile),
-        "composite": WikiStatVote.objects.composite(wiki, field, viewer_conceals=conceal, viewer=profile),
+        "my_vote": WikiStatVote.objects.my_vote(projection.wiki, field, profile),
+        "composite": projection.stat_composite(field),
         **WIKI_STAT_FIELD_META[field],
     }
 
@@ -187,20 +186,15 @@ class LocationWikiView(LoginRequiredMixin, View):
 
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
 
-        from urbanlens.dashboard.services.wiki.concealment import concealment_active
+        projection = viewer_projection(wiki, profile)
 
-        conceal = concealment_active(wiki, profile)
+        # Everything below reads field values through this rather than the stored row. It is the row itself for a
+        # viewer whose projection changes nothing, so the ordinary path is unchanged and a projection cannot forget a field.
+        shown = project_wiki(wiki, profile)
 
         # Only count root pins (not detail pins), and count distinct users. The exact count is never exposed -
         # see services.wiki.community_counts.
-        from urbanlens.dashboard.services.wiki.community_counts import wiki_community_summary
-        from urbanlens.dashboard.services.wiki.concealment import conceal_rows, conceal_wiki, concealed_community_summary
-
-        # Everything below reads field values through this rather than the live row. It delegates for anything
-        # not concealed, so the ordinary path is unchanged and the concealed one cannot forget a field.
-        shown = conceal_wiki(wiki, profile)
-
-        community = concealed_community_summary() if conceal else wiki_community_summary(wiki, location)
+        community = projection.community_summary(location)
         pin_count_display = {"is_low": community["pin_count_low"], "value": community["pin_count_approx"]}
         first_pinned = community["first_pinned"]
 
@@ -231,9 +225,7 @@ class LocationWikiView(LoginRequiredMixin, View):
             ("emergency", "Emergency"),
         ]
 
-        # A cover photo is somebody's photograph, promoted by somebody's choice, and neither the act nor the
-        # promotion is recorded anywhere the provenance rules can read.
-        show_wiki_cover_photo = bool(not conceal and profile.show_wiki_cover_photos and wiki.cover_photo_id)
+        show_wiki_cover_photo = bool(projection.shows_cover_photo() and profile.show_wiki_cover_photos and wiki.cover_photo_id)
         wiki_cover_candidates: list[dict] = []
         if show_wiki_cover_photo:
             from urbanlens.dashboard.models.images.model import Image
@@ -253,10 +245,13 @@ class LocationWikiView(LoginRequiredMixin, View):
         include_children = request.GET.get("children", "1" if wiki_is_site_scope else "0") == "1"
         has_child_wikis = visible_rows(wiki.child_wikis.all(), wiki, profile).exists()
 
+        from urbanlens.dashboard.services.pins.external_data import gallery_sources
+
         return render(
             request,
             "dashboard/pages/location/wiki.html",
             {
+                "wiki_media_loaders": [source.key for source in gallery_sources(wiki=True)],
                 "wiki": shown,
                 "wiki_revision": wiki_revision_marker(wiki),
                 "wiki_links": wiki_links,
@@ -270,7 +265,6 @@ class LocationWikiView(LoginRequiredMixin, View):
                 # now-invisible layer renders unlayered (see overlay_payload's visible_layer_ids).
                 "map_overlays_json": overlay_payload(visible_rows(MapImageOverlay.objects.for_wiki(wiki), wiki, profile), visible_layer_ids),
                 "manage_overlays_url": reverse("location.wiki.overlays", args=[location.slug]),
-                "manage_overlays_historical_url": reverse("location.wiki.overlays.historical", args=[location.slug]),
                 "overlay_corners_url_template": reverse("location.wiki.overlays.corners", args=[location.slug, OVERLAY_UUID_PLACEHOLDER]),
                 "temporal_slider_years": temporal_slider_years(location, request.user),
                 "temporal_imagery_url_template": reverse("location.wiki.temporal_imagery", args=[location.slug, TEMPORAL_YEAR_PLACEHOLDER]),
@@ -284,12 +278,12 @@ class LocationWikiView(LoginRequiredMixin, View):
                 **scope_badge(wiki),
                 # Counted over what this viewer can see, not over every row - a badge computed on the raw set
                 # announces the comments it is standing in front of.
-                "wiki_comment_count": visible_comment_count(conceal_rows(Comment.objects.filter(wiki=wiki), profile) if conceal else Comment.objects.filter(wiki=wiki), profile),
+                "wiki_comment_count": visible_comment_count(projection.rows(Comment.objects.filter(wiki=wiki)), profile),
                 "pin_count_display": pin_count_display,
                 "first_pinned": first_pinned,
-                "wiki_stats": [_wiki_stat_context(wiki, field, profile, conceal=conceal) for field in WikiStatField.values],
-                "public_vote": public_vote_context(location, profile, conceal=conceal),
-                "boundary_vote": boundary_vote_context(location.place, profile, conceal=conceal),
+                "wiki_stats": [_wiki_stat_context(projection, field, profile) for field in WikiStatField.values],
+                "public_vote": projection.public_vote(location),
+                "boundary_vote": projection.boundary_vote(location.place),
                 "user_pin": user_pin,
                 "other_locations": other_locations,
                 "page_name": "location-wiki",
@@ -302,8 +296,8 @@ class LocationWikiView(LoginRequiredMixin, View):
                 "markup_border_opacity": profile.markup_border_opacity,
                 "security_level_choices": SecurityLevel.choices,
                 # Read from `shown`: these eight feed both the About-card chips and the always-rendered
-                # Suggest-edits prefill, so reading the live row here would put concealed values back on the
-                # page through a <select>.
+                # Suggest-edits prefill, so reading the stored row here would put values the viewer is not shown
+                # back on the page through a <select>.
                 "location_security_values": [
                     ("fences", "Fences", shown.fences),
                     ("alarms", "Alarms", shown.alarms),
@@ -354,50 +348,11 @@ class LocationWikiChildDetailsView(LoginRequiredMixin, View):
         return response
 
 
-class WikiBuildingAttributesPanelView(LoginRequiredMixin, View):
-    """
-    GET: the wiki's shared Building Attributes card (REData building number/name/year built).
-
-    Location-scoped (``LocationCache``, not a Pin), so this reads whatever
-    ``RedataBuildingAttributesEnrichmentSource``'s background enrichment cycle (or a visiting pin's own
-    on-demand panel fetch) already cached - the wiki page never triggers a live REData fetch itself,
-    mirroring how the Ownership card only ever shows already-known ``WikiOwner`` rows.
-    """
-
-    def get(self, request: HttpRequest, location_slug: str) -> HttpResponse:
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
-        from urbanlens.dashboard.plugins.builtin.redata_building_attributes import _render_building_attributes
-
-        location, wiki, _profile = resolve_visible_wiki(request, location_slug)
-        # A parcel-scope wiki describes grounds, not a structure - the buildings
-        # panel stands in for this card there (see services.locations.site_scope).
-        if site_scope.is_site_scope(wiki):
-            return HttpResponse(status=204)
-        cached = LocationCache.get_fresh(location, "redata_building_attributes")
-        if cached is None:
-            return HttpResponse(status=204)
-
-        context = _render_building_attributes(cached.data or {})
-        if context is None:
-            return HttpResponse(status=204)
-
-        return render(
-            request,
-            "dashboard/partials/pins/_simple_info_panel.html",
-            {
-                "section_id": "location-building-attributes-panel",
-                "icon": "domain",
-                "title": "Building Attributes",
-                **context,
-            },
-        )
-
-
 class WikiParcelBuildingsPanelView(LoginRequiredMixin, View):
     """
     GET: the wiki's shared list of every building standing on this property.
 
-    Like the Building Attributes card beside it, this never triggers a live fetch - it shows whatever
+    Like the cards beside it, this never triggers a live fetch - it shows whatever
     ``ParcelBuildingsEnrichmentSource``'s background cycle (or a visiting pin's own panel fetch) already
     cached.
     Rows never link anywhere: a child wiki is a marker on this page's own map, not a page of its own.
@@ -443,13 +398,12 @@ class LocationWikiEditView(LoginRequiredMixin, View):
     """
 
     def post(self, request, location_slug):
-        from urbanlens.dashboard.services.wiki.concealment import conceal_wiki, writable_wiki
 
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
 
         body = posted_fields(request)
 
-        # Save the real row: wiki may be a concealed projection that must not persist.
+        # Save the real row: wiki may be a viewer's projection, which must not persist.
         target = writable_wiki(wiki)
         base_revision_id = safe_int_or_none(body.pop("base_revision_id", None))
         try:
@@ -468,7 +422,7 @@ class LocationWikiEditView(LoginRequiredMixin, View):
         # About card combines several fields; return it for in-place swap.
         about_html = render_to_string(
             "dashboard/partials/wiki/_wiki_about_card.html",
-            {"wiki": conceal_wiki(target, profile), "wiki_links": visible_rows(target.links.all(), target, profile)},
+            {"wiki": project_wiki(target, profile), "wiki_links": visible_rows(target.links.all(), target, profile)},
             request=request,
         )
         return JsonResponse({"ok": True, "changes": list(changes.keys()), "about_html": about_html, "revision": wiki_revision_marker(target)})
@@ -482,25 +436,21 @@ def _render_history(request, location: Location, wiki: Wiki):
     re-renders the up-to-date list in place, instead of leaving a stale row (or a raw JSON body) swapped
     into the DOM.
     """
-    from urbanlens.dashboard.services.wiki.concealment import conceal_rows, conceal_wiki, concealment_active, redact_edit_changes
 
     profile, _ = Profile.objects.get_or_create(user=request.user)
-    edits = wiki.edits.select_related("editor__user", "reverted_by").order_by("-created")
+    projection = viewer_projection(wiki, profile)
 
-    conceal = concealment_active(wiki, profile)
-    # Filter before paginating so pages stay full after concealment removes rows.
-    page = get_page(request, conceal_rows(edits, profile) if conceal else edits, _HISTORY_PAGE_SIZE)
-    # Materialise before redacting: the queryset would re-fetch unredacted rows.
+    # Narrow before paginating so pages stay full after rows the viewer is not shown are removed.
+    page = get_page(request, projection.rows(wiki.edits.select_related("editor__user", "reverted_by").order_by("-created")), _HISTORY_PAGE_SIZE)
+    # Materialise before rewriting: the queryset would re-fetch the stored rows.
     rows: Any = list(page.object_list)
-    if conceal:
-        # Redact changes that survive the read gate in always-shown content.
-        for edit in rows:
-            edit.changes = redact_edit_changes(edit.changes)
+    for edit in rows:
+        edit.changes = projection.edit_changes(edit.changes)
 
     return render(
         request,
         "dashboard/pages/location/wiki_history.html",
-        {"location": location, "wiki": conceal_wiki(wiki, profile), "edits": rows, "page_obj": page, "current_profile": profile},
+        {"location": location, "wiki": project_wiki(wiki, profile), "edits": rows, "page_obj": page, "current_profile": profile},
     )
 
 
@@ -526,8 +476,6 @@ class LocationWikiRevertView(LoginRequiredMixin, View):
     """
 
     def post(self, request, location_slug, edit_id: int):
-        from urbanlens.dashboard.services.wiki.concealment import writable_wiki
-
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
         target_edit = get_object_or_404(visible_rows(WikiEdit.objects.filter(wiki=wiki), wiki, profile), id=edit_id)
 
@@ -566,8 +514,6 @@ class LocationWikiEditDeleteView(LoginRequiredMixin, View):
     """
 
     def post(self, request, location_slug, edit_id: int):
-        from urbanlens.dashboard.services.wiki.concealment import writable_wiki
-
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
         target_edit = get_object_or_404(visible_rows(WikiEdit.objects.filter(wiki=wiki), wiki, profile), id=edit_id)
 
@@ -625,8 +571,6 @@ class PublicPinVoteView(LoginRequiredMixin, View):
     """
 
     def post(self, request, location_slug):
-        from urbanlens.dashboard.services.wiki.concealment import concealment_active
-
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
 
         try:
@@ -647,7 +591,7 @@ class PublicPinVoteView(LoginRequiredMixin, View):
         return render(
             request,
             "dashboard/partials/pins/_public_pin_vote_block.html",
-            {"location": location, "public_vote": public_vote_context(location, profile, conceal=concealment_active(wiki, profile))},
+            {"location": location, "public_vote": viewer_projection(wiki, profile).public_vote(location)},
         )
 
 
@@ -664,8 +608,6 @@ class BoundaryVoteView(LoginRequiredMixin, View):
     """
 
     def post(self, request, location_slug):
-        from urbanlens.dashboard.services.wiki.concealment import concealment_active
-
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
 
         try:
@@ -679,9 +621,8 @@ class BoundaryVoteView(LoginRequiredMixin, View):
             logger.info("boundary vote rejected: %s", exc)
             return JsonResponse({"error": "That boundary isn't a valid option for this place."}, status=400)
 
-        # Same conceal-aware answer the GET's boundary_vote_context computes - the raw has_consensus() states
-        # that other people voted, which is exactly what boundary_vote_context(conceal=True) exists to hide.
-        vote_context = boundary_vote_context(location.place, profile, conceal=concealment_active(wiki, profile))
+        # The same answer the GET's boundary vote context gives this viewer, not the raw has_consensus().
+        vote_context = viewer_projection(wiki, profile).boundary_vote(location.place)
         return JsonResponse(
             {
                 "ok": True,
@@ -720,10 +661,8 @@ class WikiStatVoteView(LoginRequiredMixin, View):
         else:
             WikiStatVote.objects.clear(wiki, profile, field)
 
-        from urbanlens.dashboard.services.wiki.concealment import concealment_active
-
         return render(
             request,
             "dashboard/partials/pins/_wiki_stat_rating_item.html",
-            {"wiki": wiki, **_wiki_stat_context(wiki, field, profile, conceal=concealment_active(wiki, profile))},
+            {"wiki": wiki, **_wiki_stat_context(viewer_projection(wiki, profile), field, profile)},
         )

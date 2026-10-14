@@ -684,7 +684,7 @@ class PinListMarkupMapView(LoginRequiredMixin, View):
 
 class PinListExportView(LoginRequiredMixin, View):
     """
-    Download every pin on a list as GeoJSON/KML/GPX/CSV (UL-377).
+    Download every pin on a list as GeoJSON/KML/GPX/CSV.
 
     POST /lists/<slug>/export/ body: ``format=...`` (plain form POST, not
 

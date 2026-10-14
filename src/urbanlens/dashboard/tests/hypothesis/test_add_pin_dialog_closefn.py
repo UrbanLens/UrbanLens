@@ -1,4 +1,4 @@
-"""Regression coverage for UL-32 on the "Add Pin" dialog specifically."""
+"""Regression coverage on the "Add Pin" dialog specifically."""
 
 from __future__ import annotations
 

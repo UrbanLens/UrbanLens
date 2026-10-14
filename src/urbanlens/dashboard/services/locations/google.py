@@ -26,19 +26,17 @@ class PlaceNameResolver(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class GooglePlacesNameResolver:
-    """Resolve names from Google Places nearby search: REData's cache of it when REData is configured."""
+    """Resolve names from nearby places search, through whichever places provider is available."""
 
     radius: int = 50
 
     @property
     def direct(self) -> bool:
-        """Direct Google Places only when REData is not configured."""
-        return not _redata_configured()
+        """Whether the active places provider spends this deployment's own budget rather than shielding it."""
+        return not places_resolution.shields_direct()
 
     def resolve(self, latitude: float, longitude: float) -> str | None:
-        if not settings.google_unrestricted_api_key and not _redata_configured():
-            return None
-        return places_resolution.resolve_name_from_nearby(latitude, longitude, self.radius, api_key=settings.google_unrestricted_api_key or "")
+        return places_resolution.resolve_name_from_nearby(latitude, longitude, self.radius)
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,8 +58,8 @@ class PlaceNameResolverChain:
     """
     Try resolvers in order so fallback strategies can be added.
 
-    Off production, once REData has been asked, the chain stops before any resolver that asks a ``quota`` or
-    ``billed`` provider directly (D26): a REData that failed or found nothing is reported as no name for now,
+    Off production, once a shielding provider has been asked, the chain stops before any resolver that asks a ``quota`` or
+    ``billed`` provider directly: a provider that failed or found nothing is reported as no name for now,
     which the caller retries later, rather than pushing its load onto direct Google from an address
     production shares.
     """
@@ -71,18 +69,14 @@ class PlaceNameResolverChain:
     def resolve(self, latitude: float, longitude: float) -> str | None:
         from urbanlens.dashboard.services.core.egress import direct_fallback_permitted
 
-        asked_redata = False
+        asked_shield = False
         for resolver in self.resolvers:
             direct = bool(getattr(resolver, "direct", False))
-            if direct and asked_redata and not direct_fallback_permitted():
-                logger.info("Place name for %s,%s unavailable from REData; not falling through to a direct provider off production", redact_coordinate(latitude), redact_coordinate(longitude))
+            if direct and asked_shield and not direct_fallback_permitted():
+                logger.info("Place name for %s,%s unavailable from the shielding provider; not falling through to a direct provider off production", redact_coordinate(latitude), redact_coordinate(longitude))
                 return None
-            asked_redata = asked_redata or not direct
+            asked_shield = asked_shield or not direct
             name = resolver.resolve(latitude, longitude)
             if is_meaningful_name(name):
                 return name
         return None
-
-
-def _redata_configured() -> bool:
-    return bool(settings.redata_api_url and settings.redata_api_key)

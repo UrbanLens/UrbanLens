@@ -15,7 +15,6 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import timedelta
-from decimal import Decimal
 from enum import StrEnum
 import logging
 import math
@@ -57,7 +56,7 @@ def external_calls_forbidden() -> Iterator[None]:
 
 # Service registry - default config for external API services that have not yet been converted to
 # plugins.
-# Plugin-provided integrations declare their defaults via ``UrbanLensPlugin.get_service_defaults``
+# Plugin-provided integrations declare their defaults by contributing to ``SERVICE_DEFAULTS``
 # instead; the merged view lives in ``all_service_defaults``.
 
 
@@ -86,23 +85,18 @@ class ServiceDefaults:
     min_interval_seconds: float | None = None
     usa_only: bool = False
     notes: str = ""
-    #: Estimated USD cost per successful call, if confidently known from the provider's published
-    #: pricing.
-    #: None means "not yet priced" (which may still be a free service - see ``notes``), not
-    #: "confirmed free".
-    cost_per_call: Decimal | None = None
 
     #: Whether a call here can cost money.
     #: A new service is treated as billable until someone reads the provider's terms and says
     #: otherwise here, citing them in ``notes``.
     billable: bool = True
     #: The vendor's whole free allowance for one calendar month. Every deployment billed on the
-    #: same account draws on it - UrbanLens's production, staging and development, and REData's.
+    #: same account draws on it - UrbanLens's production, staging and development, and any other service billed to it.
     #: What one deployment may spend is :func:`free_tier_ceiling`. Read from code on every check,
     #: never from the admin-editable row: raising it is a bill, not a policy choice.
     free_tier_per_calendar_month: int | None = None
     #: UrbanLens's part of :attr:`free_tier_per_calendar_month` across all its deployments: at most
-    #: 0.4 of a Google Maps Platform SKU REData can also bill (REData takes 0.5), never above 0.9,
+    #: 0.4 of a Google Maps Platform SKU another service on the account can also bill (that service takes 0.5), never above 0.9,
     #: so the hours between a UTC month turning and Google's Pacific one fall in headroom.
     free_tier_allotment: float = 0.9
     #: What kind of service this is, which decides which environments may call it and on what share of
@@ -111,6 +105,8 @@ class ServiceDefaults:
     category: EgressCategory | None = None
     #: How its calls are counted and recorded.
     ledger: CallLedger = CallLedger.ROW_PER_CALL
+    #: The tab this service sits under on the site-admin API-limits page; "Other" when None.
+    group: str | None = None
 
 
 SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
@@ -120,169 +116,24 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_minute=20,
         calls_per_day=500,
         calls_per_30_days=9999,
-        # Geocoding is 10,000/month free, shared with REData. Legacy Place Details `cid:` lookup is counted here
+        # Geocoding is 10,000/month free, shared with the account's other services. Legacy Place Details `cid:` lookup is counted here
         # but Google bills it as Places Details (Pro, 5,000 free). This ceiling keeps that SKU free:
         # 0.4 x 10,000 here + google_places' 0.4 x 1,000 = 4,400 of 5,000. Holds by arithmetic, not design.
         free_tier_per_calendar_month=10_000,
         free_tier_allotment=0.4,
-        notes="Free tier: 10,000 calls/month for Geocoding, shared with REData on the same billing account. The legacy Place Details cid: lookup is counted here too, though Google bills it as Places Details (Pro, 5,000 free a month).",
-        cost_per_call=Decimal("0.005"),
-    ),
-    "redata_cid_lookup": ServiceDefaults(
-        display_name="REData CID Resolution",
-        category=EgressCategory.REDATA,
-        calls_per_minute=10,
-        calls_per_day=None,
-        calls_per_30_days=None,
-        notes=(
-            "Batch CID->coordinate resolution via POST /places/resolve-cids/, "
-            "plus reading (GET /places/cid/{cid}/) and downloading (GET /places/cid/{cid}/media/{id}/download/) a resolved "
-            "CID's deep-scraped place detail - see plugins.builtin.redata_place_details."
-        ),
-    ),
-    "redata_places": ServiceDefaults(
-        display_name="REData Places",
-        category=EgressCategory.REDATA,
-        # Deliberately conservative since this rate limiter has no cross-service shared-budget
-        # concept and redata_api already draws from the same pool.
-        calls_per_minute=20,
-        # REData's whole Google Places budget is 160 uncached calls/day, shared by every key and its own CID
-        # resolution; it asks each client for about 40.
-        calls_per_day=40,
-        notes="Places API (New) via REData - permanently cached on REData's end. See services.apis.locations.places_resolution.",
-    ),
-    "redata_photos": ServiceDefaults(
-        display_name="REData Photo Relevance",
-        category=EgressCategory.REDATA,
-        calls_per_minute=30,
-        calls_per_day=None,
-        notes="Photo submission/voting/confidence via POST /photos/, /photos/votes/, /photos/confidence/.",
-    ),
-    "redata_labels": ServiceDefaults(
-        display_name="REData Label Suggestions",
-        category=EgressCategory.REDATA,
-        # limits) and only fire on actual writes; suggestion lookups are one call per dialog open.
-        # Generous but still bounded, matching redata_photos.
-        calls_per_minute=30,
-        calls_per_day=None,
-        notes="Tag/category taxonomy + assignment sync and suggestions via POST /labels/, /labels/assignments/, /labels/suggest/.",
-    ),
-    "redata_basemap_tiles": ServiceDefaults(
-        display_name="REData Basemap Tiles",
-        category=EgressCategory.REDATA,
-        # Deliberately far above the shared "lookup" budget below: a tile request is one per pan,
-        # not one per user action, and REData applies its own tile throttle that *replaces* rather
-        # than stacks with the per-key budget (see its api-reference.md).
-        # Holding tiles to a lookup allowance would let a few seconds of panning exhaust the budget
-        calls_per_minute=600,
-        calls_per_day=None,
-        notes="Basemap tiles and their catalogue via GET /tiles/. Proxied so REData's key stays server-side - see controllers.basemap_tiles.",
+        notes="Free tier: 10,000 calls/month for Geocoding, shared with whatever else bills to the same account. The legacy Place Details cid: lookup is counted here too, though Google bills it as Places Details (Pro, 5,000 free a month).",
     ),
     "basemap_vendor_tiles": ServiceDefaults(
         display_name="Basemap Vendor Tiles",
         category=EgressCategory.QUOTA,
-        # One per pan rather than one per user action, so sized like the REData tile budget above
-        # rather than the lookup one. These vendors are free and keyless, so the budget is
+        # One per pan rather than one per user action, so sized for tile traffic
+        # rather than a lookup allowance. These vendors are free and keyless, so the budget is
         # politeness rather than a billing guard.
         calls_per_minute=600,
         calls_per_day=None,
         notes="Raster basemap tiles fetched straight from the vendor - see services.map.basemap_vendors.",
         # One call per uncached tile, a viewport's worth at once: a locked row per tile queued them on the row lock.
         ledger=CallLedger.TALLIED,
-    ),
-    "redata_geocode": ServiceDefaults(
-        display_name="REData Geocoding",
-        category=EgressCategory.REDATA,
-        calls_per_minute=20,
-        calls_per_day=None,
-        notes="Forward/reverse geocoding via GET /geocode/, /geocode/reverse/. See services.apis.locations.geocode_resolution.",
-    ),
-    "redata_weather": ServiceDefaults(
-        display_name="REData Weather",
-        category=EgressCategory.REDATA,
-        calls_per_minute=20,
-        calls_per_day=None,
-        notes="Current conditions/forecast/sun times via GET /weather/ - every registered provider (Open-Meteo, OpenWeatherMap) in one call. See services.apis.locations.weather_resolution.",
-    ),
-    "redata_public_locations": ServiceDefaults(
-        display_name="REData Public Locations",
-        category=EgressCategory.REDATA,
-        # Costs REData no upstream call either - its own local catalog, no
-        # per-source attribution - and is only ever called by demo-instance
-        # seeding, never a real user's request.
-        calls_per_minute=20,
-        calls_per_day=None,
-        notes="State capitols, county seats and national capitals via GET /public-locations/. Used only to seed the demo instance's location pool.",
-    ),
-    "redata_capabilities": ServiceDefaults(
-        display_name="REData Capability Index",
-        category=EgressCategory.REDATA,
-        # Costs REData no external call - it is a bounds test over its own registries - so this
-        # budget bounds our own round trips, not a source's.
-        # Read on the pin-detail path now (services.apis.locations.
-        # redata_points_of_interest_gateway.applicable_provider_tags caches it for an hour per
-        calls_per_minute=60,
-        calls_per_day=None,
-        notes="Which REData domains and providers cover a point, via GET /capabilities/. Answers from REData's own registries with no upstream call; cached for an hour per coarse coordinate.",
-    ),
-    "redata_prewarm": ServiceDefaults(
-        display_name="REData Prewarm",
-        category=EgressCategory.REDATA,
-        # One per new root pin's location (services.pins.bootstrap). Not in REData's lookup pool: REData
-        # bills it to its all-endpoint budget and its own prewarm throttle.
-        calls_per_minute=20,
-        calls_per_day=None,
-        notes="Queues REData's own background fetches for a newly pinned point via POST /locations/prewarm/ (scope locations:prewarm). A key without the scope is remembered and not asked again for a day.",
-    ),
-    "redata_weather_history": ServiceDefaults(
-        display_name="REData Historical Weather",
-        category=EgressCategory.REDATA,
-        calls_per_minute=20,
-        calls_per_day=None,
-        notes="What the weather actually was, per day, via GET /weather/history/ (Open-Meteo ERA5 reanalysis, back to 1940). Separate from redata_weather because a past day is an immutable record, not a forecast. See services.locations.visit_weather.",
-    ),
-    "redata_routing": ServiceDefaults(
-        display_name="REData Routing",
-        category=EgressCategory.REDATA,
-        calls_per_minute=20,
-        calls_per_day=None,
-        notes="Route/drive-time legs via POST /routes/ (as_given capability only). See services.apis.locations.routing_resolution.",
-    ),
-    "redata_search_web": ServiceDefaults(
-        display_name="REData Web Search",
-        category=EgressCategory.REDATA,
-        calls_per_minute=20,
-        calls_per_day=None,
-        notes="Web and image search via GET /search/web/, for the Google Images and SearXNG image panels and services.search. Shares REData's one 1,000/hour lookup pool per key. See services.apis.locations.redata_search_gateway.",
-    ),
-    "redata_street_view": ServiceDefaults(
-        display_name="REData Street View",
-        category=EgressCategory.REDATA,
-        calls_per_minute=20,
-        calls_per_day=None,
-        notes="Street-level capture timelines via /street-view/timeline/, spent by the Mapillary, KartaView and Panoramax providers. Shares REData's one 1,000/hour lookup pool per key. See services.apis.locations.redata_street_view_gateway.",
-    ),
-    "redata_locations_context": ServiceDefaults(
-        display_name="REData Location Context",
-        category=EgressCategory.REDATA,
-        calls_per_minute=60,
-        calls_per_day=None,
-        notes="Cache-only reads of several near-point domains at once via GET /locations/context/, asked before each domain's own endpoint by services.locations.redata_point_data. Charged to REData's 2,000/hour default pool, not the 1,000/hour lookup pool.",
-    ),
-    "redata_buildings": ServiceDefaults(
-        display_name="REData Buildings",
-        category=EgressCategory.REDATA,
-        calls_per_minute=20,
-        calls_per_day=None,
-        notes="Overture building footprints near a point via GET /buildings/, from REData's own Overture mirror, where its synced US shards cover the point. Read by the boundary chain and the Building Characteristics panel. Shares REData's one 1,000/hour lookup pool per key. See services.apis.locations.boundaries.overture.",
-    ),
-    "redata_historical_maps": ServiceDefaults(
-        display_name="REData Historical Maps",
-        category=EgressCategory.REDATA,
-        # One call per uncached overlay tile, so a daily cap blanks overlays for the rest of the day.
-        calls_per_minute=300,
-        calls_per_day=None,
-        notes="Map sheets covering a point via GET /maps/, and their overlay tiles via GET /maps/georeferences/{uuid}/tiles/, cached per tile by controllers.historical_map_tiles. Neither is in REData's lookup or tile pools, so its 2,000/hour all-endpoint budget per key is the ceiling. See services.apis.locations.redata_historical_maps_gateway.",
     ),
     "google_open_buildings": ServiceDefaults(
         display_name="Google Open Buildings",
@@ -305,7 +156,7 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         # Values are a real budget, not bandwidth hygiene; still generic fallback numbers (no published quota).
         calls_per_minute=20,
         calls_per_day=500,
-        notes="Overture's public GeoParquet release via services.apis.locations.boundaries.overture_maps, read only where REData's mirror holds nothing (outside its synced US shards); REData answers the rest. Free public dataset, but its STAC index rate-limits us under load - see P110.",
+        notes="Overture's public GeoParquet release via services.apis.locations.boundaries.overture_maps, read only where no mirror covers the point. Free public dataset, but its STAC index rate-limits us under load.",
         billable=False,
     ),
     "openweathermap": ServiceDefaults(
@@ -334,20 +185,10 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         display_name="Overpass API public mirrors (overpass-api.de, maps.mail.ru)",
         category=EgressCategory.QUOTA,
         # Asked only when the self-hosted primary is down. The public instances allow a few concurrent slots and
-        # about 10,000 queries a day per address, and that address is the one production REData shares.
+        # about 10,000 queries a day per address, and that address is shared with the operator's other services.
         calls_per_minute=10,
         calls_per_day=2_000,
-        notes="Free API: the public Overpass instances the self-hosted primary fails over to. Their limits are per address, shared by every deployment and REData.",
-        billable=False,
-    ),
-    "digital_commonwealth": ServiceDefaults(
-        display_name="Digital Commonwealth",
-        category=EgressCategory.REDATA,
-        calls_per_minute=10,
-        calls_per_day=200,
-        usa_only=True,
-        notes="Massachusetts-based digital archive. Free API.",
-        # Free per this entry's own notes; see `ServiceDefaults.billable`.
+        notes="Free API: the public Overpass instances the self-hosted primary fails over to. Their limits are per address, shared by every deployment and the operator's other services.",
         billable=False,
     ),
     "apple_maps": ServiceDefaults(
@@ -406,93 +247,6 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_day=200,
         notes="Billed per message sent - keep this conservative.",
     ),
-    "article_expansion": ServiceDefaults(
-        display_name="Article Expansion Writing (AI)",
-        category=EgressCategory.AI,
-        calls_per_minute=10,
-        calls_per_day=500,
-        notes="Drafts plain-text paragraphs for pin/wiki articles from a linked page during AI link extraction. Cost varies by provider/model - see ApiCallLog.cost_estimate for actuals.",
-    ),
-    "article_safety": ServiceDefaults(
-        display_name="Article Expansion Safety (AI)",
-        category=EgressCategory.AI,
-        calls_per_minute=20,
-        calls_per_day=1000,
-        notes="Judges AI-drafted article text for appropriateness and safety-related implications before it is appended. Fail-closed when unavailable.",
-    ),
-    "trivia_moderation": ServiceDefaults(
-        display_name="Trivia Question Moderation (AI)",
-        category=EgressCategory.AI,
-        calls_per_minute=20,
-        calls_per_day=1000,
-        notes="Classifies user-submitted and AI-generated Trivia questions before they enter rotation. Cost varies by provider/model - see ApiCallLog.cost_estimate for actuals.",
-    ),
-    "trivia_generation": ServiceDefaults(
-        display_name="Trivia Question Generation (AI)",
-        category=EgressCategory.AI,
-        calls_per_minute=5,
-        calls_per_day=200,
-        notes="Generates candidate Trivia questions from wiki article content. Runs from a scheduled background sweep, not per-request.",
-    ),
-    "trivia_answer_check": ServiceDefaults(
-        display_name="Trivia Answer Checking (AI)",
-        category=EgressCategory.AI,
-        calls_per_minute=30,
-        calls_per_day=2000,
-        notes="Judges a non-exact-match Trivia answer as possibly correct but differently phrased. Only called on a normalized-string mismatch.",
-    ),
-    "trivia_wiki_incorporation": ServiceDefaults(
-        display_name="Trivia Wiki Incorporation (AI)",
-        category=EgressCategory.AI,
-        calls_per_minute=5,
-        calls_per_day=200,
-        notes="Drafts a plain-text paragraph folding a well-upvoted user-submitted Trivia question into its location's wiki article. Runs from a scheduled background sweep, not per-request.",
-    ),
-    # AI features: an AI call is logged, never refused for spend (R31), so these carry no daily or monthly cap,
-    # only a per-minute guard against a runaway loop. The row exists so each call is reserved and recorded, and
-    # so the API-limits page can switch one off. Development and local refuse every one of them (D26).
-    "link_extraction": ServiceDefaults(
-        display_name="Link Extraction (AI)",
-        category=EgressCategory.AI,
-        calls_per_minute=30,
-        calls_per_day=None,
-        notes="Extracts pin facts from a linked page the user asked to read. One call per extraction; the user's daily allowance is enforced by the feature itself.",
-    ),
-    "document_pin_import": ServiceDefaults(
-        display_name="Document Pin Import (AI)",
-        category=EgressCategory.AI,
-        calls_per_minute=30,
-        calls_per_day=None,
-        notes="Reads pins out of an uploaded document's text.",
-    ),
-    "trip_suggestions": ServiceDefaults(
-        display_name="Trip Suggestions (AI)",
-        category=EgressCategory.AI,
-        calls_per_minute=30,
-        calls_per_day=None,
-        notes="Suggests pins and a schedule for a trip, on request; cached and cooled down per trip and requester.",
-    ),
-    "label_style_suggestions": ServiceDefaults(
-        display_name="Label Style Suggestions (AI)",
-        category=EgressCategory.AI,
-        calls_per_minute=120,
-        calls_per_day=None,
-        notes="Suggests an icon and colour for a label created off the request path.",
-    ),
-    "category_suggestions": ServiceDefaults(
-        display_name="Category Suggestions (AI)",
-        category=EgressCategory.AI,
-        calls_per_minute=120,
-        calls_per_day=None,
-        notes="Picks labels for a pin or location from the eligible list when keywords did not match.",
-    ),
-    "assistant": ServiceDefaults(
-        display_name="Assistant (AI)",
-        category=EgressCategory.AI,
-        calls_per_minute=60,
-        calls_per_day=None,
-        notes="One row per provider round of an assistant turn; the assistant is pinned to Anthropic.",
-    ),
 }
 
 
@@ -503,10 +257,10 @@ def all_service_defaults() -> dict[str, ServiceDefaults]:
 
     Returns:
         Mapping of service key to its :class:`ServiceDefaults`."""
-    from urbanlens.dashboard.plugins import plugin_registry
+    from urbanlens.dashboard.plugins.points import SERVICE_DEFAULTS
 
     merged = dict(SERVICE_REGISTRY)
-    merged.update(plugin_registry.service_defaults())
+    merged.update(SERVICE_DEFAULTS.as_dict())
     return merged
 
 
@@ -694,7 +448,7 @@ def check_rate_limit(service: str, config: Any = None) -> bool:
     Return ``True`` if a call to ``service`` is currently permitted.
     Only the windows that are actually configured are counted - a service with no ``calls_per_30_days`` never pays for that ``COUNT(*)``.
     Each window holds this deployment's share of the configured limit (``services.core.egress.service_share``): all of
-    it for REData, our own hosts and AI (where AI is called at all), ``UL_ENVIRONMENT_SHARE`` of it for a ``quota`` or
+    it for a first-party service, our own hosts and a ``deployed`` service (where one is called at all), ``UL_ENVIRONMENT_SHARE`` of it for a ``quota`` or
     ``billed`` service.
 
     Args:
@@ -770,7 +524,6 @@ def log_api_call(
     was_rate_limited: bool = False,
     was_geo_filtered: bool = False,
     was_service_disabled: bool = False,
-    cost_estimate: Decimal | None = None,
     status_code: int | None = None,
     was_rejected_input: bool = False,
     model: str | None = None,
@@ -788,15 +541,14 @@ def log_api_call(
         endpoint: URL or endpoint path (truncated to 500 chars).
         was_rate_limited: True if the call was blocked by rate limiting.
         was_geo_filtered: True if the call was skipped due to geo filtering.
-        cost_estimate: Estimated USD cost of this call, if known - see ``ServiceDefaults.cost_per_call``.
         status_code: The upstream's HTTP status, when the caller holds the response.
         was_rejected_input: True if the call was refused before it was made because its input could not return data.
-        model: The AI model that answered, for an AI call.
-        input_tokens: Prompt tokens the provider reported, for an AI call.
-        output_tokens: Completion tokens the provider reported, for an AI call."""
+        model: The model that answered, for a call that names one.
+        input_tokens: Input tokens the provider reported, if any.
+        output_tokens: Output tokens the provider reported, if any."""
     from urbanlens.dashboard.models.api_call_log import ApiCallLog
 
-    if call_ledger(service) is CallLedger.TALLIED and cost_estimate is None and model is None and input_tokens is None and output_tokens is None:
+    if call_ledger(service) is CallLedger.TALLIED and model is None and input_tokens is None and output_tokens is None:
         from urbanlens.dashboard.services.core import call_tally
 
         outcome = (
@@ -823,7 +575,6 @@ def log_api_call(
             was_rate_limited=was_rate_limited,
             was_geo_filtered=was_geo_filtered,
             was_service_disabled=was_service_disabled,
-            cost_estimate=cost_estimate,
             status_code=status_code,
             was_rejected_input=was_rejected_input,
             model=model,
@@ -915,7 +666,6 @@ def _finalize_call(
     *,
     success: bool,
     response_ms: int | None = None,
-    cost_estimate: Decimal | None = None,
     status_code: int | None = None,
     endpoint: str | None = None,
     model: str | None = None,
@@ -930,15 +680,14 @@ def _finalize_call(
         entry_pk: pk of the ``ApiCallLog`` row returned by ``_reserve_call``.
         success: Whether the call succeeded (HTTP 2xx, no exception).
         response_ms: Round-trip time in milliseconds.
-        cost_estimate: Estimated USD cost of this call, if known - see ``ServiceDefaults.cost_per_call``.
         status_code: The upstream's HTTP status; None when no response arrived.
-        endpoint: Replaces the reserved endpoint when given - an AI call knows its provider and model only once it is made.
-        model: The AI model that answered, for an AI call.
-        input_tokens: Prompt tokens the provider reported, for an AI call.
-        output_tokens: Completion tokens the provider reported, for an AI call."""
+        endpoint: Replaces the reserved endpoint when given - a call can know its provider and model only once it is made.
+        model: The model that answered, for a call that names one.
+        input_tokens: Input tokens the provider reported, if any.
+        output_tokens: Output tokens the provider reported, if any."""
     from urbanlens.dashboard.models.api_call_log import ApiCallLog
 
-    outcome: dict[str, Any] = {"success": success, "response_ms": response_ms, "cost_estimate": cost_estimate, "status_code": status_code, "model": model, "input_tokens": input_tokens, "output_tokens": output_tokens}
+    outcome: dict[str, Any] = {"success": success, "response_ms": response_ms, "status_code": status_code, "model": model, "input_tokens": input_tokens, "output_tokens": output_tokens}
     if endpoint is not None:
         outcome["endpoint"] = endpoint[:500]
     try:
@@ -949,7 +698,7 @@ def _finalize_call(
 
 def _release_call(entry_pk: int) -> None:
     """
-    Drop a reservation row for a call the environment refused after it was reserved: a refusal leaves no row (D26).
+    Drop a reservation row for a call the environment refused after it was reserved: a refusal leaves no row.
 
     Args:
         entry_pk: pk of the ``ApiCallLog`` row returned by ``_reserve_call``.
@@ -970,19 +719,17 @@ class ApiCallSlot:
     Attributes:
         service: The service key the slot reserved.
         success: Whether the call succeeded; left False, a call that raised is recorded as failed.
-        cost_estimate: Estimated USD cost, when known.
         status_code: The upstream's HTTP status, when there was one.
         endpoint: What was called, when that is only known once it is made; replaces the reserved endpoint.
-        model: The AI model that answered, for an AI call (``services.ai.call_log`` fills it).
-        input_tokens: Prompt tokens the provider reported, for an AI call.
-        output_tokens: Completion tokens the provider reported, for an AI call.
-        refused: The environment refused the call after the slot opened (the provider behind an AI feature, D26), so
+        model: The model that answered, for a call that names one.
+        input_tokens: Input tokens the provider reported, if any.
+        output_tokens: Output tokens the provider reported, if any.
+        refused: The environment refused the call after the slot opened (the provider behind a feature), so
             nothing was sent and the reservation is released instead of recorded.
     """
 
     service: str = ""
     success: bool = False
-    cost_estimate: Decimal | None = None
     status_code: int | None = None
     endpoint: str | None = None
     model: str | None = None
@@ -991,7 +738,7 @@ class ApiCallSlot:
     refused: bool = False
 
 
-#: The slot the running code is inside, so an AI call made within one fills in its row instead of writing a second.
+#: The slot the running code is inside, so a call made within one fills in its row instead of writing a second.
 _CURRENT_SLOT: ContextVar[ApiCallSlot | None] = ContextVar("api_call_slot", default=None)
 
 
@@ -1010,8 +757,8 @@ def api_call_slot(service: str, *, endpoint: str = "") -> Iterator[ApiCallSlot]:
     """
     Reserve one call to *service* before making it, and record its outcome after.
 
-    For calls that do not go through a gateway's rate-limited session (SDK clients, the
-    inference client). The check and the ledger row are one locked step, so concurrent
+    For calls that do not go through a gateway's rate-limited session (SDK clients and other
+    non-HTTP callers). The check and the ledger row are one locked step, so concurrent
     callers cannot all pass a check that only one of them fits under.
 
     Args:
@@ -1055,7 +802,6 @@ def api_call_slot(service: str, *, endpoint: str = "") -> Iterator[ApiCallSlot]:
                     entry_pk,
                     success=slot.success,
                     response_ms=elapsed_ms,
-                    cost_estimate=slot.cost_estimate,
                     status_code=slot.status_code,
                     endpoint=slot.endpoint,
                     model=slot.model,
@@ -1073,7 +819,7 @@ class CallNotes:
     What a gateway knows about its own request that the session cannot see.
 
     Attributes:
-        model: The AI model the request asks, recorded on the row.
+        model: The model the request asks, recorded on the row.
         usage: Reads ``(input_tokens, output_tokens)`` from the response.
     """
 
@@ -1087,10 +833,10 @@ _CALL_NOTES: ContextVar[CallNotes | None] = ContextVar("api_call_notes", default
 @contextmanager
 def annotate_calls(*, model: str | None = None, usage: Callable[[Any], tuple[int | None, int | None]] | None = None) -> Iterator[None]:
     """
-    Have the rate-limited session record an AI model and token counts on the rows of the requests made inside.
+    Have the rate-limited session record a model and token counts on the rows of the requests made inside.
 
     Args:
-        model: The AI model the requests ask.
+        model: The model the requests ask.
         usage: Reads ``(input_tokens, output_tokens)`` from a response; a reader that fails records none.
 
     """
@@ -1232,16 +978,11 @@ class _RateLimitedSession:
         try:
             resp = self._session.request(method, url, **kwargs)
             elapsed_ms = int((time.monotonic() - t0) * 1000)
-            # Only a call that actually reached the provider and succeeded is billable - a
-            # rate-limited/disabled call above never went out, and a failed response wasn't
-            # necessarily charged either way, so estimating a cost for it would overstate real
-            # spend.
-            cost_estimate = all_service_defaults().get(self._service_key, ServiceDefaults(display_name="")).cost_per_call if resp.ok else None
             input_tokens, output_tokens = _reported_usage(log_usage, resp)
             if admission is not None:
                 admission.record(success=resp.ok, status_code=resp.status_code, response_ms=elapsed_ms)
             elif entry_pk is not None:
-                _finalize_call(entry_pk, success=resp.ok, response_ms=elapsed_ms, cost_estimate=cost_estimate, status_code=resp.status_code, model=log_model, input_tokens=input_tokens, output_tokens=output_tokens)
+                _finalize_call(entry_pk, success=resp.ok, response_ms=elapsed_ms, status_code=resp.status_code, model=log_model, input_tokens=input_tokens, output_tokens=output_tokens)
             if breaker is not None:
                 breaker.observe(str(url), kwargs.get("params"), resp)
             if is_unanswered_status(resp.status_code):
@@ -1317,7 +1058,7 @@ class ServiceDisabledError(RequestCancelledError):
 
 class EnvironmentRefusedError(ServiceDisabledError):
     """
-    This environment does not call the service at all (D26): not a failure, and not worth retrying here.
+    This environment does not call the service at all: not a failure, and not worth retrying here.
 
     A :class:`ServiceDisabledError`, so every caller that already degrades on a switched-off service keeps
     working. Not transient, so it is never recorded as an unanswered call or held against the provider's

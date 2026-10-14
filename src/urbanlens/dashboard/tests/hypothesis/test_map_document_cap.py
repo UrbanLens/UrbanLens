@@ -85,7 +85,7 @@ class TheCeilingMustExistTests(_SeededMapCase):
     """
     Before anything can be bounded, something has to name the bound.
 
-    Not xfail: D12 landed this half. It stays as the tripwire for the name, which
+    Not xfail: this half has landed. It stays as the tripwire for the name, which
     is what the mis-wired first draft of this file got wrong.
     """
 

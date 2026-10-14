@@ -13,7 +13,7 @@ from urbanlens.UrbanLens.egress import EgressCategory
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
-    from urbanlens.dashboard.services.pins.external_data import PanelSource
+    from urbanlens.dashboard.plugins.base import PluginContext
 
 
 class AzureMapsPanelSource(LocationCachePanelSource):
@@ -131,26 +131,25 @@ class AzureMapsPlugin(UrbanLensPlugin):
     # Places is 10); Azure sits just after them.
     order: ClassVar[int] = 15
 
-    def get_service_defaults(self) -> dict[str, ServiceDefaults]:
-        """
-        Rate-limit defaults for the Azure Maps Search/Geocoding APIs.
-        Both product areas share one subscription key and one quota, so they share a single ``azure_maps`` service key/rate-limit row too."""
-        return {
-            "azure_maps": ServiceDefaults(
-                display_name="Azure Maps (Search/Geocoding)",
-                category=EgressCategory.BILLED,
-                calls_per_minute=50,
-                calls_per_day=2500,
-                free_tier_per_calendar_month=5_000,
-                free_tier_allotment=0.4,
-                notes="Free tier: 5,000 Search transactions a month (Gen2), per subscription, shared with REData.",
-            ),
-        }
+    def setup(self, plugin: PluginContext) -> None:
+        """Azure Maps rate-limit defaults (one budget shared with the account's other services), its pin-detail panel and its place-name candidates."""
+        from urbanlens.dashboard.plugins.points import NAME_PROVIDERS, PANEL_SOURCES, SERVICE_DEFAULTS
 
-    def get_panel_sources(self) -> list[PanelSource]:
-        """Contribute the Azure Maps pin-detail panel."""
-        return [AzureMapsPanelSource()]
+        plugin.register_all(
+            SERVICE_DEFAULTS,
+            {
+                "azure_maps": ServiceDefaults(
+                    display_name="Azure Maps (Search/Geocoding)",
+                    category=EgressCategory.BILLED,
+                    calls_per_minute=50,
+                    calls_per_day=2500,
+                    free_tier_per_calendar_month=5_000,
+                    free_tier_allotment=0.4,
+                    notes="Free tier: 5,000 Search transactions a month (Gen2), per subscription, shared with any other service on it.",
+                ),
+            },
+        )
 
-    def get_name_providers(self) -> list[NameProvider]:
-        """Contribute Azure Maps' POI/address names as place-name candidates."""
-        return [AzureMapsNameProvider()]
+        plugin.extend(PANEL_SOURCES, [AzureMapsPanelSource()])
+
+        plugin.extend(NAME_PROVIDERS, [AzureMapsNameProvider()])

@@ -19,6 +19,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
 from urbanlens.dashboard.services.import_export import import_data
+from urbanlens.dashboard.tests.hypothesis.overlay_source_fake import fake_sheet_source, fake_sheet_template
 
 _CORNERS = [[40.002, -74.002], [40.002, -74.000], [40.000, -74.000], [40.000, -74.002]]
 _PUBLIC_DNS_RESULT = [(2, 1, 6, "", ("93.184.216.34", 0))]
@@ -100,13 +101,12 @@ class AnImportedOverlayUrlTests(_ImportCase):
 
 
 class AnImportedTileOverlayTests(_ImportCase):
-    def test_a_historical_tile_overlay_survives_the_round_trip(self) -> None:
-        from urbanlens.dashboard.services.map.image_overlays import historical_tile_template
-
-        template = historical_tile_template("5b0e8a4c-2d1f-4a57-9c3e-1f2a3b4c5d6e")
-        import_data.MapAnnotationsImport()._import_overlay(
-            self._row(tile_url_template=template, locked=True), self.ctx, 1
-        )
+    def test_a_recognised_sheet_overlay_survives_the_round_trip(self) -> None:
+        template = fake_sheet_template("5b0e8a4c-2d1f-4a57-9c3e-1f2a3b4c5d6e")
+        with fake_sheet_source():
+            import_data.MapAnnotationsImport()._import_overlay(
+                self._row(tile_url_template=template, locked=True), self.ctx, 1
+            )
 
         overlay = MapImageOverlay.objects.for_pin(self.pin).get()
         self.assertEqual(overlay.tile_url_template, template)

@@ -18,8 +18,8 @@ from urbanlens.UrbanLens.egress import EgressCategory
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.plugins.base import PluginContext
     from urbanlens.dashboard.services.apis.assets.base import MediaItem
-    from urbanlens.dashboard.services.pins.external_data import PanelSource
 
 
 class GoogleMapsPhotosPanelSource(GalleryMediaSource):
@@ -28,6 +28,8 @@ class GoogleMapsPhotosPanelSource(GalleryMediaSource):
     Found by coordinates only, via Places API (New) Nearby Search - never by the pin/wiki's user-given name."""
 
     key = "google_maps"
+    gallery_order: ClassVar[int | None] = 100
+    gallery_label: ClassVar[str] = "Google Maps"
     cache_source = "google_maps_photos"
     icon = "photo_camera"
     title = "Google Maps"
@@ -38,20 +40,18 @@ class GoogleMapsPhotosPanelSource(GalleryMediaSource):
     api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset()
 
     def gate(self, pin: Pin) -> bool:
-        """Requires a configured API key (Google or REData) and coordinates."""
-        from urbanlens.UrbanLens.settings.app import settings
+        """Requires an available places provider and coordinates."""
+        from urbanlens.dashboard.services.apis.locations import places_resolution
 
-        has_provider = bool(settings.google_unrestricted_api_key) or bool(settings.redata_api_url and settings.redata_api_key)
-        return has_provider and bool(pin.effective_latitude and pin.effective_longitude)
+        return places_resolution.available() and bool(pin.effective_latitude and pin.effective_longitude)
 
     def fetch(self, pin: Pin) -> None:
         """Find the nearest place by coordinates and cache its photo identifiers."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.services.apis.locations import places_resolution
-        from urbanlens.UrbanLens.settings.app import settings
 
         lat, lng = pin.effective_latitude, pin.effective_longitude
-        place_id, photo_names = places_resolution.find_nearest_place_photos(lat, lng, api_key=settings.google_unrestricted_api_key or "")
+        place_id, photo_names = places_resolution.find_nearest_place_photos(lat, lng)
         LocationCache.set(
             pin.location,
             self.cache_source,
@@ -147,32 +147,33 @@ class GooglePlacesPlugin(UrbanLensPlugin):
     author: ClassVar[str] = "UrbanLens"
     order: ClassVar[int] = 10
 
-    def get_service_defaults(self) -> dict[str, ServiceDefaults]:
-        """Rate-limit defaults for the Google Places API."""
-        return {
-            "google_places": ServiceDefaults(
-                display_name="Google Places API",
-                category=EgressCategory.BILLED,
-                calls_per_minute=20,
-                calls_per_day=200,
-                # One budget spans several SKUs; the smallest free one it can hit is 1,000 a month
-                # (Nearby Search Enterprise - the default mask asks for rating - and Place Photos).
-                free_tier_per_calendar_month=1_000,
-                free_tier_allotment=0.4,
-                notes="No credit since 2025-03: each SKU has its own monthly free cap, per billing account, shared with REData. Held to the smallest this budget can spend.",
-            ),
-        }
-
-    def get_name_providers(self) -> list[NameProvider]:
-        """Contribute Google place names as place-name candidates."""
-        return [GooglePlacesNameProvider()]
-
-    def get_panel_sources(self) -> list[PanelSource]:
-        """Contribute the Google Maps Media-gallery photos provider."""
-        return [GoogleMapsPhotosPanelSource()]
-
-    def get_enrichment_sources(self) -> list[EnrichmentSource]:
-        """Contribute GooglePlace linking and photo backfill to scheduled background enrichment."""
+    def setup(self, plugin: PluginContext) -> None:
+        """Google Places rate-limit defaults, place names, the Media-gallery photos provider, and background place linking and photo backfill."""
+        from urbanlens.dashboard.plugins.points import ENRICHMENT_SOURCES, NAME_PROVIDERS, PANEL_SOURCES, PLACES_PROVIDERS, SERVICE_DEFAULTS
+        from urbanlens.dashboard.services.apis.locations.places_resolution import GooglePlacesProvider
         from urbanlens.dashboard.services.photos.photo_enrichment import PlacePhotoEnrichmentSource
 
-        return [GooglePlaceLinkEnrichmentSource(), PlacePhotoEnrichmentSource()]
+        plugin.register_all(
+            SERVICE_DEFAULTS,
+            {
+                "google_places": ServiceDefaults(
+                    display_name="Google Places API",
+                    category=EgressCategory.BILLED,
+                    calls_per_minute=20,
+                    calls_per_day=200,
+                    # One budget spans several SKUs; the smallest free one it can hit is 1,000 a month
+                    # (Nearby Search Enterprise - the default mask asks for rating - and Place Photos).
+                    free_tier_per_calendar_month=1_000,
+                    free_tier_allotment=0.4,
+                    notes="No credit since 2025-03: each SKU has its own monthly free cap, per billing account, shared with any other service billed to it. Held to the smallest this budget can spend.",
+                ),
+            },
+        )
+
+        plugin.add(PLACES_PROVIDERS, GooglePlacesProvider(), priority=100)
+
+        plugin.extend(NAME_PROVIDERS, [GooglePlacesNameProvider()])
+
+        plugin.extend(PANEL_SOURCES, [GoogleMapsPhotosPanelSource()])
+
+        plugin.extend(ENRICHMENT_SOURCES, [GooglePlaceLinkEnrichmentSource(), PlacePhotoEnrichmentSource()])

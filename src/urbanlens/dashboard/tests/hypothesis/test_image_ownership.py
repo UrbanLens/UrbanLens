@@ -37,7 +37,7 @@ class PersonalLibraryCoverageTests(SimpleTestCase):
         self.assertEqual(
             classified,
             set(ImageSource.values),
-            "An ImageSource is not classified as personal or not. Decide: leaving a personal-library integration out shows a stranger's own photos to a concealed viewer, and it fails silently.",
+            "An ImageSource is not classified as personal or not. Decide: leaving a personal-library integration out shows a stranger's own photos to a viewer who should not see them, and it fails silently.",
         )
 
     def test_the_two_sets_do_not_overlap(self) -> None:

@@ -10,26 +10,27 @@ from urbanlens.dashboard.services.core.gateway import is_source_outage
 from urbanlens.dashboard.services.locations.enrichment import LocationCacheEnrichmentSource
 from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_CACHE_SOURCE
 from urbanlens.dashboard.services.pins.external_data import LocationCachePanelSource, PanelApiKind
-from urbanlens.dashboard.services.security.redact import redact_coordinate
+from urbanlens.dashboard.services.places.building_records import (
+    BuildingRecordProvider,
+    BuildingsAnswer,
+    bulk_enrichment_available,
+    fetch_parcel_buildings,
+    service_keys,
+    source_labels,
+)
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     from django.contrib.gis.geos import GEOSGeometry
 
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
-    from urbanlens.dashboard.services.locations.enrichment import EnrichmentSource
-    from urbanlens.dashboard.services.pins.external_data import PanelSource
+    from urbanlens.dashboard.plugins.base import PluginContext
 
 logger = logging.getLogger(__name__)
 
-#: Human-readable labels for each provider's own reporting system, for the per-row source chip.
-#: Shared with ``redata_building_attributes``, which shows the same provenance on its own card.
+#: Human-readable labels for the public sources' own reporting systems, for the per-row source chip. A plugin's
+#: provider labels its own (``BuildingRecordProvider.source_labels``).
 SOURCE_LABELS: dict[str, str] = {
-    "county_gis": "County GIS",
-    "assessor": "County Assessor",
-    "cris": "NY SHPO (CRIS)",
     "overpass": "OpenStreetMap",
     "osm": "OpenStreetMap",
     "microsoft_buildings": "Microsoft Buildings",
@@ -46,9 +47,10 @@ def source_chips(sources: list[str]) -> list[str]:
 
     Returns:
         Labels in the order given, without repeats - ``overpass`` and ``osm`` share a label, so a record referencing both would otherwise render "OpenStreetMap + OpenStreetMap"."""
+    labels = {**SOURCE_LABELS, **source_labels()}
     chips: list[str] = []
     for key in sources:
-        label = SOURCE_LABELS.get(key)
+        label = labels.get(key)
         if label and label not in chips:
             chips.append(label)
     return chips
@@ -57,13 +59,13 @@ def source_chips(sources: list[str]) -> list[str]:
 def record_sources(building: dict[str, Any]) -> list[str]:
     """
     Every source that references one building, richest-information first.
-    Reading only the old key leaves the provenance chip blank for every REData building; reading only the new one drops Overpass, which still answers in the flat shape.
+    Reading only the ``source`` key leaves the provenance chip blank for every reconciled record; reading only ``sources`` drops Overpass, which still answers in the flat shape.
 
     Args:
         building: A raw building record from either shape.
 
     Returns:
-        Source keys in the order REData ordered them (``BUILDING_SOURCES`` precedence, so the first is the richest), or a single-entry list for a flat record, or empty when neither key is present."""
+        Source keys in the order the record lists them (richest first), or a single-entry list for a flat record, or empty when neither key is present."""
     sources = building.get("sources")
     if isinstance(sources, list):
         keys = [key for entry in sources if isinstance(entry, dict) and (key := entry.get("source"))]
@@ -158,7 +160,7 @@ def _tree_ordered(rows: list[dict[str, Any]], *, annotate_depth: bool = True) ->
 def building_tree_order(buildings: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
     Order raw building records parents-first, children directly after.
-    The importer needs this ordering to mirror REData's building tree as a pin tree: a child's pin can only be parented under its building's pin if that pin exists by the time the child is created.
+    The importer needs this ordering to mirror a source's building tree as a pin tree: a child's pin can only be parented under its building's pin if that pin exists by the time the child is created.
 
     Args:
         buildings: Raw building records carrying ``ref``/``parent_ref``.
@@ -166,206 +168,6 @@ def building_tree_order(buildings: list[dict[str, Any]]) -> list[dict[str, Any]]
     Returns:
         The same records, depth-first (see :func:`_tree_ordered`)."""
     return _tree_ordered(buildings, annotate_depth=False)
-
-
-#: Ceiling on the CRIS search radius the fallback roster asks, matching the CRIS panel's own site cap.
-_MAX_CRIS_RADIUS_METERS = 1500.0
-
-
-def fetch_parcel_buildings(location: Location) -> dict[str, Any]:
-    """
-    Resolve every building on a location's parcel, REData first then Overpass.
-
-    Args:
-        location: The location whose parcel to enumerate.
-
-    Returns:
-        ``{"buildings": [...], "provider": "redata"|"osm"|"cris"}``, or ``{}`` when every provider answered and none
-        found anything. When REData named a source it could not hear from, or REData or a fallback could not be
-        reached, whatever is returned carries ``"unanswered_sources"``, so the cache keeps it only briefly.
-
-    Raises:
-        PropertyRecordsComputingError: REData is computing the parcel's list and named when it will have it, so no
-            fallback stands in for it and the caller asks again after the wait.
-        Exception: A provider could not be asked and no other found anything, so there is no answer to cache (see
-            ``is_source_outage``).
-    """
-    from urbanlens.dashboard.models.cache.location_cache import UNANSWERED_SOURCES_KEY
-    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
-    from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
-        ParcelBuildings,
-        PropertyRecordsComputingError,
-        PropertyRecordsUnavailableError,
-        RedataGateway,
-    )
-
-    latitude = float(location.latitude or 0)
-    longitude = float(location.longitude or 0)
-    outages: dict[str, Exception] = {}
-
-    answer = ParcelBuildings([])
-    if redata_configured():
-        try:
-            gateway = RedataGateway()
-            parcel_uuid = gateway.lookup_parcel_uuid(latitude, longitude)
-            answer = gateway.lookup_parcel_buildings(parcel_uuid) if parcel_uuid else answer
-        except PropertyRecordsComputingError:
-            raise
-        except PropertyRecordsUnavailableError as exc:
-            # handful of candidates, and exc_info would re-leak the exact coordinate
-            # from the failed request's own URL. See services/security/redact.py.
-            logger.debug("parcel_buildings: REData unavailable near %s,%s", redact_coordinate(latitude), redact_coordinate(longitude))
-            if is_source_outage(exc):
-                outages["redata"] = exc
-
-    partial = list(answer.unanswered_sources)
-
-    def marked(payload: dict[str, Any]) -> dict[str, Any]:
-        # Whatever stands in for a REData list missing a source, or for a provider that could not be reached, is a floor too.
-        unanswered = [*partial, *outages]
-        return {**payload, UNANSWERED_SOURCES_KEY: unanswered} if unanswered else payload
-
-    if answer.buildings:
-        return marked({"buildings": answer.buildings, "provider": "redata"})
-
-    osm_buildings = _asked("overpass", _overpass_buildings, location, outages)
-    cris_buildings = _asked("cris", _cris_buildings, location, outages)
-    if osm_buildings:
-        from urbanlens.dashboard.services.places.scope import parcel_polygon_for_location
-
-        return marked({"buildings": merge_cris_buildings(osm_buildings, cris_buildings, parcel_polygon_for_location(location)), "provider": "osm"})
-    if cris_buildings:
-        from urbanlens.dashboard.services.places.scope import parcel_polygon_for_location
-
-        merged = merge_cris_buildings([], cris_buildings, parcel_polygon_for_location(location))
-        if merged:
-            return marked({"buildings": merged, "provider": "cris"})
-    if outages:
-        raise next(iter(outages.values()))
-    return marked({"buildings": []}) if partial else {}
-
-
-def _asked(name: str, lookup: Callable[[Location], list[dict[str, Any]]], location: Location, outages: dict[str, Exception]) -> list[dict[str, Any]]:
-    """
-    One fallback's buildings, or none with its outage noted in ``outages``.
-
-    Args:
-        name: The fallback's name, as the payload's ``unanswered_sources`` gives it.
-        lookup: The fallback.
-        location: The location whose parcel to search.
-        outages: Where an outage is noted, by name.
-
-    Returns:
-        The fallback's buildings.
-    """
-    try:
-        return lookup(location)
-    except Exception as exc:
-        if not is_source_outage(exc):
-            raise
-        outages[name] = exc
-        return []
-
-
-def _cris_buildings(location: Location) -> list[dict[str, Any]]:
-    """
-    NY SHPO's inventoried buildings around the location's parcel, when REData's own list is out of reach.
-
-    REData's building list merges CRIS with OSM itself; this is the fallback's share of that, asked only in New
-    York and only when a real parcel bounds the search.
-
-    Args:
-        location: The location whose parcel to search.
-
-    Returns:
-        CRIS building resources, unfiltered by parcel, or ``[]``.
-
-    Raises:
-        PropertyRecordsUnavailableError: CRIS could not be asked.
-    """
-    from urbanlens.dashboard.plugins.builtin.cris_buildings import radius_covering
-    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
-    from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
-    from urbanlens.dashboard.services.geo.geo_boundary import state_boundary
-    from urbanlens.dashboard.services.places.scope import parcel_polygon_for_location
-
-    latitude, longitude = float(location.latitude or 0), float(location.longitude or 0)
-    if not redata_configured() or not state_boundary("NY").contains(latitude, longitude):
-        return []
-    polygon = parcel_polygon_for_location(location)
-    if polygon is None:
-        return []
-    from shapely import wkt as shapely_wkt
-
-    radius = min(radius_covering(shapely_wkt.loads(polygon.wkt), latitude, longitude), _MAX_CRIS_RADIUS_METERS)
-    try:
-        resources = RedataGateway().lookup_cultural_resources(latitude, longitude, radius_meters=radius, provider="ny_cris")
-    except PropertyRecordsUnavailableError as exc:
-        logger.debug("parcel_buildings: CRIS unavailable near %s,%s", redact_coordinate(latitude), redact_coordinate(longitude))
-        if is_source_outage(exc):
-            raise
-        return []
-    return [resource for resource in resources if isinstance(resource, dict) and resource.get("resource_type") == "building"]
-
-
-def merge_cris_buildings(osm_buildings: list[dict[str, Any]], cris_resources: list[dict[str, Any]], polygon: GEOSGeometry | None) -> list[dict[str, Any]]:
-    """
-    Fold CRIS's inventoried buildings into OSM's footprints, by REData's own reconciliation rules.
-
-    A footprint holding exactly one CRIS point is that building (the point lends its name when OSM has none).
-    A footprint holding several is an envelope over them: the points stay the buildings and name it their
-    ``parent_ref``. A point in no footprint is a building of its own. Points off the parcel are dropped.
-
-    Args:
-        osm_buildings: Overpass building records.
-        cris_resources: CRIS building resources from REData.
-        polygon: The parcel outline; None keeps every point.
-
-    Returns:
-        The OSM records (copied, possibly named or turned into envelopes) followed by the CRIS-only records.
-    """
-    from django.contrib.gis.geos import Point
-
-    from urbanlens.dashboard.services.pins.pin_restructure import building_footprint
-
-    records = [dict(building) for building in osm_buildings]
-    footprints = [building_footprint(building) for building in records]
-    held: dict[int, list[dict[str, Any]]] = {}
-    standalone: list[dict[str, Any]] = []
-    for resource in cris_resources:
-        latitude, longitude = resource.get("source_latitude"), resource.get("source_longitude")
-        if latitude is None or longitude is None:
-            continue
-        point = Point(float(longitude), float(latitude), srid=4326)
-        if polygon is not None and not polygon.contains(point):
-            continue
-        raw_attributes = resource.get("attributes")
-        attributes: dict[str, Any] = raw_attributes if isinstance(raw_attributes, dict) else {}
-        number = str(attributes.get("USNNum") or resource.get("external_id") or "").strip()
-        name = str(resource.get("name") or attributes.get("USNName") or "").strip()
-        if not number:
-            continue
-        record = {"name": name, "building_number": "", "latitude": float(latitude), "longitude": float(longitude), "ref": f"cris:{number}", "source": "cris"}
-        holder = next((index for index, footprint in enumerate(footprints) if footprint is not None and footprint.contains(point)), None)
-        if holder is None:
-            standalone.append(record)
-        else:
-            held.setdefault(holder, []).append(record)
-
-    for index, inside in held.items():
-        footprint_record = records[index]
-        if len(inside) == 1:
-            if not footprint_record.get("name"):
-                footprint_record["name"] = inside[0]["name"]
-            footprint_record["cris_ref"] = inside[0]["ref"]
-            continue
-        ref = footprint_record.get("ref") or f"osm:{footprint_record.get('osm_type') or 'way'}/{footprint_record.get('osm_id')}"
-        footprint_record["ref"] = ref
-        footprint_record["child_refs"] = [member["ref"] for member in inside]
-        for member in inside:
-            member["parent_ref"] = ref
-        standalone.extend(inside)
-    return records + standalone
 
 
 def _overpass_buildings(location: Location) -> list[dict[str, Any]]:
@@ -397,13 +199,31 @@ def _overpass_buildings(location: Location) -> list[dict[str, Any]]:
         return []
 
 
+class OverpassBuildingRecords(BuildingRecordProvider):
+    """The public source of building records: OpenStreetMap footprints inside the property boundary."""
+
+    key: ClassVar[str] = "overpass"
+    tag: ClassVar[str] = "osm"
+    place_namespace: ClassVar[str] = "osm"
+    accepts_supplements: ClassVar[bool] = True
+    service_keys: ClassVar[tuple[str, ...]] = ("overpass",)
+
+    def available(self) -> bool:
+        """Always: Overpass needs no credentials."""
+        return True
+
+    def buildings_on_parcel(self, location: Location) -> BuildingsAnswer:
+        """The OSM buildings inside the location's parcel."""
+        return BuildingsAnswer(_overpass_buildings(location))
+
+
 def building_rows(buildings: list[dict[str, Any]], children: list, url_for=None, boundary_polygon: GEOSGeometry | None = None) -> list[dict[str, Any]]:
     """
     Pair each known building with the child marker that already covers it.
     Matching goes through ``services.pins.building_clusters`` - the same grouping and matching auto-nest and the restructure suggestion use - so this panel's idea of "already pinned" can never drift from what they would actually create.
 
     Args:
-        buildings: Cached building records (see :func:`fetch_parcel_buildings`).
+        buildings: Cached building records (see :class:`~urbanlens.dashboard.services.places.building_records.BuildingRecord`).
         children: The marker's child markers at any depth, to match against.
         url_for: Optional callable turning a matched child into a link target; omit for child wikis, which are markers on their parent's page rather than pages of their own.
         boundary_polygon: The property's real (non-circle) boundary, when known.
@@ -494,7 +314,7 @@ def _building_row(building: dict[str, Any], record_index: int, child: Any, url_f
 def unpinned_building_child_rows(unmatched_children: list, url_for=None) -> list[dict[str, Any]]:
     """
     Row-shape a leftover ``BUILDING`` child pin/wiki that no known building record covers.
-    ``building_rows``' matching loop only ever *consumes* markers that cover an external building record - a ``BUILDING`` pin the owner created by hand (REData/OSM never reported it, or the parcel has no external data at all) is simply never mentioned.
+    ``building_rows``' matching loop only ever *consumes* markers that cover an external building record - a ``BUILDING`` pin the owner created by hand (no source ever reported it, or the parcel has no external data at all) is simply never mentioned.
 
     Args:
         unmatched_children: The ``unmatched`` list :func:`match_buildings_to_children` returned - children with no external building record.
@@ -629,7 +449,7 @@ def building_list_cached(location: Location) -> None:
 
     The moment the list lands is the moment the default structure can be built - every building becomes a child pin
     with no dialog. On a campus it also says which building each pinned location stands on, so those given no wiki of
-    their own while the campus's stood in for it get their building's (P265).
+    their own while the campus's stood in for it get their building's.
 
     Args:
         location: The Location the list was cached for.
@@ -755,16 +575,18 @@ class ParcelBuildingsEnrichmentSource(LocationCacheEnrichmentSource):
     key: ClassVar[str] = PARCEL_BUILDINGS_CACHE_SOURCE
     verbose_name: ClassVar[str] = "Buildings on the parcel"
     cache_source: ClassVar[str] = PARCEL_BUILDINGS_CACHE_SOURCE
-    service_keys: ClassVar[tuple[str, ...]] = ("redata_api", "overpass")
     calls_per_item: ClassVar[int] = 2
+
+    @property
+    def service_keys(self) -> tuple[str, ...]:
+        """What the providers that can be asked spend."""
+        return service_keys()
 
     def gate(self) -> bool:
         """
-        Requires REData to be configured - this source has no other backend.
-        Without it the cycle picks candidates, every fetch raises, and the run logs one exception per location."""
-        from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
-
-        return redata_configured()
+        Requires a provider the background cycle may ask for every location; the public one is too costly to ask of all of them.
+        Without one the cycle picks candidates, every fetch comes back empty, and the run caches an empty list for each location."""
+        return bulk_enrichment_available()
 
     def fetch(self, location: Location) -> tuple[dict | None, str]:
         """Enumerate the location's parcel buildings and return them for caching."""
@@ -779,27 +601,25 @@ class ParcelBuildingsEnrichmentSource(LocationCacheEnrichmentSource):
 
 
 class ParcelBuildingsPlugin(UrbanLensPlugin):
-    """Lists every building standing on a pinned property, via REData or OpenStreetMap."""
+    """Lists every building standing on a pinned property, from the sources that contribute building records."""
 
     name: ClassVar[str] = "parcel_buildings"
     verbose_name: ClassVar[str] = "Parcel Buildings"
     description: ClassVar[str] = (
-        "Enumerates every building on a pin's parcel - names and building numbers from REData "
-        "(county GIS building-footprint layers plus NY SHPO CRIS), falling back to OpenStreetMap "
-        "footprints inside the property boundary. Powers the 'Buildings on this Property' panel, the "
+        "Enumerates every building on a pin's parcel - OpenStreetMap footprints inside the property "
+        "boundary, plus whatever other sources contribute building records. Powers the 'Buildings on this Property' panel, the "
         "offer to bulk-create child pins for a multi-building site, and automatic building "
         "classification of child pins."
     )
     author: ClassVar[str] = "UrbanLens"
 
-    # No get_service_defaults() override - both providers' service keys
-    # ("redata_api", "overpass") are already registered by
-    # plugins.builtin.property_records and the boundary provider chain.
+    # No service defaults of its own: the Overpass service key is registered by the boundary provider chain.
 
-    def get_panel_sources(self) -> list[PanelSource]:
-        """Contribute the parcel buildings pin-detail panel."""
-        return [ParcelBuildingsPanelSource()]
+    def setup(self, plugin: PluginContext) -> None:
+        """The parcel buildings pin-detail panel and background fill of parcel buildings for every pinned or wiki'd Location."""
+        from urbanlens.dashboard.plugins.points import BUILDING_RECORD_PROVIDERS, ENRICHMENT_SOURCES, PANEL_SOURCES
 
-    def get_enrichment_sources(self) -> list[EnrichmentSource]:
-        """Contribute background-fill of parcel buildings for every pinned/wiki'd Location."""
-        return [ParcelBuildingsEnrichmentSource()]
+        plugin.extend(PANEL_SOURCES, [ParcelBuildingsPanelSource()])
+        plugin.add(BUILDING_RECORD_PROVIDERS, OverpassBuildingRecords(), priority=100)
+
+        plugin.extend(ENRICHMENT_SOURCES, [ParcelBuildingsEnrichmentSource()])

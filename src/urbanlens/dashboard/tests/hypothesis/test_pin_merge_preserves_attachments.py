@@ -154,11 +154,13 @@ class PinMergePreservesAttachmentsTests(TestCase):
         """
         The completeness arm: the next model with a parent_pin fails here.
 
-        A relation that CASCADEs from Pin and is never mentioned in the merge is deleted along with the loser."""
+        A relation that CASCADEs from Pin and is never mentioned in the merge is deleted along with the loser. A
+        plugin's own models are its to carry, through ``PIN_ABSORBING``."""
         source = inspect.getsource(pin_merge)
         unhandled = sorted(
             rel.related_model.__name__
             for rel in Pin._meta.related_objects
+            if rel.related_model._meta.app_label == Pin._meta.app_label
             # M2M relations expose no on_delete; their through rows carry no user
             # data of their own, and the one M2M that matters (labels) is merged.
             if getattr(getattr(rel.field.remote_field, "on_delete", None), "__name__", "") == "CASCADE"

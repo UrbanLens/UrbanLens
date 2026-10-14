@@ -25,11 +25,7 @@
             <button type="button" class="settings-tab ul-subnav-tab" data-tab="map" role="tab" aria-selected="false">
                 <i class="material-symbols-outlined">map</i> Theme
             </button>
-            {% if can_use_ai_features %}
-            <button type="button" class="settings-tab ul-subnav-tab" data-tab="ai" role="tab" aria-selected="false">
-                <i class="material-symbols-outlined">auto_awesome</i> AI
-            </button>
-            {% endif %}
+            {% plugin_slot "settings.tabs" %}
             <button type="button" class="settings-tab ul-subnav-tab" data-tab="account" role="tab" aria-selected="false">
                 <i class="material-symbols-outlined">manage_accounts</i> Account
             </button>
@@ -219,14 +215,14 @@
                 </div>
                 <div class="settings-field">
                     <label class="settings-toggle-row">
-                        {{ community_form.show_supporter_badge }}
+                        {{ community_form.show_member_badge }}
                         <span class="settings-toggle-label">
-                            <strong>{{ community_form.show_supporter_badge.label }}</strong>
-                            <span class="settings-help">{{ community_form.show_supporter_badge.help_text }}</span>
+                            <strong>{{ community_form.show_member_badge.label }}</strong>
+                            <span class="settings-help">{{ community_form.show_member_badge.help_text }}</span>
                         </span>
                     </label>
-                    {% if community_form.show_supporter_badge.errors %}
-                    <p class="settings-error">{{ community_form.show_supporter_badge.errors|join:", " }}</p>
+                    {% if community_form.show_member_badge.errors %}
+                    <p class="settings-error">{{ community_form.show_member_badge.errors|join:", " }}</p>
                     {% endif %}
                 </div>
                 {% if not community_form.instance.community_enabled %}
@@ -484,7 +480,7 @@
                     {% endif %}
                 </div>
                 {% if not external_api_form.instance.external_apis_enabled %}
-                <p class="settings-help">Weather, geocoding, place-data panels, and AI features are unavailable while this is off. AI and Places sources below can still be turned back on individually.</p>
+                <p class="settings-help">Weather, geocoding, place-data panels, and the other features that call outside services are unavailable while this is off. Individual sources below can still be turned back on.</p>
                 {% endif %}
 
                 <div class="settings-actions">
@@ -605,7 +601,7 @@
             <i class="material-symbols-outlined">sell</i>
             <div>
                 <h2 class="settings-section-title">Keyword Tagging</h2>
-                <p class="settings-section-desc">Free, local keyword matching that can auto-tag pins - no AI subscription needed.</p>
+                <p class="settings-section-desc">Free, local keyword matching that can auto-tag pins - no subscription needed.</p>
             </div>
         </div>
 
@@ -626,7 +622,7 @@
                 {% endif %}
             </div>
 
-            <div class="settings-ai-sub-options" id="keyword-tagging-sub-options" data-enabled-by="{{ keyword_tagging_form.keyword_tagging_enabled.id_for_label }}">
+            <div class="settings-sub-options" id="keyword-tagging-sub-options" data-enabled-by="{{ keyword_tagging_form.keyword_tagging_enabled.id_for_label }}">
                 <p class="settings-help" style="margin-bottom:0.75rem;">When a pin is created, matching keywords can automatically add these label types:</p>
 
                 <div class="settings-field">
@@ -1304,84 +1300,7 @@
     </section>
     </div> {# /tab-panel-map #}
 
-    {# AI tab (only exists for users whose subscription grants AI features) #}
-    {% if can_use_ai_features %}
-    <div class="settings-tab-panel" data-tab-panel="ai" id="tab-panel-ai">
-
-    {# -- AI Features ----------------------------------------------------------- #}
-    <section class="settings-section ul-section" id="ai-settings-section">
-        <div class="settings-section-header">
-            <i class="material-symbols-outlined">auto_awesome</i>
-            <div>
-                <h2 class="settings-section-title">AI Features</h2>
-                <p class="settings-section-desc">Everything AI-related in one place. Turning the master switch off disables all AI features on your account at once.</p>
-            </div>
-        </div>
-
-        <form method="post" class="settings-form" id="ai-form">
-            {% csrf_token %}
-            <input type="hidden" name="section" value="ai">
-
-            <div class="settings-field">
-                <label class="settings-toggle-row">
-                    {{ ai_form.ai_enabled }}
-                    <span class="settings-toggle-label">
-                        <strong>{{ ai_form.ai_enabled.label }}</strong>
-                        <span class="settings-help">{{ ai_form.ai_enabled.help_text }}</span>
-                    </span>
-                </label>
-                {% if ai_form.ai_enabled.errors %}
-                <p class="settings-error">{{ ai_form.ai_enabled.errors|join:", " }}</p>
-                {% endif %}
-            </div>
-
-            <div class="settings-ai-sub-options" id="ai-sub-options" data-enabled-by="{{ ai_form.ai_enabled.id_for_label }}">
-                <p class="settings-help" style="margin-bottom:0.75rem;">When a pin is created, AI can automatically add these label types:</p>
-
-                <div class="settings-field">
-                    <label class="settings-toggle-row">
-                        {{ ai_form.ai_label_categories }}
-                        <span class="settings-toggle-label">
-                            <strong>{{ ai_form.ai_label_categories.label }}</strong>
-                            <span class="settings-help">{{ ai_form.ai_label_categories.help_text }}</span>
-                        </span>
-                    </label>
-                </div>
-
-                <div class="settings-field">
-                    <label class="settings-toggle-row">
-                        {{ ai_form.ai_label_tags }}
-                        <span class="settings-toggle-label">
-                            <strong>{{ ai_form.ai_label_tags.label }}</strong>
-                            <span class="settings-help">{{ ai_form.ai_label_tags.help_text }}</span>
-                        </span>
-                    </label>
-                </div>
-
-                <div class="settings-field">
-                    <label class="settings-toggle-row">
-                        {{ ai_form.ai_label_statuses }}
-                        <span class="settings-toggle-label">
-                            <strong>{{ ai_form.ai_label_statuses.label }}</strong>
-                            <span class="settings-help">{{ ai_form.ai_label_statuses.help_text }}</span>
-                        </span>
-                    </label>
-                </div>
-
-                <p class="settings-help" style="margin:0.75rem 0 0;">
-                    AI can also read external links on your Private Pin pages to fill in supported fields -
-                    look for the <i class="material-symbols-outlined" aria-hidden="true" style="font-size:1rem;vertical-align:middle;">auto_awesome</i>
-                    button next to each link. Results are reviewable on the page linked from each completion notification.
-                </p>
-            </div>
-
-            <div class="settings-actions">
-                <button type="submit" class="settings-save-btn">Save</button>
-            </div>
-        </form>
-    </section>
-    </div> {# /tab-panel-ai #}
-    {% endif %}
+    {% plugin_slot "settings.tab_panels" %}
 
     {# Account tab #}
     <div class="settings-tab-panel" data-tab-panel="account" id="tab-panel-account">
@@ -1407,7 +1326,7 @@
         </div>
     </section>
 
-    {% plugin_slot "settings.membership" %}
+    {% plugin_slot "settings.sections" %}
 
     {# -- Storage --------------------------------------------------------------- #}
     <section class="settings-section ul-section" id="storage-settings-section">

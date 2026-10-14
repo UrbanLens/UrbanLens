@@ -50,7 +50,7 @@ class MultipleFileFieldCleanTests(SimpleTestCase):
     def _field(self) -> _MultipleFileField:
         return _MultipleFileField(required=True)
 
-    def _file(self, name: str = "test.txt", content: bytes = b"data") -> SimpleUploadedFile:
+    def _file(self, name: str = "test.csv", content: bytes = b"data") -> SimpleUploadedFile:
         return SimpleUploadedFile(name, content)
 
     def test_empty_list_raises_validation_error(self) -> None:
@@ -71,7 +71,7 @@ class MultipleFileFieldCleanTests(SimpleTestCase):
         self.assertEqual(len(result), 1)
 
     def test_multiple_files_return_all(self) -> None:
-        files = [self._file("a.txt"), self._file("b.txt")]
+        files = [self._file("a.csv"), self._file("b.csv")]
         result = self._field().clean(files)
         self.assertEqual(len(result), 2)
 
@@ -143,7 +143,7 @@ class MultipleFileFieldFalsyFilterTests(SimpleTestCase):
     def _field(self) -> _MultipleFileField:
         return _MultipleFileField(required=True)
 
-    def _file(self, name: str = "test.txt") -> SimpleUploadedFile:
+    def _file(self, name: str = "test.csv") -> SimpleUploadedFile:
         return SimpleUploadedFile(name, b"content")
 
     def test_falsy_entries_are_filtered_out(self) -> None:

@@ -38,10 +38,6 @@ class PinOnCachedMatchTests(TestCase):
 
         pin = baker.make(Pin, profile=self.profile, location=self.location, name="my notes")
         with (
-            mock.patch(
-                "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured",
-                return_value=False,
-            ),
             mock.patch("urbanlens.dashboard.services.locations.naming.update_location_name_from_external_sources"),
             self.captureOnCommitCallbacks(execute=True),
         ):

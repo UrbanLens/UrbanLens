@@ -8,8 +8,10 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
+from urbanlens.dashboard.plugins.drf import ExtensibleSerializer
 
-class PanelListEntrySerializer(serializers.Serializer):
+
+class PanelListEntrySerializer(ExtensibleSerializer):
     """One panel available on a pin, from the ``panels/`` listing endpoint."""
 
     key = serializers.CharField(read_only=True)
@@ -17,7 +19,7 @@ class PanelListEntrySerializer(serializers.Serializer):
     ready = serializers.BooleanField(read_only=True, help_text="True once the panel has an answer: its detail returns 200 with the data, or 204 when there is nothing to show.")
 
 
-class PanelPendingSerializer(serializers.Serializer):
+class PanelPendingSerializer(ExtensibleSerializer):
     """Body of a 202 response: the panel's fetch was just scheduled or is already in flight."""
 
     ready = serializers.BooleanField(default=False)

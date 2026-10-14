@@ -1,4 +1,4 @@
-"""Tests for full-account single-file pin downloads (UL-382) and emailed exports (UL-373)."""
+"""Tests for full-account single-file pin downloads and emailed exports."""
 
 from __future__ import annotations
 

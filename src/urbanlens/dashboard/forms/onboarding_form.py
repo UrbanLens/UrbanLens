@@ -91,7 +91,6 @@ class WelcomeOnboardingForm(forms.ModelForm):
             instance.places_google_enabled = False
             instance.places_nps_enabled = False
             instance.places_wikipedia_enabled = False
-            instance.ai_enabled = False
 
         instance.tos_accepted_at = timezone.now()
 

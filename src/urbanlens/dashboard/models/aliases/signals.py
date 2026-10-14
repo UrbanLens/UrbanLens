@@ -101,7 +101,7 @@ def invalidate_name_sensitive_cache_for_new_wiki_alias(sender: type[WikiAlias], 
     Drop the location's shared Wikipedia/Wikimedia rows when a new wiki alias appears.
 
     A missing row reads as "never queried" (see ``LocationCache``), so the next panel view looks again
-    with the wider name set. A pin's own alias changes only its own audience's searches (P188), so it
+    with the wider name set. A pin's own alias changes only its own audience's searches, so it
     drops nothing here.
     """
     if not created:

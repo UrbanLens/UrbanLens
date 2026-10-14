@@ -85,7 +85,7 @@
                 </div>
                 {% with recorded=visit_weather|dict_get:visit.pk %}
                 {% if recorded.summary %}
-                <div class="visit-weather" title="What the weather actually was that day (ERA5 reanalysis, via REData)">
+                <div class="visit-weather" title="What the weather actually was that day (ERA5 reanalysis)">
                     <i class="material-symbols-outlined">thermostat</i>
                     <span>{{ recorded.summary }}</span>
                 </div>

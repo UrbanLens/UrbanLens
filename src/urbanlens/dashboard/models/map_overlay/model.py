@@ -46,7 +46,7 @@ class MapImageOverlay(abstract.FrontendDashboardModel):
             working when the provider's URL rots).
         tile_url_template: An XYZ tile URL template (``.../{z}/{x}/{y}.png``)
             instead of an image - used for already-georeferenced historical
-            maps served as warped tile pyramids (REData's ``/maps/``, via
+            maps served as warped tile pyramids (from an ``OverlaySource``, via
             UrbanLens's tile proxy). A tile overlay is pre-placed by its
             georeference, so the corner handles don't apply to it; the corner
             fields store its bounds for zoom-to-extent. Exactly one of

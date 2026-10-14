@@ -1,4 +1,4 @@
-"""A direct-message photo still being re-encoded is a placeholder, never its doomed raw file (P142)."""
+"""A direct-message photo still being re-encoded is a placeholder, never its doomed raw file."""
 
 from __future__ import annotations
 

@@ -17,6 +17,8 @@ from django.conf import settings
 from django.db import connections, transaction
 from psycopg import sql
 
+from urbanlens.dashboard.plugins.points import DATABASE_ROLES
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
@@ -115,10 +117,10 @@ def declared_roles() -> tuple[DatabaseRole, ...]:
         DatabaseRole("bulk", 4, task_deadline, frozenset({"pg_read_all_data"})),
         DatabaseRole("panels", 21, task_deadline),
         DatabaseRole("sandbox", 5, task_deadline),
-        DatabaseRole("ai", 3, task_deadline),
         DatabaseRole("beat", 1, REQUEST_DEADLINE_SECONDS),
         DatabaseRole("metrics", 1, REQUEST_DEADLINE_SECONDS),
     )
+    roles = (*roles, *DATABASE_ROLES.items())
     if settings.UL_DB_ROLES_POOLED:
         return tuple(replace(role, connection_limit=UNLIMITED_CONNECTIONS) for role in roles)
     return roles

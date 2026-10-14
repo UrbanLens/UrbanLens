@@ -4,7 +4,7 @@ Read an nginx config as directives-in-blocks, rather than as text.
 Every guard the repo had over these files was an `assertIn` against whole-file
 text, which cannot see which block a directive landed in - so a `limit_conn_zone`
 placed in `events{}` instead of `http{}` passed all three of them while nginx
-refused to start (N22 H59).
+refused to start.
 
 `bin/check_nginx_config.sh` asks nginx itself, which is the complete answer;
 this exists so the rules we know to look for are also enforced where Docker is

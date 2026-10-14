@@ -1,4 +1,4 @@
-"""Fold a burst of trip or wiki changes into one notification with a count (P197)."""
+"""Fold a burst of trip or wiki changes into one notification with a count."""
 
 from django.db import migrations, models
 

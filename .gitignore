@@ -10,6 +10,10 @@ __pycache__/
 **/frontend/static/**/*.css
 **/frontend/static/**/*.css.map
 **/frontend/static/*/js/
+# Built from each package plugin's frontend/ sources.
+/src/urbanlens/plugins/*/static/*/js/
+/src/urbanlens/plugins/*/static/**/*.css
+/src/urbanlens/plugins/*/static/**/*.css.map
 src/urbanlens/media/
 .codeql/
 .sqlmap/
@@ -27,6 +31,7 @@ package-lock.json
 
 # Temporary files
 *.out
+/unused_functions.txt
 *.tmp
 *.swp
 .*cache
@@ -64,3 +69,4 @@ sample_data/Google Takeout.csv
 # Sphinx output
 docs/_build/
 docs/api/
+/.claude/worktrees/

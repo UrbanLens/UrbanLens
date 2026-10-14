@@ -254,7 +254,7 @@ class TripCreateViewTests(TestCase):
 
     def test_post_without_name_generates_a_placeholder(self):
         """
-        A blank name is accepted and gets a generated one (UL-360).
+        A blank name is accepted and gets a generated one.
 
         The behavior itself now lives in ``services.trips.trip_crud.create_trip``."""
         before = set(Trip.objects.values_list("pk", flat=True))

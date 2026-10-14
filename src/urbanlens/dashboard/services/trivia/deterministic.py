@@ -46,7 +46,7 @@ def _year_built_questions(location: Location, buildings: list[dict], *, complete
     """
     One question per named building whose records date that building itself.
 
-    A year that is the parcel's, or whose basis REData did not say (``services.pins.build_dates.own_build_year``),
+    A year that is the parcel's, or whose basis the record did not say (``services.pins.build_dates.own_build_year``),
     would assert one building's year from its parcel's, so it asks nothing. A question the records no longer support
     is withdrawn, and one withdrawn that way is approved again, with the records' year, once they do. A list that is
     not ``complete`` withdraws only the questions about buildings it names: one it leaves out may stand there yet.
@@ -128,7 +128,7 @@ def generate_deterministic_questions(location: Location) -> list[TriviaQuestion]
     buildings = cached.buildings
     questions = [*_year_built_questions(location, buildings, complete=cached.complete), *_building_number_questions(location, buildings)]
 
-    # A count is asked once and never corrected, so only a list REData answered in full may set it.
+    # A count is asked once and never corrected, so only a list every source answered in full may set it.
     count_question = _building_count_question(location, buildings) if cached.complete else None
     if count_question is not None:
         questions.append(count_question)

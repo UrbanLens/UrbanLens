@@ -322,7 +322,7 @@ class LocationDetailPinJsonView(LoginRequiredMixin, View):
             return JsonResponse({"detail_pins": []})
         # This is the endpoint the wiki page's Leaflet map actually fetches (wiki.html's
         # data-detail-pins-json-url, loaded at map init), so it carries the same rule as the panel below.
-        from urbanlens.dashboard.services.wiki.concealment import visible_rows
+        from urbanlens.dashboard.services.wiki.viewer_projection import visible_rows
 
         include_children = request.GET.get("children") == "1"
         child_qs = wiki.descendants().select_related("location", "parent_wiki") if include_children else wiki.child_wikis.select_related("location")
@@ -345,11 +345,11 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
     """
 
     def get(self, request, location_slug):
-        from urbanlens.dashboard.services.wiki.concealment import visible_rows
+        from urbanlens.dashboard.services.wiki.viewer_projection import visible_rows
 
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
-        # Same filter as the JSON endpoint above: a concealed viewer keeps their own detail pins and their
-        # friends', and the ones mirrored from building data, and loses strangers'.
+        # Same filter as the JSON endpoint above: the viewer's projection of the wiki decides which
+        # detail pins they are shown.
         child_wikis = visible_rows(wiki.child_wikis.select_related("location"), wiki, profile).order_by("pin_type", "name")
         return render(
             request,
@@ -389,10 +389,10 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
                 status=400,
             )
 
-        # The real row's name for the fallback: `wiki` may be a concealed projection, and its name is the
-        # automatic placeholder this viewer was shown - persisting that as a community child wiki's name would
-        # write concealment into shared content.
-        from urbanlens.dashboard.services.wiki.concealment import writable_wiki
+        # The real row's name for the fallback: `wiki` may be a viewer's projection, and its name is the
+        # one this viewer was shown - persisting that as a community child wiki's name would write the projection
+        # into shared content.
+        from urbanlens.dashboard.services.wiki.viewer_projection import writable_wiki
 
         child_name = text_field(body, "name") or writable_wiki(wiki).name
         name_error = column_length_error(Wiki, "name", child_name, "Name")

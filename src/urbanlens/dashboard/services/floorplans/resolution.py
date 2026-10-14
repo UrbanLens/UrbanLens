@@ -1,11 +1,14 @@
 """
-Which floorplan a building shows: the user's own first, REData's as backfill.
-When only REData answers, its document is returned read-only (``"origin": "redata"``) rather than silently copied into rows, so a future better upstream version is never shadowed by a stale mirror."""
+Which floorplan a building shows: the user's own first, an upstream provider's as backfill.
+When only a provider answers, its document is returned read-only (its ``origin`` key) rather than silently copied into rows, so a future better upstream version is never shadowed by a stale mirror."""
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
+
+from urbanlens.dashboard.plugins.points import FLOORPLAN_PROVIDERS
 
 if TYPE_CHECKING:
     import datetime as dt
@@ -17,10 +20,51 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+class FloorplanProvider(ABC):
+    """An upstream source of floorplans for a building, contributed by a plugin to ``points.FLOORPLAN_PROVIDERS``."""
+
+    #: The ``origin`` the documents it returns carry.
+    origin: ClassVar[str]
+    #: Said in the editor of a document of this origin, which is read-only until saved as the viewer's own.
+    origin_banner: ClassVar[str]
+
+    def available(self) -> bool:
+        """Whether the provider can be asked on this install."""
+        return True
+
+    @abstractmethod
+    def document(self, place: Place, on_date: dt.date | None) -> dict[str, Any] | None:
+        """
+        The provider's plan for the building, or None for any form of absence.
+
+        A floorplan is never load-bearing for a page, so upstream trouble reads as no plan.
+
+        Args:
+            place: The building.
+            on_date: Resolve the plan as of this date; None for current.
+        """
+
+    def building_ref(self, place: Place) -> str:
+        """
+        The ref a plan saved for ``place`` carries so the provider's later plans find it, or blank.
+
+        Args:
+            place: The building.
+        """
+        return ""
+
+
+def provider_building_ref(place: Place | None) -> str:
+    """The first non-blank ref a provider gives a plan saved for ``place``."""
+    if place is None:
+        return ""
+    return next((ref for provider in FLOORPLAN_PROVIDERS if (ref := provider.building_ref(place))), "")
+
+
 def resolve_document(place: Place, *, profile: Profile | None = None, on_date: dt.date | None = None) -> dict[str, Any] | None:
     """
     The floorplan document for a building, resolved by date.
-    So local lookup is profile-scoped, and REData's aggregated plans - external, non-personal by construction - are what a user without their own plan sees.
+    So local lookup is profile-scoped, and a provider's aggregated plans - external, non-personal by construction - are what a user without their own plan sees.
 
     Args:
         place: The building.
@@ -28,7 +72,7 @@ def resolve_document(place: Place, *, profile: Profile | None = None, on_date: d
         on_date: Resolve the plan as of this date; None for current.
 
     Returns:
-        The document with an ``origin`` key (``"local"`` or ``"redata"``), or None when neither side has a plan - the overwhelmingly common case, answered by one indexed query and, at most, one upstream call."""
+        The document with an ``origin`` key (``"local"``, ``"community"`` or a provider's) and, for a provider's, an ``origin_banner``, or None when no side has a plan - the overwhelmingly common case, answered by one indexed query and, at most, one upstream call."""
     from urbanlens.dashboard.models.floorplans.model import Floorplan
     from urbanlens.dashboard.services.floorplans.serialization import document_for
 
@@ -40,7 +84,7 @@ def resolve_document(place: Place, *, profile: Profile | None = None, on_date: d
     if community is not None:
         return {**document_for(community), "origin": "community"}
 
-    return _redata_document(place, on_date)
+    return _provider_document(place, on_date)
 
 
 def resolve_floorplan_row(place: Place, *, profile: Profile | None = None, on_date: dt.date | None = None) -> Floorplan | None:
@@ -77,34 +121,19 @@ def _community_plan(place: Place, profile: Profile | None, on_date: dt.date | No
     return Floorplan.objects.at(place, on_date, community=True)
 
 
-def _redata_document(place: Place, on_date: dt.date | None) -> dict[str, Any] | None:
-    """
-    REData's plan for this building, or None for any form of absence.
-    The parcel uuid comes from the building place's parent parcel when that was provisioned from REData; without one there is nothing to ask."""
-    from urbanlens.dashboard.services.apis.property_records.redata_gateway import RedataGateway
-    from urbanlens.UrbanLens.settings.app import settings
-
-    if place.provider != "redata" or not place.provider_key:
-        return None
-    if not settings.redata_api_url or not settings.redata_api_key:
-        return None
-    parcel = place.parent if place.parent_id else None
-    if parcel is None or parcel.provider != "redata" or not parcel.provider_key:
-        return None
-    try:
-        gateway = RedataGateway()
-        summaries = gateway.lookup_floorplans(parcel.provider_key, building_ref=place.provider_key, on_date=on_date.isoformat() if on_date else None)
-        if not summaries:
-            return None
-        document = gateway.lookup_floorplan_document(str(summaries[0].get("uuid") or ""))
-    except Exception:
-        # A floorplan is never load-bearing for a page; upstream trouble reads
-        # as "no plan" and the local editor still works.
-        logger.debug("floorplans: REData lookup failed for %s", place.provider_key, exc_info=True)
-        return None
-    if document is None:
-        return None
-    return {**document, "origin": "redata"}
+def _provider_document(place: Place, on_date: dt.date | None) -> dict[str, Any] | None:
+    """The first provider's plan for this building, or None for any form of absence."""
+    for provider in FLOORPLAN_PROVIDERS:
+        if not provider.available():
+            continue
+        try:
+            document = provider.document(place, on_date)
+        except Exception:
+            logger.debug("floorplans: %s lookup failed for %s", provider.origin, place.provider_key, exc_info=True)
+            continue
+        if document is not None:
+            return {**document, "origin": provider.origin, "origin_banner": provider.origin_banner}
+    return None
 
 
 def publish_to_wiki(floorplan: Floorplan, profile: Profile) -> Floorplan | None:
@@ -222,5 +251,5 @@ def floorplan_for_editing(
         pin=pin,
         profile=profile,
         valid_from=on_date,
-        building_ref=place.provider_key if place is not None and place.provider == "redata" else "",
+        building_ref=provider_building_ref(place),
     )

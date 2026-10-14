@@ -1,7 +1,7 @@
 """
 The global-search panel takes whatever the client types, as fast as it types it.
 
-Two findings on the same view (N21 H42 and H49). The panel is fired per
+The panel is fired per
 keystroke, and each fire hands one query to ~11 providers, each running a
 trigram-similarity scan over the account's rows that no index helps. The same
 engine's public API surface caps the query at 250 characters specifically to

@@ -1,5 +1,5 @@
 """
-Community wiki editing routes: album membership, overlays, layers, markup, stat votes and the article preview (P29).
+Community wiki editing routes: album membership, overlays, layers, markup, stat votes and the article preview.
 
 Each asserts what a viewer of the wiki may do, that someone who cannot see the wiki is refused and nothing changes,
 that anonymous is sent to log in, and that a malformed body is a 4xx.

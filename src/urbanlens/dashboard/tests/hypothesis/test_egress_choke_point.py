@@ -1,5 +1,5 @@
 """
-The egress policy is applied where every external call passes (D26), and a refusal is neither failure nor deferral.
+The egress policy is applied where every external call passes, and a refusal is neither failure nor deferral.
 
 ``_reserve_call``, ``api_call_slot`` and the rate-limited session refuse with ``EnvironmentRefusedError`` before
 anything is sent or recorded; ``service_is_enabled`` answers the callers that ask first.
@@ -13,12 +13,14 @@ import logging
 from unittest import mock
 
 from django.test import override_settings
+import pytest
 import requests
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.api_call_log.model import ApiCallLog
 from urbanlens.dashboard.models.api_rate_limit.model import ApiRateLimit
 from urbanlens.dashboard.services.core import egress, rate_limiter
+from urbanlens.dashboard.services.core.egress import EgressCategory
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError, is_source_outage
 from urbanlens.dashboard.services.core.rate_limiter import (
     EnvironmentRefusedError,
@@ -32,10 +34,20 @@ from urbanlens.dashboard.services.core.rate_limiter import (
 
 QUOTA = "nominatim"
 BILLED = "google_geocoding"
-REDATA = "redata_geocode"
-AI = "trivia_moderation"
+FIRST_PARTY = "first_party_probe"
+DEPLOYED = "deployed_probe"
 MESSAGING = "sms"
 PUBLIC_WRITE = "wayback_save"
+
+
+@pytest.fixture(autouse=True)
+def _classify_first_party_probe() -> Iterator[None]:
+    """No core service is first-party or deployed-only (a plugin supplies them), so classify one of each here."""
+    egress.forget_categories()
+    probes = {FIRST_PARTY: EgressCategory.FIRST_PARTY, DEPLOYED: EgressCategory.DEPLOYED}
+    with mock.patch.dict(egress.UNREGISTERED_SERVICES, probes):
+        yield
+    egress.forget_categories()
 
 
 @contextlib.contextmanager
@@ -106,21 +118,19 @@ class ChokePointTests(TestCase):
         self.assertFalse(ApiCallLog.objects.exists())
         self.assertFalse(ApiRateLimit.objects.filter(service__in=(QUOTA, BILLED)).exists())
 
-    def test_development_still_calls_redata_and_a_local_model(self) -> None:
+    def test_development_still_calls_first_party(self) -> None:
         with deployment("development"):
-            _reserve_call(REDATA, endpoint="x")
-            _reserve_call("ollama", endpoint="x")
-        self.assertEqual(ApiCallLog.objects.count(), 2)
+            _reserve_call(FIRST_PARTY, endpoint="x")
+        self.assertEqual(ApiCallLog.objects.count(), 1)
 
-    def test_development_refuses_hosted_ai_the_same_way(self) -> None:
-        """Jess, 2026-10-06; ``test_egress_hosted_ai`` covers every feature, provider and the transport."""
+    def test_development_refuses_a_deployed_only_service_the_same_way(self) -> None:
         with deployment("development"), self.assertRaises(EnvironmentRefusedError):
-            _reserve_call(AI, endpoint="x")
+            _reserve_call(DEPLOYED, endpoint="x")
         self.assertFalse(ApiCallLog.objects.exists())
 
-    def test_staging_still_calls_hosted_ai(self) -> None:
+    def test_staging_still_calls_a_deployed_only_service(self) -> None:
         with deployment("staging"):
-            _reserve_call(AI, endpoint="x")
+            _reserve_call(DEPLOYED, endpoint="x")
         self.assertEqual(ApiCallLog.objects.count(), 1)
 
     def test_staging_and_development_refuse_messaging_and_public_writes(self) -> None:
@@ -135,7 +145,7 @@ class ChokePointTests(TestCase):
 
     def test_production_calls_every_category(self) -> None:
         with deployment("production"):
-            for service in (QUOTA, BILLED, REDATA, AI, MESSAGING, PUBLIC_WRITE):
+            for service in (QUOTA, BILLED, FIRST_PARTY, DEPLOYED, MESSAGING, PUBLIC_WRITE):
                 with self.subTest(service=service):
                     egress.require_egress(service)
 
@@ -143,7 +153,7 @@ class ChokePointTests(TestCase):
         enabled_row = mock.Mock(enabled=True)
         with deployment("development"):
             self.assertFalse(service_is_enabled(QUOTA, config=enabled_row))
-            self.assertTrue(service_is_enabled(REDATA, config=enabled_row))
+            self.assertTrue(service_is_enabled(FIRST_PARTY, config=enabled_row))
 
     def test_the_session_refuses_before_the_wire(self) -> None:
         session = _RateLimitedSession(QUOTA)
@@ -174,11 +184,11 @@ class ChokePointTests(TestCase):
             _reserve_call(BILLED, endpoint="x")
 
     def test_demo_mode_no_longer_decides_egress(self) -> None:
-        """Its REData exemption is replaced by the policy; the login endpoint and banner are its business still."""
+        """Its first-party exemption is replaced by the policy; the login endpoint and banner are its business still."""
         with deployment("production"), mock.patch("urbanlens.UrbanLens.settings.app.settings.demo_mode", True):
             egress.require_egress(QUOTA)
         with deployment("development"), mock.patch("urbanlens.UrbanLens.settings.app.settings.demo_mode", True):
-            egress.require_egress(REDATA)
+            egress.require_egress(FIRST_PARTY)
             with self.assertRaises(EnvironmentRefusedError):
                 egress.require_egress(QUOTA)
 
@@ -209,7 +219,7 @@ class RefusalLoggingTests(SimpleTestCase):
         with deployment("development"), egress.collect_refusals() as refused:
             with contextlib.suppress(EnvironmentRefusedError):
                 egress.require_egress(QUOTA)
-            egress.require_egress(REDATA)
+            egress.require_egress(FIRST_PARTY)
         self.assertEqual(refused, [QUOTA])
 
 
@@ -234,11 +244,11 @@ class BudgetsAreScaledTests(TestCase):
             ApiCallLog.objects.create(service=QUOTA, success=True)
             self.assertFalse(check_rate_limit(QUOTA))
 
-    def test_redata_is_not_scaled(self) -> None:
-        ApiRateLimit.objects.create(service=REDATA, display_name="r", calls_per_minute=600, calls_per_day=10)
-        ApiCallLog.objects.bulk_create([ApiCallLog(service=REDATA, success=True) for _ in range(9)])
+    def test_first_party_is_not_scaled(self) -> None:
+        ApiRateLimit.objects.create(service=FIRST_PARTY, display_name="r", calls_per_minute=600, calls_per_day=10)
+        ApiCallLog.objects.bulk_create([ApiCallLog(service=FIRST_PARTY, success=True) for _ in range(9)])
         with deployment("staging"):
-            self.assertTrue(check_rate_limit(REDATA))
+            self.assertTrue(check_rate_limit(FIRST_PARTY))
 
 
 class StartupLogTests(SimpleTestCase):
@@ -257,7 +267,7 @@ class StartupLogTests(SimpleTestCase):
 
     def test_it_warns_about_retired_switches_and_unknown_names(self) -> None:
         with (
-            deployment("development", overrides={"no_such_service": 0.1, REDATA: 0.5}),
+            deployment("development", overrides={"no_such_service": 0.1, FIRST_PARTY: 0.5}),
             mock.patch.dict("os.environ", {"UL_ALLOW_OUTBOUND_APIS": "true"}),
             mock.patch("urbanlens.UrbanLens.settings.app.settings.background_tasks_allowlist", ["no-such-entry"]),
             self.assertLogs(egress.logger, logging.INFO) as logs,
@@ -266,5 +276,5 @@ class StartupLogTests(SimpleTestCase):
         text = "\n".join(logs.output)
         self.assertIn("UL_ALLOW_OUTBOUND_APIS", text)
         self.assertIn("no_such_service", text)
-        self.assertIn(f"{REDATA!r}, a redata service", text)
+        self.assertIn(f"{FIRST_PARTY!r}, a first_party service", text)
         self.assertIn("no-such-entry", text)

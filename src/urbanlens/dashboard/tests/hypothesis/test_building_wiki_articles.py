@@ -1,5 +1,5 @@
 """
-A building's wiki carries no Wikipedia article: the article at a building's point is its campus's (P262).
+A building's wiki carries no Wikipedia article: the article at a building's point is its campus's.
 
 The Wikipedia panel stores the campus's article on a child pin's location when the pin's own point finds none, and
 any match at a building's point is the campus's or a neighbour's (``name_tiers.describes_scope``). The cache write

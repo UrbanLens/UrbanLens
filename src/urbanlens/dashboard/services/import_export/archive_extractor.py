@@ -414,7 +414,7 @@ class _DirectoryReadBound:
 
     Each read asks the file for no more than it holds past its position: a buffered ``read(n)`` allocates ``n`` bytes
     before it reads, so answering ``zipfile``'s read-to-end of the end record with the limit would allocate all of it
-    for every ZIP opened (see UrbanLens#298 ("Nine tests fail under bin/host_pytest.sh on release/v_0_9_0")).
+    for every ZIP opened.
     """
 
     def __init__(self, raw: IO[bytes], limit: int) -> None:

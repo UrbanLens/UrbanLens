@@ -51,7 +51,7 @@ COPY_RATE = Rate(limit=600, window_seconds=60)
 COPY_THROTTLE_SCOPE = "media.remote_copy"
 
 #: First downloads in flight at once, site-wide. They run on the interactive worker beside safety deadlines (and,
-#: on k3s, on the one worker that drains every queue), so slow providers must leave it room.
+#: on the one worker that drains every queue), so slow providers must leave it room.
 DOWNLOAD_SLOTS = 1
 #: A slot outlives the download; past this a worker that died holding one gives it back.
 DOWNLOAD_SLOT_TTL = DOWNLOAD_TIMEOUT_SECONDS + 60

@@ -604,8 +604,8 @@
     }
 }
 
-// Small "this person has an active subscription" badge, opt-in per profile (Profile.show_supporter_badge).
-.ul-supporter-badge {
+// Small "this person holds a role" badge, opt-in per profile (Profile.show_member_badge).
+.ul-member-badge {
     display: inline-flex;
     align-items: center;
     justify-content: center;

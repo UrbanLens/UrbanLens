@@ -62,7 +62,7 @@ FAILURE_SKIP_TTL_SECONDS = 300
 DISABLED_SKIP_TTL_SECONDS = 1800
 #: How long a source with no store of its own stays suppressed after refusing a pin's input as one it can never answer.
 REFUSED_INPUT_SKIP_TTL_SECONDS = 86_400
-#: How long a panel whose source this environment does not call says so instead of fetching again (D26). Nothing is
+#: How long a panel whose source this environment does not call says so instead of fetching again. Nothing is
 #: stored for the location, so a deployment that may call the source fetches it as soon as this lapses.
 UNAVAILABLE_HERE_TTL_SECONDS = 1800
 #: TTL for the satellite/street "caches are warm" marker. Deliberately shorter
@@ -255,6 +255,16 @@ class PanelSource(ABC):
     queue: ClassVar[str] = Queue.PANEL_FETCH
     api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset()
     required_feature: ClassVar[SiteFeature | None] = None
+    #: Where this panel is fetched in a root pin's bootstrap (``services.pins.bootstrap``): panels that describe the
+    #: property as a whole declare an order, lowest first; None leaves it out. It still passes its own gate.
+    bootstrap_order: ClassVar[int | None] = None
+    #: Whether a parcel (site-scope) pin's page leaves the panel out because its buildings own the same facts.
+    hidden_on_site_scope: ClassVar[bool] = False
+    #: URL name of the view rendering this panel's own card on the Private Pin page (called with the pin's slug), for a
+    #: panel whose markup is its own; the page lays one out for each, after the standard panels. Empty: no card of its own.
+    card_view: ClassVar[str] = ""
+    #: Where the card sits among the others that name a ``card_view``, lowest first.
+    card_order: ClassVar[int] = 100
 
     def scope(self, pin: Pin) -> str:
         """
@@ -707,6 +717,12 @@ class GalleryMediaSource(LocationCachePanelSource, ABC):
     members_media: ClassVar[bool] = False
     #: The payload key :meth:`media_items` reads its results from.
     media_results_key: ClassVar[str] = "items"
+    #: Where this source's loader sits in the Private Pin page's Media gallery, lowest first; None keeps it out of the gallery.
+    gallery_order: ClassVar[int | None] = None
+    #: The source's tab in the Media gallery.
+    gallery_label: ClassVar[str] = ""
+    #: Whether the community wiki's Media gallery lists the source too.
+    in_wiki_gallery: ClassVar[bool] = True
 
     @abstractmethod
     def media_items(self, data: dict) -> list[MediaItem]:
@@ -1087,7 +1103,17 @@ class NameSearchSource(LocationCachePanelSource, ABC):
 class GatewayMediaPanelSource(GalleryMediaSource):
     """A Media gallery provider backed by one :class:`MediaProvider` gateway."""
 
-    def __init__(self, key: str, cache_source: str, gateway_factory) -> None:
+    def __init__(
+        self,
+        key: str,
+        cache_source: str,
+        gateway_factory,
+        *,
+        gallery_order: int | None = None,
+        gallery_label: str = "",
+        in_wiki_gallery: bool = True,
+        bootstrap_order: int | None = None,
+    ) -> None:
         """
         Bind this source to one media provider.
 
@@ -1096,11 +1122,19 @@ class GatewayMediaPanelSource(GalleryMediaSource):
             cache_source: The provider gateway's ``service_key`` (its
                 LocationCache source).
             gateway_factory: Zero-argument callable building the gateway.
+            gallery_order: Where the provider's loader sits in the Media gallery; None keeps it out.
+            gallery_label: The provider's tab in the Media gallery.
+            in_wiki_gallery: Whether the community wiki's gallery lists it too.
+            bootstrap_order: Where the provider is fetched in a root pin's bootstrap; None leaves it out.
         """
         # Per-instance rather than ClassVar: several providers share this class.
         self.key = key
         self.cache_source = cache_source
         self._gateway_factory = gateway_factory
+        self.gallery_order = gallery_order
+        self.gallery_label = gallery_label
+        self.in_wiki_gallery = in_wiki_gallery
+        self.bootstrap_order = bootstrap_order
 
     def make_gateway(self) -> MediaProvider:
         """Build this provider's gateway instance."""
@@ -1188,7 +1222,7 @@ class DocumentMediaPanelSource(MediaPanelSource, DocumentPanelSource):
     documents_depend_on_site_scope: ClassVar[bool] = False
     documents_judged: ClassVar[bool] = True
 
-    def __init__(self, key: str, cache_source: str, gateway_factory, *, fetched_for_sources: bool = True) -> None:
+    def __init__(self, key: str, cache_source: str, gateway_factory, *, fetched_for_sources: bool = True, **gallery: Any) -> None:
         """
         Bind this source to one media provider.
 
@@ -1198,8 +1232,9 @@ class DocumentMediaPanelSource(MediaPanelSource, DocumentPanelSource):
             gateway_factory: Zero-argument callable building the gateway.
             fetched_for_sources: False to list only the documents the Media gallery's own search has cached, so the
                 Sources tab never searches the provider itself.
+            **gallery: Where the provider sits in the Media gallery and the bootstrap, as for :class:`GatewayMediaPanelSource`.
         """
-        super().__init__(key, cache_source, gateway_factory)
+        super().__init__(key, cache_source, gateway_factory, **gallery)
         self.fetched_for_sources = fetched_for_sources
 
     def may_list_documents(self, data: dict) -> bool:
@@ -1326,16 +1361,16 @@ class BoundaryPanelSource(PanelSource):
 
 def _satellite_gateways() -> list[SatelliteViewProvider]:
     """The plugin-contributed satellite imagery provider chain, in display order."""
-    from urbanlens.dashboard.plugins import plugin_registry
+    from urbanlens.dashboard.plugins.points import SATELLITE_PROVIDERS
 
-    return plugin_registry.satellite_providers()
+    return [factory() for factory in SATELLITE_PROVIDERS]
 
 
 def _street_view_gateways() -> list[StreetViewProvider]:
     """The plugin-contributed street-level imagery provider chain, in display order."""
-    from urbanlens.dashboard.plugins import plugin_registry
+    from urbanlens.dashboard.plugins.points import STREET_VIEW_PROVIDERS
 
-    return plugin_registry.street_view_providers()
+    return [factory() for factory in STREET_VIEW_PROVIDERS]
 
 
 def collect_satellite_slides(lat: float, lng: float) -> tuple[list[SatelliteSlide], list[ProviderFetchResult]]:
@@ -1430,7 +1465,7 @@ class SlidesPanelSource(PanelSource, ABC):
     def fetch(self, pin: Pin) -> None:
         """
         Warm every provider's slide cache, then mark how far to trust the result.
-        Those retry on the ordinary failure cadence instead. A provider this environment refused (D26) answered
+        Those retry on the ordinary failure cadence instead. A provider this environment refused answered
         nothing, so the pass is trusted only as long as an unavailable panel is, and an override takes effect."""
         lat = float(pin.effective_latitude or 0)
         lng = float(pin.effective_longitude or 0)
@@ -1524,10 +1559,10 @@ def panel_sources() -> dict[str, PanelSource]:
 
     Returns:
         Mapping of source key to its :class:`PanelSource`."""
-    from urbanlens.dashboard.plugins import plugin_registry
+    from urbanlens.dashboard.plugins.points import PANEL_SOURCES
 
     sources: dict[str, PanelSource] = {source.key: source for source in _CORE_PANEL_SOURCES}
-    for source in plugin_registry.panel_sources():
+    for source in PANEL_SOURCES:
         if source.key in sources:
             logger.warning("Ignoring duplicate panel source '%s' from plugins", source.key)
             continue
@@ -1539,6 +1574,38 @@ def panel_sources() -> dict[str, PanelSource]:
             _REPORTED_PANEL_PROBLEMS.add(key)
             logger.error("Panel source '%s' (%s) is misconfigured: %s", key, type(source).__name__, "; ".join(problems))
     return sources
+
+
+def gallery_sources(*, wiki: bool = False) -> list[GalleryMediaSource]:
+    """
+    The Media gallery's providers, in loader order.
+
+    Args:
+        wiki: Whether the community wiki's gallery is wanted, which leaves out the sources that opt out of it.
+
+    Returns:
+        Every registered :class:`GalleryMediaSource` that declares a ``gallery_order``, lowest first.
+    """
+    sources = [source for source in panel_sources().values() if isinstance(source, GalleryMediaSource) and source.gallery_order is not None and (source.in_wiki_gallery or not wiki)]
+    return sorted(sources, key=lambda source: source.gallery_order or 0)
+
+
+def gallery_label(source_key: str) -> str:
+    """The Media gallery tab label of a provider, or its key when it declares none (or is not registered)."""
+    source = panel_sources().get(source_key)
+    return (source.gallery_label if isinstance(source, GalleryMediaSource) else "") or source_key
+
+
+def card_panels(sources: Iterable[PanelSource]) -> list[LocationCachePanelSource]:
+    """The panels with a card view of their own, in card order; a stable sort, so ties keep registry order."""
+    cards = [source for source in sources if isinstance(source, LocationCachePanelSource) and source.card_view]
+    return sorted(cards, key=lambda source: source.card_order)
+
+
+def bootstrap_panels() -> list[PanelSource]:
+    """The panels fetched in a root pin's bootstrap, in the order they declare."""
+    declared = [source for source in panel_sources().values() if source.bootstrap_order is not None]
+    return sorted(declared, key=lambda source: source.bootstrap_order or 0)
 
 
 def tabbed_panels(sources: Iterable[PanelSource], placement: PanelPlacement) -> list[InfoPanelSource]:

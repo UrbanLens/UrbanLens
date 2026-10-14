@@ -3,7 +3,7 @@ External-API routes for pin-detail panels.
 
 Endpoints here are therefore job-shaped rather than resource-shaped - ask for a panel, get either a
 cached result or a pending marker, poll - and every route must keep the per-plugin rate limiting and
-per-call cost tracking intact rather than reaching around it into the provider gateway.
+per-call usage logging intact rather than reaching around it into the provider gateway.
 Use ``path()`` (``re_path()`` cannot be ordered and is rejected at import time) and keep every
 ``name=`` unique across the whole external API.
 """

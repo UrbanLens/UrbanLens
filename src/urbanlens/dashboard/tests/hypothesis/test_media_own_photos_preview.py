@@ -6,12 +6,14 @@ from decimal import Decimal
 
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db.models import Case, FloatField, Value, When
 from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.plugins.points import PHOTO_RELEVANCE_SCORES
 
 _PNG_BYTES = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\xcf\xc0\x00\x00\x03\x01\x01\x00\x18\xdd\x8d\xb0\x00\x00\x00\x00IEND\xaeB`\x82"
 
@@ -67,21 +69,31 @@ class PhotosMediaPreviewTests(TestCase):
         response = self._get()
         self.assertEqual(response.status_code, 204)
 
-    def test_higher_redata_confidence_sorts_first_regardless_of_upload_order(self) -> None:
-        """
-        services.photos.redata_relevance's cached confidence should rank an
-        older, more-confidently-relevant photo ahead of a newer, unscored one."""
-        older_but_confident = baker.make(
-            Image, pin=self.pin, profile=self.profile, image=_uploaded_photo("older.png"), redata_confidence=0.9
-        )
-        newer_but_unscored = baker.make(
-            Image, pin=self.pin, profile=self.profile, image=_uploaded_photo("newer.png"), redata_confidence=None
-        )
-        body = self._get().content.decode()
+    def test_higher_scored_confidence_sorts_first_regardless_of_upload_order(self) -> None:
+        """A scoring plugin's confidence ranks an older, more-confidently-relevant photo ahead of a newer, unscored one."""
+        older_but_confident = baker.make(Image, pin=self.pin, profile=self.profile, image=_uploaded_photo("older.png"))
+        newer_but_unscored = baker.make(Image, pin=self.pin, profile=self.profile, image=_uploaded_photo("newer.png"))
+
+        def score(images):
+            return images.annotate(
+                relevance_confidence=Case(
+                    When(pk=older_but_confident.pk, then=Value(0.9)), default=Value(None), output_field=FloatField()
+                )
+            )
+
+        with PHOTO_RELEVANCE_SCORES.overridden([score]):
+            body = self._get().content.decode()
         self.assertLess(
             body.index(f'data-image-id="{older_but_confident.pk}"'),
             body.index(f'data-image-id="{newer_but_unscored.pk}"'),
         )
+
+    def test_unscored_photos_sort_newest_first_when_nothing_scores(self) -> None:
+        older = baker.make(Image, pin=self.pin, profile=self.profile, image=_uploaded_photo("older.png"))
+        newer = baker.make(Image, pin=self.pin, profile=self.profile, image=_uploaded_photo("newer.png"))
+        with PHOTO_RELEVANCE_SCORES.overridden([]):
+            body = self._get().content.decode()
+        self.assertLess(body.index(f'data-image-id="{newer.pk}"'), body.index(f'data-image-id="{older.pk}"'))
 
     def test_photo_materialized_from_a_provider_is_excluded(self) -> None:
         """A photo materialized from an external Media-gallery provider (e.g. via "Mark relevant" or "Send to wiki") already renders as its own live tile in that provider's panel - see services.media.media_relevance.local_images_for_gallery_items, which swaps that tile's thumbnail for this same cached copy. Including it here too would show the same photo twice in the combined grid."""

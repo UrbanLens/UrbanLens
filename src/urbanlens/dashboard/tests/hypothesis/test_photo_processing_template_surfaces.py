@@ -1,4 +1,4 @@
-"""Server-rendered photo surfaces draw a pending upload as the shared placeholder, never an empty <img> (P142)."""
+"""Server-rendered photo surfaces draw a pending upload as the shared placeholder, never an empty <img>."""
 
 from __future__ import annotations
 

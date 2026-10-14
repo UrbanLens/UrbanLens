@@ -1,4 +1,4 @@
-"""Per-user endpoints that spend an upstream or walk a user's pins are throttled (G5-3)."""
+"""Per-user endpoints that spend an upstream or walk a user's pins are throttled."""
 
 from __future__ import annotations
 
@@ -18,8 +18,6 @@ ROUTES = {
     "map.autocomplete.places": {},
     "map.places.nearby": {},
     "map.places.details": {},
-    "pin.overlays.historical": {"pin_slug": "some-pin"},
-    "location.wiki.overlays.historical": {"location_slug": "some-place"},
     "trips.weather": {"trip_slug": "some-trip"},
     "profile.social.verify": {},
 }

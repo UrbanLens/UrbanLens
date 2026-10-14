@@ -5,8 +5,7 @@ Three routes left it there. A change of what a member may see that did not save 
 auto-synced calendar kept the address until the trip next changed. A deleted stop took its link with it and left its
 event on every exporter's calendar. And an export without auto-sync is never pushed, so what 0.8.0 wrote stays until
 its owner exports again; ``manage.py clear_withheld_calendar_locations`` rewrites those events once, at the 0.9.0
-rollout. Every write goes through the calendar gateway and its budget, against ``FakeGoogleCalendar``. See
-UrbanLens#301 ("hidden location stays on an unreached calendar").
+rollout. Every write goes through the calendar gateway and its budget, against ``FakeGoogleCalendar``.
 """
 
 from __future__ import annotations

@@ -11,11 +11,13 @@ from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
 
+from urbanlens.core.tests.provider_fakes import FakeWeatherProvider, hold_providers
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.visits.model import PinVisit
+from urbanlens.dashboard.plugins.points import WEATHER_PROVIDERS
 from urbanlens.dashboard.services.locations.visit_weather import RecordedDay, _clusters, recorded_days
 
 _FETCH = "urbanlens.dashboard.services.locations.visit_weather._fetch_days"
@@ -204,11 +206,7 @@ class VisitHistoryPanelTests(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        configured = patch(
-            "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured", return_value=True
-        )
-        configured.start()
-        self.addCleanup(configured.stop)
+        hold_providers(self, WEATHER_PROVIDERS, [FakeWeatherProvider()])
         baker.make(User)
         self.user: User = baker.make("auth.User")
         self.profile = Profile.objects.get(user=self.user)

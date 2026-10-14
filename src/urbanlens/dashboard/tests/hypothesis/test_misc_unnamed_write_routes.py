@@ -1,5 +1,5 @@
 """
-A pin's boundary drawing, its debug cache reset, its web-search refresh, and the old Memories photos redirect (P29).
+A pin's boundary drawing, its debug cache reset, its web-search refresh, and the old Memories photos redirect.
 
 Each asserts what the owner may do, that another user is refused with nothing changed, that anonymous is sent to log
 in, and that a malformed body is a 4xx.

@@ -1,5 +1,5 @@
 """
-A NUL character in a request is a 400, before a view hands it to Postgres, which refuses it in text (P283).
+A NUL character in a request is a 400, before a view hands it to Postgres, which refuses it in text.
 
 Twenty-five routes answered one with a 500: every search, and every write of a text field outside a Django form.
 """

@@ -124,6 +124,10 @@ class PaginatedListMixin:
         Returns:
             A ``{count, next, previous, results}`` response for the requested page.
         """
+        from urbanlens.dashboard.plugins.points import API_LIST_QUERYSETS
+
+        if isinstance(queryset, QuerySet):
+            queryset = API_LIST_QUERYSETS.apply(queryset, serializer_class, request)
         paginator = self.pagination_class()
         page = paginator.paginate_queryset(stable_ordering(queryset), request, view=self)
         shaped = page_builder(list(page)) if page_builder is not None else page

@@ -56,7 +56,7 @@ class _CountsCase(EndpointScalingMixin, TestCase):
 
 
 class TheCountBadgesDoNotReadEveryPinTests(_CountsCase):
-    """Bounded output, and bounded reading (P107)."""
+    """Bounded output, and bounded reading."""
 
     def test_it_does_not_read_a_row_per_pin_to_answer(self) -> None:
         self.assert_endpoint_scaling(self.url, expect_growth=False, growth_waiver=_WAIVER)

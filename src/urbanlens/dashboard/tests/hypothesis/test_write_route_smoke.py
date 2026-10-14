@@ -52,11 +52,6 @@ _SKIP_ROUTES = {
     # Ends the session; every subsequent request in the sweep would then be
     # measuring the login redirect instead of the route.
     "logout",
-    # Answers 503 when UL_STRIPE_WEBHOOK_SECRET is unset, which it is in tests.
-    # That is the endpoint working: it fails closed rather than processing an
-    # unverifiable payload. A fact about the environment, like the network guard
-    # below, not a route that crashes.
-    "billing.stripe_webhook",
 }
 
 
@@ -264,7 +259,9 @@ class _WriteRouteSweep(_SweepBase):
                         f"[{method.upper()}] raised {type(exc).__name__}: {str(exc)[:160]} at {_origin(exc)}"
                     )
                     continue
-                if response.status_code >= 500:
+                # A 503 is a view declining to answer (a webhook with no signing secret, a limiter that cannot be read),
+                # not an unhandled exception, which is a 500.
+                if response.status_code >= 500 and response.status_code != 503:
                     crashes[name] = f"[{method.upper()}] returned {response.status_code}"
         return crashes
 

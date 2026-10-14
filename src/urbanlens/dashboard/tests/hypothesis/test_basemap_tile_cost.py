@@ -7,7 +7,7 @@ opened, per user. Gunicorn serves the whole site on ``workers x threads`` reques
 (``-w $WEB_CONCURRENCY --threads 4``), which makes per-tile cost the thing that decides how many
 people can open a map at the same time, far more than upstream speed does.
 
-REData is stubbed everywhere here, deliberately twice over: these numbers are about this
+The tile catalogue is a fake everywhere here, deliberately twice over: these numbers are about this
 deployment's own cost, and a performance test must not put load on someone else's service to
 measure it.
 
@@ -37,6 +37,7 @@ from urbanlens.dashboard.controllers import basemap_tiles
 from urbanlens.dashboard.services.core import bounded_cache, call_tally
 from urbanlens.dashboard.services.map.basemap_vendors import VENDOR_TILES
 from urbanlens.dashboard.services.map.tile_cache_keys import basemap_tile_cache_key
+from urbanlens.dashboard.tests.hypothesis.tile_catalogue_fake import catalogue_off, catalogue_on
 from urbanlens.dashboard.tests.hypothesis.vendor_tile_wire import vendor_wire
 
 if TYPE_CHECKING:
@@ -44,10 +45,9 @@ if TYPE_CHECKING:
     from django.http.response import HttpResponseBase
 
 #: Every layer these tests use is one `VENDOR_TILES` names, so the proxy fetches it straight from
-#: the vendor; REData is only the fallback for a layer that table does not carry. Patching the
+#: the vendor; the catalogue is only the fallback for a layer that table does not carry. Patching the
 #: wrong one of the two does not fail loudly - the request escapes to the real vendor instead.
 _GATEWAY = "urbanlens.dashboard.services.apis.locations.basemap_vendor_tiles_gateway.BasemapVendorTilesGateway"
-_CONFIGURED = "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured"
 
 #: A document response, as the control for anything asserting a tile does not carry a document header.
 _DOCUMENT_URL = "/dashboard/map/"
@@ -158,18 +158,18 @@ class BasemapTileCostTests(TestCase):
 
     def _warm_client(self) -> None:
         _tile_store().set(basemap_tile_cache_key("street", 12, 9999, 1539), (b"x" * TILE_BYTES, "image/png"), 60)
-        with mock.patch(_CONFIGURED, return_value=True):
+        with catalogue_on():
             self.client.get(self._url(x=9999))
 
     def _serve_cached(self, x: int = 1204) -> HttpResponseBase:
         """Answer one tile from the cache, the way the second viewer of an area is answered."""
         _tile_store().set(basemap_tile_cache_key("street", 12, x, 1539), (b"x" * TILE_BYTES, "image/png"), 60)
-        with mock.patch(_CONFIGURED, return_value=True):
+        with catalogue_on():
             return self.client.get(self._url(x=x))
 
     def test_a_cached_tile_stays_inside_its_query_budget(self) -> None:
         """Every query here is paid ~30 times per map opened, by every viewer."""
-        with mock.patch(_CONFIGURED, return_value=True):
+        with catalogue_on():
             _tile_store().set(basemap_tile_cache_key("street", 12, 1204, 1539), (b"x" * TILE_BYTES, "image/png"), 60)
             with CaptureQueriesContext(connection) as queries:
                 response = self.client.get(self._url())
@@ -193,7 +193,7 @@ class BasemapTileCostTests(TestCase):
 
         with (
             mock.patch.object(bounded_cache, "_store", return_value=counting),
-            mock.patch(_CONFIGURED, return_value=True),
+            catalogue_on(),
         ):
             response = self.client.get(self._url())
 
@@ -222,9 +222,9 @@ class BasemapTileCostTests(TestCase):
         fresh.force_login(self.user)
         _tile_store().set(basemap_tile_cache_key("street", 12, 1204, 1539), (b"x" * TILE_BYTES, "image/png"), 60)
 
-        with mock.patch(_CONFIGURED, return_value=True), CaptureQueriesContext(connection) as first:
+        with catalogue_on(), CaptureQueriesContext(connection) as first:
             response = fresh.get(self._url())
-        with mock.patch(_CONFIGURED, return_value=True), CaptureQueriesContext(connection) as second:
+        with catalogue_on(), CaptureQueriesContext(connection) as second:
             fresh.get(self._url())
 
         self.assertEqual(response.status_code, 200)
@@ -239,7 +239,7 @@ class BasemapTileCostTests(TestCase):
         The same request served from cache and refused outright touch entirely different code inside
         the view, so a query either of them makes that the other does not is the view's own."""
         _tile_store().set(basemap_tile_cache_key("street", 12, 1204, 1539), (b"x" * TILE_BYTES, "image/png"), 60)
-        with mock.patch(_CONFIGURED, return_value=True):
+        with catalogue_on():
             with CaptureQueriesContext(connection) as served:
                 self.client.get(self._url())
             with (
@@ -278,7 +278,7 @@ class BasemapTileCostTests(TestCase):
 
     def _serve_fetched(self, x: int) -> HttpResponseBase:
         with (
-            mock.patch(_CONFIGURED, return_value=True),
+            catalogue_on(),
             mock.patch(f"{_GATEWAY}.download_tile", return_value=(200, b"PNG", "image/png")),
         ):
             return self.client.get(self._url(x=x))
@@ -294,7 +294,7 @@ class BasemapTileCostTests(TestCase):
         client = self.client_class()
         client.force_login(self.user)
         _tile_store().set(basemap_tile_cache_key("street", 12, 1204, 1539), (b"x" * TILE_BYTES, "image/png"), 60)
-        with mock.patch(_CONFIGURED, return_value=True), vendor_wire() as wire:
+        with catalogue_on(), vendor_wire() as wire:
             client.get(self._url())  # the session's first tile establishes its tile access
             call_tally.publish_limits("basemap_vendor_tiles")
             call_tally._limits.clear()
@@ -339,7 +339,7 @@ class BasemapTileCostTests(TestCase):
         It is also the expensive one - it cost an upstream fetch - so it is the last tile that
         should have to be asked for twice."""
         with (
-            mock.patch(_CONFIGURED, return_value=True),
+            catalogue_on(),
             mock.patch(f"{_GATEWAY}.download_tile", return_value=(200, b"PNG", "image/png")),
         ):
             response = self.client.get(self._url(x=1211))
@@ -351,7 +351,7 @@ class BasemapTileCostTests(TestCase):
     def test_a_miss_the_server_already_remembers_is_not_re_asked_either(self) -> None:
         """The cached-sentinel path, which is how a hole in a layer is answered after the first ask."""
         _tile_store().set(basemap_tile_cache_key("street", 12, 1212, 1539), "__ul_no_tile__", 60)
-        with mock.patch(_CONFIGURED, return_value=True):
+        with catalogue_on():
             response = self.client.get(self._url(x=1212))
 
         self.assertEqual(response.status_code, 404)
@@ -382,7 +382,7 @@ class BasemapTileCostTests(TestCase):
     def test_a_definitive_miss_is_not_re_asked_on_every_pan(self) -> None:
         """The server already remembers this answer for a week; the browser should not have to ask."""
         with (
-            mock.patch(_CONFIGURED, return_value=True),
+            catalogue_on(),
             mock.patch(f"{_GATEWAY}.download_tile", return_value=(404, b"", "")),
         ):
             response = self.client.get(self._url(x=1207))
@@ -390,12 +390,12 @@ class BasemapTileCostTests(TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertIn("max-age=", cache_directives(response))
 
-    def test_a_deployment_with_no_redata_is_not_remembered_as_having_no_tiles(self) -> None:
+    def test_a_deployment_with_no_catalogue_is_not_remembered_as_having_no_tiles(self) -> None:
         """
         This 404 says "not configured", which is a deployment's state and not a fact about the
-        tile - cached in the browser, configuring REData would leave every map blank until it aged
+        tile - cached in the browser, configuring a catalogue would leave every map blank until it aged
         out."""
-        with mock.patch(_CONFIGURED, return_value=False):
+        with catalogue_off():
             response = self.client.get(self._url(x=1208))
 
         self.assertEqual(response.status_code, 404)
@@ -408,7 +408,7 @@ class BasemapTileCostTests(TestCase):
             self.assertTrue(basemap_tiles.UpstreamSlots.semaphore().acquire(blocking=False))
             try:
                 with (
-                    mock.patch(_CONFIGURED, return_value=True),
+                    catalogue_on(),
                     mock.patch(f"{_GATEWAY}.download_tile", return_value=(200, b"PNG", "image/png")),
                 ):
                     response = self.client.get(self._url(x=1209))
@@ -421,7 +421,7 @@ class BasemapTileCostTests(TestCase):
     def test_a_refused_tile_costs_no_more_than_a_served_one(self) -> None:
         """Refusing is what the proxy does most of under load, so it is the path that has to be cheap."""
         _tile_store().set(basemap_tile_cache_key("street", 12, 1204, 1539), (b"x" * TILE_BYTES, "image/png"), 60)
-        with mock.patch(_CONFIGURED, return_value=True):
+        with catalogue_on():
             with CaptureQueriesContext(connection) as served:
                 self.client.get(self._url())
 
@@ -452,7 +452,7 @@ class BasemapViewportCostTests(TestCase):
         self.client.force_login(self.user)
         basemap_tiles.UpstreamSlots.reset()
         self.addCleanup(basemap_tiles.UpstreamSlots.reset)
-        with mock.patch(_CONFIGURED, return_value=False):
+        with catalogue_off():
             self.client.get(reverse("map.basemap_tiles", kwargs={"layer": "street", "z": 12, "x": 1, "y": 1}))
 
     def _viewport_urls(self) -> list[str]:
@@ -477,7 +477,7 @@ class BasemapViewportCostTests(TestCase):
         urls = self._viewport_urls()
         self._warm_the_cache(urls)
 
-        with mock.patch(_CONFIGURED, return_value=True):
+        with catalogue_on():
             started = time.perf_counter()
             with CaptureQueriesContext(connection) as queries:
                 statuses = [self.client.get(url).status_code for url in urls]
@@ -508,7 +508,7 @@ class BasemapViewportCostTests(TestCase):
             self.assertTrue(semaphore.acquire(blocking=False))
             try:
                 with (
-                    mock.patch(_CONFIGURED, return_value=True),
+                    catalogue_on(),
                     mock.patch(f"{_GATEWAY}.download_tile", return_value=(200, b"PNG", "image/png")) as download,
                 ):
                     statuses = [self.client.get(url).status_code for url in urls]
@@ -529,7 +529,7 @@ class BasemapViewportCostTests(TestCase):
         say more about the harness than about this code."""
         urls = self._viewport_urls()
         self._warm_the_cache(urls)
-        with mock.patch(_CONFIGURED, return_value=True):
+        with catalogue_on():
             started = time.perf_counter()
             with CaptureQueriesContext(connection) as serving:
                 for url in urls:
@@ -548,7 +548,7 @@ class BasemapViewportCostTests(TestCase):
             semaphore = basemap_tiles.UpstreamSlots.semaphore()
             self.assertTrue(semaphore.acquire(blocking=False))
             try:
-                with mock.patch(_CONFIGURED, return_value=True):
+                with catalogue_on():
                     started = time.perf_counter()
                     with CaptureQueriesContext(connection) as refusing:
                         statuses = [self.client.get(url).status_code for url in cold]

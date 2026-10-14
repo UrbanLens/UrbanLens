@@ -159,7 +159,7 @@ class Floorplan(FloorplanItem):
         pin: The pin it was authored from, when personal.
         profile: The local author; null for plans mirrored from upstream.
         wiki: Set when published to the place's community wiki.
-        building_ref: REData's reconciliation ref for the building, when known.
+        building_ref: The ref a floorplan provider knows the building by, when it does.
         building_name: Free-text fallback naming the building.
         name: Version label ("As built", "After the 1962 fire").
         valid_from: The date this version takes effect; null is the original

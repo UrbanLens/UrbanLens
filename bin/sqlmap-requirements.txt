@@ -1,4 +1,4 @@
-# Hash-pinned per docs/INTEGRATION_TESTS.md's "sqlmap" section.
+# Hash-pinned for bin/install_sqlmap.py.
 #
 # sqlmap (https://github.com/sqlmapproject/sqlmap) publishes no checksums,
 # signatures, or attestation of its own for any release - verified against

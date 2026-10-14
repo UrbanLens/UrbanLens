@@ -15,8 +15,6 @@
 @use 'page_hero';
 @use 'page-tabs';
 @use 'article';
-@use 'ai_extractions';
-@use 'assistant';
 @use 'game_shell';
 @use 'spotguessr';
 @use 'trivia';
@@ -42,7 +40,6 @@
 @use 'faq';
 @use 'legal';
 @use 'thanks';
-@use 'costs';
 @use 'help';
 @use 'comments';
 @use 'gallery';

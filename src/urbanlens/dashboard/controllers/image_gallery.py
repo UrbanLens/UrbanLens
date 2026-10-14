@@ -22,7 +22,7 @@ from urbanlens.dashboard.services.core.request_body import json_body, list_field
 from urbanlens.dashboard.services.geo.sampling import bound_map_layer
 from urbanlens.dashboard.services.media.images import apply_image_map_update, delete_stored_file, detach_image_from_wiki, image_to_gallery_json, prime_uploader_memo
 from urbanlens.dashboard.services.photos.uploads import UploadRejection, record_photo_upload_failure, upload_photo_for_owner
-from urbanlens.dashboard.services.wiki.concealment import visible_rows
+from urbanlens.dashboard.services.wiki.viewer_projection import visible_rows
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
@@ -472,18 +472,17 @@ class WikiGalleryView(LoginRequiredMixin, View):
     """HTML gallery panel for the wiki page."""
 
     def _get_context(self, request: HttpRequest, location_slug: str) -> dict:
-        from urbanlens.dashboard.services.wiki.concealment import conceal_rows, conceal_wiki, concealment_active
+        from urbanlens.dashboard.services.wiki.viewer_projection import project_wiki
 
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
         images, include_children = _wiki_gallery_images(request, wiki, profile)
-        # A third gate, on top of the container and settings gates visible_to already applies. Provider media
-        # stays - a fresh wiki carries it - and uploads survive only from the viewer or a friend.
-        if concealment_active(wiki, profile):
-            images = conceal_rows(images, profile)
+        # A third gate, on top of the container and settings gates visible_to already applies: what the viewer's
+        # projection of the wiki shows.
+        images = visible_rows(images, wiki, profile)
         page_obj = get_page(request, images.order_by("-created"), _GALLERY_PAGE_SIZE)
         return {
             "location": location,
-            "wiki": conceal_wiki(wiki, profile),
+            "wiki": project_wiki(wiki, profile),
             "images": page_obj.object_list,
             "page_obj": page_obj,
             "profile": profile,
@@ -509,17 +508,11 @@ class WikiGalleryJsonView(LoginRequiredMixin, View):
     """JSON endpoint for the wiki photo map layer."""
 
     def get(self, request: HttpRequest, location_slug: str) -> JsonResponse:
-        from urbanlens.dashboard.services.wiki.concealment import conceal_rows, concealment_active
-
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
         images, include_children = _wiki_gallery_images(request, wiki, profile)
         images = images.with_coords().servable()
-        # This layer plots photos at their capture coordinates, so an unfiltered payload does not merely list
-        # other people's contributions - it maps where they stood.
-        if concealment_active(wiki, profile):
-            images = conceal_rows(images, profile)
-        # Capped after concealment, so a concealed row can never be what the cap
-        # chose to keep.
+        # This layer maps where each photo was taken, and the cap must keep only rows the viewer is shown.
+        images = visible_rows(images, wiki, profile)
         images, truncated, total = bound_map_layer(images)
         data = []
         uploader_memo: dict[int, str] = {}
@@ -547,7 +540,7 @@ class WikiCoverPhotoView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest, location_slug: str) -> JsonResponse:
-        from urbanlens.dashboard.services.wiki.concealment import writable_wiki
+        from urbanlens.dashboard.services.wiki.viewer_projection import writable_wiki
 
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
         try:
@@ -556,8 +549,8 @@ class WikiCoverPhotoView(LoginRequiredMixin, View):
         except ValueError:
             return JsonResponse({"error": "Invalid request data."}, status=400)
 
-        # The row that gets saved must be the real one, not a concealed
-        # projection of it - see concealment.writable_wiki.
+        # The row that gets saved must be the real one, not a viewer's
+        # projection of it - see viewer_projection.writable_wiki.
         target = writable_wiki(wiki)
 
         if image_id is None:

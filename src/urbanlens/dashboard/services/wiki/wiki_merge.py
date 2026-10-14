@@ -23,7 +23,7 @@ def wiki_property_polygon(wiki: Wiki):
 
     Returns:
         A real (community-drawn or provider-generated) property polygon, or None - also when it is too large to be
-        a parcel, which would nest wikis a county apart (P148)."""
+        a parcel, which would nest wikis a county apart."""
     from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
     from urbanlens.dashboard.models.place.model import PlaceKind, is_plausible_area
     from urbanlens.dashboard.services.geo.area import area_sqm

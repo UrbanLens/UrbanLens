@@ -186,7 +186,7 @@ describe("openMediaLightbox", () => {
     });
 
     test("canRelevance is false for another member's photo shown through Nearby Photos", () => {
-        const tile = buildTile({ mediaUrl: "a", mediaSource: "redata_photo_pool", membersMedia: "true" });
+        const tile = buildTile({ mediaUrl: "a", mediaSource: "nearby_photos", membersMedia: "true" });
         buildGrid("media-gallery-grid", "/relevance", [tile]);
         openMediaLightbox(tile.querySelector("button") as HTMLElement);
         expect(calls[0]?.list[0]?.canRelevance).toBe(false);

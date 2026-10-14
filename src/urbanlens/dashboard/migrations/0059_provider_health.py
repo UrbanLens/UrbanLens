@@ -1,4 +1,4 @@
-"""Record each external provider's health and backoff, and route the alert when one is refusing or failing (REData PL13)."""
+"""Record each external provider's health and backoff, and route the alert when one is refusing or failing."""
 
 import django.utils.timezone
 from django.db import migrations, models

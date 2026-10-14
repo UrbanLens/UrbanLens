@@ -205,7 +205,7 @@ export interface OwnPhotoFetch {
  *     non-200 response once attempts are exhausted.
  */
 /**
- * The photo's own media url once its re-encode has landed. Until then the API names no file (P142),
+ * The photo's own media url once its re-encode has landed. Until then the API names no file,
  * so reading `url` straight off an upload response tests nothing.
  */
 export async function settledPhotoUrl(api: ApiClient, photoUuid: string, timeoutMs = 60_000): Promise<string> {

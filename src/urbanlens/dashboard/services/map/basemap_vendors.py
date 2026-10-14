@@ -1,14 +1,14 @@
 """
 Where a raster basemap tile is actually fetched from.
 
-REData publishes the basemap catalogue and serves the tiles, but none of the raster layers it
-offers needs its API key - every one of them is a public, keyless vendor endpoint that REData is
-itself fetching. Measured from a staging pod in September 2026 over 8 cold coordinates a
-side, a satellite tile cost 0.490s through REData against 0.238s from Esri. Against a viewport of
+A tile catalogue publishes the basemap layers and serves their tiles, but none of the raster layers it
+offers needs its API key - every one of them is a public, keyless vendor endpoint that the catalogue's
+service is itself fetching. Measured from a staging pod in September 2026 over 8 cold coordinates a
+side, a satellite tile cost 0.490s through the catalogue's service against 0.238s from Esri. Against a viewport of
 ~30 tiles and a handful of upstream slots, halving the per-tile cost is the difference between
 filling and timing out.
 
-So the proxy fetches the vendor directly for any layer named here, and falls back to REData for one
+So the proxy fetches the vendor directly for any layer named here, and falls back to the tile catalogue for one
 that is not. What the proxy does *not* do is hand these URLs to the browser: a map page URL can
 encode a pin's coordinates, and which tiles a viewer asks for is which places they are looking at.
 Keeping the fetch server-side is the whole reason the proxy exists (see
@@ -34,12 +34,12 @@ class VendorTiles:
             ``{z}/{x}/{y}``; a template that swaps them serves a real tile for the wrong place,
             which no status code reports.
         subdomains: Hostnames ``{s}`` may take, or empty when the template has no ``{s}``.
-        attribution: Set only where this endpoint is a *different* vendor from the one REData
+        attribution: Set only where this endpoint is a *different* vendor from the one the catalogue
             publishes for the layer, whose credit the catalogue would otherwise carry. Showing one
             vendor's credit over another's bytes is a licence breach, not a cosmetic error, so the
             credit has to travel with the URL that decides the bytes.
         max_native_zoom: Deepest level this endpoint holds real tiles for, where that differs from
-            the depth REData publishes for the layer. A layer named here never reaches REData, so
+            the depth the catalogue publishes for the layer. A layer named here never reaches the catalogue's service, so
             its published depth describes an endpoint that is not being used: too shallow and the
             client upscales levels this vendor would have drawn, too deep and the proxy fetches
             Esri's blank-past-coverage JPEG, which is a 200 and caches for a week like any tile.
@@ -110,8 +110,8 @@ _ESRI_MAX_AGE = 86_400
 #: The service path inside an ArcGIS Online tile URL - ``Canvas/World_Dark_Gray_Base`` keeps its folder.
 _ESRI_SERVICE = re.compile(r"^https://(?:server|services)\.arcgisonline\.com/ArcGIS/rest/services/(.+?)/MapServer/", re.IGNORECASE)
 
-#: REData layer id -> the endpoint REData would have fetched on our behalf. Mirrors its
-#: ``TILE_PROVIDERS``; a layer absent here still goes through REData.
+#: Catalogue layer id -> the endpoint the catalogue's service would have fetched on our behalf; a layer absent here
+#: still goes through the catalogue.
 VENDOR_TILES: dict[str, VendorTiles] = {
     "street": VendorTiles(url_template=f"{_ESRI}/World_Street_Map/MapServer/tile/{{z}}/{{y}}/{{x}}", browser_max_age=_ESRI_MAX_AGE),
     "satellite": VendorTiles(url_template=f"{_ESRI}/World_Imagery/MapServer/tile/{{z}}/{{y}}/{{x}}", browser_max_age=_ESRI_MAX_AGE),
@@ -143,9 +143,9 @@ def vendor_for(layer: str) -> VendorTiles | None:
     The vendor endpoint for a layer, if this deployment fetches it directly.
 
     Args:
-        layer: Layer id from REData's catalogue.
+        layer: Layer id from the tile catalogue.
 
     Returns:
-        The vendor's endpoint, or None when the layer should go through REData.
+        The vendor's endpoint, or None when the layer should go through the catalogue.
     """
     return VENDOR_TILES.get(layer)

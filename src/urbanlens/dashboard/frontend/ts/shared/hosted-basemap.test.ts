@@ -26,7 +26,7 @@ import {
 } from "./hosted-basemap";
 
 const HOSTED = "https://api.protomaps.com/tiles/v4/{z}/{x}/{y}.mvt?key=pk_test";
-const OWN = "https://tiles.urbanlens.org/basemap/{z}/{x}/{y}";
+const OWN = "https://tiles.example.com/basemap/{z}/{x}/{y}";
 
 function embed(content: unknown): void {
     const el = document.createElement("script");
@@ -165,7 +165,7 @@ describe("which tiles a page draws", () => {
     test("leaves a source alone that has no plain tile list to fall back to", () => {
         embed({ tiles: HOSTED });
         const sources: Record<string, SourceSpecification> = {
-            protomaps: { type: "vector", url: "pmtiles://https://tiles.urbanlens.org/planet.pmtiles" },
+            protomaps: { type: "vector", url: "pmtiles://https://tiles.example.com/planet.pmtiles" },
             dem: { type: "raster-dem", tiles: [OWN] },
         };
         expect(useHostedTiles(sources, "protomaps", "street")).toBeNull();
@@ -235,7 +235,7 @@ describe("falling back to our own tiles", () => {
         expect(map.setTilesCalls.at(-1)).toEqual({ id: BASEMAP_SOURCE_ID, tiles: [OWN] });
 
         // Each is retried once: failing again, it is a failure of our own tiles and is reported.
-        map.fire("error", tileError(BASEMAP_SOURCE_ID, 500, "https://tiles.urbanlens.org/basemap/3/1/2", failed[0]));
+        map.fire("error", tileError(BASEMAP_SOURCE_ID, 500, "https://tiles.example.com/basemap/3/1/2", failed[0]));
         expect(map.refreshed).toHaveLength(1);
         expect(error).toHaveBeenCalledTimes(1);
     });
@@ -310,8 +310,8 @@ describe("falling back to our own tiles", () => {
         map.fire("error", tileError(BASEMAP_SOURCE_ID, 403));
 
         const own = { x: 7, y: 7, z: 4 };
-        map.fire("error", tileError(BASEMAP_SOURCE_ID, 500, "https://tiles.urbanlens.org/basemap/4/7/7", own));
-        map.fire("error", tileError(BASEMAP_SOURCE_ID, 500, "https://tiles.urbanlens.org/basemap/4/7/7", own));
+        map.fire("error", tileError(BASEMAP_SOURCE_ID, 500, "https://tiles.example.com/basemap/4/7/7", own));
+        map.fire("error", tileError(BASEMAP_SOURCE_ID, 500, "https://tiles.example.com/basemap/4/7/7", own));
 
         expect(map.refreshed.map((call) => call.tiles)).toEqual([[{ x: 0, y: 0, z: 1 }], [own]]);
         expect(error).toHaveBeenCalledTimes(1);
@@ -326,7 +326,7 @@ describe("falling back to our own tiles", () => {
         map.fire("error", tileError(BASEMAP_SOURCE_ID, 403));
 
         now += LATE_FAILURE_WINDOW_MS + 1;
-        map.fire("error", tileError(BASEMAP_SOURCE_ID, 500, "https://tiles.urbanlens.org/basemap/4/7/7", { x: 7, y: 7, z: 4 }));
+        map.fire("error", tileError(BASEMAP_SOURCE_ID, 500, "https://tiles.example.com/basemap/4/7/7", { x: 7, y: 7, z: 4 }));
 
         // Only the refused tile, at the swap.
         expect(map.refreshed.map((call) => call.tiles)).toEqual([[{ x: 0, y: 0, z: 1 }]]);

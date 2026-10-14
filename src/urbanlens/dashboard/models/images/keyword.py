@@ -1,7 +1,7 @@
 """
 ImageKeyword - searchable keywords attached to an uploaded photo.
 Keywords are produced by photo-keyword plugins (see ``dashboard.services.photos.photo_keywords``).
-Each plugin stores its own rows, attributed via ``source`` (the plugin slug), so multiple keywording strategies - embedded XMP/IPTC tags, AI vision descriptions, content classifiers - can coexist and be regenerated independently.
+Each plugin stores its own rows, attributed via ``source`` (the plugin slug), so multiple keywording strategies - embedded XMP/IPTC tags, image analysis from external providers - can coexist and be regenerated independently.
 """
 
 from __future__ import annotations
@@ -21,11 +21,11 @@ class ImageKeyword(abstract.DashboardModel):
     """One searchable keyword for one photo, attributed to the plugin that produced it."""
 
     keyword = CharField(max_length=MAX_KEYWORD_LENGTH, db_index=True)
-    # Plugin slug (e.g. "photo_keywords_metadata", "photo_keywords_ai_vision").
+    # Plugin slug (e.g. "photo_keywords_metadata").
     # Regeneration replaces only rows matching its own source.
     source = CharField(max_length=50)
     # Provider-reported confidence in [0, 1], when the provider scores its
-    # keywords (classifiers do; embedded-metadata tags don't).
+    # keywords (scoring providers do; embedded-metadata tags don't).
     confidence = FloatField(null=True, blank=True)
 
     image = ForeignKey(
@@ -50,7 +50,7 @@ class ImageKeyword(abstract.DashboardModel):
 
 class ImageKeywordRetry(abstract.DashboardModel):
     """
-    A keyword source that did not answer for a photo, and when to ask it again (P323).
+    A keyword source that did not answer for a photo, and when to ask it again.
 
     Written by ``services.photos.photo_keywords.generate_keywords_for_image`` when a source did not answer, deleted
     once it does, and swept by ``services.photos.keyword_retry.sweep``.

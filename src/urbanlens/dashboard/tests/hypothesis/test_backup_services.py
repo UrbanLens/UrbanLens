@@ -243,7 +243,7 @@ class DefaultSiteSettingsTests(TestCase):
 
 class DeploymentSwitchTests(SimpleTestCase):
     """
-    ``UL_BACKUP_ENABLED=false`` turns scheduled backups off whatever the settings row says (P202).
+    ``UL_BACKUP_ENABLED=false`` turns scheduled backups off whatever the settings row says.
 
     On Kubernetes the backups directory is an emptyDir that a new pod sees empty, so the task always reads as due, and
     a restored settings row brought it back on after infrastructure had switched it off.

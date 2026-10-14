@@ -30,7 +30,7 @@ Most rows only loosen or take reworded notes. Three earlier defaults tighten ins
   30 days holds at most 8,000 x share: two months' ceilings, or, where it touches three months, one month's and a
   day's 500 x share at each end. That is below the 30-day cap's 9,999 x share.
 - ``nominatim`` at 60 a minute with a 1.0 s spacing, from f6df0c851 (2026-09-29, on ``release/v_0_8_0`` only). It was
-  reverted the same day by deb9d93dd, per D25, so the row takes 1 a minute, as every release wrote.
+  reverted the same day by deb9d93dd, so the row takes 1 a minute, as every release wrote.
 - ``virustotal`` at 4 a minute and 490 a day, from 19daf23be (2026-09-01, ``release/v_0_8_0`` only, replaced the same
   day by 3d0195b47); it takes 3 and 480, as 0.8.0 wrote.
 

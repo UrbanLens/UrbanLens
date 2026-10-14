@@ -1,4 +1,4 @@
-"""Drive-time legs between consecutive trip activities (UL-60 slice)."""
+"""Drive-time legs between consecutive trip activities."""
 
 from __future__ import annotations
 

@@ -1,5 +1,5 @@
 """
-Two overlapping ingests for one profile must merge into one pending suggestion (P49).
+Two overlapping ingests for one profile must merge into one pending suggestion.
 
 `ingest_location_hits` checks for an existing pending suggestion, then creates or extends it. Two
 ingests at once (an Immich sweep overlapping a local-scan upload) can both miss the check and both

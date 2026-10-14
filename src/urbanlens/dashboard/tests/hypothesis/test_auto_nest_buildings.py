@@ -31,7 +31,7 @@ def _building(seq: int, **extra) -> dict:
 
 class ConfidentBuildingsTests(SimpleTestCase):
     def test_an_unresolved_overlap_is_not_confident(self) -> None:
-        """REData refused to say what this record is; so must we."""
+        """The source refused to say what this record is; so must we."""
         from urbanlens.dashboard.plugins.builtin.parcel_buildings import confident_buildings
 
         records = [_building(1), _building(2, overlap_refs=["osm:way/9"])]
@@ -80,7 +80,7 @@ class AutoNestPinTests(TestCase):
         LocationCache.set(
             pin.location,
             PARCEL_BUILDINGS_CACHE_SOURCE,
-            {"buildings": buildings, "provider": "redata"},
+            {"buildings": buildings, "provider": "registry"},
             query_key="test",
         )
 
@@ -95,7 +95,7 @@ class AutoNestPinTests(TestCase):
         self.assertTrue(all(child.pin_type == PinType.BUILDING for child in pin.detail_pins.all()))
 
     def test_an_unresolved_overlap_is_still_a_building(self) -> None:
-        """Every building is pinned; an overlap REData could not resolve changes how records group, not whether."""
+        """Every building is pinned; an overlap the source could not resolve changes how records group, not whether."""
         pin = self._pin()
         self._cache(pin, [_building(1), _building(2), _building(3, overlap_refs=["osm:way/9"])])
 
@@ -185,7 +185,7 @@ class AutoNestPinTests(TestCase):
         self.assertEqual(Pin.objects.get(name="Building 2").parent_pin.name, "Building 1")
 
     def test_nested_buildings_nest_their_pins(self) -> None:
-        """REData's building tree becomes the pin tree, not a flat list."""
+        """The source's building tree becomes the pin tree, not a flat list."""
         pin = self._pin()
         self._cache(pin, [_building(1, child_refs=["cris:2"]), _building(2, parent_ref="cris:1"), _building(3)])
 

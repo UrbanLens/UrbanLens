@@ -7,7 +7,7 @@ idle socket sends nothing, so it is charged nothing, while still occupying one o
 nginx's ``worker_connections`` (1024 per worker, shared with every HTTP request)
 and a slot in the single daphne process behind it. One account opening a few
 thousand costs every other user their connection - which is the availability
-requirement failing at the cheapest possible price to the attacker (N21 H10).
+requirement failing at the cheapest possible price to the attacker.
 
 Held in a ``services.core.connection_registry.ConnectionRegistry``: a sorted set
 per identity, member per connection. A worker that dies mid-connection leaves

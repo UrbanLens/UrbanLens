@@ -29,12 +29,12 @@ def schedule_plugin_beat_entries(**_extra) -> None:
     """
     from django.conf import settings as django_settings
 
-    from urbanlens.dashboard.plugins import plugin_registry
+    from urbanlens.dashboard.plugins.points import BEAT_SCHEDULE
     from urbanlens.UrbanLens.egress import beat_classification, scheduled_beat_entries
     from urbanlens.UrbanLens.settings.app import settings as app_settings
 
     plugin_entries = scheduled_beat_entries(
-        plugin_registry.beat_schedule(),
+        BEAT_SCHEDULE.as_dict(),
         django_settings.EGRESS_ENVIRONMENT,
         app_settings.background_tasks_allowlist,
         beat_classification(),

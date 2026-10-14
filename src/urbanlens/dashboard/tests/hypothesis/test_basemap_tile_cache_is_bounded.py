@@ -1,7 +1,7 @@
 """
 The basemap tile proxy writes whatever the vendor sent into the shared cache.
 
-N21 H35/H22/H13. `cache.set(cache_key, (body, resolved_type), _TILE_CACHE_TTL)`
+`cache.set(cache_key, (body, resolved_type), _TILE_CACHE_TTL)`
 stores raw tile bytes with no size check, into the same shared Dragonfly that holds
 sessions and the Channels layer - and a full store there raises rather than
 evicting to make room. One oversized tile - or a vendor answering a tile
@@ -31,10 +31,9 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
+from urbanlens.dashboard.tests.hypothesis.tile_catalogue_fake import FakeCatalogueMixin, catalogue_on
 
-_GATEWAY = "urbanlens.dashboard.services.apis.locations.redata_basemap_tiles_gateway.RedataBasemapTilesGateway"
-_CONFIGURED = "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured"
+_GATEWAY = "urbanlens.dashboard.tests.hypothesis.tile_catalogue_fake.FakeTileCatalogue"
 _CEILING = "urbanlens.dashboard.services.core.bounded_cache.MAX_CACHED_BODY_BYTES"
 
 
@@ -49,7 +48,7 @@ def _breaking(operation: str, reason: str = "dragonfly is full"):
     return mock.patch.object(caches[settings.PROXIED_BYTES_CACHE], operation, side_effect=ConnectionError(reason))
 
 
-class _TileCase(RedataConfiguredMixin, TestCase):
+class _TileCase(FakeCatalogueMixin, TestCase):
     def setUp(self) -> None:
         super().setUp()
         cache.clear()
@@ -60,7 +59,7 @@ class _TileCase(RedataConfiguredMixin, TestCase):
 
     def _fetch(self, body: bytes, times: int = 1):
         with (
-            mock.patch(_CONFIGURED, return_value=True),
+            catalogue_on(),
             mock.patch(f"{_GATEWAY}.download_tile", return_value=(200, body, "image/png")) as download,
         ):
             responses = [self.client.get(self.url) for _ in range(times)]
@@ -120,7 +119,7 @@ class ACacheFailureIsNotA500Tests(_TileCase):
         """The 404 path writes its own sentinel, so it has its own way to 500."""
         with (
             _breaking("set"),
-            mock.patch(_CONFIGURED, return_value=True),
+            catalogue_on(),
             mock.patch(f"{_GATEWAY}.download_tile", return_value=(404, b"", "")),
         ):
             response = self.client.get(self.url)

@@ -11,7 +11,8 @@ from hypothesis import given, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.aliases.model import AliasType, PinAlias, WikiAlias
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.plugins.builtin.flickr import FlickrPlugin
+from urbanlens.dashboard.plugins.points import PANEL_SOURCES
+from urbanlens.dashboard.plugins.testing import contributed
 from urbanlens.dashboard.services.apis.flickr import search as flickr_search
 from urbanlens.dashboard.services.apis.flickr.search import (
     FlickrFeedSearchGateway,
@@ -206,7 +207,7 @@ class FlickrSearchGatewayTests(TestCase):
         self.assertEqual(items[0].page_url, "https://www.flickr.com/photos/12345@N00/1/")
 
     def test_description_tags_and_geotag_are_asked_for_and_kept(self) -> None:
-        """Relevance (P196) reads them: Flickr's text search matches a photo's tags and description, not only its title."""
+        """Relevance reads them: Flickr's text search matches a photo's tags and description, not only its title."""
         gw = self._gateway()
         gw.session.get.return_value = _mock_response(
             json_data={
@@ -439,14 +440,14 @@ class FlickrMediaPanelSourceTests(TestCase):
         self.assertTrue(self.source.gate(self.pin))
 
 
-# -- FlickrPlugin.get_panel_sources ------------------------------------------------------
+# -- FlickrPlugin's PANEL_SOURCES contribution ------------------------------------------------------
 
 
 class FlickrPluginPanelSourceTests(SimpleTestCase):
     """The plugin picks the API gateway or the keyless feed fallback per current config."""
 
     def _factory(self):
-        (source,) = FlickrPlugin().get_panel_sources()
+        (source,) = contributed("flickr", PANEL_SOURCES)
         return source.make_gateway
 
     def test_uses_api_gateway_when_configured(self) -> None:

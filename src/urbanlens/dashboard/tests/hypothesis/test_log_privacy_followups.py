@@ -1,10 +1,9 @@
 """
-What a model wrote, where a building or a cached lookup is, which map tile someone looked at, and whose address or
-login it was stay out of log lines.
+Where a building or a cached lookup is, which map tile someone looked at, and whose address or login it was stay out
+of log lines.
 
-Pin names name undisclosed sites and coordinates locate them (``services.security.redact``); a trivia question is
-generated from a wiki's text, a lock key can carry the point it locks, a high-zoom tile index is a building, and a
-lockout counter is keyed by whatever a visitor typed.
+Pin names name undisclosed sites and coordinates locate them (``services.security.redact``); a lock key can carry the
+point it locks, a high-zoom tile index is a building, and a lockout counter is keyed by whatever a visitor typed.
 """
 
 from __future__ import annotations
@@ -16,7 +15,6 @@ from unittest import mock
 
 from django.contrib.auth.models import User
 from django.core.cache import cache
-from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.log_output import handler_output
@@ -26,10 +24,8 @@ from urbanlens.dashboard.models.aliases.model import PinAlias
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
-from urbanlens.dashboard.services.apis.locations.redata_historical_maps_gateway import RedataHistoricalMapsGateway
 from urbanlens.dashboard.services.core import coalesce, counters, locks
 from urbanlens.dashboard.services.notifications.notification_delivery import send_email_now
 from urbanlens.dashboard.services.pins.pin_restructure import building_footprint
@@ -40,82 +36,16 @@ from urbanlens.dashboard.services.pins.pin_subresources import (
     delete_pin_alias,
 )
 from urbanlens.dashboard.services.security.redact import redact_cache_key, redact_tile
-from urbanlens.dashboard.services.trivia.classifier import ClassifierVerdict, classify_trivia_question
-from urbanlens.dashboard.services.trivia.generation import generate_questions_for_wiki
-from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
 _MARKER = "Quokkabridge Sanatorium"
 _LATITUDE, _LONGITUDE = "41.71825", "-73.93402"
-_POINT_KEY = f"redata:context:{_LATITUDE},{_LONGITUDE}"
+_POINT_KEY = f"point:context:{_LATITUDE},{_LONGITUDE}"
 
 
 def _text(records: list[logging.LogRecord]) -> str:
     """Every captured record as it would be written, traceback included."""
     formatter = logging.Formatter("%(message)s")
     return "\n".join(formatter.format(record) for record in records)
-
-
-class _Gateway:
-    model = "fake-model"
-
-    def __init__(self, answer: str | None = None, pairs: list[str] | None = None) -> None:
-        self._answer, self._pairs = answer, pairs or []
-
-    def send_prompt(self, prompt: str, **kwargs: object) -> str | None:  # noqa: ARG002 - the gateway's signature
-        return self._answer
-
-    def send_prompt_list(self, prompt: str, **kwargs: object) -> list[str]:  # noqa: ARG002
-        return self._pairs
-
-    @property
-    def cost(self) -> int:
-        return 0
-
-
-class WhatATriviaModelWroteTests(TestCase):
-    """A generated question quotes the wiki it was written from; a classifier's stray reply can quote anything."""
-
-    def test_an_unrecognised_classifier_reply_is_not_logged(self) -> None:
-        location = baker.make(Location, official_name="Old Armory")
-        with (
-            mock.patch(
-                "urbanlens.dashboard.services.trivia.classifier.get_gateway",
-                return_value=_Gateway(answer=f"{_MARKER} looks fine to me"),
-            ),
-            self.assertLogs("urbanlens", level="DEBUG") as captured,
-        ):
-            verdict = classify_trivia_question("What year was it built?", "1937", location)
-
-        self.assertFalse(verdict.approved)
-        self.assertNotIn("quokkabridge", _text(captured.records).casefold())
-
-    def _generate(self, pairs: list[str], verdict: ClassifierVerdict) -> str:
-        wiki = baker.make(
-            Wiki, location=baker.make(Location), description="This building has a long and storied history. " * 20
-        )
-        with (
-            mock.patch(
-                "urbanlens.dashboard.services.trivia.generation.get_gateway", return_value=_Gateway(pairs=pairs)
-            ),
-            mock.patch("urbanlens.dashboard.services.trivia.generation.classify_trivia_question", return_value=verdict),
-            self.assertLogs("urbanlens", level="DEBUG") as captured,
-        ):
-            generate_questions_for_wiki(wiki)
-        return _text(captured.records)
-
-    def test_a_pair_with_no_separator_is_not_logged(self) -> None:
-        logged = self._generate([f"When did {_MARKER} close"], ClassifierVerdict(approved=True))
-
-        self.assertIn("separator", logged, "the discarded pair was not logged at all")
-        self.assertNotIn("Quokkabridge", logged)
-
-    def test_a_rejected_question_is_not_logged(self) -> None:
-        logged = self._generate(
-            [f"When did {_MARKER} close?|||1994"], ClassifierVerdict(approved=False, reason="person")
-        )
-
-        self.assertIn("person", logged, "the rejection was not logged with its reason")
-        self.assertNotIn("Quokkabridge", logged)
 
 
 class AnUnparseableBuildingFootprintTests(SimpleTestCase):
@@ -132,7 +62,7 @@ class AnUnparseableBuildingFootprintTests(SimpleTestCase):
 
 
 class ACacheKeyThatLocatesAPlaceTests(SimpleTestCase):
-    """``redata_point_data`` keys its shared lookups by the point: ``redata:context:<lat>,<lng>``."""
+    """A shared lookup is keyed by the point it is about: ``<kind>:context:<lat>,<lng>``."""
 
     def test_a_failed_share_does_not_log_the_point(self) -> None:
         with (
@@ -144,7 +74,7 @@ class ACacheKeyThatLocatesAPlaceTests(SimpleTestCase):
             self.assertEqual(coalesce.coalesced(_POINT_KEY, lambda: "answer", ttl=60, wait_seconds=0), "answer")
 
         logged = _text(captured.records)
-        self.assertIn("redata:context:", logged, "the key's kind was not kept")
+        self.assertIn("point:context:", logged, "the key's kind was not kept")
         self.assertNotIn(_LATITUDE, logged)
 
     def test_a_lock_released_twice_does_not_log_the_point(self) -> None:
@@ -160,49 +90,15 @@ class ACacheKeyThatLocatesAPlaceTests(SimpleTestCase):
     def test_the_same_key_draws_the_same_token(self) -> None:
         """So one failing key can still be followed through the log."""
         self.assertEqual(redact_cache_key(_POINT_KEY), redact_cache_key(_POINT_KEY))
-        self.assertNotEqual(redact_cache_key(_POINT_KEY), redact_cache_key("redata:context:40.00000,-75.00000"))
+        self.assertNotEqual(redact_cache_key(_POINT_KEY), redact_cache_key("point:context:40.00000,-75.00000"))
 
 
-class AMapTileSomeoneViewedTests(RedataConfiguredMixin, TestCase):
+class AMapTileSomeoneViewedTests(SimpleTestCase):
     """At zoom 18 a tile is a building; its zoom-12 ancestor is a town."""
 
     def test_the_tile_index_is_coarsened(self) -> None:
         self.assertEqual(redact_tile(12, 1204, 1539), "12/1204/1539")
         self.assertEqual(redact_tile(18, 77096, 98496), "12/1204/1539 (z18)")
-
-    def test_a_failed_basemap_tile_logs_only_its_coarse_tile(self) -> None:
-        cache.clear()
-        baker.make(User)
-        self.client.force_login(baker.make(User))
-        url = reverse("map.basemap_tiles", kwargs={"layer": "usgs-topo", "z": 18, "x": 77096, "y": 98496})
-        with (
-            mock.patch(
-                "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured",
-                return_value=True,
-            ),
-            mock.patch(
-                "urbanlens.dashboard.services.apis.locations.redata_basemap_tiles_gateway.RedataBasemapTilesGateway.download_tile",
-                return_value=(500, b"", "text/plain"),
-            ),
-            self.assertLogs("urbanlens", level="DEBUG") as captured,
-        ):
-            self.assertEqual(self.client.get(url).status_code, 503)
-
-        logged = _text(captured.records)
-        self.assertIn("12/1204/1539", logged)
-        self.assertNotIn("77096", logged)
-        self.assertNotIn("98496", logged)
-
-
-class AHistoricalMapTileCallTests(SimpleTestCase):
-    """Each REData call is recorded in ``ApiCallLog`` by its endpoint, and an overlay tile's path is the tile."""
-
-    def test_its_recorded_endpoint_stops_at_the_georeference(self) -> None:
-        url = "https://redata.example.test/api/v1/maps/georeferences/abc-123/tiles/18/77096/98496.png"
-
-        endpoint = RedataHistoricalMapsGateway.endpoint_for_log(url)
-
-        self.assertEqual(endpoint, "https://redata.example.test/api/v1/maps/georeferences/abc-123/tiles/")
 
 
 class ALoginCounterTests(TestCase):

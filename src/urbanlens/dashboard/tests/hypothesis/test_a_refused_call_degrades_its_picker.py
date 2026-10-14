@@ -1,7 +1,7 @@
 """
 A refused external call costs a picker its results, not the page.
 
-A limiter that cannot read its own table refuses the call like any other refusal: under R29 an executor thread's
+A limiter that cannot read its own table refuses the call like any other refusal: an executor thread's
 connection is refused whenever ``ul_web`` is at its limit.
 """
 

@@ -1,22 +1,20 @@
-"""Resolves Google Maps CIDs to coordinates, choosing REData or Google Places."""
+"""Resolves Google Maps CIDs to coordinates through the first resolver that can answer."""
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 import logging
+from typing import ClassVar
 
 import requests
 
 from urbanlens.dashboard.services.apis.locations.cid_validation import CID_FLOAT_ROUNDED, InvalidCidError, reconcile_cid
 from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
-from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import CidLookupEntry, RedataCidGateway, RedataPermissionError
-from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
-from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
 
-PROVIDER_REDATA = "redata"
 PROVIDER_GOOGLE = "google_places"
 
 
@@ -27,40 +25,85 @@ class CidResolutionResult:
     provider: str
     resolved: dict[int, tuple[float, float]] = field(default_factory=dict)
     #: Confirmed no answer exists (e.g. Google's NOT_FOUND/ZERO_RESULTS, or
-    #: REData explicitly returning null) - a terminal result, never retried.
+    #: a resolver explicitly returning null) - a terminal result, never retried.
     unresolvable: set[int] = field(default_factory=set)
     #: Rate-limited or a transient failure - the caller should retry these
     #: later, not treat them as done.
     pending: list[int] = field(default_factory=list)
-    #: REData rejected the API key itself (401/403) - also left in `pending` for its count, but this
+    #: The resolver rejected the API key itself (401/403) - also left in `pending` for its count, but this
     #: flag tells the caller retrying is pointless until the key/scope is fixed, so it should stop
     #: and surface the failure instead of looping forever.
     auth_failed: bool = False
-    #: The REData request itself failed outright (network error, non-200, unparseable body) - also
+    #: The resolver's request itself failed outright (network error, non-200, unparseable body) - also
     #: left in `pending` for its count, but this distinguishes "the whole batch made zero progress
     #: this attempt" from a response that resolved/deferred cids normally.
     #: Lets the caller count *consecutive* failures across retries and eventually give up on a
     request_failed: bool = False
-    #: Refused before any lookup, by ``cid_validation`` here or by REData, with the refusal's code -
+    #: Refused before any lookup, by ``cid_validation`` here or by the resolver, with the refusal's code -
     #: a cid that cannot name a place, never retried.
     rejected: dict[int, str] = field(default_factory=dict)
 
 
+class CidResolver(ABC):
+    """
+    One way to turn Google Maps CIDs into coordinates.
+
+    Attributes:
+        key: Short identifier, reported as :attr:`CidResolutionResult.provider`.
+    """
+
+    key: ClassVar[str]
+
+    @abstractmethod
+    def available(self) -> bool:
+        """Whether this resolver is configured to answer."""
+
+    @abstractmethod
+    def resolve(self, cids: list[int], urls_by_cid: dict[int, str] | None = None) -> CidResolutionResult:
+        """
+        Resolve a batch of CIDs that already passed validation.
+
+        Args:
+            cids: Google Maps CIDs to resolve.
+            urls_by_cid: The source Google Maps URL for any of ``cids`` that came from one, for a resolver that can use it.
+
+        Returns:
+            A result partitioning every input cid into resolved/unresolvable/pending (or rejected).
+        """
+
+
+class GoogleCidResolver(CidResolver):
+    """One Google Places lookup per CID, spending this deployment's own budget."""
+
+    key: ClassVar[str] = PROVIDER_GOOGLE
+
+    def available(self) -> bool:
+        """Always: it is the resolver of last resort."""
+        return True
+
+    def resolve(self, cids: list[int], urls_by_cid: dict[int, str] | None = None) -> CidResolutionResult:
+        """See :func:`_resolve_via_google`."""
+        return _resolve_via_google(cids)
+
+
 def resolve_cids(cids: list[int], urls_by_cid: dict[int, str] | None = None) -> CidResolutionResult:
     """
-    Resolve a batch of CIDs to coordinates via whichever provider is configured.
+    Resolve a batch of CIDs to coordinates via the first available resolver.
 
     Args:
         cids: Google Maps CIDs to resolve.
-        urls_by_cid: The source Google Maps URL for any of ``cids`` that came from one (e.g. a Takeout CSV import) - passed through to REData when it's the configured provider, since it resolves via a place's own URL faster and more reliably than the bare cid alone...
+        urls_by_cid: The source Google Maps URL for any of ``cids`` that came from one (e.g. a Takeout CSV import) - passed through to the resolver, since one that resolves via a place's own URL does so faster and more reliably than from the bare cid alone.
 
     Returns:
         A :class:`CidResolutionResult` partitioning every input cid into resolved/unresolvable/pending/rejected."""
+    from urbanlens.dashboard.plugins.points import CID_RESOLVERS
+
     usable, rejected = _usable_cids(cids, urls_by_cid or {})
-    if settings.redata_api_url and settings.redata_api_key:
-        result = _resolve_via_redata(usable, urls_by_cid)
+    resolver = next((candidate for candidate in CID_RESOLVERS if candidate.available()), None)
+    if resolver is None:
+        result = CidResolutionResult(provider="", pending=list(usable), request_failed=True)
     else:
-        result = _resolve_via_google(usable)
+        result = resolver.resolve(usable, urls_by_cid)
     return replace(result, rejected={**rejected, **result.rejected}) if rejected else result
 
 
@@ -87,26 +130,6 @@ def _usable_cids(cids: list[int], urls_by_cid: dict[int, str]) -> tuple[list[int
     if rejected:
         logger.warning("Refused %d cid(s) before any lookup: %s", len(rejected), sorted(set(rejected.values())))
     return usable, rejected
-
-
-def _resolve_via_redata(cids: list[int], urls_by_cid: dict[int, str] | None = None) -> CidResolutionResult:
-    entries = [CidLookupEntry(cid=cid, url=(urls_by_cid or {}).get(cid)) for cid in cids]
-    try:
-        batch = RedataCidGateway().resolve_cids(entries)
-    except RedataPermissionError:
-        logger.exception("REData rejected the API key resolving %d cid(s) - not retrying until UL_REDATA_API_KEY's scopes are fixed.", len(cids))
-        return CidResolutionResult(provider=PROVIDER_REDATA, pending=list(cids), auth_failed=True)
-    except GatewayRequestError:
-        logger.warning("REData CID batch resolution failed for %d cid(s) - deferring for retry.", len(cids))
-        return CidResolutionResult(provider=PROVIDER_REDATA, pending=list(cids), request_failed=True)
-
-    return CidResolutionResult(
-        provider=PROVIDER_REDATA,
-        resolved=batch.resolved,
-        unresolvable=batch.unresolvable,
-        pending=list(batch.pending),
-        rejected=batch.rejected,
-    )
 
 
 def _resolve_via_google(cids: list[int]) -> CidResolutionResult:

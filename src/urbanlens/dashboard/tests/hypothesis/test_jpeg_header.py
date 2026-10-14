@@ -1,5 +1,5 @@
 """
-A JPEG's pixel size is read from its frame header, never by decoding it (P324).
+A JPEG's pixel size is read from its frame header, never by decoding it.
 
 Pillow appears here only to write fixtures and to say what size a decoder sees.
 """
@@ -173,7 +173,7 @@ class NotAJpegTests(SimpleTestCase):
             "WebP": encoded("WEBP"),
             "GIF": encoded("GIF"),
             "text": b"not a jpeg",
-            "P320's fixture": b"\xff\xd8\xff\xe0fake-jpeg-bytes",
+            "fake JPEG magic": b"\xff\xd8\xff\xe0fake-jpeg-bytes",
         }.items():
             with self.subTest(name):
                 self.assertIsNone(jpeg_dimensions(data))

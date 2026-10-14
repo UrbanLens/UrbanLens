@@ -29,7 +29,7 @@ from urbanlens.dashboard.services.pins.pin_subresources import (
     delete_pin_link,
 )
 from urbanlens.dashboard.services.security.link_urls import InvalidLinkUrlError, clean_link_url
-from urbanlens.dashboard.services.wiki.concealment import visible_rows
+from urbanlens.dashboard.services.wiki.viewer_projection import visible_rows
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 logger = logging.getLogger(__name__)
@@ -62,8 +62,6 @@ def _with_links_changed(response: HttpResponse) -> HttpResponse:
 
 
 def _render_pin_links(request, pin: Pin) -> HttpResponse:
-    from urbanlens.dashboard.services.ai.link_extraction import ai_extract_button_context
-
     return render(
         request,
         "dashboard/partials/pins/_pin_links_row.html",
@@ -74,7 +72,6 @@ def _render_pin_links(request, pin: Pin) -> HttpResponse:
             "row_id": request.GET.get("row") or "pin-links-row",
             "owner_slug": pin.slug,
             "show_badge": True,
-            **ai_extract_button_context(pin.profile.user, pin.profile, pin),
         },
     )
 
@@ -86,17 +83,15 @@ def _render_wiki_links(request, wiki, profile) -> HttpResponse:
     Takes the profile for the same reason ``aliases._render_location_panel``
     does - see that docstring.
     """
-    from urbanlens.dashboard.services.wiki.concealment import conceal_rows, conceal_wiki, concealment_active
+    from urbanlens.dashboard.services.wiki.viewer_projection import project_wiki
 
-    links = wiki.links.all()
-    if concealment_active(wiki, profile):
-        links = conceal_rows(links, profile)
+    links = visible_rows(wiki.links.all(), wiki, profile)
 
     return render(
         request,
         "dashboard/partials/pins/_pin_links_row.html",
         {
-            "wiki": conceal_wiki(wiki, profile),
+            "wiki": project_wiki(wiki, profile),
             "links": links,
             "delete_url_name": "location.wiki.link.delete",
             "row_id": "wiki-links-row",

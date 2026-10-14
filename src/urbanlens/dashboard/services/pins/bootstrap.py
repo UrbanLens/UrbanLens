@@ -3,7 +3,7 @@ Everything a new root pin's property needs, fetched once in the background rathe
 
 ``tasks.bootstrap_location`` runs one stage per task run, each with its own time limit, and queues the next:
 
-1. ``boundary`` - ask REData to prewarm the point, then draw the parcel (the boundary panel's own fetch).
+1. ``boundary`` - tell the services that can prewarm the point (``LOCATION_PREWARMERS``), then draw the parcel (the boundary panel's own fetch).
 2. ``buildings`` - list the parcel's buildings (the "Buildings on this Property" panel's own fetch), which nests them.
 3. ``nest`` - the community wiki, then the building places, pins and wikis, for a property whose list was already
    cached by somebody else.
@@ -14,8 +14,8 @@ Every fetch takes the panel's flight marker, so a page opened meanwhile polls th
 its own, and a stage that finds a page's fetch in flight waits for it.
 
 Bulk imports never reach here: they create pins through ``Pin.objects.get_nearby_or_create``, and their locations are
-filled by the hourly enrichment job, whose per-run cap and per-service budget pace them against the REData key every
-environment shares (P144). A client creating root pins one by one through the API is paced by
+filled by the hourly enrichment job, whose per-run cap and per-service budget pace them against the keys every
+environment shares. A client creating root pins one by one through the API is paced by
 :data:`BOOTSTRAP_BURST`, and every account together by :data:`SITE_BOOTSTRAP_BURST`; past either, a pin falls back to
 the same job.
 """
@@ -25,7 +25,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 import logging
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING, NamedTuple, Protocol
 
 from django.core.cache import cache
 from django.db import transaction
@@ -53,28 +53,12 @@ class BootstrapStage(StrEnum):
     DATES = "dates"
 
 
-#: The panels describing the property as a whole: ownership and sales, historic registers, New York's CRIS inventory,
-#: news, web photos, reported incidents and the archives searched for documents. Each still passes its own gate.
-SITE_PANEL_KEYS: tuple[str, ...] = (
-    "property_records",
-    "redata_historic_registers",
-    "cris_building",
-    "gdelt",
-    "searxng_images",
-    "redata_incidents",
-    "loc",
-    "internet_archive",
-    "smithsonian",
-    "digital_commonwealth",
-    "chronicling_america",
-)
-
 #: Root pins one profile may have bootstrapped at once; a pin past this waits for the hourly enrichment job.
 BOOTSTRAP_BURST = 10
 #: Seconds for one more of :data:`BOOTSTRAP_BURST` to come back: ten an hour, sustained.
 BOOTSTRAP_REFILL_SECONDS = 360
-#: Root pins every account together may have bootstrapped at once. At about 25 REData requests each, twenty an hour
-#: is half of the hourly budget the key shares with every other environment (P144).
+#: Root pins every account together may have bootstrapped at once. At about 25 first-party requests each, twenty an hour
+#: is half of the hourly budget the key shares with every other environment.
 SITE_BOOTSTRAP_BURST = 20
 #: Seconds for one more of :data:`SITE_BOOTSTRAP_BURST` to come back: twenty an hour, sustained.
 SITE_BOOTSTRAP_REFILL_SECONDS = 180
@@ -84,7 +68,7 @@ _SITE_ALLOWANCE_KEY = "ul:pin-bootstrap:site"
 MAX_FLIGHT_WAITS = 5
 #: Seconds between those waits; five of them outlast a panel fetch task's hard time limit.
 FLIGHT_WAIT_SECONDS = 30
-#: The longest wait a source may name for a stage to sit it out and ask again, such as REData's while it computes a
+#: The longest wait a source may name for a stage to sit it out and ask again, such as a service computing a
 #: cold parcel's buildings; past it the stage moves on, and a page view or the enrichment job asks later.
 MAX_DEFERRAL_WAIT_SECONDS = 300
 #: Added to a source's wait, so the stage asks once the fetch's own suppression has lapsed.
@@ -97,12 +81,6 @@ DATES_DELAY_SECONDS = 150
 
 #: How long a location counts as being bootstrapped, for the enrichment job to leave it alone.
 IN_FLIGHT_SECONDS = 3600
-#: How long a key REData refused to prewarm for is not asked again.
-PREWARM_REFUSED_SECONDS = 24 * 3600
-#: How long one location is not prewarmed again.
-PREWARM_REPEAT_SECONDS = 24 * 3600
-_PREWARM_REFUSED_KEY = "ul:redata-prewarm:refused"
-
 #: The queue each stage after the first runs on, when it is not the task's own. A campus can mean hundreds of pins.
 _STAGE_QUEUES: dict[BootstrapStage, str] = {BootstrapStage.NEST: Queue.BULK, BootstrapStage.DATES: Queue.BULK}
 
@@ -349,57 +327,57 @@ def schedule_site_panels(pin: Pin) -> list[str]:
     """
     Schedule every site panel that applies to the pin and has nothing stored, as a page's first view would.
 
+    Site panels are the ones describing the property as a whole, which declare a ``bootstrap_order``. Each still passes
+    its own gate.
+
     Args:
         pin: A root pin.
 
     Returns:
         The keys of the panels now being fetched, by this call or one already in flight.
     """
-    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
-    from urbanlens.dashboard.services.pins.external_data import gate_allows, get_panel_source, panel_visible_to, schedule_panel_fetch
+    from urbanlens.dashboard.services.pins.external_data import bootstrap_panels, gate_allows, panel_visible_to, schedule_panel_fetch
 
-    # Every one of them answers from REData; without it there is nothing to schedule.
-    if not redata_configured():
-        return []
     scheduled: list[str] = []
-    for key in SITE_PANEL_KEYS:
-        source = get_panel_source(key)
-        if source is None or not panel_visible_to(pin.profile.user, source) or not gate_allows(source, pin) or source.has_landed(pin):
+    for source in bootstrap_panels():
+        if not panel_visible_to(pin.profile.user, source) or not gate_allows(source, pin) or source.has_landed(pin):
             continue
-        if schedule_panel_fetch(key, pin):
-            scheduled.append(key)
+        if schedule_panel_fetch(source.key, pin):
+            scheduled.append(source.key)
     return scheduled
+
+
+class LocationPrewarmer(Protocol):
+    """A service that can start gathering what it knows about a point before anything asks for it."""
+
+    def prewarm(self, location: Location) -> bool:
+        """
+        Ask the service to start, without waiting for any of it.
+
+        Args:
+            location: The newly pinned location.
+
+        Returns:
+            Whether the service accepted the request; False when it is unavailable, was asked recently or refused.
+        """
+        ...
 
 
 def prewarm_location(location: Location) -> bool:
     """
-    Ask REData to start fetching what it knows about a new point, without waiting for any of it.
-
-    The key needs the ``locations:prewarm`` scope; one without it is remembered and not asked again for
-    :data:`PREWARM_REFUSED_SECONDS`, and the bootstrap goes on as if nothing had been asked.
+    Tell every service that can prewarm a new point about it, without waiting for any of them.
 
     Args:
         location: The newly pinned location.
 
     Returns:
-        Whether REData accepted the request.
+        Whether any service accepted.
     """
-    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
-    from urbanlens.dashboard.services.apis.locations.redata_prewarm_gateway import PrewarmNotPermittedError, RedataPrewarmGateway
-    from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+    from urbanlens.dashboard.plugins.points import LOCATION_PREWARMERS
 
-    if location.latitude is None or location.longitude is None or not redata_configured() or cache.get(_PREWARM_REFUSED_KEY):
+    if location.latitude is None or location.longitude is None:
         return False
-    if not cache.add(f"ul:redata-prewarm:loc{location.pk}", 1, PREWARM_REPEAT_SECONDS):
-        return False
-    try:
-        RedataPrewarmGateway().prewarm(float(location.latitude), float(location.longitude))
-    except PrewarmNotPermittedError:
-        logger.info("REData does not let this key prewarm; not asking again for %ss", PREWARM_REFUSED_SECONDS)
-        cache.set(_PREWARM_REFUSED_KEY, 1, PREWARM_REFUSED_SECONDS)
-        return False
-    except GatewayRequestError as exc:
-        # Unreachable, throttled or refused by our own rate limiter: the bootstrap's fetches ask REData directly anyway.
-        logger.info("REData prewarm for location %s not made: %s", location.pk, type(exc).__name__)
-        return False
-    return True
+    accepted = False
+    for prewarmer in LOCATION_PREWARMERS:
+        accepted = prewarmer.prewarm(location) or accepted
+    return accepted

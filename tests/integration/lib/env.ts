@@ -153,8 +153,6 @@ export const env = {
     /** Whether `/health/primary` should answer 200 (read-replicas legitimately answer 503). */
     expectPrimaryDatabase: readBoolean("UL_E2E_EXPECT_PRIMARY", true),
 
-    /** Optional REData base URL. Unset skips the cross-service checks. */
-    redataUrl: process.env.UL_E2E_REDATA_URL?.trim().replace(/\/+$/, "") || null,
 
     /** The app container, for specs that read back what a real inbox would receive. Unset skips them. */
     appContainer: process.env.UL_E2E_APP_CONTAINER?.trim() || null,

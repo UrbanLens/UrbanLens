@@ -13,6 +13,7 @@ import type { APIRequestContext } from "@playwright/test";
 import type { ApiClient, CreatedPin } from "../../lib/api-client.js";
 import { expect, ifSecondaryAccount, test } from "../../lib/fixtures.js";
 import { resourceName } from "../../lib/env.js";
+import { pluginEntries } from "../../lib/plugin-entries.js";
 import {
     createChild,
     createCustomField,
@@ -89,6 +90,7 @@ interface Endpoint {
 // segment fails the meta test until it is placed here.
 
 const FAMILY_BY_SEGMENT: Record<string, string> = {
+    ...pluginEntries.sweepSegments,
     pins: "pins",
     photos: "photos",
     lists: "lists",
@@ -102,13 +104,12 @@ const FAMILY_BY_SEGMENT: Record<string, string> = {
     friends: "profiles and friends",
     messages: "messaging and key exchange",
     e2ee: "messaging and key exchange",
-    notifications: "notifications, undo, devices, suggestions, shares, games and the assistant",
-    undo: "notifications, undo, devices, suggestions, shares, games and the assistant",
-    "push-devices": "notifications, undo, devices, suggestions, shares, games and the assistant",
-    suggestions: "notifications, undo, devices, suggestions, shares, games and the assistant",
-    "pin-shares": "notifications, undo, devices, suggestions, shares, games and the assistant",
-    games: "notifications, undo, devices, suggestions, shares, games and the assistant",
-    assistant: "notifications, undo, devices, suggestions, shares, games and the assistant",
+    notifications: "notifications, undo, devices, suggestions, shares and games",
+    undo: "notifications, undo, devices, suggestions, shares and games",
+    "push-devices": "notifications, undo, devices, suggestions, shares and games",
+    suggestions: "notifications, undo, devices, suggestions, shares and games",
+    "pin-shares": "notifications, undo, devices, suggestions, shares and games",
+    games: "notifications, undo, devices, suggestions, shares and games",
 };
 
 const FAMILIES = [...new Set(Object.values(FAMILY_BY_SEGMENT))];
@@ -191,12 +192,11 @@ const SELECTOR_BY_PARAM: Record<string, SelectorKey> = {
  * scopes the lookup to the caller instead.
  */
 const PLACEHOLDERS: Record<string, string> = {
+    ...pluginEntries.sweepPlaceholders,
     suggestion_id:
         "suggestions are produced by background photo/import analysis, not by any API call; both action views filter by the caller (external_api/views.py:1603-1607, 1655)",
     share_id:
         "a pin share needs an accepted friendship and the web send flow (no external route); the respond view looks it up with to_profile=caller (views_pin_shares.py:59-63). specs/security/pin-share.spec.ts owns it",
-    turn_id: "an assistant turn bills a model provider; poll and confirm compare the cached turn's profile_id with the caller (views_assistant.py:186, 230)",
-    n: "an assistant proposal index, only meaningful under a real turn (see turn_id)",
     session_id:
         "a SpotGuessr session is alpha-gated and bills Street View; every session view resolves through GameSessionParticipant filtered by the caller (views_games.py:208, 727)",
     round_id: "only meaningful under a real session (see session_id)",

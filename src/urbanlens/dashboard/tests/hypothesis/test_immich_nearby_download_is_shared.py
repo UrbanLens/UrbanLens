@@ -5,7 +5,7 @@ Immich exposes no coordinate-radius filter, so "photos near this pin" can only
 be answered by fetching every geolocated asset and measuring in Python - tens
 of thousands of assets over the network, inside the request. The existing cache
 is keyed on the *point*, which makes the six radius options on one pin share a
-download but makes every pin pay for its own (N21 H09).
+download but makes every pin pay for its own.
 
 The download is a property of the account, not of the point. Only the measuring
 and sorting depend on where the pin is, so those stay keyed per point and the

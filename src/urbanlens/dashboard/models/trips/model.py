@@ -519,7 +519,7 @@ class TripComment(LocationMentioningModel, abstract.DashboardModel):
         on_delete=CASCADE,
         related_name="comments",
     )
-    # CASCADE, matching dashboard.Comment.profile (P25): deleting an account erases the
+    # CASCADE, matching dashboard.Comment.profile: deleting an account erases the
     # comments it authored everywhere, trips included - signals.py still tombstones any
     # reply another member wrote before this row goes.
     author = ForeignKey(
@@ -539,7 +539,7 @@ class TripComment(LocationMentioningModel, abstract.DashboardModel):
     # Set by this model's own pre_delete signal (see signals.py) on every reply of a comment that's
     # about to be deleted, before `parent` is nulled out by SET_NULL below.
     # Without this, a reply to a deleted comment silently becomes an unexplained top-level comment -
-    # mirrors dashboard.Comment.parent_deleted (UL-219), ported here.
+    # mirrors dashboard.Comment.parent_deleted, ported here.
     parent_deleted = BooleanField(default=False)
 
     objects = TripCommentManager()

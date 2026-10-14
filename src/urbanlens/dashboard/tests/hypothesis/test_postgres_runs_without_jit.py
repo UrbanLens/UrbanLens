@@ -7,7 +7,7 @@ without it. A web request's statements are short; the compilation never pays for
 
 The rest is server sizing. The image's defaults describe a machine nobody here runs: a 128 MB buffer cache against a
 1,000 MB database, a seek priced at four sequential reads, and a 4 GB page-cache estimate against a 2 GB container.
-X27 measured what that costs and why ``pg_stat_statements`` has to be present to measure it again.
+Measuring what that costs, and why ``pg_stat_statements`` has to be present to measure it again.
 """
 
 from __future__ import annotations
@@ -71,14 +71,14 @@ class PostgresIsSizedForItsContainerTests(SimpleTestCase):
 
     def test_statement_statistics_are_available_without_an_alter_system(self) -> None:
         """
-        X27's figures came from a setting someone applied by hand to one container, which is
+        The figures came from a setting someone applied by hand to one container, which is
         indistinguishable from a measurement nobody can repeat."""
         self.assertEqual(self.settings_given.get("shared_preload_libraries"), "pg_stat_statements")
 
     def test_planning_time_tracking_is_off_unless_a_deployment_asks(self) -> None:
         """
         Anti-vacuity for the line above: it is Postgres's own default, its cost here was not
-        measurable against host noise, and X27 needs it turned on deliberately rather than always."""
+        measurable against host noise, and it needs turning on deliberately rather than always."""
         self.assertEqual(_default_of(self.settings_given["pg_stat_statements.track_planning"]), "off")
 
     def test_every_setting_is_overridable_without_editing_compose(self) -> None:

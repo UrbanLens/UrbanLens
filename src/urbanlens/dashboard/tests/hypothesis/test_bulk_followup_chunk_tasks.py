@@ -1,5 +1,5 @@
 """
-Tests for the chunk-shaped batch task siblings tasks.py exposes for P109's per-pin fan-out.
+Tests for the chunk-shaped batch task siblings tasks.py exposes for the per-pin fan-out.
 
 Each batch task below calls its per-item sibling *directly* (as a plain call, not via ``.delay()``/
 ``.apply_async()``), so a transient failure there can't schedule its own delayed retry: Celery's
@@ -101,25 +101,6 @@ class SuggestPinCategoriesChunkTests(SimpleTestCase):
             self.assertRaises(OSError),
         ):
             tasks.suggest_pin_categories([1, 2, 3])
-
-
-class ScoreReputationEventsChunkTests(SimpleTestCase):
-    """
-    score_reputation_events calls score_event/recompute_total (plain functions), never the
-    score_reputation_event *task* object, so it never hits the called_directly trap the other five
-    chunk tasks above must guard against - covered here as the negative case."""
-
-    def test_calls_the_plain_scoring_function_not_the_task_object(self) -> None:
-        with (
-            mock.patch("urbanlens.dashboard.models.reputation.model.ReputationEvent.objects") as manager,
-            mock.patch("urbanlens.dashboard.services.reputation.scoring.score_event"),
-            mock.patch("urbanlens.dashboard.services.reputation.scoring.recompute_total"),
-            mock.patch("urbanlens.dashboard.tasks.score_reputation_event") as score_reputation_event_task,
-        ):
-            manager.filter.return_value = []
-            tasks.score_reputation_events([1, 2, 3])
-
-        score_reputation_event_task.assert_not_called()
 
 
 class _ArchiveLinksChunkCase(SimpleTestCase):

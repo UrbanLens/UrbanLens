@@ -1,52 +1,40 @@
-"""Tests for the parcel-buildings plugin."""
+"""Tests for the parcel-buildings plugin: the rows, the panel and the wiki card."""
 
 from __future__ import annotations
 
-from contextlib import contextmanager
-from datetime import timedelta
-from typing import TYPE_CHECKING
 from unittest.mock import patch
 from uuid import uuid4
 
 from django.contrib.auth.models import User
 from django.contrib.gis.geos import MultiPolygon, Polygon
 from django.urls import reverse
-from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.inline_scripts import executable_blocks, inline_handlers
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
-from urbanlens.dashboard.models.cache.location_cache import PARTIAL_ANSWER_STALE_AFTER, LocationCache
+from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.plugins.builtin.parcel_buildings import (
     ParcelBuildingsEnrichmentSource,
     ParcelBuildingsPanelSource,
-    ParcelBuildingsPlugin,
     building_rows,
-    fetch_parcel_buildings,
 )
+from urbanlens.dashboard.plugins.points import BUILDING_RECORD_PROVIDERS, ENRICHMENT_SOURCES, PANEL_SOURCES
+from urbanlens.dashboard.plugins.testing import contributed
 from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
-from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
-    ParcelBuildings,
-    PropertyRecordsUnavailableError,
-    RedataGateway,
-)
 from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_CACHE_SOURCE
 from urbanlens.dashboard.services.pins.pin_restructure import match_marker
-from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
+from urbanlens.dashboard.services.places.building_records import BuildingRecordProvider
 
 from .place_helpers import official_geometry
 
-if TYPE_CHECKING:
-    from collections.abc import Iterator
-
 _coord_counter = 0
 
-_REDATA_BUILDINGS = [
+_RECONCILED_BUILDINGS = [
     {
-        "source": "cris",
+        "source": "survey",
         "name": "Tool Shed",
         "building_number": "154",
         "year_built": 1937,
@@ -54,7 +42,7 @@ _REDATA_BUILDINGS = [
         "longitude": -73.93040,
     },
     {
-        "source": "cris",
+        "source": "survey",
         "name": "Main Hall",
         "building_number": "9",
         "year_built": 1892,
@@ -62,16 +50,6 @@ _REDATA_BUILDINGS = [
         "longitude": -73.93000,
     },
 ]
-
-
-@contextmanager
-def _redata_answers(answer: ParcelBuildings) -> Iterator[None]:
-    with (
-        patch.object(RedataGateway, "__post_init__", lambda _self: None),
-        patch.object(RedataGateway, "lookup_parcel_uuid", return_value="parcel-1"),
-        patch.object(RedataGateway, "lookup_parcel_buildings", return_value=answer),
-    ):
-        yield
 
 
 def _make_location(**kwargs) -> Location:
@@ -130,173 +108,18 @@ def _box(latitude: float, longitude: float, half_lat: float, half_lng: float) ->
     return {"type": "Polygon", "coordinates": [ring]}
 
 
-class FetchParcelBuildingsTests(RedataConfiguredMixin, TestCase):
-    """REData first, Overpass only when REData has nothing."""
+class _SurveyRecords(BuildingRecordProvider):
+    """A source of building records that labels the ``survey`` source of its rows."""
 
-    def setUp(self) -> None:
-        super().setUp()
-        self.location = _make_location()
+    key = "survey_records"
+    tag = "survey"
+    source_labels = {"survey": "County Survey"}
 
-    def test_redata_buildings_are_used_when_available(self) -> None:
-        with (
-            patch.object(RedataGateway, "__post_init__", lambda _self: None),
-            patch.object(RedataGateway, "lookup_parcel_uuid", return_value="parcel-1"),
-            patch.object(RedataGateway, "lookup_parcel_buildings", return_value=ParcelBuildings(_REDATA_BUILDINGS)),
-        ):
-            payload = fetch_parcel_buildings(self.location)
-        self.assertEqual(payload["provider"], "redata")
-        self.assertEqual(len(payload["buildings"]), 2)
-
-    def test_a_partial_redata_answer_names_what_did_not_answer(self) -> None:
-        with _redata_answers(ParcelBuildings(_REDATA_BUILDINGS, unanswered_sources=("overture",))):
-            payload = fetch_parcel_buildings(self.location)
-        self.assertEqual(payload["unanswered_sources"], ["overture"])
-
-    def test_overpass_is_not_consulted_when_redata_answers(self) -> None:
-        with (
-            patch.object(RedataGateway, "__post_init__", lambda _self: None),
-            patch.object(RedataGateway, "lookup_parcel_uuid", return_value="parcel-1"),
-            patch.object(RedataGateway, "lookup_parcel_buildings", return_value=ParcelBuildings(_REDATA_BUILDINGS)),
-            patch.object(OverpassGateway, "buildings_within") as mock_overpass,
-        ):
-            fetch_parcel_buildings(self.location)
-        mock_overpass.assert_not_called()
-
-    def test_falls_back_to_overpass_inside_the_property_boundary(self) -> None:
-        official_geometry(
-            self.location,
-            _square_around(float(self.location.latitude), float(self.location.longitude)),
-        )
-        osm = [
-            {
-                "name": "Powerhouse",
-                "building_number": "",
-                "latitude": 41.7331,
-                "longitude": -73.9301,
-                "osm_id": 5,
-                "source": "osm",
-            }
-        ]
-        with (
-            patch.object(RedataGateway, "__post_init__", lambda _self: None),
-            patch.object(RedataGateway, "lookup_parcel_uuid", return_value=None),
-            patch.object(OverpassGateway, "__post_init__", lambda _self: None),
-            patch.object(OverpassGateway, "buildings_within", return_value=osm),
-        ):
-            payload = fetch_parcel_buildings(self.location)
-        self.assertEqual(payload["provider"], "osm")
-        self.assertEqual(payload["buildings"], osm)
-
-    def test_no_real_property_boundary_skips_overpass_entirely(self) -> None:
-        """The synthesized 50m circle isn't a parcel - counting inside it would catch neighbours."""
-        with (
-            patch.object(RedataGateway, "__post_init__", lambda _self: None),
-            patch.object(RedataGateway, "lookup_parcel_uuid", return_value=None),
-            patch.object(OverpassGateway, "buildings_within") as mock_overpass,
-        ):
-            payload = fetch_parcel_buildings(self.location)
-        mock_overpass.assert_not_called()
-        self.assertEqual(payload, {})
-
-    def test_a_settled_redata_refusal_falls_through_to_nothing_found(self) -> None:
-        with (
-            patch.object(RedataGateway, "__post_init__", lambda _self: None),
-            patch.object(
-                RedataGateway, "lookup_parcel_uuid", side_effect=PropertyRecordsUnavailableError("no_data_found", "")
-            ),
-        ):
-            self.assertEqual(fetch_parcel_buildings(self.location), {})
-
-    def test_a_redata_outage_with_nothing_else_found_raises(self) -> None:
-        """``{}`` here is cached as "no buildings" for the whole cache term."""
-        with (
-            patch.object(RedataGateway, "__post_init__", lambda _self: None),
-            patch.object(
-                RedataGateway, "lookup_parcel_uuid", side_effect=PropertyRecordsUnavailableError("source_error", "boom")
-            ),
-            self.assertRaises(PropertyRecordsUnavailableError),
-        ):
-            fetch_parcel_buildings(self.location)
-
-    def test_a_redata_outage_still_returns_what_overpass_found(self) -> None:
-        official_geometry(
-            self.location,
-            _square_around(float(self.location.latitude), float(self.location.longitude)),
-        )
-        osm = [{"name": "Powerhouse", "latitude": 41.7331, "longitude": -73.9301, "osm_id": 5, "source": "osm"}]
-        with (
-            patch.object(RedataGateway, "__post_init__", lambda _self: None),
-            patch.object(
-                RedataGateway, "lookup_parcel_uuid", side_effect=PropertyRecordsUnavailableError("source_error", "boom")
-            ),
-            patch.object(RedataGateway, "lookup_cultural_resources", return_value=[]),
-            patch.object(OverpassGateway, "__post_init__", lambda _self: None),
-            patch.object(OverpassGateway, "buildings_within", return_value=osm),
-        ):
-            payload = fetch_parcel_buildings(self.location)
-
-        self.assertEqual(payload["provider"], "osm")
-        self.assertEqual(payload["unanswered_sources"], ["redata"], "a fallback standing in for REData is a floor")
-
-    def test_an_overpass_outage_beside_a_cris_answer_is_marked(self) -> None:
-        official_geometry(
-            self.location,
-            _square_around(float(self.location.latitude), float(self.location.longitude)),
-        )
-        cris = [{"name": "Main Hall", "latitude": 41.7331, "longitude": -73.9301, "source": "cris"}]
-        with (
-            patch.object(RedataGateway, "__post_init__", lambda _self: None),
-            patch.object(RedataGateway, "lookup_parcel_uuid", return_value=None),
-            patch.object(OverpassGateway, "__post_init__", lambda _self: None),
-            patch.object(OverpassGateway, "buildings_within", side_effect=OSError("overpass down")),
-            patch("urbanlens.dashboard.plugins.builtin.parcel_buildings._cris_buildings", return_value=cris),
-            patch(
-                "urbanlens.dashboard.plugins.builtin.parcel_buildings.merge_cris_buildings",
-                side_effect=lambda found, cris_rows, _polygon: [*found, *cris_rows],
-            ),
-        ):
-            payload = fetch_parcel_buildings(self.location)
-
-        self.assertEqual(payload["provider"], "cris")
-        self.assertEqual(payload["unanswered_sources"], ["overpass"])
-
-    def test_a_redata_answer_found_unaided_is_not_marked(self) -> None:
-        with _redata_answers(ParcelBuildings(_REDATA_BUILDINGS)):
-            payload = fetch_parcel_buildings(self.location)
-
-        self.assertNotIn("unanswered_sources", payload)
-
-    def test_an_overpass_outage_with_nothing_else_found_raises(self) -> None:
-        official_geometry(
-            self.location,
-            _square_around(float(self.location.latitude), float(self.location.longitude)),
-        )
-        with (
-            patch.object(RedataGateway, "__post_init__", lambda _self: None),
-            patch.object(RedataGateway, "lookup_parcel_uuid", return_value=None),
-            patch.object(RedataGateway, "lookup_cultural_resources", return_value=[]),
-            patch.object(OverpassGateway, "__post_init__", lambda _self: None),
-            patch.object(OverpassGateway, "buildings_within", side_effect=OSError("overpass down")),
-            self.assertRaises(OSError),
-        ):
-            fetch_parcel_buildings(self.location)
-
-    def test_an_overpass_failure_that_is_not_an_outage_is_nothing_found(self) -> None:
-        official_geometry(
-            self.location,
-            _square_around(float(self.location.latitude), float(self.location.longitude)),
-        )
-        with (
-            patch.object(RedataGateway, "__post_init__", lambda _self: None),
-            patch.object(RedataGateway, "lookup_parcel_uuid", return_value=None),
-            patch.object(RedataGateway, "lookup_cultural_resources", return_value=[]),
-            patch.object(OverpassGateway, "__post_init__", lambda _self: None),
-            patch.object(OverpassGateway, "buildings_within", side_effect=ValueError("malformed ring")),
-        ):
-            self.assertEqual(fetch_parcel_buildings(self.location), {})
+    def available(self) -> bool:
+        return True
 
 
-class PanelSourceTests(RedataConfiguredMixin, TestCase):
+class PanelSourceTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
         self.profile = baker.make("dashboard.Profile")
@@ -311,63 +134,6 @@ class PanelSourceTests(RedataConfiguredMixin, TestCase):
         """A child pin marks one building; it has no buildings of its own to list."""
         child = baker.make(Pin, profile=self.profile, location=_make_location(), parent_pin=self.pin)
         self.assertFalse(self.source.gate(child))
-
-    def test_fetch_caches_the_building_list(self) -> None:
-        with (
-            patch.object(RedataGateway, "__post_init__", lambda _self: None),
-            patch.object(RedataGateway, "lookup_parcel_uuid", return_value="parcel-1"),
-            patch.object(RedataGateway, "lookup_parcel_buildings", return_value=ParcelBuildings(_REDATA_BUILDINGS)),
-        ):
-            self.source.fetch(self.pin)
-        cached = LocationCache.get_fresh(self.location, PARCEL_BUILDINGS_CACHE_SOURCE)
-        assert cached is not None
-        self.assertEqual(len(cached.data["buildings"]), 2)
-
-
-class PartialAnswerCachingTests(RedataConfiguredMixin, TestCase):
-    """A building list REData says is missing a source is shown, and asked for again within the hour."""
-
-    def setUp(self) -> None:
-        super().setUp()
-        self.location = _make_location()
-        self.pin = baker.make(Pin, profile=baker.make("dashboard.Profile"), location=self.location)
-
-    def _fresh_after(self, elapsed: timedelta) -> bool:
-        with patch("django.utils.timezone.now", return_value=timezone.now() + elapsed):
-            return LocationCache.get_fresh(self.location, PARCEL_BUILDINGS_CACHE_SOURCE) is not None
-
-    def test_the_panel_keeps_a_partial_list_only_briefly(self) -> None:
-        with _redata_answers(ParcelBuildings(_REDATA_BUILDINGS, unanswered_sources=("overture",))):
-            ParcelBuildingsPanelSource().fetch(self.pin)
-
-        self.assertTrue(self._fresh_after(timedelta(0)))
-        self.assertFalse(self._fresh_after(PARTIAL_ANSWER_STALE_AFTER + timedelta(minutes=1)))
-
-    def test_background_enrichment_keeps_a_partial_list_only_briefly(self) -> None:
-        with _redata_answers(ParcelBuildings(_REDATA_BUILDINGS, unanswered_sources=("overture",))):
-            ParcelBuildingsEnrichmentSource().enrich(self.location)
-
-        self.assertTrue(self._fresh_after(timedelta(0)))
-        self.assertFalse(self._fresh_after(PARTIAL_ANSWER_STALE_AFTER + timedelta(minutes=1)))
-
-    def test_a_complete_list_keeps_the_full_window(self) -> None:
-        with _redata_answers(ParcelBuildings(_REDATA_BUILDINGS)):
-            ParcelBuildingsPanelSource().fetch(self.pin)
-
-        self.assertTrue(self._fresh_after(PARTIAL_ANSWER_STALE_AFTER + timedelta(minutes=1)))
-
-
-class EnrichmentSourceTests(RedataConfiguredMixin, TestCase):
-    def test_fetch_returns_the_payload_and_a_coordinate_query_key(self) -> None:
-        location = baker.make(Location, latitude="41.733150", longitude="-73.930370", google_place=None)
-        with (
-            patch.object(RedataGateway, "__post_init__", lambda _self: None),
-            patch.object(RedataGateway, "lookup_parcel_uuid", return_value="parcel-1"),
-            patch.object(RedataGateway, "lookup_parcel_buildings", return_value=ParcelBuildings(_REDATA_BUILDINGS)),
-        ):
-            payload, query_key = ParcelBuildingsEnrichmentSource().fetch(location)
-        self.assertEqual(len(payload["buildings"]), 2)
-        self.assertEqual(query_key, "41.73315,-73.93037")
 
 
 class MatchChildMarkerTests(TestCase):
@@ -386,11 +152,11 @@ class MatchChildMarkerTests(TestCase):
 
     def test_matches_a_marker_standing_on_the_building(self) -> None:
         pin = self._pin_at(41.733200, -73.930400)
-        self.assertEqual(match_marker(_REDATA_BUILDINGS[0], [pin]), pin)
+        self.assertEqual(match_marker(_RECONCILED_BUILDINGS[0], [pin]), pin)
 
     def test_does_not_match_a_marker_at_another_building(self) -> None:
         pin = self._pin_at(41.733000, -73.930000)
-        self.assertIsNone(match_marker(_REDATA_BUILDINGS[0], [pin]))
+        self.assertIsNone(match_marker(_RECONCILED_BUILDINGS[0], [pin]))
 
     def test_a_building_without_coordinates_matches_nothing(self) -> None:
         pin = self._pin_at(41.733200, -73.930400)
@@ -425,12 +191,12 @@ class BuildingRowsTests(TestCase):
 
     def test_a_matched_child_supplies_its_name_and_url(self) -> None:
         child = self._pin_at(41.733200, -73.930400, name="Tool Shed")
-        rows = building_rows([_REDATA_BUILDINGS[0]], [child], url_for=lambda c: f"/pins/{c.pk}/")
+        rows = building_rows([_RECONCILED_BUILDINGS[0]], [child], url_for=lambda c: f"/pins/{c.pk}/")
         self.assertEqual(rows[0]["child_name"], "Tool Shed")
         self.assertEqual(rows[0]["child_url"], f"/pins/{child.pk}/")
 
     def test_an_unmatched_building_has_no_child(self) -> None:
-        rows = building_rows([_REDATA_BUILDINGS[0]], [])
+        rows = building_rows([_RECONCILED_BUILDINGS[0]], [])
         self.assertEqual(rows[0]["child_name"], "")
         self.assertEqual(rows[0]["child_url"], "")
 
@@ -463,13 +229,14 @@ class BuildingRowsTests(TestCase):
         self.assertEqual([row["child_name"] for row in rows], ["Only One", "Only One"])
 
     def test_source_labels_are_humanized(self) -> None:
-        rows = building_rows([{"name": "X", "source": "cris"}, {"name": "Y", "source": "osm"}], [])
-        self.assertEqual({row["source_label"] for row in rows}, {"NY SHPO (CRIS)", "OpenStreetMap"})
+        with BUILDING_RECORD_PROVIDERS.overridden([_SurveyRecords()]):
+            rows = building_rows([{"name": "X", "source": "survey"}, {"name": "Y", "source": "osm"}], [])
+        self.assertEqual({row["source_label"] for row in rows}, {"County Survey", "OpenStreetMap"})
 
     def test_omitting_url_for_leaves_rows_unlinked(self) -> None:
         """The wiki renders the same rows, but child wikis are markers, not pages."""
         child = self._pin_at(41.733200, -73.930400, name="Tool Shed")
-        rows = building_rows([_REDATA_BUILDINGS[0]], [child])
+        rows = building_rows([_RECONCILED_BUILDINGS[0]], [child])
         self.assertEqual(rows[0]["child_name"], "Tool Shed")
         self.assertEqual(rows[0]["child_url"], "")
 
@@ -482,7 +249,7 @@ class BuildingRowsTests(TestCase):
     def test_boundary_polygon_drops_an_unmatched_building_outside_it(self) -> None:
         boundary = _square_around(41.733, -73.930, size=0.001)
         far_away = {"name": "Far Away", "latitude": 41.740, "longitude": -73.940}
-        rows = building_rows([_REDATA_BUILDINGS[0], far_away], [], boundary_polygon=boundary)
+        rows = building_rows([_RECONCILED_BUILDINGS[0], far_away], [], boundary_polygon=boundary)
         self.assertEqual([row["name"] for row in rows], ["Tool Shed"])
 
     def test_boundary_polygon_keeps_a_matched_building_regardless_of_position(self) -> None:
@@ -494,7 +261,7 @@ class BuildingRowsTests(TestCase):
         self.assertEqual(rows[0]["child_name"], "Far Away Pin")
 
     def test_boundary_polygon_checks_the_real_footprint_over_the_centroid(self) -> None:
-        """REData's footprint - not its summary point - decides whether a building is on the parcel."""
+        """The real footprint - not the summary point - decides whether a building is on the parcel."""
         boundary = _square_around(41.733, -73.930, size=0.001)
         misleading_centroid = {
             "name": "Footprint Outside",
@@ -536,7 +303,7 @@ class ParcelBuildingsPanelViewTests(TestCase):
 
     def test_cached_buildings_render_with_their_numbers(self) -> None:
         LocationCache.set(
-            self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _REDATA_BUILDINGS, "provider": "redata"}
+            self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _RECONCILED_BUILDINGS, "provider": "survey"}
         )
         response = self.client.get(self._url())
         self.assertEqual(response.status_code, 200)
@@ -555,7 +322,7 @@ class ParcelBuildingsPanelViewTests(TestCase):
             location=baker.make(Location, latitude="41.733200", longitude="-73.930400", google_place=None),
         )
         LocationCache.set(
-            self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _REDATA_BUILDINGS, "provider": "redata"}
+            self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _RECONCILED_BUILDINGS, "provider": "survey"}
         )
         response = self.client.get(self._url())
         self.assertContains(response, reverse("pin.details", kwargs={"pin_slug": child.slug}))
@@ -569,16 +336,16 @@ class ParcelBuildingsPanelViewTests(TestCase):
     def test_a_building_outside_the_parcel_boundary_is_dropped(self) -> None:
         lat, lng = float(self.location.latitude), float(self.location.longitude)
         official_geometry(self.location, _square_around(lat, lng))
-        inside = {"source": "cris", "name": "Inside Hall", "building_number": "1", "latitude": lat, "longitude": lng}
+        inside = {"source": "survey", "name": "Inside Hall", "building_number": "1", "latitude": lat, "longitude": lng}
         outside = {
-            "source": "cris",
+            "source": "survey",
             "name": "Outside Shed",
             "building_number": "2",
             "latitude": lat + 1,
             "longitude": lng + 1,
         }
         LocationCache.set(
-            self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": [inside, outside], "provider": "redata"}
+            self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": [inside, outside], "provider": "survey"}
         )
         body = self.client.get(self._url()).content.decode()
         self.assertIn("Inside Hall", body)
@@ -588,7 +355,7 @@ class ParcelBuildingsPanelViewTests(TestCase):
         lat, lng = float(self.location.latitude), float(self.location.longitude)
         official_geometry(self.location, _square_around(lat, lng))
         outside = {
-            "source": "cris",
+            "source": "survey",
             "name": "Outside Shed",
             "building_number": "2",
             "latitude": lat + 1,
@@ -602,20 +369,20 @@ class ParcelBuildingsPanelViewTests(TestCase):
             slug="outside-shed",
             location=baker.make(Location, latitude=lat + 1, longitude=lng + 1, google_place=None),
         )
-        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": [outside], "provider": "redata"})
+        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": [outside], "provider": "survey"})
         self.assertContains(self.client.get(self._url()), "Outside Shed")
 
     def test_without_a_real_boundary_nothing_is_filtered(self) -> None:
         """No Boundary row exists at all - only the synthesized fallback circle - so nothing is dropped."""
         lat, lng = float(self.location.latitude), float(self.location.longitude)
         outside = {
-            "source": "cris",
+            "source": "survey",
             "name": "Outside Shed",
             "building_number": "2",
             "latitude": lat + 1,
             "longitude": lng + 1,
         }
-        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": [outside], "provider": "redata"})
+        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": [outside], "provider": "survey"})
         self.assertContains(self.client.get(self._url()), "Outside Shed")
 
 
@@ -719,7 +486,7 @@ class ParcelBuildingsTabsTests(TestCase):
 
     def test_buildings_and_child_pins_are_one_card_with_two_tabs(self) -> None:
         LocationCache.set(
-            self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _REDATA_BUILDINGS, "provider": "redata"}
+            self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _RECONCILED_BUILDINGS, "provider": "survey"}
         )
         shed = self._child(
             PinType.BUILDING,
@@ -802,16 +569,16 @@ class WikiParcelBuildingsPanelViewTests(TestCase):
     def test_a_building_outside_the_parcel_boundary_is_dropped(self) -> None:
         lat, lng = float(self.location.latitude), float(self.location.longitude)
         official_geometry(self.location, _square_around(lat, lng))
-        inside = {"source": "cris", "name": "Inside Hall", "building_number": "1", "latitude": lat, "longitude": lng}
+        inside = {"source": "survey", "name": "Inside Hall", "building_number": "1", "latitude": lat, "longitude": lng}
         outside = {
-            "source": "cris",
+            "source": "survey",
             "name": "Outside Shed",
             "building_number": "2",
             "latitude": lat + 1,
             "longitude": lng + 1,
         }
         LocationCache.set(
-            self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": [inside, outside], "provider": "redata"}
+            self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": [inside, outside], "provider": "survey"}
         )
         body = self.client.get(self._url()).content.decode()
         self.assertIn("Inside Hall", body)
@@ -821,7 +588,7 @@ class WikiParcelBuildingsPanelViewTests(TestCase):
         lat, lng = float(self.location.latitude), float(self.location.longitude)
         official_geometry(self.location, _square_around(lat, lng))
         outside = {
-            "source": "cris",
+            "source": "survey",
             "name": "Outside Shed",
             "building_number": "2",
             "latitude": lat + 1,
@@ -832,20 +599,20 @@ class WikiParcelBuildingsPanelViewTests(TestCase):
             parent_wiki=self.wiki,
             location=baker.make(Location, latitude=lat + 1, longitude=lng + 1, google_place=None),
         )
-        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": [outside], "provider": "redata"})
+        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": [outside], "provider": "survey"})
         self.assertContains(self.client.get(self._url()), "Outside Shed")
 
 
 class PluginContributionsTests(SimpleTestCase):
-    def setUp(self) -> None:
-        super().setUp()
-        self.plugin = ParcelBuildingsPlugin()
-
     def test_contributes_one_panel_source(self) -> None:
-        self.assertEqual([type(s) for s in self.plugin.get_panel_sources()], [ParcelBuildingsPanelSource])
+        self.assertEqual(
+            [type(s) for s in contributed("parcel_buildings", PANEL_SOURCES)], [ParcelBuildingsPanelSource]
+        )
 
     def test_contributes_one_enrichment_source(self) -> None:
-        self.assertEqual([type(s) for s in self.plugin.get_enrichment_sources()], [ParcelBuildingsEnrichmentSource])
+        self.assertEqual(
+            [type(s) for s in contributed("parcel_buildings", ENRICHMENT_SOURCES)], [ParcelBuildingsEnrichmentSource]
+        )
 
 
 #: An element's extent as `out tags geom` reports it, centred on 41.7331, -73.9301.

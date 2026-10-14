@@ -10,7 +10,7 @@ that makes either safe to substitute for the other has never been asserted:
 
     location_visible_to(loc, viewer) == (loc.pk in visible_wiki_location_ids(viewer))
 
-Worth binding for two reasons. The immediate one is H44: the single-location form
+Worth binding for two reasons. The immediate one is cost: the single-location form
 answers in one query where the set form takes four, and the media path authorizes
 exactly one image, so the cheap form is the remaining win there - but only if it
 cannot disagree. The larger one is that two implementations of a *visibility* rule

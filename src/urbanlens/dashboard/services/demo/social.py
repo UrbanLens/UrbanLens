@@ -1,6 +1,6 @@
 """
 The fabricated half of a demo account: friends, messages, trips, visits, lists.
-Everything here is invented, unlike the real places in :mod:`.locations` - see that module and ``docs/DEMO.md`` for why coordinates are never fabricated."""
+Everything here is invented, unlike the real places in :mod:`.locations` - see that module for why coordinates are never fabricated."""
 
 from __future__ import annotations
 

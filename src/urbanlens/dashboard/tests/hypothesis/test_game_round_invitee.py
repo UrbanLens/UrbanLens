@@ -1,5 +1,5 @@
 """
-An invitee who never joined cannot create, advance or complete a game's rounds through the round view (N29 batch 1).
+An invitee who never joined cannot create, advance or complete a game's rounds through the round view.
 
 The round GET creates the next round once the last is revealed, and completes the session when none is left. Each
 game's active participants include INVITED rows, so without a joined check an invitee drove both for the players.

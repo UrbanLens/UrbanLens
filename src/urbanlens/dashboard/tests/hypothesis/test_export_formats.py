@@ -1,4 +1,4 @@
-"""Property tests for the pin export writers (UL-377/UL-382)."""
+"""Property tests for the pin export writers."""
 
 from __future__ import annotations
 

@@ -1,8 +1,8 @@
 """
-Repair or delete the import failures whose Google Maps CID lost its low digits to a float64 (REData's P120).
+Repair or delete the import failures whose Google Maps CID lost its low digits to a float64.
 
 The import wizard used to send each pin's CID through the browser as a JSON number, which a
-JavaScript ``Number`` returns with its low digits zeroed. Such a CID names no place; REData asked
+JavaScript ``Number`` returns with its low digits zeroed. Such a CID names no place, yet its resolver asked
 Google about 1,945 of them, nightly, for months.
 
 A dry run by default: it reports what it would change, per table. ``--execute`` applies all of it in
@@ -63,7 +63,7 @@ def _plan() -> _Plan:
 class Command(BaseCommand):
     """Repair or delete every import failure whose CID has visibly been through a float64."""
 
-    help = "Repair or delete pin import failures whose Google Maps CID was rounded through a float64 (REData P120). Dry run unless --execute."
+    help = "Repair or delete pin import failures whose Google Maps CID was rounded through a float64. Dry run unless --execute."
 
     def add_arguments(self, parser):
         parser.add_argument("--execute", action="store_true", help="Apply the changes. Without it, only report them.")

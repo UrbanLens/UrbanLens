@@ -26,7 +26,7 @@
             {% endif %}
         </div>
         {% endif %}
-        {# wiki_links: passed in by the caller (LocationWikiEditView.post / LocationWikiView.get), already narrowed by concealment.visible_rows. #}
+        {# wiki_links: passed in by the caller (LocationWikiEditView.post / LocationWikiView.get), already narrowed by viewer_projection.visible_rows. #}
         {% include "dashboard/partials/pins/_pin_links_row.html" with wiki=wiki links=wiki_links delete_url_name="location.wiki.link.delete" row_id="wiki-links-row" owner_slug=wiki.location.slug dialog_id="wiki-link-add-dialog" show_label=True %}
         {% if built_year or wiki.date_abandoned or wiki.effective_date_last_active %}
         <div class="wiki-meta-dates">

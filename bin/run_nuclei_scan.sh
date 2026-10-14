@@ -9,7 +9,7 @@
 # Same rules as `bin/run_integration_tests.sh`: explicit target, manual only, `--docker` needs only Docker.
 #
 # Usage:
-#   bin/run_nuclei_scan.sh --url https://s1.dev.urbanlens.org
+#   bin/run_nuclei_scan.sh --url https://s1.dev.example.com
 #   bin/run_nuclei_scan.sh --url ... --docker              # no local install needed
 #   bin/run_nuclei_scan.sh --url ... --fail-on-findings    # nonzero exit if anything matched
 #   bin/run_nuclei_scan.sh --url ... --accounts-file /tmp/e2e.json  # authenticated
@@ -63,10 +63,7 @@ usage() {
 		  --exclude-tags LIST    Additional tags to skip, on top of the fixed "dos"
 		                         exclusion.
 		  --rate-limit N         Max requests/second (default: ${RATE_LIMIT}). Keep this
-		                         conservative against a shared staging box - see the
-		                         write-quota discussion in docs/INTEGRATION_TESTS.md for
-		                         why "the burstiest client it will ever have" is a
-		                         mistake worth avoiding twice.
+		                         conservative against a shared staging box: "the burstiest client it will ever have" is a mistake worth avoiding twice.
 		  --concurrency N        Parallel template executions (default: ${CONCURRENCY}).
 		  --skip-update          Don't refresh the template catalogue first.
 		  --accounts-file PATH   Manifest written by \`manage.py provision_integration_env\`
@@ -80,7 +77,7 @@ usage() {
 		                         the restricted-scope API key, the full-scope API key,
 		                         and a real signed-in session (cookie auth, covering the
 		                         HTML/HTMX dashboard surface the API key cannot reach at
-		                         all - see docs/INTEGRATION_TESTS.md). Each writes to its
+		                         all). Each writes to its
 		                         own subdirectory under reports/nuclei/. A tier that
 		                         can't be set up (no restricted key provisioned, no Node
 		                         for the session login) is skipped with a warning rather
@@ -92,7 +89,7 @@ usage() {
 		  --fail-on-findings     Exit non-zero if anything matched, across every tier
 		                         run. Off by default: a finding here is a lead to
 		                         triage, not automatically a broken build - same
-		                         posture as the audit tooling in docs/TOOLING.md.
+		                         posture as the audit tooling.
 		  --docker               Run the official projectdiscovery/nuclei image; needs
 		                         only Docker, no local install.
 		  --version VERSION      Pin the Nuclei/image version (default: ${NUCLEI_VERSION}).
@@ -190,8 +187,8 @@ if [[ ${ALL_TIERS} -eq 1 && -z "${ACCOUNTS_FILE}" ]]; then
 fi
 
 # Exact-hostname match, same logic as tests/integration/lib/env.ts's guard -
-# scheme, path, query and port stripped, so "s1.dev.urbanlens.org" is never
-# caught by an entry for "urbanlens.org".
+# scheme, path, query and port stripped, so "s1.dev.example.com" is never
+# caught by an entry for "example.com".
 hostname_of() {
 	local url="$1"
 	url="${url#*://}"
@@ -201,7 +198,7 @@ hostname_of() {
 	printf '%s' "${url,,}"
 }
 
-DEFAULT_PRODUCTION_HOSTS="urbanlens.org,www.urbanlens.org,app.urbanlens.org,urbanlens.com,www.urbanlens.com,app.urbanlens.com"
+DEFAULT_PRODUCTION_HOSTS="example.com,www.example.com,app.example.com"
 PRODUCTION_HOSTS="${UL_NUCLEI_PRODUCTION_HOSTS:-${DEFAULT_PRODUCTION_HOSTS}}"
 ALLOW_PRODUCTION="${UL_NUCLEI_ALLOW_PRODUCTION:-0}"
 TARGET_HOST="$(hostname_of "${BASE_URL}")"

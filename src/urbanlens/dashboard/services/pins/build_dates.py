@@ -33,7 +33,7 @@ SOURCE_BUILDING_RECORD = "building_record"
 SOURCE_HISTORIC_REGISTER = "historic_register"
 SOURCE_PROPERTY_RECORD = "property_record"
 
-#: REData's ``year_built_basis`` for a year a source gave the building itself, such as a CRIS survey date.
+#: A building record's ``year_built_basis`` for a year a source gave the building itself, such as a CRIS survey date.
 YEAR_BASIS_BUILDING = "building"
 
 
@@ -46,7 +46,7 @@ class BuildYear:
 
     @property
     def as_date(self) -> date:
-        """January 1st of the year, the convention for a year-only date (as ``services.ai.link_extraction`` stores one)."""
+        """January 1st of the year, the convention for a year-only date (the convention extracted dates follow)."""
         return date(self.year, 1, 1)
 
 
@@ -73,11 +73,11 @@ def own_build_year(record: Mapping[str, Any]) -> int | None:
     """
     The year a building record says that building itself was built.
 
-    REData's ``year_built_basis`` says what a ``year_built`` dates. ``"building"`` is the building's own year.
-    ``"parcel"`` is the assessor's one year for the parcel's principal improvement, which REData sets on at most the
+    ``year_built_basis`` says what a ``year_built`` dates. ``"building"`` is the building's own year.
+    ``"parcel"`` is the assessor's one year for the parcel's principal improvement, which a source sets on at most the
     building under the point the parcel was looked up at, so it says nothing of when that building was built. A record
-    with no basis (from REData before 0.3.6, a list cached before then, or Overpass) may hold either, so it is read as
-    the parcel's.
+    with no basis (from a source that did not say, a list cached before it did, or Overpass) may hold either, so it is
+    read as the parcel's.
 
     Args:
         record: A building record, reconciled or one source's.
@@ -120,13 +120,11 @@ def site_build_year(pin: Pin, nester: BuildingNester) -> BuildYear | None:
         The year and its source, or None when nothing cached says.
     """
     from urbanlens.dashboard.models.cache.location_cache import LocationCache
-    from urbanlens.dashboard.services.locations.register_names import CONTAINS_POINT_KEY
+    from urbanlens.dashboard.services.locations.historic_registers import register_listing_year
 
     location = pin.location
-    registers = LocationCache.get_fresh(location, "redata_historic_registers")
-    for row in (registers.data.get("resources") if registers and isinstance(registers.data, dict) else None) or []:
-        if isinstance(row, dict) and row.get(CONTAINS_POINT_KEY) and (year := plausible_year(row.get("year_built"))) is not None:
-            return BuildYear(year, SOURCE_HISTORIC_REGISTER)
+    if (year := register_listing_year(location)) is not None:
+        return BuildYear(year, SOURCE_HISTORIC_REGISTER)
 
     if (year := standing_year(pin, nester)) is not None:
         return BuildYear(year, SOURCE_BUILDING_RECORD)
@@ -233,7 +231,7 @@ def _record_wiki_years(pin: Pin, nester: BuildingNester, site_year: BuildYear | 
     """
     Record the campus's and each building's year on the wikis standing for them.
 
-    A building record's year is taken back only on a building list REData answered in full: with no list cached, or
+    A building record's year is taken back only on a building list every source answered in full: with no list cached, or
     one a source did not answer, a missing year says nothing.
     """
     from urbanlens.dashboard.models.wiki.model import Wiki
@@ -249,7 +247,7 @@ def _record_wiki_years(pin: Pin, nester: BuildingNester, site_year: BuildYear | 
     cached = cached_parcel_buildings(pin.location)
     settled = cached is not None and cached.complete
     # A record that no longer dates the campus takes back what it said, such as a parcel's year recorded as a
-    # building's before REData said which it was.
+    # building's before the record said which it was.
     if settled and standing_year(pin, nester) is None:
         retract_wiki_build_year(campus, SOURCE_BUILDING_RECORD)
     if not parcel_year_may_date(campus):
@@ -327,9 +325,12 @@ def wiki_build_year(wiki: Wiki) -> int | None:
         The year, or None when nothing says.
     """
     from urbanlens.dashboard.models.facts.model import Fact, FactEvidence, FactSourceKind
-    from urbanlens.dashboard.services.wiki.concealment import is_concealed
+    from urbanlens.dashboard.services.wiki.viewer_projection import projection_of
 
-    if wiki.pk is None or is_concealed(wiki):
+    if wiki.pk is None:
+        return None
+    projection = projection_of(wiki)
+    if projection is not None and not projection.shows_build_year():
         return None
     fact = Fact.objects.filter(wiki=wiki, key=BUILT_YEAR_FACT).first()
     if fact is None:

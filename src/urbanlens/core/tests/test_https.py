@@ -70,7 +70,7 @@ class DockerHealthProbeTests(TestCase):
     """Container healthchecks curl /health/ with Host: localhost."""
 
     @override_settings(
-        ALLOWED_HOSTS=["urbanlens.org"],
+        ALLOWED_HOSTS=["example.com"],
         SECURE_SSL_REDIRECT=True,
         SECURE_PROXY_SSL_HEADER=None,
         SECURE_REDIRECT_EXEMPT=[r"^health"],
@@ -80,7 +80,7 @@ class DockerHealthProbeTests(TestCase):
         self.assertEqual(response.status_code, 400)
 
     @override_settings(
-        ALLOWED_HOSTS=["urbanlens.org", "localhost", "127.0.0.1"],
+        ALLOWED_HOSTS=["example.com", "localhost", "127.0.0.1"],
         SECURE_SSL_REDIRECT=True,
         SECURE_PROXY_SSL_HEADER=None,
         SECURE_REDIRECT_EXEMPT=[r"^health"],

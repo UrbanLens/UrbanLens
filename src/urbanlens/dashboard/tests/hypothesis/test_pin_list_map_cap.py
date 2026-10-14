@@ -1,5 +1,5 @@
 """
-The list-detail overview map plots a bounded number of pins (P69).
+The list-detail overview map plots a bounded number of pins.
 
 `_items_map_data` had no cap, unlike the near-identical saved-filter preview
 map in the same feature, which has had `_PREVIEW_MAP_PIN_LIMIT = 500` all

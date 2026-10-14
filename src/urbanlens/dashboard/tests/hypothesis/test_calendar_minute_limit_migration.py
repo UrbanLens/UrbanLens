@@ -5,7 +5,7 @@ It also clears push marks on links without auto-sync, which no earlier release w
 
 ``get_limit_config`` never rewrites a row holding a service's own defaults, so without the migration a deployment
 that upgraded would keep 30 a minute, and a trip with 30 or more scheduled activities would need a push to finish
-every export (P334).
+every export.
 """
 
 from __future__ import annotations
@@ -22,7 +22,8 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.api_rate_limit import ApiRateLimit
 from urbanlens.dashboard.models.calendar_sync.model import CalendarSyncDirection, TripCalendarLink
 from urbanlens.dashboard.models.trips.model import Trip
-from urbanlens.dashboard.plugins.builtin.google_calendar import GoogleCalendarPlugin
+from urbanlens.dashboard.plugins.points import SERVICE_DEFAULTS
+from urbanlens.dashboard.plugins.testing import contributed
 from urbanlens.dashboard.services.core import rate_limiter
 
 _MIGRATION = importlib.import_module("urbanlens.dashboard.migrations.0067_calendar_export_resumable")
@@ -44,7 +45,7 @@ def _forward() -> None:
 
 class CalendarMinuteLimitMigrationTests(TestCase):
     def test_the_migration_writes_what_the_plugin_now_registers(self) -> None:
-        defaults = GoogleCalendarPlugin().get_service_defaults()[_SERVICE]
+        defaults = dict(contributed("google_calendar", SERVICE_DEFAULTS))[_SERVICE]
         self.assertEqual(
             {"calls_per_minute": defaults.calls_per_minute, "notes": defaults.notes},
             _MIGRATION._NEW,

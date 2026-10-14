@@ -1,7 +1,7 @@
 """
 Name a community wiki from public sources without overriding anyone who named it by hand.
 
-Candidates come from the Location's cached public data (Wikipedia, REData, CRIS, OSM, the
+Candidates come from the Location's cached public data (Wikipedia, the name providers, OSM, the
 Location's official name, Google as a last resort). A private pin's own name is never one of them.
 """
 
@@ -74,9 +74,9 @@ def is_provisional_name(wiki: Wiki, *, outranked_by: NameTier | None = None) -> 
     sources = set(wiki.aliases.filter(name__iexact=wiki.name.strip()).values_list("source", flat=True))
     if not sources or sources & PROVISIONAL_NAME_SOURCES:
         return True
-    from urbanlens.dashboard.services.locations.name_tiers import NOMINATIM_SOURCES, SOURCE_TIERS, naming_scope, rank_key, tier_for
+    from urbanlens.dashboard.services.locations.name_tiers import NOMINATIM_SOURCES, naming_scope, rank_key, source_tiers, tier_for
 
-    if outranked_by is None or not sources <= SOURCE_TIERS.keys() | NOMINATIM_SOURCES:
+    if outranked_by is None or not sources <= source_tiers().keys() | NOMINATIM_SOURCES:
         return False
 
     location = wiki.location

@@ -350,7 +350,7 @@ class CustomLayerShareToWikiTests(TestCase):
         """
         The toast must not let a caller learn, from its wording alone,
         whether a same-named layer was already on the wiki - that would be a
-        name-existence oracle once viewer concealment is live."""
+        name-existence oracle for layers a viewer is not shown."""
         layer = CustomLayer.objects.create(name="Tunnels", parent_pin=self.pin, profile=self.profile)
         first_toast = json.loads(self.client.post(self._share_url(layer))["HX-Trigger"])["showToast"]
         second_toast = json.loads(self.client.post(self._share_url(layer))["HX-Trigger"])["showToast"]

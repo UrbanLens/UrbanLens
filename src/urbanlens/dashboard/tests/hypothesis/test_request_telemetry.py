@@ -138,7 +138,7 @@ class TheNumbersAreRightTests(TestCase):
 
     def test_cpu_time_separates_waiting_from_working(self) -> None:
         """
-        The field R27 turned on, and the reason a total alone is not enough.
+        The field that was turned on, and the reason a total alone is not enough.
 
         `/slow/` sleeps, so its wall time is large and its CPU time is nearly nothing."""
         with self.assertLogs("urbanlens.dashboard.middleware", level="WARNING") as logged:
@@ -168,7 +168,7 @@ class TheNumbersAreRightTests(TestCase):
         )
 
     def test_rows_fetched_counts_the_rows_the_view_read(self) -> None:
-        """`sql_rows` is what makes P107's shape visible in a log line."""
+        """`sql_rows` is what makes the query shape visible in a log line."""
         for index in range(SEEDED_LABELS):
             Label.objects.create(kind="tag", name=f"Telemetry {index}")
 

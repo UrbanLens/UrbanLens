@@ -1,7 +1,7 @@
 """
 A pin share reaches its recipient only as far as the sender consented, and is copied as of acceptance.
 
-What a share consents to (``docs/PRIVACY_MODEL.md`` §5): the place as it was when shared (``PinShare.location``),
+What a share consents to: the place as it was when shared (``PinShare.location``),
 the site's objective facts (type, indoor/outdoor, dates, security indicators), a name only when the sender typed one
 (``shared_name``), the photos they ticked, the map they attached, the child pins they bundled, and their message.
 Anything else - their own name for the pin, where it is now, their notes, ratings, styling, labels, aliases, links,

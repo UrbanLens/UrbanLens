@@ -28,7 +28,7 @@ from urbanlens.dashboard.services.pins.pin_subresources import (
     delete_pin_alias,
     promote_alias_to_name,
 )
-from urbanlens.dashboard.services.wiki.concealment import visible_rows, writable_wiki
+from urbanlens.dashboard.services.wiki.viewer_projection import visible_rows, writable_wiki
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 from urbanlens.dashboard.services.wiki.wiki_aliases import WikiAliasExistsError, WikiAliasNameError, create_wiki_alias, promote_wiki_alias_to_name
 
@@ -116,14 +116,12 @@ def _render_location_panel(request, location: Location, wiki: Wiki, profile: Pro
     Takes the profile rather than re-deriving it from the request: every caller has just had one back
     from ``resolve_visible_wiki``, and a second derivation can disagree with the first.
     """
-    from urbanlens.dashboard.services.wiki.concealment import conceal_rows, conceal_wiki, concealment_active
+    from urbanlens.dashboard.services.wiki.viewer_projection import project_wiki
 
-    rows = wiki.aliases.order_by("name")
-    if concealment_active(wiki, profile):
-        rows = conceal_rows(rows, profile)
+    rows = visible_rows(wiki.aliases.order_by("name"), wiki, profile)
     # Annotated against the *shown* name, not the stored one: "is current" is a comparison, and comparing to a
     # name this viewer cannot see would mark the wrong alias - or none - and say so on the page.
-    shown = conceal_wiki(wiki, profile)
+    shown = project_wiki(wiki, profile)
     aliases = _annotated(rows, shown.name)
     return render(
         request,
@@ -268,7 +266,7 @@ class LocationAliasUseView(LoginRequiredMixin, View):
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
         alias = get_object_or_404(visible_rows(WikiAlias.objects.filter(wiki=wiki), wiki, profile), id=alias_id)
         # Renaming saves the wiki (through apply_wiki_edit), so it needs the real row - see
-        # concealment.writable_wiki.
+        # viewer_projection.writable_wiki.
         target = writable_wiki(wiki)
         before_name = target.name
         try:

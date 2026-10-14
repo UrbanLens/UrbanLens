@@ -20,10 +20,6 @@ if TYPE_CHECKING:
 class SiteFeature(TextChoices):
     """Feature flags that can be unlocked by subscription roles."""
 
-    AI = "ai", "AI features"
-    # than the text features AI covers, so admins grant this tier explicitly
-    # (it is not part of the VIP canonical set).
-    AI_PHOTO_PROCESSING = "ai_photo_processing", "AI photo processing"
     PLACES = "places", "Places layer (Google Places landmarks)"
     SEARCH = "search", "Web search engines"
     # larger than photos, so admins grant this tier explicitly to manage
@@ -38,18 +34,17 @@ class SiteFeature(TextChoices):
     # This flag names the concept, not every panel that could plausibly use it - check each
     # PanelSource.required_feature, don't assume from this comment.
     NEARBY_RESEARCH = "nearby_research", "Nearby research data"
-    # Full REData incident history for a pin's block (up to 25 years back) - a deeper pull than the
+    # Full incident history for a pin's block (up to 25 years back) - a deeper pull than the
     # free "Reported Incidents" card everyone gets (last 3 years, top few rows only).
     # Kept as its own flag rather than folded into NEARBY_RESEARCH: unlike a nearby-facility list, a
     # block's multi-year crime-report history is sensitive enough that a site may want to manage
     INCIDENT_HISTORY = "incident_history", "Historical incident data"
     # Owner identity/contact details UrbanLens looked up *for* the user from county assessor records
-    # (via REData) - the paid data feed, and the part of a property record that names a private
+    # - the paid data feed, and the part of a property record that names a private
     # individual.
     PROPERTY_OWNERS = "property_owners", "Official property owner names & contact info"
-    # Automatic tag/category assignment from REData's label-suggestion service.
-    # Its own feature rather than part of AI: suggestions come from REData matching a place against
-    # the user's own taxonomy, not from an LLM call, so the cost profile and the grant decision are
+    # Automatic tag/category assignment from an external label-suggestion service: it matches a place against
+    # the user's own taxonomy, so the cost profile and the grant decision are
     # different.
     AUTO_TAGGING = "auto_tagging", "Automatic tagging of pins"
     # Gates access to features still under active development, but stable enough for general (VIP)
@@ -59,6 +54,18 @@ class SiteFeature(TextChoices):
     BETA_FEATURES = "beta_features", "Beta features"
     # Earlier-stage than BETA_FEATURES: features not yet ready for general use.
     ALPHA_FEATURES = "alpha_features", "Alpha features"
+
+
+def site_feature_choices() -> list[tuple[str, str]]:
+    """Every grantable feature: the ``SiteFeature`` members, then those plugins contribute."""
+    from urbanlens.dashboard.plugins.points import SITE_FEATURES
+
+    return [*SiteFeature.choices, *((value, label) for value, label in SITE_FEATURES.choices() if value not in SiteFeature.values)]
+
+
+def site_feature_values() -> frozenset[str]:
+    """The value of every grantable feature."""
+    return frozenset(value for value, _label in site_feature_choices())
 
 
 class SubscriptionRole(abstract.DashboardModel):
@@ -127,9 +134,9 @@ class SubscriptionRole(abstract.DashboardModel):
     def feature_labels(self) -> list[str]:
         """Human-readable labels for the role's granted features, in declaration order."""
         feature_set = self.feature_set
-        return [label for value, label in SiteFeature.choices if value in feature_set]
+        return [label for value, label in site_feature_choices() if value in feature_set]
 
-    def grants(self, feature: SiteFeature | str) -> bool:
+    def grants(self, feature: str) -> bool:
         return str(feature) in self.feature_set
 
     def __str__(self) -> str:
@@ -228,12 +235,12 @@ def _additional_subscription_roles(user: User) -> list[SubscriptionRole]:
     Returns:
         The extra roles, deduplicated by the caller.
     """
-    from urbanlens.dashboard.plugins.hooks import hooks
+    from urbanlens.dashboard.plugins.points import SUBSCRIPTION_ROLES
 
-    return list(hooks.apply_filters("additional_subscription_roles", [], user))
+    return list(SUBSCRIPTION_ROLES.apply([], user))
 
 
-def user_has_feature(user: AbstractBaseUser | AnonymousUser, feature: SiteFeature | str) -> bool:
+def user_has_feature(user: AbstractBaseUser | AnonymousUser, feature: str) -> bool:
     """
     Return whether the user has the feature, via the admin permission, the site default or an active role.
     Anonymous users never have subscription-backed features.
@@ -252,7 +259,7 @@ def user_features(user: AbstractBaseUser | AnonymousUser) -> frozenset[str]:
     from urbanlens.dashboard.models.subscriptions.access_state import access_state
 
     state = access_state(user)
-    return frozenset(SiteFeature.values) if state.admin else state.features
+    return site_feature_values() if state.admin else state.features
 
 
 def user_features_from_database(user: User) -> frozenset[str]:
@@ -265,7 +272,7 @@ def user_features_from_database(user: User) -> frozenset[str]:
     from urbanlens.dashboard.models.subscriptions.access_state import compute_access_state
 
     state = compute_access_state(user)
-    return frozenset(SiteFeature.values) if state.admin else state.features
+    return site_feature_values() if state.admin else state.features
 
 
 def active_subscription_roles(user: AbstractBaseUser | AnonymousUser) -> list[SubscriptionRole]:

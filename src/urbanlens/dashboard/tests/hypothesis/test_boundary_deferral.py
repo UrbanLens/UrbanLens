@@ -1,7 +1,7 @@
 """
 A provider that refused for now is not a provider that found nothing.
 
-Reproduces the HRSH courtyard pin on staging (41.73266, -73.92736): REData's Dutchess budget was
+Reproduces the HRSH courtyard pin on staging (41.73266, -73.92736): a county provider's budget was
 spent, the parcel lookup was refused, and the miss was stamped as "no parcel here" for the whole
 boundary cache window. The same point sits inside the campus tax parcel.
 """
@@ -17,11 +17,6 @@ from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.services.apis.locations.base import BoundaryProviderDeferredError
 from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
-from urbanlens.dashboard.services.apis.locations.boundaries.redata import RedataBoundaryProvider
-from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
-    REASON_SOURCE_RATE_LIMITED,
-    PropertyRecordsUnavailableError,
-)
 from urbanlens.dashboard.services.locations.boundaries import (
     BoundaryProviderChain,
     ResolvedBoundaries,
@@ -33,7 +28,7 @@ _LAT, _LON = 41.73266, -73.92736
 
 
 class _Refusing:
-    service_key = "redata_boundary"
+    service_key = "county_boundary"
     boundary_kind = "property"
 
     def get_typed_boundaries(self, latitude, longitude, *, name=None):
@@ -48,40 +43,12 @@ class _Empty:
         return {"property": None, "building": None}
 
 
-class RedataRefusalIsADeferralTests(SimpleTestCase):
-    _GATEWAY = "urbanlens.dashboard.services.apis.locations.boundaries.redata.RedataGateway"
-
-    def test_a_transient_refusal_defers_rather_than_answering_none(self) -> None:
-        with (
-            mock.patch(
-                "urbanlens.dashboard.services.apis.locations.boundaries.redata.redata_configured", return_value=True
-            ),
-            mock.patch(self._GATEWAY) as gateway,
-        ):
-            gateway.return_value.lookup_parcel.side_effect = PropertyRecordsUnavailableError(
-                REASON_SOURCE_RATE_LIMITED, "Dutchess budget exhausted"
-            )
-            with self.assertRaises(BoundaryProviderDeferredError):
-                RedataBoundaryProvider().get_typed_boundaries(_LAT, _LON)
-
-    def test_a_settled_answer_is_still_none(self) -> None:
-        with (
-            mock.patch(
-                "urbanlens.dashboard.services.apis.locations.boundaries.redata.redata_configured", return_value=True
-            ),
-            mock.patch(self._GATEWAY) as gateway,
-        ):
-            gateway.return_value.lookup_parcel.side_effect = PropertyRecordsUnavailableError("no_data_found", "none")
-            result = RedataBoundaryProvider().get_typed_boundaries(_LAT, _LON)
-        self.assertEqual(result, {"property": None, "building": None})
-
-
 class ChainRecordsDeferralTests(SimpleTestCase):
     def test_a_deferring_provider_is_recorded_and_the_chain_continues(self) -> None:
         later = _Empty()
         with mock.patch.object(later, "get_typed_boundaries", wraps=later.get_typed_boundaries) as asked:
             resolved = BoundaryProviderChain(providers=(_Refusing(), later)).get_boundaries(_LAT, _LON)
-        self.assertEqual(resolved.deferred, ["redata_boundary"])
+        self.assertEqual(resolved.deferred, ["county_boundary"])
         self.assertEqual(resolved.retry_after, 120)
         asked.assert_called_once()
 
@@ -89,7 +56,7 @@ class ChainRecordsDeferralTests(SimpleTestCase):
 class DeferredMissIsNotStampedTests(TestCase):
     def test_a_deferred_miss_is_left_unresolved_and_retried(self) -> None:
         location = baker.make(Location, latitude=_LAT, longitude=_LON)
-        resolved = ResolvedBoundaries(deferred=["redata_boundary"], retry_after=300)
+        resolved = ResolvedBoundaries(deferred=["county_boundary"], retry_after=300)
         with (
             mock.patch(
                 "urbanlens.dashboard.services.locations.boundaries.BoundaryProviderChain.get_boundaries",
@@ -127,7 +94,7 @@ class DeferredMissIsNotStampedTests(TestCase):
         with (
             mock.patch(
                 "urbanlens.dashboard.services.locations.boundaries.BoundaryProviderChain.get_boundaries",
-                return_value=ResolvedBoundaries(deferred=["redata_boundary"]),
+                return_value=ResolvedBoundaries(deferred=["county_boundary"]),
             ),
             mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
         ):
@@ -228,7 +195,7 @@ def _http_error(status: int):
 
 
 class AnUnreachableProviderIsADeferralTests(SimpleTestCase):
-    """P214: a provider the chain couldn't reach is asked again, not recorded as having no boundary here."""
+    """A provider the chain couldn't reach is asked again, not recorded as having no boundary here."""
 
     def test_refused_timed_out_and_503_each_defer(self) -> None:
         import requests

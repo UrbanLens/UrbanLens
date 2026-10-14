@@ -54,11 +54,9 @@ def _0048_decrypt_existing_preference_fields(apps, schema_editor) -> None:
     in columns the pre-0048 code reads as plaintext - silent corruption that
     reports success, rather than a failure anyone can act on.
 
-    The project settled the question in ``docs/DATA_ENCRYPTION.md`` ("Migration
-    rollbacks decrypt", 2026-08-15) two days before this migration landed, and
-    0007 and 0039 already implement it: decrypt properly, and abort the whole
-    rollback if any value cannot be decrypted under the configured keys. 0048
-    was the one file contradicting a written rule.
+    A rollback decrypts. 0007 and 0039 already do: decrypt properly, and abort
+    the whole rollback if any value cannot be decrypted under the configured
+    keys. 0048 was the one migration that did not.
     """
     with schema_editor.connection.cursor() as cursor:
         for table, column in _COLUMNS:
@@ -72,8 +70,7 @@ def _0048__encrypt_column(cursor, table: str, column: str) -> None:
     rather than the ORM so it is unaffected by the historical model's field
     type, and therefore by operation order relative to the ``AlterField``s.
     Without this pass, every pre-existing row would raise ``InvalidToken`` on
-    its first read after deploy - the retrofit hazard documented in
-    docs/DATA_ENCRYPTION.md.
+    its first read after deploy - the retrofit hazard of encrypting a column that already holds plaintext.
     """
     cursor.execute(
         f"SELECT id, {column} FROM {table} WHERE {column} IS NOT NULL AND {column} != ''"
@@ -126,7 +123,7 @@ _COLUMN = "exif_data"
 def _0066_decrypt_existing_exif_data(apps, schema_editor) -> None:
     """Real reverse: decrypt back to plaintext JSON text before the column returns to jsonb.
 
-    Per "Migration rollbacks decrypt" in docs/DATA_ENCRYPTION.md. A value not
+    Like 0007 and 0039, a rollback decrypts. A value not
     shaped like a Fernet token (they begin ``gAAAA``) is left alone - it was
     written before the forward pass, and re-processing it would corrupt real
     plaintext. A token-shaped value no key can decrypt raises, aborting and

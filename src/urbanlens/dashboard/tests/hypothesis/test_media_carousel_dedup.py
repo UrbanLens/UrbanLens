@@ -1,4 +1,4 @@
-"""Tests for UL-288: the satellite and street-view carousel endpoints."""
+"""Tests for the satellite and street-view carousel endpoints."""
 
 from __future__ import annotations
 

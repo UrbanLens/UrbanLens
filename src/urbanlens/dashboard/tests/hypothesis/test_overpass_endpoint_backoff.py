@@ -1,4 +1,4 @@
-"""A transient Overpass failure takes an endpoint out for minutes, growing on repeats, not until the next day (P205)."""
+"""A transient Overpass failure takes an endpoint out for minutes, growing on repeats, not until the next day."""
 
 from __future__ import annotations
 

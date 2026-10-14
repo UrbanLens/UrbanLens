@@ -25,7 +25,7 @@ UrbanLens is a web mapping platform for photographers and urban explorers. It gi
 - **Safety check-ins** — "I didn't come home" alerts that escalate to emergency contacts, with live chat. Contacts never see any of your plans unless you don't check-in on time, so you can keep your activities private unless you actually need help.
 - **End-to-end encrypted messaging** — reactions, disappearing messages, search, and more. End-to-end encrypted, so your messages are only visible from your device.
 - **Social layer** — friendships, granular visibility settings, and comments with mentions and reactions
-- **AI assistance** — import pins from loose notes, auto-tagging, and update your pin data from external urls
+- **Smart import** — auto-tagging, and update your pin data from external urls
 - **Import/export** — Google Takeout, GPX, KML/KMZ, OSM XML, Shapefile, WKT/WKB; full-account export plus scheduled backups
 - **Responsible-exploration ethos** — discovery-gated wikis and discretion by design, not public broadcasting
 
@@ -40,7 +40,7 @@ UrbanLens is a web mapping platform for photographers and urban explorers. It gi
 | Frontend        | HTMX-first interactivity, Leaflet for maps, TypeScript/TSX where JS is unavoidable, SCSS, bundled with Bun   |
 | Geospatial      | GeoDjango, GeoPandas, Shapely, FastKML, geopy                                                                |
 | Auth            | Django auth plus Google and Discord OAuth, passkeys (WebAuthn), and TOTP 2FA                                 |
-| External data   | Google Maps/Places/Search, OpenWeatherMap, Smithsonian, National Park Service, OpenAI, and more              |
+| External data   | Google Maps/Places/Search, OpenWeatherMap, Smithsonian, National Park Service, and more                      |
 | Quality tooling | Ruff, MyPy, pytest-django, Hypothesis, pre-commit                                                            |
 
 
@@ -75,7 +75,7 @@ UrbanLens uses GitHub Actions for automated quality gates, security checks, rele
 - UrbanLens stays below 1.0.0: a breaking change or a feature bumps the minor version, anything else the patch.
 - If a release branch reaches `main` as one squash commit, only that commit's message is read. Title it as a Conventional Commit (`feat: v0.9.0 (#123)`) or put `Release-As: 0.9.0` in its body; a bare `v0.9.0 (#123)` gives the tool nothing to release. `.release-please-manifest.json` (its name is left over from release-please) holds the last released version, never the one in development, because the next version is computed from it.
 - `main` accepts only signed commits, including every commit on a pull request's branch.
-- A commit on `main` is published only once its CI run passes: a provenance-attested container image in GitHub Container Registry (`ghcr.io/UrbanLens/UrbanLens`) tagged `sha-<7>`, plus `main` while it is still `main`'s tip. The AI tier's egress proxy (`src/urbanlens/config/egress`) is published beside it as `ghcr.io/UrbanLens/UrbanLens-egress-proxy` with the same tags, and before it, so every app tag has a proxy built from the same commit. A release's commit also gets its version tag and, for a stable release, `latest`, and the release gets the Python distributions. If a release commit's CI fails, its version tags wait until someone runs the Publish workflow by hand with the release's tag as `ref`. A release a person publishes on GitHub builds at once.
+- A commit on `main` is published only once its CI run passes: a provenance-attested container image in GitHub Container Registry (`ghcr.io/urbanlens/urbanlens`) tagged `sha-<7>`, plus `main` while it is still `main`'s tip. The egress proxy is published beside it as `ghcr.io/urbanlens/urbanlens-egress-proxy` with the same tags, and before it, so every app tag has a proxy built from the same commit. A release's commit also gets its version tag and, for a stable release, `latest`, and the release gets the Python distributions. If a release commit's CI fails, its version tags wait until someone runs the Publish workflow by hand with the release's tag as `ref`. A release a person publishes on GitHub builds at once.
 
 
 

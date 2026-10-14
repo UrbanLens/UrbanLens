@@ -216,22 +216,19 @@ class BoundaryManager(_BoundaryManagerBase["Boundary"]):
 
         Args:
             wiki: The Wiki whose boundary is being displayed. When this is a
-                concealed projection (``services.wiki.concealment.is_concealed``),
-                a wiki-drawn customization is skipped in favour of the place/
-                circle fallback - a wiki-scoped ``Boundary`` row records no
-                author at all (always ``profile=None``), so unlike markup or
-                custom layers it cannot get the own-contribution treatment;
-                hiding it outright is the only option that doesn't risk
-                showing a stranger's edit back as automatic.
+                viewer's projection (``services.wiki.viewer_projection``) that
+                does not show the wiki's own outline, a wiki-drawn customization
+                is skipped in favour of the place/circle fallback.
             boundary_type: A :class:`BoundaryType` value.
 
         Returns:
             Tuple of (polygon, source) where source is one of "wiki",
             "place", "circle", or (None, None) when nothing applies.
         """
-        from urbanlens.dashboard.services.wiki.concealment import is_concealed
+        from urbanlens.dashboard.services.wiki.viewer_projection import projection_of
 
-        return self._resolve_wiki_chain(wiki, boundary_type, row=lambda: self.row_for_wiki(wiki, boundary_type), concealed=is_concealed(wiki))
+        projection = projection_of(wiki)
+        return self._resolve_wiki_chain(wiki, boundary_type, row=lambda: self.row_for_wiki(wiki, boundary_type), own_outline_shown=projection is None or projection.shows_wiki_outline())
 
     def own_polygons_for_wikis(self, wikis: Iterable[Wiki], boundary_type: str, viewer: Profile | None) -> dict[int, GEOSGeometry | None]:
         """
@@ -240,20 +237,20 @@ class BoundaryManager(_BoundaryManagerBase["Boundary"]):
         Args:
             wikis: The wikis.
             boundary_type: A :class:`BoundaryType` value.
-            viewer: Who is looking: a wiki concealed from them shows no outline drawn on it.
+            viewer: Who is looking: a wiki whose projection for them hides its own outline shows none drawn on it.
 
         Returns:
             Wiki id to polygon, or None where nothing applies.
         """
         from urbanlens.dashboard.models.wiki.model import Wiki
-        from urbanlens.dashboard.services.wiki.concealment import concealment_active
+        from urbanlens.dashboard.services.wiki.viewer_projection import viewer_projection
 
         loaded = list(Wiki.objects.filter(pk__in=[wiki.pk for wiki in wikis]).select_related("place", "location__place"))
         rows = {row.wiki_id: row for row in self.filter(wiki_id__in=[wiki.pk for wiki in loaded], pin__isnull=True, boundary_type=boundary_type)}
-        return {wiki.pk: self._resolve_wiki_chain(wiki, boundary_type, row=lambda wiki=wiki: rows.get(wiki.pk), concealed=concealment_active(wiki, viewer))[0] for wiki in loaded}
+        return {wiki.pk: self._resolve_wiki_chain(wiki, boundary_type, row=lambda wiki=wiki: rows.get(wiki.pk), own_outline_shown=viewer_projection(wiki, viewer).shows_wiki_outline())[0] for wiki in loaded}
 
     @staticmethod
-    def _resolve_wiki_chain(wiki: Wiki, boundary_type: str, *, row: Callable[[], Boundary | None], concealed: bool) -> tuple[GEOSGeometry | None, str | None]:
+    def _resolve_wiki_chain(wiki: Wiki, boundary_type: str, *, row: Callable[[], Boundary | None], own_outline_shown: bool) -> tuple[GEOSGeometry | None, str | None]:
         """
         The :meth:`resolve_for_wiki` chain, given how to find the wiki's own row and whether the viewer may see it.
 
@@ -261,7 +258,7 @@ class BoundaryManager(_BoundaryManagerBase["Boundary"]):
             wiki: The wiki, its place and location loaded.
             boundary_type: A :class:`BoundaryType` value.
             row: Finds the wiki's own boundary row of this type; called only when it can be shown.
-            concealed: Whether the wiki is concealed from the viewer, which hides an outline drawn on it.
+            own_outline_shown: Whether an outline drawn on the wiki itself may be shown to the viewer.
 
         Returns:
             The polygon and its source.
@@ -277,7 +274,7 @@ class BoundaryManager(_BoundaryManagerBase["Boundary"]):
         if place is not None and not outline_applies(place, boundary_type):
             return None, None
 
-        if not concealed and (own := row()) and own.drawn_or_generated_polygon:
+        if own_outline_shown and (own := row()) and own.drawn_or_generated_polygon:
             return own.drawn_or_generated_polygon, "wiki"
         if scoped is not None:
             return scoped, "place"

@@ -1,5 +1,5 @@
 """
-A label's icon is an icon, never markup (P128).
+A label's icon is an icon, never markup.
 
 The add-pin dialog rendered ``Label.icon`` as HTML, and nothing server-side limited the column to the icon
 shapes the picker offers: the external API, the bulk edit and the archive import all stored any 50-character
@@ -95,9 +95,9 @@ class TheApiRefusesMarkupTests(TestCase):
         self.assertFalse(Label.objects.filter(name="Hostile").exists())
 
     def test_create_accepts_an_emoji(self) -> None:
-        response = self._post("", {"name": "P128 emoji label", "kind": KIND_TAG, "icon": "🏥"})
+        response = self._post("", {"name": "emoji label", "kind": KIND_TAG, "icon": "🏥"})
         self.assertEqual(response.status_code, 201, response.content)
-        self.assertEqual(Label.objects.get(name="P128 emoji label").icon, "🏥")
+        self.assertEqual(Label.objects.get(name="emoji label").icon, "🏥")
 
     def test_bulk_edit_refuses_a_markup_icon(self) -> None:
         label = ensure_label(profile=self.profile, name="Mine", kind=KIND_TAG)

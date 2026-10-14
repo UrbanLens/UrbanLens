@@ -5,7 +5,7 @@ Both servers need this and neither can share the other's mechanism: gunicorn
 warms from `post_worker_init` in `gunicorn.conf.py`, daphne from `asgi.py` at
 import. Keeping the *what* here means only the *when* differs between them -
 the previous arrangement had one copy per server and they drifted, with daphne
-having no copy at all until N22 H62.
+having no copy at all until a later fix.
 """
 
 from __future__ import annotations
@@ -18,8 +18,8 @@ def warm_urlconf() -> tuple[int, int]:
     """
     Import the URLconf and build its reverse table.
 
-    Two separate pieces of lazy work, and warming only the first is what H63
-    was. Reading ``url_patterns`` imports the URLconf module, which reaches
+    Two separate pieces of lazy work, and warming only the first leaves the
+    second for the first request. Reading ``url_patterns`` imports the URLconf module, which reaches
     every controller and through them GeoPandas/Shapely - 1.4-2.3s of CPU.
     Django then builds the *reverse* table separately, on the first ``reverse()``
     or ``{% url %}``, by normalising every pattern's regex: a further 0.364s,

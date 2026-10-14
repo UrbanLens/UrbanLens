@@ -162,7 +162,7 @@ class SendPinsToWikiTests(TestCase):
 
 class BuildingFootprintMatchingTests(TestCase):
     """
-    Two building-typed markers match by REData's real footprint, not just proximity.
+    Two building-typed markers match by the provider's real footprint, not just proximity.
 
     A building pin shared from one end of a long hall and the receiving side's own pin for the same building at
     the other end can easily sit farther apart than site_scope.BUILDING_MATCH_METERS - but the parcel's building

@@ -2,7 +2,6 @@
  * "Core" globals bundle: LocationSearchEngine + MarkupEngine + the createMarkupToolbar factory.
  */
 import { installGlobalArticleSubtabs } from "../shared/article-subtabs";
-import { installGlobalAssistantOverlay } from "../shared/assistant-overlay";
 import { installGlobalAutosaveGuard } from "../shared/autosave-guard";
 import { installCardTabs } from "../shared/card-tabs";
 import { installGlobalCollapsibleSections } from "../shared/collapsible-sections";
@@ -59,7 +58,6 @@ import { installSiteRuntime } from "../shared/site-runtime";
 // First: the rest may toast, and body scripts read window.csrftoken.
 installSiteRuntime();
 installGlobalArticleSubtabs();
-installGlobalAssistantOverlay();
 installGlobalAutosaveGuard();
 installCardTabs();
 installGlobalCollapsibleSections();

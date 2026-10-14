@@ -1,7 +1,7 @@
 """
 The Maps subpage renders every map the account has ever drawn, in one response.
 
-N21 H31 and H37, which are the same page from two angles. `MemoriesMapsView`
+Two audit findings, which are the same page from two angles. `MemoriesMapsView`
 builds a card per `MarkupMap` the profile owns with no pagination and no
 ceiling, and each card calls `to_snapshot()` - so the response carries every
 annotation of every map, and the page's own advertised workflow (draw a route

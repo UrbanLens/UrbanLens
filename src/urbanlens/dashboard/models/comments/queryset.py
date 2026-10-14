@@ -32,7 +32,7 @@ class CommentQuerySet(abstract.FrontendDashboardQuerySet["Comment"]):
             profile: The viewing profile.
 
         Returns:
-            The comments they may be shown, before concealment.
+            The comments they may be shown, before any projection of the wiki narrows them.
         """
         from urbanlens.dashboard.models.pin.model import Pin
         from urbanlens.dashboard.models.wiki.model import Wiki

@@ -297,7 +297,7 @@ class TriviaSessionVolumeTests(TransactionTestCase):
     @override_settings(UL_MESSAGES_PER_MINUTE=1)
     def test_a_ping_does_not_spend_the_message_budget(self) -> None:
         """
-        The client sends one every 45 seconds, because Cloudflare closes an idle tunnelled socket at about 100. Charging those against the write budget would throttle a user for sitting in a lobby.
+        The client sends one every 45 seconds, because a reverse proxy closes an idle socket at about 100. Charging those against the write budget would throttle a user for sitting in a lobby.
 
         The frame budget is left at its production value here, so the pings are charged where they belong and
         the message that follows still arrives."""

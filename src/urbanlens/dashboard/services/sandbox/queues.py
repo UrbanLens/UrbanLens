@@ -18,10 +18,6 @@ Queue                Container                  Reaches
 ``sandbox``          ``media-worker``           DB, broker, media volumes. No internet,
                                                 no third-party API keys, no capabilities
 ``sandbox_batch``    ``media-worker-batch``     identical isolation to ``sandbox``
-``ai``               ``ai-worker``              DB, broker, encryption key (tools read
-                                                encrypted content). No REData/OAuth/
-                                                provider keys - model calls go through
-                                                ai-inference. See docs/AI_PIPELINE.md.
 ===================  =========================  ==================================
 
 ``interactive``, ``bulk`` and ``maintenance`` are the same split applied to what
@@ -51,11 +47,6 @@ Resolution is deliberately late and degradable. ``sandbox_queue()`` returns the
 started a ``media-worker`` container keeps working (with the isolation it
 didn't ask for absent) rather than accumulating a queue nobody drains.
 
-``ai_queue()`` does not follow that pattern. The regular worker holds REData
-and OAuth credentials and sits on ``app_network``; degrading the assistant's
-tool loop onto it would be a bigger blast radius than the problem it's
-avoiding. When no ``ai-worker`` is deployed the assistant is unavailable
-(see ``services/ai/access.py:assistant_available``), not degraded.
 """
 
 from __future__ import annotations
@@ -83,7 +74,7 @@ class Queue(StrEnum):
         PANEL_FETCH: External-data panel fetches for the Private Pin page.
         SANDBOX: Interactive parsing of untrusted user-supplied bytes - image decode, video transcode, document conversion.
         SANDBOX_BATCH: Long-running untrusted-parse batch jobs - archive walks, data imports.
-        AI: The assistant's tool loop, drained by ``ai-worker``."""
+    """
 
     DEFAULT = "celery"
     INTERACTIVE = "interactive"
@@ -92,7 +83,6 @@ class Queue(StrEnum):
     PANEL_FETCH = "panel_fetch"
     SANDBOX = "sandbox"
     SANDBOX_BATCH = "sandbox_batch"
-    AI = "ai"
 
 
 def sandbox_queue(*, batch: bool = False) -> str:
@@ -110,13 +100,3 @@ def sandbox_queue(*, batch: bool = False) -> str:
     if not getattr(settings, "UL_SANDBOX_ENABLED", False):
         return Queue.DEFAULT
     return Queue.SANDBOX_BATCH if batch else Queue.SANDBOX
-
-
-def ai_queue() -> str:
-    """
-    The queue the assistant's tool-loop task should be routed to.
-    Read once per task definition, at import time, so it appears in the task's own exec options rather than at each call site - matching :func:`sandbox_queue`.
-
-    Returns:
-        :attr:`Queue.AI`, always."""
-    return Queue.AI

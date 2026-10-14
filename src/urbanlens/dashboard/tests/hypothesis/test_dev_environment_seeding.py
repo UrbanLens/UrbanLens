@@ -13,14 +13,27 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki.model import Wiki
+from urbanlens.dashboard.plugins.points import DEMO_LOCATION_SOURCES
+from urbanlens.dashboard.services.demo.locations import DemoLocationSource
 from urbanlens.dashboard.services.demo.seeding import (
     HUDSON_RIVER_STATE_HOSPITAL,
     seed_dev_environment,
     seed_landmark_pin,
 )
 
-#: Imported inside `redata_demo_locations`, so it is patched where it is defined.
-_CATALOG = "urbanlens.dashboard.services.demo.locations.redata_demo_locations"
+
+class _Catalog(DemoLocationSource):
+    """A catalog of public places that answers with whatever it was given."""
+
+    key = "fake"
+    verbose_name = "Fake catalog"
+
+    def __init__(self, entries: list[dict]) -> None:
+        self._entries = entries
+
+    def entries(self) -> list[dict]:
+        return self._entries
+
 
 #: What `bin/opslib/devenv.py` derives from the environment slug.
 _PASSWORD = "demo-a1b2c3"  # noqa: S105 - the point of this feature is that it is not secret
@@ -57,7 +70,7 @@ class SeedDevEnvironmentTests(TestCase):
         self.enterContext(mock.patch("urbanlens.UrbanLens.settings.app.settings.environment_name", "development"))
 
     def _seed(self, entries: list[dict] | None = None) -> dict:
-        with mock.patch(_CATALOG, return_value=entries if entries is not None else _ENTRIES):
+        with DEMO_LOCATION_SOURCES.overridden([_Catalog(entries if entries is not None else _ENTRIES)]):
             return seed_dev_environment(username="demo", password=_PASSWORD)
 
     def test_it_creates_an_account_with_the_password_it_reports(self) -> None:
@@ -101,14 +114,14 @@ class SeedDevEnvironmentTests(TestCase):
         self.assertTrue(Wiki.objects.filter(location=pin.location).exists())
 
     def test_an_unreachable_catalog_still_produces_a_usable_account(self) -> None:
-        """A dev environment must not be worth less because REData had nothing to say."""
+        """A dev environment must not be worth less because the catalog had nothing to say."""
         summary = self._seed(entries=[])
 
         owner = User.objects.get(username="demo").profile
         self.assertTrue(summary["created"])
         self.assertEqual(summary["pins"], 1, "the landmark pin, and nothing from the catalog")
         self.assertEqual(summary["landmark"], HUDSON_RIVER_STATE_HOSPITAL["name"])
-        self.assertIn("REData", summary["catalog"])
+        self.assertIn("no public-locations catalog", summary["catalog"])
         self.assertTrue(Pin.objects.filter(profile=owner).exists())
 
     def test_seeding_twice_neither_duplicates_nor_raises(self) -> None:

@@ -84,14 +84,12 @@ class ProvisionAccountTests(TestCase):
 
         profile = Profile.objects.get(user__username=account.username)
         self.assertFalse(profile.external_apis_enabled)
-        self.assertFalse(profile.ai_enabled)
 
     def test_outbound_providers_can_be_left_on_deliberately(self):
         account, _ = provision_account("primary", password=PASSWORD, external_apis=True)
 
         profile = Profile.objects.get(user__username=account.username)
         self.assertTrue(profile.external_apis_enabled)
-        self.assertTrue(profile.ai_enabled)
 
     def test_no_notification_is_ever_delivered_by_email(self):
         """
@@ -465,19 +463,15 @@ class SubscriberProvisioningTests(OffProductionMixin, TestCase):
         self.assertEqual(subscription.role.slug, SUBSCRIBER_ROLE_SLUG)
         self.assertIsNone(subscription.expires_at, "a grant that expires turns a later run into a non-subscriber run")
 
-    def test_the_role_grants_only_property_owners_and_is_not_for_sale(self):
+    def test_the_role_grants_only_property_owners(self):
         """A dedicated role, so the subscriber differs from the non-subscriber in exactly one feature."""
         provision_account("subscriber", password=PASSWORD, subscriber=True)
 
         role = SubscriptionRole.objects.get(slug=SUBSCRIBER_ROLE_SLUG)
         self.assertEqual(role.feature_set, {SiteFeature.PROPERTY_OWNERS.value})
-        from urbanlens.dashboard.plugins import plugin_available
-
-        if plugin_available("billing"):
-            self.assertFalse(role.pricing.is_purchasable)
 
     def test_an_edited_role_is_reset(self):
-        SubscriptionRole.objects.create(slug=SUBSCRIBER_ROLE_SLUG, name="edited", features="ai")
+        SubscriptionRole.objects.create(slug=SUBSCRIBER_ROLE_SLUG, name="edited", features=SiteFeature.SEARCH.value)
 
         provision_account("subscriber", password=PASSWORD, subscriber=True)
 
@@ -513,7 +507,9 @@ class SubscriberProvisioningTests(OffProductionMixin, TestCase):
     def test_revoking_leaves_other_roles_alone(self):
         provision_account("primary", password=PASSWORD, subscriber=True)
         user = self._user("primary")
-        other = SubscriptionRole.objects.create(slug="someone-elses-role", name="Other", features="ai")
+        other = SubscriptionRole.objects.create(
+            slug="someone-elses-role", name="Other", features=SiteFeature.SEARCH.value
+        )
         grant_subscription(user, other, granted_by=user, months=None)
 
         provision_account("primary", password=PASSWORD)

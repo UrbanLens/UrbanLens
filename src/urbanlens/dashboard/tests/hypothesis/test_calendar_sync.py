@@ -1504,7 +1504,7 @@ class CalendarInviteRespectsNotificationPreferenceTests(TestCase):
 
 
 class ListEventsPagingTests(_CalendarSyncDBTestCase):
-    """The gateway follows Google's pages up to an explicit limit, and says when it stopped short (G4-5)."""
+    """The gateway follows Google's pages up to an explicit limit, and says when it stopped short."""
 
     def _gateway_with_pages(self, *pages: dict):
         from urbanlens.dashboard.services.apis.calendar.google import GoogleCalendarGateway

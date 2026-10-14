@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import timedelta
 from unittest import mock
 
-from django.contrib.auth.models import User
 from django.utils import timezone
 from model_bakery import baker
 import requests
@@ -16,235 +15,11 @@ from urbanlens.dashboard.models.cache.location_cache import (
     UNANSWERED_SOURCES_KEY,
     LocationCache,
 )
-from urbanlens.dashboard.models.google_place.model import GooglePlace
 from urbanlens.dashboard.models.location.model import Location
-from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.services.apis.locations.redata_context_gateway import (
-    LocationContextEnvelope,
-    LocationContextUnavailableError,
-)
-from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
-from urbanlens.dashboard.tests.hypothesis.redata_helpers import (
-    BUDGET_REFUSALS,
-    DETAIL_WITHHELD_ANSWERS,
-    RedataConfiguredMixin,
-    detail_withheld_error,
-)
 
 
-class SearxngImageOutageTests(RedataConfiguredMixin, TestCase):
-    def setUp(self) -> None:
-        super().setUp()
-        baker.make(User)  # absorbs the bootstrap site-admin promotion
-        self.profile = baker.make(User).profile
-        location = baker.make(
-            Location,
-            latitude=41.73,
-            longitude=-73.92,
-            official_name="Hudson River State Hospital",
-            official_name_source="google_places",
-        )
-        self.pin = baker.make(
-            Pin, profile=self.profile, location=location, parent_pin=None, name="Hudson River State Hospital"
-        )
-
-    def _source(self):
-        from urbanlens.dashboard.plugins.builtin.searxng_images import SearxngImageMediaSource
-
-        return SearxngImageMediaSource()
-
-    def _cached(self) -> int:
-        return LocationCache.objects.filter(location=self.pin.location, source=self._source().cache_source).count()
-
-    def test_an_outage_leaves_the_source_unfetched(self) -> None:
-        with mock.patch(
-            "urbanlens.dashboard.services.apis.locations.redata_search_gateway.RedataSearchGateway.search_web",
-            side_effect=LocationContextUnavailableError("source_error", "503"),
-        ):
-            self._source().fetch(self.pin)
-
-        self.assertEqual(
-            self._cached(), 0, "caching the outage makes it permanent - nothing refetches a source that has a row"
-        )
-
-    def test_a_genuine_empty_result_is_cached(self) -> None:
-        """Asked and told nothing is a real answer, and must not be refetched forever."""
-        with mock.patch(
-            "urbanlens.dashboard.services.apis.locations.redata_search_gateway.RedataSearchGateway.search_web",
-            return_value=[],
-        ):
-            self._source().fetch(self.pin)
-
-        self.assertEqual(self._cached(), 1)
-
-    def test_results_are_cached(self) -> None:
-        with mock.patch(
-            "urbanlens.dashboard.services.apis.locations.redata_search_gateway.RedataSearchGateway.search_web",
-            return_value=[{"url": "https://example.test/a.jpg"}],
-        ):
-            self._source().fetch(self.pin)
-
-        self.assertEqual(self._cached(), 1)
-
-
-class SiteConditionsOutageTests(RedataConfiguredMixin, TestCase):
-    def setUp(self) -> None:
-        super().setUp()
-        baker.make(User)
-        self.profile = baker.make(User).profile
-        location = baker.make(Location, latitude=41.74, longitude=-73.93)
-        self.pin = baker.make(Pin, profile=self.profile, location=location, parent_pin=None)
-
-    def _source(self):
-        from urbanlens.dashboard.plugins.builtin.redata_site_conditions import SiteConditionsPanelSource
-
-        return SiteConditionsPanelSource()
-
-    def _cached(self) -> int:
-        return LocationCache.objects.filter(location=self.pin.location, source=self._source().cache_source).count()
-
-    def test_a_total_outage_leaves_it_unfetched(self) -> None:
-        targets = [
-            "urbanlens.dashboard.services.apis.locations.redata_land_cover_gateway.RedataLandCoverGateway.get_land_cover",
-            "urbanlens.dashboard.services.apis.locations.redata_walkability_gateway.RedataWalkabilityGateway.get_walkability",
-            "urbanlens.dashboard.services.apis.locations.redata_soil_gateway.RedataSoilGateway.get_soil_components",
-        ]
-        with (
-            mock.patch(targets[0], side_effect=LocationContextUnavailableError("source_error", "down")),
-            mock.patch(targets[1], side_effect=LocationContextUnavailableError("source_error", "down")),
-            mock.patch(targets[2], side_effect=LocationContextUnavailableError("source_error", "down")),
-        ):
-            self._source().fetch(self.pin)
-
-        self.assertEqual(self._cached(), 0)
-
-
-class RedataPartialProviderOutageTests(TestCase):
-    """
-    A provider outage *inside* a successful request is still an outage.
-
-    The tests above guard a failed request."""
-
-    def setUp(self) -> None:
-        super().setUp()
-        baker.make(User)  # absorbs the bootstrap site-admin promotion
-        self.profile = baker.make(User).profile
-        location = baker.make(
-            Location,
-            latitude=41.73,
-            longitude=-73.92,
-            official_name="Hudson River State Hospital",
-            official_name_source="google_places",
-        )
-        self.pin = baker.make(Pin, profile=self.profile, location=location, parent_pin=None, name="HRSH")
-
-    def _source(self):
-        from urbanlens.dashboard.plugins.builtin.redata_permits import BuildingPermitsPanelSource
-
-        return BuildingPermitsPanelSource()
-
-    def _cached(self) -> int:
-        return LocationCache.objects.filter(location=self.pin.location, source=self._source().cache_source).count()
-
-    def _envelope(self, *, complete: bool, results: list[dict]):
-        from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope
-
-        return LocationContextEnvelope(count=len(results), complete=complete, results=results, providers=[])
-
-    def test_an_empty_incomplete_answer_is_not_cached(self) -> None:
-        source = self._source()
-        with mock.patch.object(type(source), "fetch_envelope", return_value=self._envelope(complete=False, results=[])):
-            source.fetch(self.pin)
-
-        self.assertEqual(self._cached(), 0, "could not ask is not an answer - a row here makes the blank permanent")
-
-    def test_an_empty_complete_answer_is_cached(self) -> None:
-        """Asked and told nothing is a real result, and must not be refetched forever."""
-        source = self._source()
-        with mock.patch.object(type(source), "fetch_envelope", return_value=self._envelope(complete=True, results=[])):
-            source.fetch(self.pin)
-
-        self.assertEqual(self._cached(), 1)
-
-    def test_a_partial_answer_with_rows_is_cached(self) -> None:
-        """One flaky provider must not stop the other four's rows being stored."""
-        source = self._source()
-        with mock.patch.object(
-            type(source),
-            "fetch_envelope",
-            return_value=self._envelope(complete=False, results=[{"permit_number": "A-1"}]),
-        ):
-            source.fetch(self.pin)
-
-        self.assertEqual(self._cached(), 1)
-
-    def test_the_rule_is_inherited_by_every_panel_built_on_the_base(self) -> None:
-        """
-        Stated as a property of the base rather than of one panel.
-
-        Six panels share this fetch; asserting it on one of them only proves
-        the base works, which is the point of moving the rule there.
-        """
-        from urbanlens.dashboard.services.pins.redata_panel import RedataInfoPanelSource
-
-        for source_cls in RedataInfoPanelSource.__subclasses__():
-            with self.subTest(panel=source_cls.__name__):
-                self.assertIs(
-                    source_cls.fetch,
-                    RedataInfoPanelSource.fetch,
-                    f"{source_cls.__name__} overrides fetch and so opts out of the outage rule",
-                )
-                self.assertTrue(
-                    getattr(source_cls, "payload_key", ""),
-                    f"{source_cls.__name__} declares no payload_key, so the inherited fetch has nowhere to write",
-                )
-
-
-class HistoricalMapMediaOutageTests(RedataConfiguredMixin, TestCase):
-    _LOOKUP = (
-        "urbanlens.dashboard.services.apis.locations.redata_historical_maps_gateway."
-        "RedataHistoricalMapsGateway.get_maps_covering"
-    )
-
-    def setUp(self) -> None:
-        super().setUp()
-        baker.make(User)  # absorbs the bootstrap site-admin promotion
-        self.profile = baker.make(User).profile
-        location = baker.make(
-            Location,
-            latitude=41.73,
-            longitude=-73.92,
-            official_name="Hudson River State Hospital",
-            official_name_source="google_places",
-        )
-        self.pin = baker.make(Pin, profile=self.profile, location=location, parent_pin=None, name="HRSH")
-
-    def _source(self):
-        from urbanlens.dashboard.plugins.builtin.redata_historical_map_media import HistoricalMapMediaSource
-
-        return HistoricalMapMediaSource()
-
-    def _cached(self) -> int:
-        return LocationCache.objects.filter(location=self.pin.location, source=self._source().cache_source).count()
-
-    def test_an_outage_leaves_the_source_unfetched(self) -> None:
-        with mock.patch(self._LOOKUP, side_effect=LocationContextUnavailableError("source_error", "503")):
-            self._source().fetch(self.pin)
-
-        self.assertEqual(self._cached(), 0)
-
-    def test_a_genuine_empty_result_is_cached(self) -> None:
-        with mock.patch(self._LOOKUP, return_value=[]):
-            self._source().fetch(self.pin)
-
-        self.assertEqual(self._cached(), 1)
-
-
-_PROPERTY_GATEWAY = "urbanlens.dashboard.services.apis.property_records.redata_gateway.RedataGateway"
-
-
-def _hrsh(**fields) -> Location:
+def _site(**fields) -> Location:
     return baker.make(
         Location,
         latitude=41.7321,
@@ -253,321 +28,6 @@ def _hrsh(**fields) -> Location:
         official_name_source="google_places",
         **fields,
     )
-
-
-class CrisEnrichmentOutageTests(RedataConfiguredMixin, TestCase):
-    """The batch's CRIS fetch, which wrote 50 empty rows in the production outage."""
-
-    def setUp(self) -> None:
-        super().setUp()
-        self.location = _hrsh()
-
-    def _enrich(self, **lookup) -> None:
-        from urbanlens.dashboard.plugins.builtin.cris_buildings import CrisBuildingEnrichmentSource
-
-        with mock.patch(f"{_PROPERTY_GATEWAY}.lookup_cultural_resources", **lookup):
-            CrisBuildingEnrichmentSource().enrich(self.location)
-
-    def _rows(self) -> int:
-        return LocationCache.objects.filter(location=self.location, source="cris_building_usn").count()
-
-    def test_an_outage_writes_nothing(self) -> None:
-        with self.assertRaises(PropertyRecordsUnavailableError):
-            self._enrich(side_effect=PropertyRecordsUnavailableError("source_error", "Could not reach REData"))
-
-        self.assertEqual(self._rows(), 0)
-
-    def test_a_settled_refusal_is_cached_as_empty(self) -> None:
-        self._enrich(side_effect=PropertyRecordsUnavailableError("no_data_found", ""))
-
-        self.assertEqual(self._rows(), 1)
-
-    def test_a_genuine_empty_answer_is_cached(self) -> None:
-        self._enrich(return_value=[])
-
-        self.assertEqual(self._rows(), 1)
-
-
-class CrisDetailOutageTests(RedataConfiguredMixin, TestCase):
-    """A building found but its detail unreachable: the row would claim attachments it never saw."""
-
-    def setUp(self) -> None:
-        super().setUp()
-        baker.make(User)  # absorbs the bootstrap site-admin promotion
-        location = _hrsh()
-        self.pin = baker.make(Pin, profile=baker.make(User).profile, location=location, parent_pin=None)
-        self.building = {
-            "uuid": "b-1",
-            "resource_type": "building",
-            "provider": "ny_cris",
-            "source_latitude": 41.7321,
-            "source_longitude": -73.9262,
-            "attributes": {"USNName": "Main Building"},
-        }
-
-    def _fetch(self, **detail) -> None:
-        from urbanlens.dashboard.plugins.builtin.cris_buildings import CrisBuildingPanelSource
-
-        with (
-            mock.patch(f"{_PROPERTY_GATEWAY}.lookup_cultural_resources", return_value=[self.building]),
-            mock.patch(f"{_PROPERTY_GATEWAY}.fetch_cultural_resource_detail", **detail),
-            mock.patch("urbanlens.dashboard.services.locations.site_scope.is_site_scope", return_value=False),
-        ):
-            CrisBuildingPanelSource()._fetch_now(self.pin)
-
-    def _rows(self) -> int:
-        return LocationCache.objects.filter(location=self.pin.location, source="cris_building_usn").count()
-
-    def test_an_unreachable_detail_writes_nothing(self) -> None:
-        with self.assertRaises(PropertyRecordsUnavailableError):
-            self._fetch(side_effect=PropertyRecordsUnavailableError("source_error", "503"))
-
-        self.assertEqual(self._rows(), 0)
-
-    def test_a_detail_redata_withholds_for_now_writes_nothing(self) -> None:
-        """A 503 and a held resource (``unresolved``) are both "ask again later", never "no deeper record"."""
-        for answer in DETAIL_WITHHELD_ANSWERS:
-            with self.subTest(answer=answer):
-                with self.assertRaises(PropertyRecordsUnavailableError):
-                    self._fetch(side_effect=detail_withheld_error(answer))
-
-                self.assertEqual(self._rows(), 0)
-
-    def test_a_detail_redata_does_not_have_keeps_the_search_row(self) -> None:
-        self._fetch(side_effect=PropertyRecordsUnavailableError("no_data_found", ""))
-
-        self.assertEqual(self._rows(), 1)
-
-
-class PlaceDetailsEnrichmentOutageTests(RedataConfiguredMixin, TestCase):
-    """The batch's place-details fetch, which wrote 50 empty rows in the production outage."""
-
-    _DETAIL = "urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway.RedataCidGateway.get_place_detail"
-    _RESOLVE = "urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway.RedataCidGateway.resolve_cids"
-
-    def setUp(self) -> None:
-        super().setUp()
-        google_place = GooglePlace.objects.create(latitude="41.7321", longitude="-73.9262", cid=123456789012345678)
-        self.location = _hrsh(google_place=google_place)
-
-    def _rows(self) -> int:
-        return LocationCache.objects.filter(location=self.location, source="redata_place_details").count()
-
-    def _enrich(self, **detail) -> None:
-        from urbanlens.dashboard.plugins.builtin.redata_place_details import RedataPlaceDetailsEnrichmentSource
-
-        with mock.patch(self._DETAIL, **detail):
-            RedataPlaceDetailsEnrichmentSource().enrich(self.location)
-
-    def test_an_outage_writes_nothing(self) -> None:
-        with self.assertRaises(GatewayRequestError):
-            self._enrich(side_effect=GatewayRequestError("Could not reach REData: ConnectionError"))
-
-        self.assertEqual(self._rows(), 0)
-
-    def test_a_cid_redata_never_resolved_is_posted_and_kept_briefly(self) -> None:
-        from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import RedataCidBatchResult
-
-        pending = RedataCidBatchResult(pending={123456789012345678})
-        with mock.patch(f"{self._RESOLVE}", return_value=pending) as resolve:
-            self._enrich(return_value=None)
-
-        resolve.assert_called_once()
-        self.assertEqual(self._rows(), 1)
-
-    def test_a_cid_that_cannot_be_posted_writes_nothing(self) -> None:
-        with (
-            mock.patch(f"{self._RESOLVE}", side_effect=GatewayRequestError("Could not reach REData")),
-            self.assertRaises(GatewayRequestError),
-        ):
-            self._enrich(return_value=None)
-
-        self.assertEqual(self._rows(), 0)
-
-
-class ParcelBuildingsOutageTests(RedataConfiguredMixin, TestCase):
-    """REData's building list, whose outage left 48 empty rows and so blanked the building attributes read from them."""
-
-    def setUp(self) -> None:
-        super().setUp()
-        self.location = _hrsh()
-
-    def _rows(self, source: str = "parcel_buildings") -> int:
-        return LocationCache.objects.filter(location=self.location, source=source).count()
-
-    def _enrich(self, **parcel) -> None:
-        from urbanlens.dashboard.plugins.builtin.parcel_buildings import ParcelBuildingsEnrichmentSource
-
-        with mock.patch(f"{_PROPERTY_GATEWAY}.lookup_parcel_uuid", **parcel):
-            ParcelBuildingsEnrichmentSource().enrich(self.location)
-
-    def test_an_outage_writes_nothing(self) -> None:
-        with self.assertRaises(PropertyRecordsUnavailableError):
-            self._enrich(side_effect=PropertyRecordsUnavailableError("source_error", "Could not reach REData"))
-
-        self.assertEqual(self._rows(), 0)
-
-    def test_no_parcel_is_cached_as_empty(self) -> None:
-        self._enrich(side_effect=PropertyRecordsUnavailableError("no_data_found", ""))
-
-        self.assertEqual(self._rows(), 1)
-
-    def test_building_attributes_after_a_parcel_outage_write_nothing(self) -> None:
-        """The production cascade: the attributes source answers from the cached building list when there is one."""
-        from urbanlens.dashboard.plugins.builtin.parcel_buildings import ParcelBuildingsEnrichmentSource
-        from urbanlens.dashboard.plugins.builtin.redata_building_attributes import (
-            RedataBuildingAttributesEnrichmentSource,
-        )
-
-        outage = PropertyRecordsUnavailableError("source_error", "Could not reach REData")
-        with mock.patch(f"{_PROPERTY_GATEWAY}.lookup_parcel_uuid", side_effect=outage):
-            for source in (ParcelBuildingsEnrichmentSource(), RedataBuildingAttributesEnrichmentSource()):
-                with self.assertRaises(PropertyRecordsUnavailableError):
-                    source.enrich(self.location)
-
-        self.assertEqual(self._rows() + self._rows("redata_building_attributes"), 0)
-
-
-class MediaArchiveOutageTests(RedataConfiguredMixin, TestCase):
-    """Smithsonian, LOC, Internet Archive and the rest share ``MediaProvider.get_media``, for base and audience rows."""
-
-    _SEARCH = (
-        "urbanlens.dashboard.services.apis.locations.redata_reference_documents_gateway."
-        "RedataReferenceDocumentsGateway.search"
-    )
-
-    def setUp(self) -> None:
-        super().setUp()
-        baker.make(User)  # absorbs the bootstrap site-admin promotion
-        location = _hrsh(locality="Poughkeepsie", administrative_area_level_1="NY", country="US")
-        # A name of the owner's own, so the pin reads an audience row beside the shared one.
-        self.pin = baker.make(
-            Pin, profile=baker.make(User).profile, location=location, parent_pin=None, name="Hudson River Psychiatric"
-        )
-
-    def _source(self):
-        from urbanlens.dashboard.services.apis.locations.redata_reference_documents_gateway import (
-            SmithsonianMediaProvider,
-        )
-        from urbanlens.dashboard.services.pins.external_data import MediaPanelSource
-
-        return MediaPanelSource("smithsonian", SmithsonianMediaProvider.service_key, SmithsonianMediaProvider)
-
-    def _audiences(self) -> set[str]:
-        rows = LocationCache.objects.filter(location=self.pin.location, source="smithsonian")
-        return set(rows.values_list("audience", flat=True))
-
-    def test_the_fixture_reads_two_rows(self) -> None:
-        self.assertEqual(len(self._source().search_scopes(self.pin)), 2)
-
-    def _fetch_during_an_outage(self) -> None:
-        with (
-            mock.patch(self._SEARCH, side_effect=LocationContextUnavailableError("source_error", "503")),
-            self.assertRaises(LocationContextUnavailableError),
-        ):
-            self._source().fetch(self.pin)
-
-    def test_an_outage_writes_no_shared_row(self) -> None:
-        self._fetch_during_an_outage()
-
-        self.assertEqual(self._audiences(), set())
-
-    def test_an_outage_writes_no_row_for_the_owners_names(self) -> None:
-        LocationCache.set(self.pin.location, "smithsonian", {"items": []})
-
-        self._fetch_during_an_outage()
-
-        self.assertEqual(self._audiences(), {""})
-
-    def test_an_outage_leaves_a_stale_good_row_as_it_was(self) -> None:
-        stale = LocationCache.set(self.pin.location, "smithsonian", {"items": [{"url": "https://example.test/a"}]})
-        LocationCache.objects.filter(pk=stale.pk).update(updated=stale.updated.replace(year=2020))
-        stale.refresh_from_db()
-
-        self._fetch_during_an_outage()
-
-        after = LocationCache.objects.get(pk=stale.pk)
-        self.assertEqual((after.data, after.updated), (stale.data, stale.updated))
-
-    def test_a_genuine_empty_answer_is_cached_for_both(self) -> None:
-        with mock.patch(self._SEARCH, return_value=LocationContextEnvelope(count=0, complete=True)):
-            self._source().fetch(self.pin)
-
-        self.assertEqual(len(self._audiences()), 2)
-
-    _REQUEST = (
-        "urbanlens.dashboard.services.apis.locations.redata_reference_documents_gateway."
-        "RedataReferenceDocumentsGateway._request"
-    )
-    _DOCUMENT = {
-        "provider": "smithsonian",
-        "title": "Hudson River State Hospital, Main Building, 1871",
-        "url": "https://collections.si.edu/search/detail/edanmdm:hrsh-1",
-        "thumbnail_url": "https://ids.si.edu/ids/deliveryService?id=hrsh-1",
-        "description": "",
-    }
-
-    def _fetch_answering(self, body: dict) -> None:
-        """Fetch with REData's archive search answering ``body`` with a 200."""
-        response = mock.Mock(status_code=200)
-        response.json.return_value = body
-        with mock.patch(self._REQUEST, return_value=response):
-            self._source().fetch(self.pin)
-
-    @staticmethod
-    def _answer(results: list[dict], *, smithsonian: str | None) -> dict:
-        """``/reference-documents/search/?provider=smithsonian``: REData 0.3.7's body, or an older one's without a status."""
-        if smithsonian is None:
-            return {"count": len(results), "results": results}
-        providers = [
-            {
-                "provider": "smithsonian",
-                "status": smithsonian,
-                "count": len(results),
-                "message": None if smithsonian == "ok" else "IndexError",
-            }
-        ]
-        providers += [
-            {"provider": name, "status": "skipped", "count": 0, "message": None}
-            for name in ("internet_archive", "library_of_congress")
-        ]
-        return {"count": len(results), "complete": smithsonian == "ok", "results": results, "providers": providers}
-
-    def test_an_archive_redata_isolated_as_unavailable_is_not_cached_as_nothing(self) -> None:
-        """REData 0.3.7 answers a provider's parse error as ``unavailable`` with ``complete: false`` instead of a 500."""
-        with self.assertRaises(LocationContextUnavailableError):
-            self._fetch_answering(self._answer([], smithsonian="unavailable"))
-
-        self.assertEqual(self._audiences(), set())
-
-    def test_an_archive_answer_redata_says_is_incomplete_is_shown_and_kept_briefly(self) -> None:
-        self._fetch_answering(self._answer([self._DOCUMENT], smithsonian="unavailable"))
-
-        rows = LocationCache.objects.filter(location=self.pin.location, source="smithsonian")
-        self.assertEqual(rows.count(), 2)
-        for row in rows:
-            self.assertEqual([item["url"] for item in row.data["items"]], [self._DOCUMENT["url"]])
-            self.assertTrue(row.data.get(UNANSWERED_SOURCES_KEY), row.data)
-        later = timezone.now() + PARTIAL_ANSWER_STALE_AFTER + timedelta(minutes=1)
-        with mock.patch("django.utils.timezone.now", return_value=later):
-            self.assertIsNone(LocationCache.get_fresh(self.pin.location, "smithsonian"))
-
-    def assert_kept_for_the_window(self, smithsonian: str | None) -> None:
-        self._fetch_answering(self._answer([self._DOCUMENT], smithsonian=smithsonian))
-
-        rows = LocationCache.objects.filter(location=self.pin.location, source="smithsonian")
-        self.assertEqual(rows.count(), 2)
-        for row in rows:
-            self.assertNotIn(UNANSWERED_SOURCES_KEY, row.data)
-        later = timezone.now() + PARTIAL_ANSWER_STALE_AFTER + timedelta(minutes=1)
-        with mock.patch("django.utils.timezone.now", return_value=later):
-            self.assertIsNotNone(LocationCache.get_fresh(self.pin.location, "smithsonian"))
-
-    def test_a_complete_archive_answer_keeps_the_window(self) -> None:
-        self.assert_kept_for_the_window("ok")
-
-    def test_an_archive_answer_from_redata_before_0_3_7_keeps_the_window(self) -> None:
-        self.assert_kept_for_the_window(None)
 
 
 class MediaProviderPartialOutageTests(TestCase):
@@ -594,7 +54,7 @@ class MediaProviderPartialOutageTests(TestCase):
         return LocationCache.objects.filter(location=location, source="outage_probe").count()
 
     def test_an_outage_on_one_query_and_results_on_another_are_cached_briefly(self) -> None:
-        location = _hrsh()
+        location = _site()
         provider = self._provider({"a": requests.ConnectionError("refused"), "b": ["https://example.test/1"]})
 
         items, _from_cache = provider.get_media(location, ["a", "b"])
@@ -608,7 +68,7 @@ class MediaProviderPartialOutageTests(TestCase):
             self.assertIsNone(LocationCache.get_fresh(location, "outage_probe"))
 
     def test_results_from_every_query_keep_the_window(self) -> None:
-        location = _hrsh()
+        location = _site()
         provider = self._provider({"a": ["https://example.test/1"], "b": []})
 
         provider.get_media(location, ["a", "b"])
@@ -617,7 +77,7 @@ class MediaProviderPartialOutageTests(TestCase):
         self.assertNotIn(UNANSWERED_SOURCES_KEY, row.data)
 
     def test_an_outage_on_one_query_and_nothing_on_another_is_not_cached(self) -> None:
-        location = _hrsh()
+        location = _site()
         provider = self._provider({"a": requests.ConnectionError("refused"), "b": []})
 
         with self.assertRaises(requests.ConnectionError):
@@ -626,100 +86,12 @@ class MediaProviderPartialOutageTests(TestCase):
         self.assertEqual(self._rows(location), 0)
 
     def test_a_failure_that_is_not_an_outage_is_still_an_answer(self) -> None:
-        location = _hrsh()
+        location = _site()
         provider = self._provider({"a": ValueError("unparseable")})
 
         provider.get_media(location, ["a"])
 
         self.assertEqual(self._rows(location), 1)
-
-
-class WebSearchOutageTests(RedataConfiguredMixin, TestCase):
-    """The page's own fetch shows "try later" and stores nothing; the warming task stores nothing either."""
-
-    _SEARCH = "urbanlens.dashboard.services.apis.locations.redata_search_gateway.RedataSearchGateway.search_web"
-
-    def setUp(self) -> None:
-        super().setUp()
-        from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, grant_subscription
-
-        baker.make(User)  # absorbs the bootstrap site-admin promotion
-        self.user = baker.make(User)
-        grant_subscription(self.user, baker.make(SubscriptionRole, features=SiteFeature.SEARCH), self.user, None)
-        location = _hrsh(locality="Poughkeepsie", administrative_area_level_1="NY", country="US")
-        self.pin = baker.make(Pin, profile=self.user.profile, location=location, parent_pin=None, name="Hudson River")
-
-    def _rows(self) -> int:
-        return LocationCache.objects.filter(location=self.pin.location, source="web_search").count()
-
-    def _view(self):
-        from django.test import RequestFactory
-
-        from urbanlens.dashboard.controllers.pin import PinController
-
-        request = RequestFactory().get("/")
-        request.user = self.user
-        return PinController().web_search(request, pin_slug=self.pin.slug)
-
-    def test_the_page_says_try_later_and_stores_nothing(self) -> None:
-        with mock.patch(self._SEARCH, side_effect=LocationContextUnavailableError("all_providers_unavailable", "")):
-            response = self._view()
-
-        self.assertContains(response, "Search unavailable")
-        self.assertEqual(self._rows(), 0)
-
-    def test_the_warming_task_stores_nothing(self) -> None:
-        from urbanlens.dashboard.tasks import refresh_pin_web_search
-
-        with mock.patch(self._SEARCH, side_effect=LocationContextUnavailableError("source_error", "refused")):
-            refresh_pin_web_search.apply(args=[self.pin.pk])
-
-        self.assertEqual(self._rows(), 0)
-
-    def test_a_genuine_empty_answer_is_cached(self) -> None:
-        with mock.patch(self._SEARCH, return_value=[]):
-            self._view()
-
-        self.assertGreater(self._rows(), 0)
-
-
-class ProviderDiscoveryOutageTests(RedataConfiguredMixin, TestCase):
-    """Historic registers and site features ask REData which providers cover the point before asking them."""
-
-    _INDEX = (
-        "urbanlens.dashboard.services.apis.locations.redata_capabilities_gateway."
-        "RedataCapabilitiesGateway.get_capabilities"
-    )
-
-    def setUp(self) -> None:
-        super().setUp()
-        baker.make(User)  # absorbs the bootstrap site-admin promotion
-        self.pin = baker.make(Pin, profile=baker.make(User).profile, location=_hrsh(), parent_pin=None)
-
-    def _sources(self):
-        from urbanlens.dashboard.plugins.builtin.redata_historic_registers import HistoricRegisterPanelSource
-        from urbanlens.dashboard.plugins.builtin.redata_site_features import SiteFeaturesPanelSource
-
-        return (HistoricRegisterPanelSource(), SiteFeaturesPanelSource())
-
-    def _rows(self, source) -> int:
-        return LocationCache.objects.filter(location=self.pin.location, source=source.cache_source).count()
-
-    def test_an_unreadable_index_writes_nothing(self) -> None:
-        for source in self._sources():
-            with (
-                self.subTest(source=source.key),
-                mock.patch(self._INDEX, side_effect=LocationContextUnavailableError("source_error", "refused")),
-                self.assertRaises(LocationContextUnavailableError),
-            ):
-                source.fetch(self.pin)
-            self.assertEqual(self._rows(source), 0)
-
-    def test_no_coverage_is_cached_as_empty(self) -> None:
-        for source in self._sources():
-            with self.subTest(source=source.key), mock.patch(self._INDEX, return_value={"domains": []}):
-                source.fetch(self.pin)
-            self.assertEqual(self._rows(source), 1)
 
 
 class SourceOutageClassificationTests(SimpleTestCase):
@@ -742,13 +114,8 @@ class SourceOutageClassificationTests(SimpleTestCase):
             requests.HTTPError(response=self._response(503)),
             requests.HTTPError(response=self._response(429)),
             requests.HTTPError("no response"),
-            GatewayRequestError("Could not reach REData"),
+            GatewayRequestError("Could not reach the upstream"),
             RateLimitExceededError("nominatim"),
-            LocationContextUnavailableError("source_error", "503"),
-            PropertyRecordsUnavailableError("source_error", "refused"),
-            PropertyRecordsUnavailableError("source_rate_limited", ""),
-            *(PropertyRecordsUnavailableError(error, "") for error in BUDGET_REFUSALS),
-            *(LocationContextUnavailableError(error, "") for error in BUDGET_REFUSALS),
         ):
             with self.subTest(exc=repr(exc)):
                 self.assertTrue(is_source_outage(exc))
@@ -761,9 +128,6 @@ class SourceOutageClassificationTests(SimpleTestCase):
             requests.HTTPError(response=self._response(400)),
             ValueError("unparseable"),
             KeyError("results"),
-            LocationContextUnavailableError("invalid_coordinates", "", rejected=True),
-            PropertyRecordsUnavailableError("no_data_found", ""),
-            PropertyRecordsUnavailableError("manual_only", ""),
         ):
             with self.subTest(exc=repr(exc)):
                 self.assertFalse(is_source_outage(exc))

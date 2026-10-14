@@ -1,5 +1,5 @@
 """
-Photos and map overlay images restored from an export archive go through the upload pipeline (P119).
+Photos and map overlay images restored from an export archive go through the upload pipeline.
 
 Both were written straight into storage and published, so a photo came back with whatever metadata it was archived
 with, and nothing re-encoded it. An upload through the site is stored pending and processed by the sandbox worker;

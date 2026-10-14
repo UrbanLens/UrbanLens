@@ -1,4 +1,4 @@
-"""Drop cached searches that may have been built from a pin owner's own names (P188).
+"""Drop cached searches that may have been built from a pin owner's own names.
 
 Every viewer of a Location read these rows, whoever's names built them. From 0039 on, a search built from a pin's own
 names is cached under that name set's audience, and the shared row is built from public names only. The rows are a

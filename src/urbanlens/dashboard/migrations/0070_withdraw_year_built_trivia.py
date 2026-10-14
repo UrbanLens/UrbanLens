@@ -1,4 +1,4 @@
-"""Withdraw every deterministic year-built trivia question, until the building records say the year is the building's (UrbanLens#321, "a parcel's assessor year").
+"""Withdraw every deterministic year-built trivia question, until the building records say the year is the building's.
 
 ``services.trivia.deterministic`` asked "What year was <building> built?" from whatever ``year_built`` a parcel's
 building record carried. REData 0.3.6 says what that year dates (``year_built_basis``): often it is the assessor's one

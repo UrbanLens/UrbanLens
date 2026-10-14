@@ -1,9 +1,9 @@
 """
-A rate-limit row created from the generic fallback takes the service's defaults once they exist (P93).
+A rate-limit row created from the generic fallback takes the service's defaults once they exist.
 
 `get_limit_config` creates a missing row from the registered defaults, or from a generic 20/min, 500/day fallback
 when there are none. Registering defaults later changed nothing for a row that already existed, so a deployment kept
-the limit nobody chose - for the REData historical-map tile proxy, a 500-tile daily cap.
+the limit nobody chose - for a tile proxy, a 500-tile daily cap.
 """
 
 from __future__ import annotations
@@ -14,13 +14,16 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.api_rate_limit import ApiRateLimit
 from urbanlens.dashboard.services.core import rate_limiter
 
-_SERVICE = "redata_historical_maps"
+_SERVICE = "tile_proxy_probe"
+_DEFAULTS = rate_limiter.ServiceDefaults(
+    display_name="Tile proxy", calls_per_minute=120, calls_per_day=None, notes="One call per uncached tile."
+)
 
 
 def _fallback_row(**overrides: object) -> ApiRateLimit:
     values: dict[str, object] = {
         "service": _SERVICE,
-        "display_name": "Redata Historical Maps",
+        "display_name": "Tile Proxy Probe",
         "calls_per_minute": 20,
         "calls_per_day": 500,
     }
@@ -32,9 +35,15 @@ def _fallback_row(**overrides: object) -> ApiRateLimit:
 
 
 class FallbackRowAdoptsDefaultsTests(TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        patcher = mock.patch.object(rate_limiter, "all_service_defaults", return_value={_SERVICE: _DEFAULTS})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_a_row_still_at_the_fallback_takes_the_registered_defaults(self) -> None:
         _fallback_row()
-        defaults = rate_limiter.all_service_defaults()[_SERVICE]
+        defaults = _DEFAULTS
 
         config = rate_limiter.get_limit_config(_SERVICE)
 
@@ -63,7 +72,7 @@ class FallbackRowAdoptsDefaultsTests(TestCase):
 
     def test_defaults_identical_to_the_fallback_are_not_rewritten_on_every_read(self) -> None:
         _fallback_row()
-        same = rate_limiter.ServiceDefaults(display_name="Redata Historical Maps")
+        same = rate_limiter.ServiceDefaults(display_name="Tile Proxy Probe")
 
         with (
             mock.patch.object(rate_limiter, "all_service_defaults", return_value={_SERVICE: same}),

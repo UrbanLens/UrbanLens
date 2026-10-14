@@ -41,7 +41,7 @@ def create_wiki_alias(wiki: Wiki, profile: Profile, *, name: str, kind: str = Al
     Add a community name to *wiki* and record it in the wiki's history and the editor's undo stack.
 
     Args:
-        wiki: The wiki to name; the real row, never a concealed projection.
+        wiki: The wiki to name; the real row, never a viewer's projection.
         profile: The contributor, recorded as the alias's ``created_by`` and the edit's editor.
         name: The submitted name, sanitized here the way ``WikiAlias.save()`` would.
         kind: An :class:`AliasType` value.

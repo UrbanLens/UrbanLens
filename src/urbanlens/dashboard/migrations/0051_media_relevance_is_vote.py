@@ -1,4 +1,4 @@
-"""Let a media relevance mark be a private "remove from my results" rather than a vote (P233); every existing mark is a vote."""
+"""Let a media relevance mark be a private "remove from my results" rather than a vote; every existing mark is a vote."""
 
 from django.db import migrations, models
 

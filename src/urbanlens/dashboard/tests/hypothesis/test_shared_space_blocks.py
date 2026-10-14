@@ -1,4 +1,4 @@
-"""A block records when it was placed, and one helper answers what it hides in a shared space (I7)."""
+"""A block records when it was placed, and one helper answers what it hides in a shared space."""
 
 from __future__ import annotations
 

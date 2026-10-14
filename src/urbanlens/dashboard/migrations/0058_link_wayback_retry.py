@@ -1,4 +1,4 @@
-"""Record each link's failed Wayback attempts and when its URL may be asked about again (P308)."""
+"""Record each link's failed Wayback attempts and when its URL may be asked about again."""
 
 from django.db import migrations, models
 

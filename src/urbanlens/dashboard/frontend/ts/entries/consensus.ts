@@ -7,12 +7,12 @@ import { confirmAction, toast } from "../shared/dialogs";
 import { ChatComposer, toastRefusal } from "../shared/chat-composer";
 import { createGameShell, playEntrance, type GameShell } from "../shared/game-shell";
 import { openLiveSocket, type LiveSocketHandle } from "../shared/live-socket";
-import { createMapLayers, registerRedataLayers } from "../shared/map-layers";
+import { createMapLayers, registerCatalogueLayers } from "../shared/map-layers";
 
 // Fired now rather than awaited at ensureRoundMap()'s first call: the round map is created
-// lazily, well after this module has finished loading, so this deployment's REData tile
+// lazily, well after this module has finished loading, so this deployment's tile
 // catalogue fetch has almost always already resolved by then.
-void registerRedataLayers();
+void registerCatalogueLayers();
 
 declare const L: typeof import("leaflet");
 
@@ -971,8 +971,8 @@ function showSummary(summary: SummaryPayload): void {
 
 function connectSessionSocket(): void {
     if (state.ws || state.sessionId === null) return;
-    // shared/live-socket.ts adds the heartbeat this socket needs to survive the
-    // Cloudflare tunnel's idle cutoff, and the reconnect it never had.
+    // shared/live-socket.ts adds the heartbeat this socket needs to survive
+    // a reverse proxy's idle cutoff, and the reconnect it never had.
     state.ws = openLiveSocket({
         path: `/ws/consensus/session/${state.sessionId}/`,
         onMessage: handleSocketMessage,

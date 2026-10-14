@@ -1,5 +1,5 @@
 """
-Dashboard write routes on a user's own check-ins, lists, floorplans and trip activities (P29).
+Dashboard write routes on a user's own check-ins, lists, floorplans and trip activities.
 
 Each asserts the owner's (or authorised member's) write lands, that anyone else is refused and nothing changes,
 that anonymous is sent to log in (or, on the token-gated contact route, refused without a valid token), and that a

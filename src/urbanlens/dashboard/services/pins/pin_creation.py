@@ -61,7 +61,7 @@ class AddressLookupUnavailableError(AddressResolutionError):
     """
     The address could not be looked up right now - not that it names no place.
 
-    The geocoder did not answer, its budget is spent, or this environment does not ask it (D26).
+    The geocoder did not answer, its budget is spent, or this environment does not ask it.
     """
 
 
@@ -377,11 +377,11 @@ def create_pin_for_profile(
         if user_has_feature(profile.user, SiteFeature.SEARCH):
             safely_enqueue_task(refresh_pin_web_search, pin.pk)
 
-    if user_has_feature(profile.user, SiteFeature.AI):
-        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
-        from urbanlens.dashboard.tasks import suggest_pin_category
+    # Each auto-tagging stage decides for itself whether it applies to this owner.
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.tasks import suggest_pin_category
 
-        safely_enqueue_task(suggest_pin_category, pin.pk)
+    safely_enqueue_task(suggest_pin_category, pin.pk)
 
     # A root pin's property - parcel, buildings, their pins and wikis, the site panels - is fetched in the
     # background now rather than when somebody first opens the pin. Without a bootstrap (external lookups off, or

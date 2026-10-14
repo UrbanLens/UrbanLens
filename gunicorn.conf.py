@@ -4,12 +4,12 @@ Gunicorn config for the production ``app`` service.
 Named explicitly by package.json's ``start`` script - but gunicorn also reads
 ``gunicorn.conf.py`` out of the working directory when nothing names it, and
 that directory is ``/app`` for every service built from this image. So this file
-also configures ``ai-inference``, which runs a different WSGI application with
-no Django and no ORM. Each hook below therefore checks that it applies to the
+also configures any other service built from it that runs a different WSGI
+application with no Django and no ORM. Each hook below therefore checks that it applies to the
 process it has landed in, rather than assuming it is the app.
 
 Why ``-k gthread --threads 4`` is on that command line, since package.json
-cannot carry a comment (D11). Each request thread keeps its Postgres connection
+cannot carry a comment. Each request thread keeps its Postgres connection
 (``UL_DB_CONN_MAX_AGE`` on the app service), so a request pays no login, and the
 connection population is ``workers x threads``. The app logs in as ``ul_web``,
 whose ``CONNECTION LIMIT`` lives in ``services/core/database_roles.py``;
@@ -81,7 +81,7 @@ def post_fork(server, worker):
     gevent monkey-patches pure-Python socket IO; psycopg is a C extension that
     bypasses it, so every query blocks the worker's whole event loop and with it
     every other in-flight request there. psycogreen's wait callback fixed that
-    for psycopg2 and has no psycopg3 equivalent (X27). Refusing at fork replaces
+    for psycopg2 and has no psycopg3 equivalent. Refusing at fork replaces
     a worker that serves requests and is merely slow, which is the hardest kind
     of failure to attribute.
 

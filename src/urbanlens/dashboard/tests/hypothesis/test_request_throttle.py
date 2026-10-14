@@ -42,7 +42,7 @@ class TheCounterTests(TestCase):
         self.assertTrue(throttle.allow("login", "1.2.3.4", rate), "one endpoint exhausted another endpoint's budget")
 
     def test_an_unreachable_cache_neither_refuses_everyone_nor_lifts_the_limit(self) -> None:
-        """P105's lesson - an abuse control must not become an outage - without the outage lifting the limit (G2-27)."""
+        """An abuse control must not become an outage, and the outage must not lift the limit."""
         from urbanlens.core.cache_backend import AtomicLocMemCache, CacheUnavailableError
 
         rate = throttle.Rate(limit=1, window_seconds=60)

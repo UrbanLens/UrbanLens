@@ -332,7 +332,7 @@ function initImportWizard(dialog: HTMLElement): void {
         closeButton.disabled = true;
 
         const hasDocument = locationFiles.some((f) => /\.(txt|docx)$/i.test(f.name));
-        $("iw-parsing-label").textContent = hasDocument ? "Reading files... AI is analyzing your document, this may take a moment." : "Reading files...";
+        $("iw-parsing-label").textContent = hasDocument ? "Reading files... analyzing your document, this may take a moment." : "Reading files...";
 
         const formData = new FormData();
         formData.append("csrfmiddlewaretoken", getCsrfToken());

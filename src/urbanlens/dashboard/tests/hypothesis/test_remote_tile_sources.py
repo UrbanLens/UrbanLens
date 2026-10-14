@@ -5,7 +5,6 @@ host's tiles are drawn through this site and kept."""
 from __future__ import annotations
 
 from io import BytesIO
-import shutil
 import tempfile
 from unittest.mock import MagicMock, patch
 
@@ -16,10 +15,7 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
 from urbanlens.dashboard.models.remote_tiles.model import RemoteTile, RemoteTileSource
-from urbanlens.dashboard.services.import_export import import_data
-from urbanlens.dashboard.services.map.image_overlays import historical_tile_template
 from urbanlens.dashboard.services.map.remote_tiles import (
     MAX_TILE_ZOOM,
     TileDownload,
@@ -27,9 +23,9 @@ from urbanlens.dashboard.services.map.remote_tiles import (
     pending_marker,
     template_digest,
 )
+from urbanlens.dashboard.tests.hypothesis.overlay_import_case import ImportCase
+from urbanlens.dashboard.tests.hypothesis.overlay_source_fake import fake_sheet_source, fake_sheet_template
 
-_CORNERS = [[40.002, -74.002], [40.002, -74.000], [40.000, -74.000], [40.000, -74.002]]
-_PUBLIC_DNS_RESULT = [(2, 1, 6, "", ("93.184.216.34", 0))]
 _SHEET = "5b0e8a4c-2d1f-4a57-9c3e-1f2a3b4c5d6e"
 _FOREIGN = "https://{s}.tiles.example/sanborn/{z}/{x}/{y}.png"
 _DOWNLOAD = "urbanlens.dashboard.controllers.remote_tiles.download_tile"
@@ -45,59 +41,42 @@ def _png(mode: str = "RGBA") -> bytes:
     return buffer.getvalue()
 
 
-class _ImportCase(TestCase):
-    def setUp(self) -> None:
-        super().setUp()
-        self.profile = baker.make(User).profile
-        self.pin = baker.make_recipe("dashboard.pin", profile=self.profile)
-        self.data_dir = tempfile.mkdtemp(prefix="ul_tile_import_")
-        self.addCleanup(shutil.rmtree, self.data_dir, ignore_errors=True)
-        self.ctx = import_data.ImportContext(
-            profile=self.profile,
-            data_dir=self.data_dir,
-            result=import_data.ImportResult(),
-            pin_uuid_map={str(self.pin.uuid): self.pin.pk},
-            label_uuid_map={},
-        )
-
-    def _import(self, template: str) -> MapImageOverlay | None:
-        row = {
-            "name": "Sanborn",
-            "corners": _CORNERS,
-            "target_type": "pin",
-            "target_uuid": str(self.pin.uuid),
-            "tile_url_template": template,
-        }
-        with patch("socket.getaddrinfo", return_value=_PUBLIC_DNS_RESULT):
-            import_data.MapAnnotationsImport()._import_overlay(row, self.ctx, 1)
-        return MapImageOverlay.objects.for_pin(self.pin).first()
-
-
-class RecognisedSheetTests(_ImportCase):
+class RecognisedSheetTests(ImportCase):
     def test_another_deployments_sheet_is_rebuilt_onto_this_sites_route(self) -> None:
-        overlay = self._import(f"https://staging.urbanlens.org{historical_tile_template(_SHEET)}")
+        with fake_sheet_source():
+            overlay = self._import(f"https://staging.example.com{fake_sheet_template(_SHEET)}")
 
         assert overlay is not None
-        self.assertEqual(overlay.tile_url_template, historical_tile_template(_SHEET))
+        self.assertEqual(overlay.tile_url_template, fake_sheet_template(_SHEET))
         self.assertFalse(RemoteTileSource.objects.exists())
 
-    def test_redatas_own_tile_address_is_rebuilt_onto_this_sites_route(self) -> None:
-        overlay = self._import(f"https://redata.example/api/v1/maps/georeferences/{_SHEET}/tiles/{{z}}/{{x}}/{{y}}.png")
+    def test_the_sources_own_tile_address_is_rebuilt_onto_this_sites_route(self) -> None:
+        with fake_sheet_source():
+            overlay = self._import(f"https://sheets.example/upstream/{_SHEET}/tiles/{{z}}/{{x}}/{{y}}.png")
 
         assert overlay is not None
-        self.assertEqual(overlay.tile_url_template, historical_tile_template(_SHEET))
+        self.assertEqual(overlay.tile_url_template, fake_sheet_template(_SHEET))
 
     def test_a_sheet_address_with_a_query_is_not_taken_for_a_sheet(self) -> None:
-        overlay = self._import(f"https://tracker.example{historical_tile_template(_SHEET)}?id=me")
+        with fake_sheet_source():
+            overlay = self._import(f"https://tracker.example{fake_sheet_template(_SHEET)}?id=me")
 
         assert overlay is not None
-        self.assertNotEqual(overlay.tile_url_template, historical_tile_template(_SHEET))
+        self.assertNotEqual(overlay.tile_url_template, fake_sheet_template(_SHEET))
         self.assertEqual(
-            RemoteTileSource.objects.get().template, f"https://tracker.example{historical_tile_template(_SHEET)}?id=me"
+            RemoteTileSource.objects.get().template, f"https://tracker.example{fake_sheet_template(_SHEET)}?id=me"
         )
 
+    def test_with_no_source_a_sheet_address_is_just_another_hosts_tiles(self) -> None:
+        with fake_sheet_source(none=True):
+            overlay = self._import(f"https://staging.example.com{fake_sheet_template(_SHEET)}")
 
-class ForeignTemplateImportTests(_ImportCase):
+        assert overlay is not None
+        self.assertNotEqual(overlay.tile_url_template, fake_sheet_template(_SHEET))
+        self.assertEqual(RemoteTileSource.objects.count(), 1)
+
+
+class ForeignTemplateImportTests(ImportCase):
     def test_another_hosts_tiles_are_drawn_through_this_site(self) -> None:
         overlay = self._import(_FOREIGN)
 

@@ -1,8 +1,8 @@
 """
 Identical upstream asks made together cost one call.
 
-Five panel sources on one Private Pin page each asked REData ``parcels/lookup`` for the same coordinate, in
-separate tasks started within a second of each other: 205 parcel lookups in the HRSH run's hour for 70 pins.
+Five panel sources on one Private Pin page each asked the same parcel lookup for the same coordinate, in
+separate tasks started within a second of each other: 205 parcel lookups in an hour for 70 pins.
 """
 
 from __future__ import annotations
@@ -14,9 +14,7 @@ from django.core.cache import cache
 import pytest
 
 from urbanlens.core.tests.testcase import SimpleTestCase
-from urbanlens.dashboard.services.apis.property_records.redata_gateway import RedataGateway
 from urbanlens.dashboard.services.core.coalesce import coalesced
-from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
 
 class CoalescedTests(SimpleTestCase):
@@ -77,140 +75,3 @@ class CoalescedTests(SimpleTestCase):
             mock.patch.object(cache, "set", side_effect=ConnectionError),
         ):
             self.assertEqual(coalesced("t:down", compute, ttl=60), "answer")
-
-
-class ParcelLookupTests(SimpleTestCase):
-    """Every panel that needs the parcel asks the same question; REData answers it once."""
-
-    def _gateway(self) -> tuple[RedataGateway, mock.Mock]:
-        session = mock.Mock()
-        response = mock.Mock(status_code=200, headers={})
-        response.json.return_value = {"uuid": "parcel-1", "record_payload": {"owner": "State of New York"}}
-        session.get.return_value = response
-        return RedataGateway(base_url="https://redata.example.test", api_key="k", session=session), session
-
-    def test_the_record_and_the_uuid_share_one_lookup(self) -> None:
-        gateway, session = self._gateway()
-
-        record = gateway.lookup_parcel(41.7321, -73.9262)
-        uuid = RedataGateway(base_url="https://redata.example.test", api_key="k", session=session).lookup_parcel_uuid(
-            41.7321, -73.9262
-        )
-
-        self.assertEqual(record["uuid"], "parcel-1")
-        self.assertEqual(uuid, "parcel-1")
-        session.get.assert_called_once()
-
-    def test_a_different_address_is_a_different_question(self) -> None:
-        gateway, session = self._gateway()
-
-        gateway.lookup_parcel(41.7321, -73.9262)
-        gateway.lookup_parcel(41.7321, -73.9262, situs_address="1 Main St")
-
-        self.assertEqual(session.get.call_count, 2)
-
-
-def _ok(body: object) -> mock.Mock:
-    response = mock.Mock(status_code=200, headers={}, ok=True)
-    response.json.return_value = body
-    return response
-
-
-class SiteLevelAnswersTests(RedataConfiguredMixin, SimpleTestCase):
-    """Answers that describe the area, not the point, are asked once per area."""
-
-    def test_the_capability_index_is_read_once_for_every_domain(self) -> None:
-        """Satellite imagery, cultural resources and site features each asked for the same index."""
-        from urbanlens.dashboard.services.apis.locations import redata_capabilities_gateway as capabilities
-
-        index = {
-            "domains": [
-                {"tag": tag, "applicable_providers": [f"{tag}-a"]}
-                for tag in ("imagery", "cultural_resources", "points_of_interest")
-            ]
-        }
-        with mock.patch.object(capabilities.RedataCapabilitiesGateway, "get_capabilities", return_value=index) as fetch:
-            tags = [
-                capabilities.applicable_providers(tag, 41.7321, -73.9262)
-                for tag in ("imagery", "cultural_resources", "points_of_interest")
-            ]
-
-        self.assertEqual(tags, [["imagery-a"], ["cultural_resources-a"], ["points_of_interest-a"]])
-        fetch.assert_called_once()
-
-    def test_the_nearest_park_is_shared_across_a_site(self) -> None:
-        """Two buildings 60 m apart on one campus; the nearest park unit within 100 km is the same answer."""
-        from urbanlens.dashboard.services.apis.locations.redata_national_parks_gateway import RedataNationalParksGateway
-
-        session = mock.Mock()
-        session.get.return_value = _ok(
-            {"count": 1, "complete": True, "results": [{"park_code": "vama"}], "providers": []}
-        )
-
-        def gateway() -> RedataNationalParksGateway:
-            return RedataNationalParksGateway(base_url="https://redata.example.test", api_key="k", session=session)
-
-        first = gateway().find_nearest_park(41.7321, -73.9262)
-        second = gateway().find_nearest_park(41.7326, -73.9258)
-
-        self.assertEqual(first, second)
-        session.get.assert_called_once()
-
-    def test_a_repeated_nearby_place_search_is_one_call(self) -> None:
-        """Name resolution asked the same 50 m question twice while creating one pin, and again on its page."""
-        from urbanlens.dashboard.services.apis.locations.google.redata_places_gateway import RedataPlacesGateway
-
-        session = mock.Mock()
-        session.get.return_value = _ok({"count": 1, "results": [{"place_id": "p1", "name": "Kirkbride"}]})
-
-        def gateway() -> RedataPlacesGateway:
-            return RedataPlacesGateway(base_url="https://redata.example.test", api_key="k", session=session)
-
-        gateway().search_nearby(41.7321, -73.9262, radius_meters=50)
-        gateway().search_nearby(41.7321, -73.9262, radius_meters=50)
-        gateway().search_nearby(41.7321, -73.9262, radius_meters=75, max_results=1)
-
-        self.assertEqual(session.get.call_count, 2)
-
-
-class CulturalResourceTests(SimpleTestCase):
-    """
-    Every building on a campus matches the campus's CRIS record, and each building's panel asked for it again.
-
-    A root pin and three building pins cost 6 fetch-detail and 19 attachment-extract calls for 7 attachments.
-    """
-
-    def _gateway(self, body: dict) -> tuple[RedataGateway, mock.Mock]:
-        session = mock.Mock()
-        session.post.return_value = _ok(body)
-        return RedataGateway(base_url="https://redata.example.test", api_key="k", session=session), session
-
-    def test_a_resource_is_fetched_once(self) -> None:
-        gateway, session = self._gateway({"resource": {"uuid": "r1", "attachments": []}})
-
-        first = gateway.fetch_cultural_resource_detail("r1")
-        second = gateway.fetch_cultural_resource_detail("r1")
-
-        self.assertEqual(first, second)
-        session.post.assert_called_once()
-
-    def test_an_attachment_is_extracted_once(self) -> None:
-        gateway, session = self._gateway({"fields": {"name": "Kirkbride"}, "images": []})
-
-        gateway.extract_cultural_resource_attachment("r1", 7)
-        gateway.extract_cultural_resource_attachment("r1", 7)
-        gateway.extract_cultural_resource_attachment("r1", 8)
-
-        self.assertEqual(session.post.call_count, 2)
-
-    def test_a_caller_finding_an_extraction_in_flight_waits_out_its_download_and_second_attempt(self) -> None:
-        """An undownloaded document costs an extraction, a download and a second extraction; a shorter wait asks again."""
-        from urbanlens.dashboard.services.apis.property_records import redata_gateway
-
-        gateway, _session = self._gateway({})
-        with mock.patch.object(
-            redata_gateway, "coalesced", side_effect=lambda _key, compute, **_kw: compute()
-        ) as shared:
-            gateway.extract_cultural_resource_attachment("r1", 9, timeout=180)
-
-        self.assertGreaterEqual(shared.call_args.kwargs["wait_seconds"], 2 * 180 + redata_gateway._REQUEST_TIMEOUT)

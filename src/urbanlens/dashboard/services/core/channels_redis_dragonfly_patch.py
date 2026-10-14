@@ -4,7 +4,7 @@ Make channels_redis's backup-queue script declare its keys, so Dragonfly stops r
 ``RedisChannelLayer._brpop_with_clean`` (the receive-side of every WebSocket consumer) runs a Lua
 script that references two keys through ``ARGV`` instead of declaring them via ``KEYS``. Standalone
 Redis tolerates that outside cluster mode; Dragonfly enforces the cluster rule unconditionally and
-raises ``script tried accessing undeclared key`` on every call, crashing the receive loop (see P127).
+raises ``script tried accessing undeclared key`` on every call, crashing the receive loop.
 Declaring the same two values as ``KEYS[1]``/``KEYS[2]`` instead of ``ARGV[1]``/``ARGV[2]`` changes
 nothing about what the script does - only whether the server can see which keys it touches - so this
 is silent under real Redis and just fixes Dragonfly, with no per-script server flag required.

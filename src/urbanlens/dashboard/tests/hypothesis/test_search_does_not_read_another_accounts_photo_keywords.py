@@ -5,7 +5,7 @@ Searching your own photos must not read keyword rows belonging to a photo you ca
 ``PhotoSearchProvider``'s ``labels__name`` path. Its field list (``apply_text``'s call in
 ``PhotoSearchProvider.search``) also feeds ``keywords__keyword`` - Image's reverse foreign key to
 ``ImageKeyword`` (``related_name="keywords"``, populated by photo-keyword plugins: embedded XMP/IPTC
-tags, AI vision descriptions, content classifiers). Same shape as labels, a different relation: the
+tags, image descriptions, content labels). Same shape as labels, a different relation: the
 unscoped ``Exists(Image._base_manager.filter(keywords__keyword__icontains=..., pk=OuterRef("pk")))``
 semijoin reads another account's photo-keyword rows regardless of whether the viewer can see that
 photo. No index covers ``ImageKeyword.keyword`` for this ``icontains`` path, so both the matching and

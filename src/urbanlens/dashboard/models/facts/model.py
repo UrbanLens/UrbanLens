@@ -1,7 +1,7 @@
 """
 Facts - a confidence-tracked piece of data about a Location, Wiki, or Image.
 A ``Fact`` is the *resolved* current state (value, confidence, status) for one ``(subject, key)`` pair - e.g.
-It is never written to directly; it is always recomputed from its ``FactEvidence`` trail (see ``services.facts.confidence``) by whichever source contributed a new observation (SpotGuessr guesses, Consensus answers, manual wiki edits, future AI extraction - see ``services.facts.evidence``).
+It is never written to directly; it is always recomputed from its ``FactEvidence`` trail (see ``services.facts.confidence``) by whichever source contributed a new observation (SpotGuessr guesses, Consensus answers, manual wiki edits - see ``services.facts.evidence``).
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from django.db.models import (
     PositiveIntegerField,
     Q,
 )
-from django.db.models.constraints import UniqueConstraint
+from django.db.models.constraints import CheckConstraint, UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.facts.queryset import FactEvidenceManager, FactManager
@@ -75,9 +75,15 @@ class FactSourceKind(abstract.TextChoices):
     PLAYER_ANONYMOUS = "player_anonymous", "Anonymous player"
     PLAYER_ATTRIBUTED = "player_attributed", "Attributed player"
     WIKI_EDIT = "wiki_edit", "Manual wiki edit"
-    AI_AGENT = "ai_agent", "AI agent"
     EXTERNAL_SOURCE = "external_source", "External data source"
     ADMIN = "admin", "Admin/staff"
+
+
+def fact_source_kind_choices() -> list[tuple[str, str]]:
+    """Core's source kinds and those plugins contribute. Read lazily, since plugins are set up after models load."""
+    from urbanlens.dashboard.plugins.points import FACT_SOURCE_KINDS
+
+    return [*FactSourceKind.choices, *((value, label) for value, label in FACT_SOURCE_KINDS.choices() if value not in FactSourceKind.values)]
 
 
 #: Which typed ``value_*`` column stores a value of each ``FactDataType``.
@@ -215,6 +221,10 @@ class Fact(TypedValueModel):
             UniqueConstraint(fields=["location", "key"], condition=Q(location__isnull=False), name="db_fact_unique_location_key"),
             UniqueConstraint(fields=["wiki", "key"], condition=Q(wiki__isnull=False), name="db_fact_unique_wiki_key"),
             UniqueConstraint(fields=["image", "key"], condition=Q(image__isnull=False), name="db_fact_unique_image_key"),
+            CheckConstraint(
+                condition=(Q(location__isnull=False, wiki__isnull=True, image__isnull=True) | Q(location__isnull=True, wiki__isnull=False, image__isnull=True) | Q(location__isnull=True, wiki__isnull=True, image__isnull=False)),
+                name="db_fact_exactly_one_subject",
+            ),
         ]
 
 
@@ -244,7 +254,7 @@ class FactEvidence(TypedValueModel):
             should be excluded from confidence recomputation.
     """
 
-    source_kind = CharField(max_length=17, choices=FactSourceKind.choices)
+    source_kind = CharField(max_length=17, choices=fact_source_kind_choices)
     source_name = CharField(max_length=50, blank=True, default="")
 
     submitter = ForeignKey("dashboard.Profile", on_delete=SET_NULL, null=True, blank=True, related_name="fact_evidence")

@@ -260,7 +260,7 @@ function renderVerdict(data) {
     }
 
     lines.push("");
-    lines.push("  P123: search latency across the whole run, independent of phase");
+    lines.push("  Search latency across the whole run, independent of phase");
     lines.push("  endpoint              count      p50      p95      p99      max");
     for (const endpoint of SEARCH_ENDPOINTS) {
         const metric = data.metrics[`http_req_duration{scenario:neighbour,endpoint:${endpoint}}`];

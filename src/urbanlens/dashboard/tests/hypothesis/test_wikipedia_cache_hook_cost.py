@@ -1,8 +1,8 @@
 """
 A location's Wikipedia match costs the same however many pins stand on it.
 
-N29 batch 1 found the cache hook walking ``location.pins`` the first time a match gained a title, seeding an article
-and adding a link on every pin there. 40d418c1d (P181) took the loop out: the hook seeds the location's wiki, and a
+An audit found the cache hook walking ``location.pins`` the first time a match gained a title, seeding an article
+and adding a link on every pin there. 40d418c1d took the loop out: the hook seeds the location's wiki, and a
 pin takes the match only from its own owner's activity (``wiki_seed.seed_pin_from_cached_wikipedia``). These keep
 the hook's cost independent of the pin count, and keep it off the network: it reads the cached row. The wiki's
 lead-image cover is not fetched, since ``_store_cover_from_url`` has no owner for a wiki cover yet (its TODO); the

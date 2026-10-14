@@ -105,7 +105,7 @@ class FilterByCriteriaPriorityTests(TestCase):
 
 
 class FilterByCriteriaDangerTests(TestCase):
-    """min_danger / max_danger criteria - unlike rating, danger is a plain always-populated IntegerField(default=0) on Pin, so 0 is a real, meaningful value with no "unrated" special case needed - the only regression here is UL-296's `if x := ...:` truthiness bug silently skipping the filter whenever the threshold was exactly 0."""
+    """min_danger / max_danger criteria - unlike rating, danger is a plain always-populated IntegerField(default=0) on Pin, so 0 is a real, meaningful value with no "unrated" special case needed - the only regression here is the `if x := ...:` truthiness bug silently skipping the filter whenever the threshold was exactly 0."""
 
     profile: Profile
 

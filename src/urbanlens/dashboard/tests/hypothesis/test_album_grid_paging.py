@@ -1,4 +1,4 @@
-"""The Photos tab's album grid pages, and the add-to-album picker reaches every album on its own (P171)."""
+"""The Photos tab's album grid pages, and the add-to-album picker reaches every album on its own."""
 
 from __future__ import annotations
 
@@ -15,10 +15,10 @@ from urbanlens.dashboard.models.album.model import Album
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki.model import Wiki
+from urbanlens.dashboard.tests.hypothesis.viewer_projection_helpers import projecting
 
 _PAGE = 3
 _PAGE_SIZE = "urbanlens.dashboard.controllers.albums.ALBUM_GRID_PAGE_SIZE"
-_CONCEALED = "urbanlens.dashboard.services.wiki.concealment.concealment_active"
 _NEXT = re.compile(r'class="album-target-more"[^>]*hx-get="([^"]+)"')
 _PICKER_SLUG = re.compile(r'class="album-target-item"[^>]*data-slug="([^"]+)"')
 
@@ -229,17 +229,16 @@ class WikiAlbumGridPagingTests(_AlbumPagingTestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
 
-    def test_an_unconcealed_viewer_pages_to_every_album(self) -> None:
-        with mock.patch(_CONCEALED, return_value=False):
-            slugs = self._grid_pages(self.url)
-            picker, _body = self._picker_pages(f"{self.url}?picker=1")
+    def test_a_viewer_with_no_projection_pages_to_every_album(self) -> None:
+        slugs = self._grid_pages(self.url)
+        picker, _body = self._picker_pages(f"{self.url}?picker=1")
 
         expected = sorted(album.slug for album in [*self.own, self.theirs])
         self.assertEqual(sorted(slugs), expected)
         self.assertEqual(sorted(picker), expected)
 
-    def test_a_concealed_viewer_is_not_paged_or_searched_to_another_contributors_album(self) -> None:
-        with mock.patch(_CONCEALED, return_value=True):
+    def test_a_projection_hiding_another_contributors_album_leaves_it_out_of_paging_and_search(self) -> None:
+        with projecting(hidden_profile_ids=[self.other.pk]):
             slugs = self._grid_pages(self.url)
             _picker, body = self._picker_pages(f"{self.url}?picker=1&q=theirs")
             count = self.client.get(self.url).context["album_count"]

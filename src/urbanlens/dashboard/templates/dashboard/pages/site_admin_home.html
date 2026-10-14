@@ -116,6 +116,16 @@
             <i class="material-icons admin-nav-card__arrow">arrow_forward</i>
         </a>
 
+        <a href="{% url 'site_admin_subscriptions' %}" class="admin-nav-card">
+            <div class="admin-nav-card__icon" style="background:rgba(234,179,8,.12)">
+                <i class="material-icons" style="color:#ca8a04">workspace_premium</i>
+            </div>
+            <div class="admin-nav-card__body">
+                <div class="admin-nav-card__title">Subscriptions</div>
+                <div class="admin-nav-card__desc">Grant, review, and revoke premium access for individual users.</div>
+            </div>
+            <i class="material-icons admin-nav-card__arrow">arrow_forward</i>
+        </a>
         {% plugin_slot "site_admin.home.cards" %}
 
         <a href="{% url 'site_admin_api_limits' %}" class="admin-nav-card">

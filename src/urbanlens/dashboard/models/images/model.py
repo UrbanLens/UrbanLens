@@ -15,13 +15,11 @@ from django.db.models import (
     CharField,
     DateTimeField,
     DecimalField,
-    FloatField,
     ForeignKey,
     ImageField,
     Index,
     IntegerField,
     ManyToManyField,
-    PositiveIntegerField,
     PositiveSmallIntegerField,
     Q,
     TextField,
@@ -103,7 +101,7 @@ def pin_image_marker_thumbnail_path(instance: Image, filename: str) -> str:
 
 @declares_media_family("pin_images")
 def pin_image_analysis_thumbnail_path(instance: Image, filename: str) -> str:
-    """Storage path for the copy sent to vision models."""
+    """Storage path for the copy sent to image-analysis providers."""
     stem, ext = posixpath.splitext(filename)
     return f"pin_images/analysis/{_random_upload_dir()}/{stem[:100]}{ext[:_UPLOAD_EXT_LIMIT]}"
 
@@ -169,7 +167,7 @@ class Image(abstract.FrontendDashboardModel):
     thumbnail = ImageField(upload_to=pin_image_thumbnail_path, max_length=255, null=True, blank=True)
     # Map-marker preview; empty until generated.
     marker_thumbnail = ImageField(upload_to=pin_image_marker_thumbnail_path, max_length=255, null=True, blank=True)
-    # Separate copy for vision models.
+    # Separate copy for image-analysis providers.
     analysis_thumbnail = ImageField(upload_to=pin_image_analysis_thumbnail_path, max_length=255, null=True, blank=True)
     # True upload filename, kept for attribution and downloads.
     original_filename = EncryptedTextField(blank=True, default="", fail_soft=True)
@@ -333,13 +331,6 @@ class Image(abstract.FrontendDashboardModel):
     media_unreadable_at = DateTimeField(null=True, blank=True)
     # Search-only labels; no effect on map icons.
     labels = ManyToManyField("dashboard.Label", related_name="images", blank=True)
-    # Cached external photo-relevance score; null means unknown.
-    redata_confidence = FloatField(null=True, blank=True)
-    # Which scorer produced the confidence above.
-    redata_scorer = CharField(max_length=10, null=True, blank=True)
-    # Model version behind the score, when applicable.
-    redata_model_version = PositiveIntegerField(null=True, blank=True)
-    redata_scored_at = DateTimeField(null=True, blank=True)
 
     if TYPE_CHECKING:
         pin_id: int | None

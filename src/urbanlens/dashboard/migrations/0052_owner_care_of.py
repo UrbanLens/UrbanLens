@@ -1,4 +1,4 @@
-"""An owner's care-of line, which county records and REData publish beside the mailing address (P229)."""
+"""An owner's care-of line, which county records and REData publish beside the mailing address."""
 
 from django.db import migrations, models
 

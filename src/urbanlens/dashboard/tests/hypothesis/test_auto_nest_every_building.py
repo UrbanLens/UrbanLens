@@ -31,6 +31,8 @@ from urbanlens.dashboard.services.places.lineage import refresh_derived_flags
 from urbanlens.dashboard.tests.hypothesis.building_fixtures import (
     CAMPUS_LAT,
     CAMPUS_LNG,
+    REGISTRY_NAMESPACE,
+    file_buildings_under_registry,
     offset,
     parcel_square,
     record,
@@ -85,6 +87,7 @@ def _geos(geometry: dict) -> GEOSGeometry:
 class CampusTestCase(TestCase):
     def setUp(self) -> None:
         super().setUp()
+        file_buildings_under_registry(self)
         baker.make(User)  # absorbs the bootstrap site-admin promotion
         self.user = baker.make(User)
         self.profile = self.user.profile
@@ -99,7 +102,7 @@ class CampusTestCase(TestCase):
         LocationCache.set(
             location or self.location,
             PARCEL_BUILDINGS_CACHE_SOURCE,
-            {"buildings": buildings, "provider": "redata"},
+            {"buildings": buildings, "provider": "registry"},
             query_key="test",
         )
 
@@ -302,7 +305,7 @@ class ResweepTests(CampusTestCase):
         self.assertEqual(Wiki.objects.exclude(pk=self.campus_wiki.pk).count(), 6)
 
     def _rename_refs(self) -> None:
-        """P7: REData's ref follows whichever source joined the cluster, so a CRIS timeout renames buildings."""
+        """A reconciled record's ref follows whichever source joined the cluster, so a source timing out renames buildings."""
         renamed = {"osm:way/1": "cris:1", "osm:way/2": "cris:2", "cris:2": "osm:way/2", "cris:3a": "h:9#1"}
         for building in self.records:
             building["ref"] = renamed.get(building["ref"], building["ref"])
@@ -316,7 +319,7 @@ class ResweepTests(CampusTestCase):
         self.assertEqual(auto_nest_pin(self.pin), 0)
         self.assertEqual({child.pk for child in self.descendants()}, self.before)
 
-    @pytest.mark.xfail(strict=True, reason="P7: ensure_building_places still keys building places by REData ref")
+    @pytest.mark.xfail(strict=True, reason="ensure_building_places still keys building places by the record's ref")
     def test_a_ref_that_changes_between_responses_reuses_the_building_place(self) -> None:
         before = Place.objects.filter(kind=PlaceKind.BUILDING).count()
         self._rename_refs()
@@ -380,7 +383,7 @@ class SweepGateTests(CampusTestCase):
 
 
 class BuildingYearNameTests(CampusTestCase):
-    """A nameless building's wiki is dated only by its own year, and a sweep follows what the records say (UrbanLens#321)."""
+    """A nameless building's wiki is dated only by its own year, and a sweep follows what the records say."""
 
     DATED = "Garage (1925) at Hudson River State Hospital"
     UNDATED = "Garage at Hudson River State Hospital"
@@ -465,7 +468,7 @@ class ChildWikiRaceTests(CampusTestCase):
             kind=PlaceKind.BUILDING,
             geometry=MultiPolygon(_geos(rect(60, -80, 70, 20))),
             parent=self.parcel,
-            provider="redata",
+            provider=REGISTRY_NAMESPACE,
             provider_key="osm:way/1",
         )
         self.campus_wiki.place = main_place

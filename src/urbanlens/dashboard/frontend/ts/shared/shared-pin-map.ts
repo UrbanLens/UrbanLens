@@ -1,6 +1,6 @@
 /**
  * The map on a pin shared with you (``pages/pin_share/detail.html``): MapLibre where the browser has WebGL2, Leaflet
- * otherwise (D12). A share with no location (hidden or rejected) still gets a map, so the toolbar's screenshot tool
+ * otherwise. A share with no location (hidden or rejected) still gets a map, so the toolbar's screenshot tool
  * has one to read.
  */
 

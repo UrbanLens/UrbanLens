@@ -82,8 +82,6 @@ class LocksOutliveTheirTasksTests(SimpleTestCase):
     def test_the_hourly_sweeps_end_before_their_lock(self) -> None:
         for task in (
             tasks.run_scheduled_enrichment,
-            tasks.run_scheduled_trivia_generation,
-            tasks.run_scheduled_trivia_wiki_incorporation,
             tasks.send_account_deletion_reminders,
             tasks.hard_delete_expired_accounts,
         ):

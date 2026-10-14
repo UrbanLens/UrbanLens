@@ -2,8 +2,8 @@
 A gateway proxying someone else's media must bound what it reads into memory.
 
 `bounded_cache.set_if_small` already stops an oversized body being *stored* in
-the shared Dragonfly (H14, H22, H35). Nothing stopped it being *read*: every media
-download in the REData gateways was `response.content`, which buffers the whole
+the shared Dragonfly. Nothing stopped it being *read*: every media
+download in the gateways was `response.content`, which buffers the whole
 body into the web worker regardless of size. The throttle in front of these
 endpoints bounds how often that happens, not how big it gets, and a
 worker killed for memory takes every other in-flight request on it with it.
@@ -29,7 +29,6 @@ from urllib3 import HTTPResponse
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.core.gateway import MAX_PROXIED_MEDIA_BYTES, GatewayRequestError, read_capped
-from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
 
 def _streamed(body: bytes, content_type: str = "image/jpeg") -> requests.Response:
@@ -134,120 +133,45 @@ class TheDefaultIsSaneTests(SimpleTestCase):
         self.assertLessEqual(MAX_PROXIED_MEDIA_BYTES, 64 * 1024 * 1024)
 
 
-class TheGatewaysActuallyUseItTests(RedataConfiguredMixin, SimpleTestCase):
+class TheGatewaysActuallyUseItTests(SimpleTestCase):
     """
-    The existing proxy tests stub `download_listing_photo` itself, so they
-    pass whatever the gateway does underneath - including against a cap that was
-    never wired in, or one wired in wrongly enough to serve empty bodies. These
-    stub the HTTP layer instead, which is the only level at which `stream=True`
-    and `read_capped` are observable.
+    Stubbing a gateway's own download method passes whatever the gateway does underneath - including against a cap
+    that was never wired in. These stub the HTTP layer instead, which is the only level at which ``stream=True`` and
+    ``read_capped`` are observable.
     """
 
-    def _gateway(self, body: bytes):
-        """A REData gateway whose session returns *body* as a streamed response."""
-        from unittest import mock
+    def test_a_places_photo_is_streamed_and_arrives_whole(self) -> None:
+        from urbanlens.dashboard.services.apis.locations.google.places import GooglePlacesGateway
 
-        from urbanlens.dashboard.services.apis.property_records.redata_gateway import RedataGateway
-
-        gateway = RedataGateway(base_url="https://redata.example")
         session = mock.Mock()
-        session.get.return_value = _streamed(body)
-        gateway.session = session
-        return gateway, session
+        session.get.return_value = _streamed(b"x" * 2048)
+        google = GooglePlacesGateway(api_key="k", session=session)
 
-    def test_a_normal_photo_still_downloads(self) -> None:
-        """
-        The half that catches a broken cap: `raw.read()` on a response the
-        gateway forgot to stream returns b'', which is a silent empty image."""
-        gateway, session = self._gateway(b"x" * 2048)
+        result = google.get_photo_media("places/p/photos/x")
 
-        content, content_type = gateway.download_listing_photo("abc", 1)
+        self.assertIsNotNone(result)
+        self.assertEqual(result[0], b"x" * 2048)
+        self.assertTrue(session.get.call_args.kwargs.get("stream"), "the photo GET was not streamed")
 
-        self.assertEqual(content, b"x" * 2048)
-        self.assertEqual(content_type, "image/jpeg")
-        self.assertTrue(
-            session.get.call_args.kwargs.get("stream"), "the media GET was not streamed, so its size cannot be bounded"
-        )
+    def test_a_places_photo_over_the_cap_is_refused(self) -> None:
+        from urbanlens.dashboard.services.apis.locations.google.places import GooglePlacesGateway
 
-    def test_an_oversized_photo_is_refused(self) -> None:
-        gateway, _ = self._gateway(b"x" * (MAX_PROXIED_MEDIA_BYTES + 1))
+        session = mock.Mock()
+        session.get.return_value = _streamed(b"x" * (MAX_PROXIED_MEDIA_BYTES + 1))
+        google = GooglePlacesGateway(api_key="k", session=session)
 
         with pytest.raises(GatewayRequestError, match="larger than"):
-            gateway.download_listing_photo("abc", 1)
-
-    def _places_photo_downloads(self, body: bytes):
-        """Each Places-photo and cid-media download, bound to a session that returns *body* streamed."""
-        from unittest import mock
-
-        from urbanlens.dashboard.services.apis.locations.google.places import GooglePlacesGateway
-        from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import RedataCidGateway
-        from urbanlens.dashboard.services.apis.locations.google.redata_places_gateway import RedataPlacesGateway
-
-        def session() -> mock.Mock:
-            fake = mock.Mock()
-            fake.get.return_value = _streamed(body)
-            return fake
-
-        google = GooglePlacesGateway(api_key="k", session=session())
-        places = RedataPlacesGateway(base_url="https://redata.example", api_key="k", session=session())
-        cid = RedataCidGateway(base_url="https://redata.example", api_key="k", session=session())
-        return {
-            "google places photo": (google.session, lambda: google.get_photo_media("places/p/photos/x")),
-            "redata places photo": (places.session, lambda: places.download_photo("p", 1)),
-            "redata cid media": (cid.session, lambda: cid.download_media(1, 2)),
-        }
-
-    def test_places_photos_and_cid_media_are_streamed_and_arrive_whole(self) -> None:
-        for name, (session, download) in self._places_photo_downloads(b"x" * 2048).items():
-            with self.subTest(name):
-                result = download()
-                self.assertIsNotNone(result)
-                self.assertEqual(result[0], b"x" * 2048)
-                self.assertTrue(session.get.call_args.kwargs.get("stream"), f"{name} was not streamed")
-
-    def test_places_photos_and_cid_media_over_the_cap_are_refused(self) -> None:
-        for name, (_session, download) in self._places_photo_downloads(b"x" * (MAX_PROXIED_MEDIA_BYTES + 1)).items():
-            with self.subTest(name), pytest.raises(GatewayRequestError, match="larger than"):
-                download()
+            google.get_photo_media("places/p/photos/x")
 
     def test_every_media_download_streams(self) -> None:
-        """
-        One forgotten `stream=True` is a silent empty body, so this asserts
-        the property across the gateways rather than per call site."""
+        """One forgotten ``stream=True`` is a silent empty body, so this asserts the property across the gateways rather than per call site."""
         import inspect
-        import re
 
         from urbanlens.dashboard.services.apis.flickr import gateway as flickr_gateway, public as flickr_public
-        from urbanlens.dashboard.services.apis.locations import (
-            redata_basemap_tiles_gateway,
-            redata_historical_maps_gateway,
-            redata_imagery_gateway,
-        )
-        from urbanlens.dashboard.services.apis.locations.google import (
-            maps,
-            places,
-            redata_cid_gateway,
-            redata_places_gateway,
-        )
+        from urbanlens.dashboard.services.apis.locations.google import maps, places
         from urbanlens.dashboard.services.apis.photos import google as google_photos
-        from urbanlens.dashboard.services.apis.property_records import redata_gateway
 
-        for module in (
-            redata_gateway,
-            redata_basemap_tiles_gateway,
-            redata_historical_maps_gateway,
-            redata_imagery_gateway,
-            places,
-            redata_places_gateway,
-            redata_cid_gateway,
-            flickr_gateway,
-            flickr_public,
-            google_photos,
-            maps,
-        ):
+        for module in (places, flickr_gateway, flickr_public, google_photos, maps):
             source = inspect.getsource(module)
-            for call in re.findall(r"read_capped\(\s*response[^)]*\)", source):
-                self.assertIn("response", call)
-            # Every capped read must have a streamed GET somewhere in its module.
             if "read_capped(" in source:
                 self.assertIn("stream=True", source, f"{module.__name__} caps a read but never streams a request")

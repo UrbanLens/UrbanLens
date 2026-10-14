@@ -7,7 +7,7 @@ The Immich half is one query per connected account, because an Immich URL is the
 and there is no single prefix - which is also why an account that has since been disconnected cannot
 be matched at all.
 
-- concealment, who may withdraw a photo from a wiki, reputation, the upload
+- who may withdraw a photo from a wiki, the upload
 """
 
 from __future__ import annotations

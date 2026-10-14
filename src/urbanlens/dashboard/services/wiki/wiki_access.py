@@ -412,7 +412,7 @@ def locate_visible_wiki(request: HttpRequest, location_slug: str) -> tuple[Locat
     """
     Find a Location and its Wiki, 404ing unless the requester can see it.
 
-    The bare gate: unlike :func:`resolve_visible_wiki` it neither records engagement nor conceals, so it suits a
+    The bare gate: unlike :func:`resolve_visible_wiki` it neither records engagement nor projects the wiki for the viewer, so it suits a
     caller that only needs to know where the wiki is.
 
     Args:
@@ -420,7 +420,7 @@ def locate_visible_wiki(request: HttpRequest, location_slug: str) -> tuple[Locat
         location_slug: Slug, former slug or uuid of the Location.
 
     Returns:
-        Tuple of (Location, unconcealed Wiki, requester's Profile).
+        Tuple of (Location, stored Wiki, requester's Profile).
 
     Raises:
         Http404: The location doesn't exist, has no wiki, or the requester can't see it."""
@@ -460,16 +460,15 @@ def resolve_visible_wiki(request: HttpRequest, location_slug: str) -> tuple[Loca
     """Resolve a Location and its Wiki, 404ing unless the requester can see it."""
     location, wiki, profile = locate_visible_wiki(request, location_slug)
 
-    # Viewing while access is held grants it permanently (D19). Only reached once location_visible_to has passed.
+    # Viewing while access is held grants it permanently. Only reached once location_visible_to has passed.
     if location.place_id is not None:
         from urbanlens.dashboard.models.place.model import PlaceAccessGrant
 
         PlaceAccessGrant.objects.record_engagement(profile, location.place)
 
-    # Concealment is applied *here*, at the one place every wiki-scoped surface already funnels
-    # through - 56 controller call sites plus the external API's 32 handlers, all of which get it
-    # without knowing it exists.
+    # The viewer's projection is applied *here*, at the one place every wiki-scoped surface already funnels
+    # through - the controllers and the external API's handlers, all of which get it without knowing it exists.
     # A rule kept in one place cannot be forgotten at the others.
-    from urbanlens.dashboard.services.wiki.concealment import conceal_wiki
+    from urbanlens.dashboard.services.wiki.viewer_projection import project_wiki
 
-    return location, conceal_wiki(wiki, profile), profile
+    return location, project_wiki(wiki, profile), profile

@@ -72,7 +72,7 @@ def suggest_mutual_connection(a: Profile, b: Profile) -> None:
     from urbanlens.dashboard.models.notifications.model import NotificationLog
     from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
 
-    # No dedicated NotificationPreference field for this type (same as AI_EXTRACTION) - it's a
+    # No dedicated NotificationPreference field for this type - it's a
     # one-off soft suggestion, not a recurring notification category worth its own settings-page
     # toggle.
     # The profile link is safe to include even for a NO_ONE-visibility subject: without a

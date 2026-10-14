@@ -1,4 +1,4 @@
-"""The "Remove from my results" action hides a public-source photo from one account's pin pages and nowhere else (P233)."""
+"""The "Remove from my results" action hides a public-source photo from one account's pin pages and nowhere else."""
 
 from __future__ import annotations
 

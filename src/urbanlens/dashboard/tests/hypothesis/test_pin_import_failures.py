@@ -22,7 +22,7 @@ from urbanlens.dashboard.models.pin_import_failures.model import (
     PinImportFailureReason,
     PinImportFailureStatus,
 )
-from urbanlens.dashboard.services.apis.locations.cid_resolution import PROVIDER_REDATA, CidResolutionResult
+from urbanlens.dashboard.services.apis.locations.cid_resolution import CidResolutionResult
 from urbanlens.dashboard.services.apis.locations.legacy_cid_coordinate_fix import LEGACY_COORDINATE_CUTOFF
 from urbanlens.dashboard.services.pins.pin_creation import PinCreationError
 from urbanlens.dashboard.services.pins.pin_import_failures import (
@@ -404,7 +404,7 @@ class ResolveDeferredPinLocationsFailureRecordingTests(TestCase):
 
     def test_unresolvable_cid_creates_no_location_found_failure(self) -> None:
         deferred_lists = self._lists([{"name": "Cresson Sanatorium", "description": "Old asylum", "cid": 12345}])
-        result = CidResolutionResult(provider=PROVIDER_REDATA, unresolvable={12345})
+        result = CidResolutionResult(provider="fake", unresolvable={12345})
 
         with (
             mock.patch(_resolve_cids_path(), return_value=result),
@@ -421,7 +421,7 @@ class ResolveDeferredPinLocationsFailureRecordingTests(TestCase):
 
     def test_rerunning_the_same_import_does_not_duplicate_the_failure(self) -> None:
         deferred_lists = self._lists([{"name": "Cresson Sanatorium", "description": "Old asylum", "cid": 12345}])
-        result = CidResolutionResult(provider=PROVIDER_REDATA, unresolvable={12345})
+        result = CidResolutionResult(provider="fake", unresolvable={12345})
 
         with (
             mock.patch(_resolve_cids_path(), return_value=result),
@@ -437,7 +437,7 @@ class ResolveDeferredPinLocationsFailureRecordingTests(TestCase):
             {"name": "Black Point Ruins", "description": "", "cid": 111},
             {"name": "Fort Wetherill", "description": "", "cid": 222},
         ]
-        result = CidResolutionResult(provider=PROVIDER_REDATA, pending=[111, 222], auth_failed=True)
+        result = CidResolutionResult(provider="fake", pending=[111, 222], auth_failed=True)
 
         with (
             mock.patch(_resolve_cids_path(), return_value=result),
@@ -459,7 +459,7 @@ class ResolveDeferredPinLocationsFailureRecordingTests(TestCase):
             {"name": "Black Point Ruins", "description": "", "cid": 111},
             {"name": "Fort Wetherill", "description": "", "cid": 222},
         ]
-        result = CidResolutionResult(provider=PROVIDER_REDATA, pending=[111, 222], request_failed=True)
+        result = CidResolutionResult(provider="fake", pending=[111, 222], request_failed=True)
 
         with (
             mock.patch(_resolve_cids_path(), return_value=result),
@@ -469,7 +469,7 @@ class ResolveDeferredPinLocationsFailureRecordingTests(TestCase):
                 self.profile.pk,
                 self._lists(pins),
                 auto_tag=False,
-                consecutive_request_failures=tasks._MAX_CONSECUTIVE_REDATA_FAILURES - 1,
+                consecutive_request_failures=tasks._MAX_CONSECUTIVE_RESOLVER_FAILURES - 1,
                 # The counters only widen the retry gap now; the two-day deadline is
                 # what ends a batch and turns its cids into failure rows.
                 started_at=(timezone.now() - timedelta(days=3)).isoformat(),
@@ -488,7 +488,7 @@ class ResolveDeferredPinLocationsFailureRecordingTests(TestCase):
             {"name": "Black Point Ruins", "description": "", "cid": 111},
             {"name": "Fort Wetherill", "description": "", "cid": 222},
         ]
-        result = CidResolutionResult(provider=PROVIDER_REDATA, pending=[111, 222], request_failed=False)
+        result = CidResolutionResult(provider="fake", pending=[111, 222], request_failed=False)
 
         with (
             mock.patch(_resolve_cids_path(), return_value=result),
@@ -518,7 +518,7 @@ class ResolveDeferredPinLocationsFailureRecordingTests(TestCase):
         or a fresh re-import) must have its pending failure cleared and pointed at
         the new pin - this is the auto-resolve half of the feature."""
         pins = [{"name": "Cresson Sanatorium", "description": "Old asylum", "cid": 12345, "label_ids": []}]
-        unresolved = CidResolutionResult(provider=PROVIDER_REDATA, unresolvable={12345})
+        unresolved = CidResolutionResult(provider="fake", unresolvable={12345})
 
         with (
             mock.patch(_resolve_cids_path(), return_value=unresolved),
@@ -529,7 +529,7 @@ class ResolveDeferredPinLocationsFailureRecordingTests(TestCase):
         failure = PinImportFailure.objects.get(profile=self.profile, cid=12345)
         self.assertEqual(failure.status, PinImportFailureStatus.PENDING)
 
-        resolved = CidResolutionResult(provider=PROVIDER_REDATA, resolved={12345: (41.348754, -71.453896)})
+        resolved = CidResolutionResult(provider="fake", resolved={12345: (41.348754, -71.453896)})
         with (
             mock.patch(_resolve_cids_path(), return_value=resolved),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
@@ -546,7 +546,7 @@ class ResolveDeferredPinLocationsFailureRecordingTests(TestCase):
 
     def test_successful_resolution_with_no_prior_failure_does_not_create_one(self) -> None:
         pins = [{"name": "Known Place", "description": "", "cid": 55555, "label_ids": []}]
-        resolved = CidResolutionResult(provider=PROVIDER_REDATA, resolved={55555: (41.0, -75.0)})
+        resolved = CidResolutionResult(provider="fake", resolved={55555: (41.0, -75.0)})
 
         with (
             mock.patch(_resolve_cids_path(), return_value=resolved),
@@ -746,7 +746,7 @@ class PinImportFailureQueuePartialViewTests(TestCase):
         """
         Ownership, checked across every page rather than on the first.
 
-        This used to assert the queue was unpaginated, which it no longer is (P69) - but the half worth keeping
+        This used to assert the queue was unpaginated, which it no longer is - but the half worth keeping
         is stronger when it walks the pages: a slice applied before the ownership filter would leak on some page
         other than the one a single-page assertion happens to look at."""
         other = baker.make(User)

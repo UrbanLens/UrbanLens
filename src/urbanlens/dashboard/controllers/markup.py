@@ -73,7 +73,7 @@ def _apply_security_indicator(owner: Pin | Wiki, indicator: str) -> None:
     if not field:
         return
     # The real row, for the read as much as the write.
-    from urbanlens.dashboard.services.wiki.concealment import writable_wiki
+    from urbanlens.dashboard.services.wiki.viewer_projection import writable_wiki
 
     if isinstance(owner, Wiki):
         owner = writable_wiki(owner)
@@ -255,7 +255,7 @@ def _resolve_owner(
         raise Http404
     _location, wiki, profile = resolve_visible_wiki(request, location_slug)
     # Filtered by who drew it, not hidden outright.
-    from urbanlens.dashboard.services.wiki.concealment import visible_rows
+    from urbanlens.dashboard.services.wiki.viewer_projection import visible_rows
 
     return wiki, visible_rows(PinMarkup.objects.for_wiki(wiki), wiki, profile)
 
@@ -281,7 +281,7 @@ def _resolve_visible_layer(layer_uuid: str | None, owner: Pin | Wiki | MarkupMap
 
     Scoped by owner exactly as before (a layer belonging to a different pin/ wiki, or any value on the
     map_uuid route, resolves to None); additionally scoped by ``visible_rows`` on a wiki owner, so a
-    concealed viewer's own write can't file an item under a stranger's layer - the layer they'd have no
+    viewer's own write can't file an item under a layer they are not shown - the layer they'd have no
     way to see reflected back (the read side already nulls layer_uuid for exactly this case; refusing it
     here keeps the write side consistent with what the read side shows).
 
@@ -299,7 +299,7 @@ def _resolve_visible_layer(layer_uuid: str | None, owner: Pin | Wiki | MarkupMap
         return None
     qs = CustomLayer.objects.filter(uuid=parsed_uuid, **owner_kwargs)
     if isinstance(owner, Wiki):
-        from urbanlens.dashboard.services.wiki.concealment import visible_rows
+        from urbanlens.dashboard.services.wiki.viewer_projection import visible_rows
 
         qs = visible_rows(qs, owner, profile)
     return qs.first()
@@ -309,12 +309,12 @@ def _current_layer_is_visible(layer_id: int, owner: Pin | Wiki | MarkupMap, prof
     """
     Whether *profile* could see the CustomLayer *layer_id* under *owner*.
 
-    Always True off a wiki - concealment is a wiki-only concept, so a Pin's or MarkupMap's own layers
+    Always True off a wiki - a viewer projection is a wiki-only concept, so a Pin's or MarkupMap's own layers
     are never filtered.
     """
     if not isinstance(owner, Wiki):
         return True
-    from urbanlens.dashboard.services.wiki.concealment import visible_rows
+    from urbanlens.dashboard.services.wiki.viewer_projection import visible_rows
 
     return visible_rows(CustomLayer.objects.filter(pk=layer_id), owner, profile).exists()
 
@@ -353,8 +353,8 @@ class MarkupJsonView(LoginRequiredMixin, View):
             items = PinMarkup.objects.filter(parent_pin__in=subtree).select_related("parent_pin__location", "parent_pin__location__wiki", "layer")
         elif include_children and isinstance(owner, Wiki):
             # Mirrors _resolve_owner's own single-wiki narrowing - the raw
-            # subtree filter below carries no concealment of its own.
-            from urbanlens.dashboard.services.wiki.concealment import visible_rows
+            # subtree filter below narrows nothing for the viewer of its own.
+            from urbanlens.dashboard.services.wiki.viewer_projection import visible_rows
 
             wiki_subtree = Wiki.objects.filter(pk=owner.pk).with_descendants()
             items = visible_rows(
@@ -368,7 +368,7 @@ class MarkupJsonView(LoginRequiredMixin, View):
         # independent visibility questions.
         visible_layer_ids: set[int] | None = None
         if location_slug is not None and isinstance(owner, Wiki):
-            from urbanlens.dashboard.services.wiki.concealment import visible_rows
+            from urbanlens.dashboard.services.wiki.viewer_projection import visible_rows
 
             visible_layer_ids = set(visible_rows(CustomLayer.objects.for_wiki(owner), owner, profile).values_list("pk", flat=True))
 
@@ -895,7 +895,7 @@ class MarkupEditView(LoginRequiredMixin, View):
                 # A genuine clear: nothing to clear, or the layer being cleared was one this viewer could see
                 # and could therefore have deliberately chosen to remove.
                 item.layer = None
-            # else: item.layer_id names a layer this viewer cannot see - a concealed wiki hides that layer from
+            # else: item.layer_id names a layer this viewer cannot see - their projection of the wiki hides that layer from
             # the picker and nulls its layer_uuid on read (MarkupJsonView.get), so an empty layer_uuid here is
             # indistinguishable from that display value being echoed straight back by an edit to some other
             # field.

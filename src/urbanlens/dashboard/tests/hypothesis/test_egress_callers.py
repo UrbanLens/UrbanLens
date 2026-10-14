@@ -1,35 +1,34 @@
 """
-Callers treat an environment refusal as "not available here" and move on (D26).
+Callers treat an environment refusal as "not available here" and move on.
 
 The boundary chain skips the source rather than deferring it; a panel says so rather than caching an empty
-answer or vanishing; the name and geocode chains never fall through from REData to a direct provider off
-production; the AI features are reserved and logged on production and staging and refused in development; messaging,
-Stripe, the hosted basemap and the public Overpass mirrors stay production's.
+answer or vanishing; the name and geocode chains never fall through from a first-party provider to a direct one off
+production; messaging, the hosted basemap and the public Overpass mirrors stay production's.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterator
 import contextlib
-from decimal import Decimal
 from unittest import mock
 
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.gis.geos import MultiPolygon, Polygon
 from django.core.cache import cache
-from django.core.exceptions import ImproperlyConfigured
 from django.test import RequestFactory, override_settings
 from model_bakery import baker
 import requests
 
+from urbanlens.core.tests.provider_fakes import FakePlacesProvider
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.api_call_log.model import ApiCallLog
-from urbanlens.dashboard.models.api_rate_limit.model import ApiRateLimit
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
+from urbanlens.dashboard.plugins.points import GEOCODERS, PLACES_PROVIDERS
+from urbanlens.dashboard.services.apis.locations.geocode_resolution import GeocodeProvider, NominatimGeocoder
+from urbanlens.dashboard.services.core.gateway import ProviderUnavailableError
 from urbanlens.dashboard.services.core.rate_limiter import EnvironmentRefusedError
 from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain
 from urbanlens.dashboard.services.pins.external_data import (
@@ -38,11 +37,6 @@ from urbanlens.dashboard.services.pins.external_data import (
     schedule_panel_fetch,
     unavailable_here,
 )
-
-# Imported before any test patches ``ai.factory.get_gateway``: these bind it at import, and one first imported
-# under the patch would keep the mock for every later test in the process.
-import urbanlens.dashboard.services.trips.trip_ai_suggestions  # noqa: F401
-import urbanlens.dashboard.services.trivia  # noqa: F401
 
 _LAT, _LON = 41.73266, -73.92736
 
@@ -174,7 +168,7 @@ class OverpassMirrorLedgerTests(TestCase):
 
 
 class PanelUnavailableHereTests(TestCase):
-    _SOURCE_KEY = "photon"
+    _SOURCE_KEY = "wikipedia"
 
     def setUp(self) -> None:
         super().setUp()
@@ -183,10 +177,10 @@ class PanelUnavailableHereTests(TestCase):
         self.source = get_panel_source(self._SOURCE_KEY)
 
     def test_a_refused_fetch_says_so_and_stores_nothing(self) -> None:
-        with mock.patch.object(type(self.source), "fetch", side_effect=_refused("photon")):
+        with mock.patch.object(type(self.source), "fetch", side_effect=_refused("wikipedia")):
             run_panel_fetch(self._SOURCE_KEY, self.pin, None)
 
-        self.assertEqual(unavailable_here(self._SOURCE_KEY, self.pin), "photon")
+        self.assertEqual(unavailable_here(self._SOURCE_KEY, self.pin), "wikipedia")
         self.assertFalse(LocationCache.objects.exists())
         self.assertFalse(schedule_panel_fetch(self._SOURCE_KEY, self.pin))
 
@@ -212,7 +206,7 @@ class PanelUnavailableHereTests(TestCase):
     def test_the_panel_renders_the_note_instead_of_vanishing(self) -> None:
         from urbanlens.dashboard.controllers.pin import PinController
 
-        cache.set(self.source.unavailable_key(self.pin), "photon", 60)
+        cache.set(self.source.unavailable_key(self.pin), "wikipedia", 60)
         request = RequestFactory().get("/")
         request.user = AnonymousUser()
 
@@ -276,29 +270,22 @@ class SlidesCarouselRefusalTests(TestCase):
 
 
 class NameChainTests(SimpleTestCase):
-    """REData failing off production is "no name for now", never a call to direct Google Geocoding."""
+    """A first-party places provider failing off production is "no name for now", never a call to direct Google Geocoding."""
 
-    def _chain(self, direct: mock.Mock):
+    def _run(self, environment: str) -> tuple[str | None, mock.Mock]:
         from urbanlens.dashboard.services.locations.google import (
             GoogleGeocodingNameResolver,
             GooglePlacesNameResolver,
             PlaceNameResolverChain,
         )
 
-        return PlaceNameResolverChain(resolvers=(GooglePlacesNameResolver(), GoogleGeocodingNameResolver())), direct
-
-    def _run(self, environment: str) -> mock.Mock:
         with (
             deployment(environment),
-            mock.patch("urbanlens.dashboard.services.locations.google._redata_configured", return_value=True),
-            mock.patch(
-                "urbanlens.dashboard.services.apis.locations.places_resolution.resolve_name_from_nearby",
-                return_value=None,
-            ),
+            PLACES_PROVIDERS.overridden([FakePlacesProvider(shields_direct=True)]),
             mock.patch("urbanlens.dashboard.services.locations.google.GoogleGeocodingGateway") as direct,
         ):
             direct.return_value.get_place_name.return_value = "Hudson River State Hospital"
-            chain, _ = self._chain(direct)
+            chain = PlaceNameResolverChain(resolvers=(GooglePlacesNameResolver(), GoogleGeocodingNameResolver()))
             name = chain.resolve(_LAT, _LON)
         return name, direct
 
@@ -312,31 +299,40 @@ class NameChainTests(SimpleTestCase):
         self.assertEqual(name, "Hudson River State Hospital")
 
 
+class _ShieldingGeocoder(GeocodeProvider):
+    """A first-party geocoder that is always unavailable."""
+
+    key = "shielding"
+    shields_direct = True
+
+    def available(self) -> bool:
+        return True
+
+    def geocode(self, address: str) -> tuple[float | None, float | None]:
+        raise ProviderUnavailableError("budget exhausted")
+
+
 class GeocodeChainTests(SimpleTestCase):
     _MODULE = "urbanlens.dashboard.services.apis.locations.geocode_resolution"
 
     def _run(self, environment: str):
         with (
             deployment(environment),
-            mock.patch(f"{self._MODULE}.redata_configured", return_value=True),
-            mock.patch(f"{self._MODULE}.RedataGeocodeGateway") as redata,
+            GEOCODERS.overridden([_ShieldingGeocoder(), NominatimGeocoder()]),
             mock.patch(f"{self._MODULE}.nominatim_geocode", return_value=(1.0, 2.0)) as nominatim,
         ):
-            redata.return_value.geocode.side_effect = LocationContextUnavailableError(
-                "rate_limited", "budget exhausted"
-            )
             from urbanlens.dashboard.services.apis.locations.geocode_resolution import geocode_address
 
             try:
                 return geocode_address("1 Main St"), nominatim
-            except LocationContextUnavailableError as exc:
+            except ProviderUnavailableError as exc:
                 return exc, nominatim
 
-    def test_a_redata_503_surfaces_as_unavailable_off_production(self) -> None:
+    def test_a_shielding_providers_unavailability_surfaces_off_production(self) -> None:
         for environment in ("staging", "development"):
             with self.subTest(environment=environment):
                 result, nominatim = self._run(environment)
-                self.assertIsInstance(result, LocationContextUnavailableError)
+                self.assertIsInstance(result, ProviderUnavailableError)
                 nominatim.assert_not_called()
 
     def test_production_falls_back(self) -> None:
@@ -353,7 +349,7 @@ class GeocodeChainTests(SimpleTestCase):
         with (
             mock.patch(
                 "urbanlens.dashboard.services.pins.pin_creation.get_pin_by_address",
-                side_effect=LocationContextUnavailableError("rate_limited", "x"),
+                side_effect=ProviderUnavailableError("x"),
             ),
             self.assertRaises(AddressLookupUnavailableError),
         ):
@@ -364,222 +360,6 @@ class GeocodeChainTests(SimpleTestCase):
 
         with deployment("development"), self.assertRaises(EnvironmentRefusedError):
             NominatimGateway().search("1 Main St", limit=1)
-
-
-class _FakeGateway:
-    model = "fake-model"
-    cost = Decimal("0.0010")
-    tokens = 0
-
-    def __init__(self, answer: str = "", answers: list[str] | None = None) -> None:
-        self.answer = answer
-        self.answers = answers or []
-        self.calls = 0
-
-    def send_prompt(self, prompt: str, **kwargs) -> str:
-        self.calls += 1
-        return self.answer
-
-    def send_prompt_list(self, prompt: str, *, max_results: int | None = None, **kwargs) -> list[str]:
-        self.calls += 1
-        return self.answers
-
-
-class AiPathsAreReservedAndLoggedTests(TestCase):
-    """
-    The seven features that called the provider with no ledger row and no gate.
-
-    The assistant is covered in ``test_ai_assistant``.
-    """
-
-    def setUp(self) -> None:
-        super().setUp()
-        self.profile = Profile.objects.get(user=baker.make("auth.User"))
-
-    def _call(self, feature: str):
-        gateway = _FakeGateway(answer="", answers=[])
-        with mock.patch("urbanlens.dashboard.services.ai.factory.get_gateway", return_value=gateway):
-            getattr(self, f"_run_{feature}")(gateway)
-        return gateway
-
-    def _run_trivia_generation(self, gateway: _FakeGateway) -> None:
-        from urbanlens.dashboard.models.wiki.model import Wiki
-        from urbanlens.dashboard.services.trivia.generation import MIN_DESCRIPTION_LENGTH, generate_questions_for_wiki
-
-        wiki = baker.make(Wiki, location=baker.make(Location), description="x" * MIN_DESCRIPTION_LENGTH)
-        generate_questions_for_wiki(wiki, gateway=gateway)
-
-    def _run_link_extraction(self, gateway: _FakeGateway) -> None:
-        from urbanlens.dashboard.models.link_extraction.model import LinkExtraction
-        from urbanlens.dashboard.services.ai import link_extraction
-
-        extraction = baker.make(
-            LinkExtraction, profile=self.profile, pin=baker.make(Pin, profile=self.profile), url="https://example.com/a"
-        )
-        with (
-            mock.patch.object(link_extraction, "fetch_page_text", return_value="page"),
-            mock.patch.object(link_extraction, "build_extraction_prompt", return_value=("i", "p")),
-            mock.patch.object(link_extraction, "_notify_extraction_complete"),
-        ):
-            link_extraction.run_extraction(extraction)
-
-    def _run_document_pin_import(self, gateway: _FakeGateway) -> None:
-        from urbanlens.dashboard.services.ai.document_import import extract_pins_from_text
-
-        extract_pins_from_text("a.txt", "Old Mill, 1 Main St", self.profile)
-
-    def _run_trip_suggestions(self, gateway: _FakeGateway) -> None:
-        from urbanlens.dashboard.services.trips import trip_ai_suggestions
-
-        with (
-            mock.patch.object(trip_ai_suggestions, "get_gateway", return_value=gateway),
-            mock.patch.object(trip_ai_suggestions, "build_trip_context"),
-            mock.patch.object(trip_ai_suggestions, "_format_prompt", return_value="p"),
-        ):
-            trip_ai_suggestions.generate_trip_suggestions(mock.Mock(pk=1), self.profile)
-
-    def _run_label_style_suggestions(self, gateway: _FakeGateway) -> None:
-        from urbanlens.dashboard.services.labels import style_suggestions
-
-        with mock.patch.object(style_suggestions, "ai_features_enabled", return_value=True):
-            style_suggestions.suggest_label_style("Factories", self.profile)
-
-    def _run_category_suggestions(self, gateway: _FakeGateway) -> None:
-        from urbanlens.dashboard.services.labels.auto_tag import AutoTagService
-
-        service = AutoTagService()
-        with (
-            mock.patch.object(AutoTagService, "_build_prompt", return_value="p"),
-            mock.patch.object(AutoTagService, "_build_instructions", return_value="i"),
-        ):
-            service._ai_match(mock.Mock(), [mock.Mock(name="label")], "category")
-
-    FEATURES = (
-        "trivia_generation",
-        "link_extraction",
-        "document_pin_import",
-        "trip_suggestions",
-        "label_style_suggestions",
-        "category_suggestions",
-    )
-
-    def test_each_call_is_one_row_under_its_feature(self) -> None:
-        for feature in self.FEATURES:
-            with self.subTest(feature=feature):
-                gateway = self._call(feature)
-                self.assertEqual(gateway.calls, 1)
-                self.assertEqual(ApiCallLog.objects.filter(service=feature).count(), 1)
-
-    def test_a_feature_switched_off_on_the_api_limits_page_makes_no_call(self) -> None:
-        for feature in self.FEATURES:
-            with self.subTest(feature=feature):
-                ApiRateLimit.objects.update_or_create(
-                    service=feature, defaults={"display_name": feature, "enabled": False}
-                )
-                gateway = self._call(feature)
-                self.assertEqual(gateway.calls, 0)
-
-    def test_development_refuses_every_ai_feature_and_records_nothing(self) -> None:
-        """Development refuses all AI features and logs nothing."""
-        for feature in self.FEATURES:
-            with self.subTest(feature=feature), deployment("development"):
-                gateway = self._call(feature)
-                self.assertEqual(gateway.calls, 0)
-        self.assertFalse(ApiCallLog.objects.exists())
-
-    def test_staging_still_calls_ai_and_logs_it(self) -> None:
-        with deployment("staging"):
-            gateway = self._call("document_pin_import")
-        self.assertEqual(gateway.calls, 1)
-        self.assertEqual(ApiCallLog.objects.filter(service="document_pin_import").count(), 1)
-
-    def test_an_override_opts_one_feature_back_in_on_development(self) -> None:
-        with deployment("development", overrides={"document_pin_import": 1.0}):
-            gateway = self._call("document_pin_import")
-        self.assertEqual(gateway.calls, 1)
-        self.assertEqual(ApiCallLog.objects.filter(service="document_pin_import").count(), 1)
-
-    def test_the_ai_features_carry_no_spend_cap(self) -> None:
-        """Logged, never refused for spend (R31): no daily or 30-day window, only a per-minute runaway guard."""
-        from urbanlens.dashboard.services.core.rate_limiter import SERVICE_REGISTRY
-
-        for feature in (
-            "link_extraction",
-            "document_pin_import",
-            "trip_suggestions",
-            "label_style_suggestions",
-            "category_suggestions",
-            "assistant",
-        ):
-            with self.subTest(feature=feature):
-                self.assertIsNone(SERVICE_REGISTRY[feature].calls_per_day)
-                self.assertIsNone(SERVICE_REGISTRY[feature].calls_per_30_days)
-                self.assertIsNotNone(SERVICE_REGISTRY[feature].calls_per_minute)
-
-    def test_an_answered_call_with_nothing_usable_in_it_is_a_success(self) -> None:
-        """Provider health reads a failed row as the provider failing; an empty answer is the provider answering."""
-        from urbanlens.dashboard.services.ai.call_log import recorded_ai_call
-
-        class _Answering(_FakeGateway):
-            def send_prompt_list(self, prompt: str, **kwargs) -> list[str]:
-                with recorded_ai_call(service="category_suggestions", provider="cloudflare", model="m") as call:
-                    call.success = True
-                return super().send_prompt_list(prompt, **kwargs)
-
-        gateway = _Answering(answers=[])
-        with mock.patch("urbanlens.dashboard.services.ai.factory.get_gateway", return_value=gateway):
-            self._run_category_suggestions(gateway)
-        self.assertTrue(ApiCallLog.objects.get(service="category_suggestions").success)
-
-    def test_a_shared_gateway_records_each_call_s_own_cost(self) -> None:
-        """The trivia sweep reuses one gateway, whose ``cost`` is a running total."""
-        from urbanlens.dashboard.models.wiki.model import Wiki
-        from urbanlens.dashboard.services.trivia.generation import MIN_DESCRIPTION_LENGTH, generate_questions_for_wiki
-
-        class _Billing(_FakeGateway):
-            def send_prompt_list(self, prompt: str, **kwargs) -> list[str]:
-                self.cost += Decimal("0.0010")
-                return super().send_prompt_list(prompt, **kwargs)
-
-        gateway = _Billing(answers=[])
-        for _ in range(3):
-            wiki = baker.make(Wiki, location=baker.make(Location), description="x" * MIN_DESCRIPTION_LENGTH)
-            generate_questions_for_wiki(wiki, gateway=gateway)
-        costs = list(ApiCallLog.objects.filter(service="trivia_generation").values_list("cost_estimate", flat=True))
-        self.assertEqual(costs, [Decimal("0.001")] * 3)
-
-    def test_a_refused_trivia_sweep_marks_no_wiki_tried(self) -> None:
-        """Nothing was asked, so the wikis wait for the next run, not for RETRY_AFTER."""
-        from urbanlens.dashboard.models.trivia.model import TriviaGenerationAttempt
-        from urbanlens.dashboard.models.wiki.model import Wiki
-        from urbanlens.dashboard.services.trivia import generation
-
-        for _ in range(2):
-            baker.make(Wiki, location=baker.make(Location), description="x" * generation.MIN_DESCRIPTION_LENGTH)
-        ApiRateLimit.objects.update_or_create(
-            service="trivia_generation", defaults={"display_name": "t", "enabled": False}
-        )
-        gateway = _FakeGateway(answers=[])
-        with mock.patch.object(generation, "_gateway", return_value=gateway):
-            summary = generation.sweep_wikis_for_generation(batch_size=5)
-        self.assertEqual(gateway.calls, 0)
-        self.assertEqual(summary["wikis_considered"], 0)
-        self.assertFalse(TriviaGenerationAttempt.objects.exists())
-
-    def test_a_refused_trip_suggestion_is_unavailable_not_a_cached_apology(self) -> None:
-        ApiRateLimit.objects.update_or_create(
-            service="trip_suggestions", defaults={"display_name": "t", "enabled": False}
-        )
-        from urbanlens.dashboard.services.trips import trip_ai_suggestions
-
-        gateway = _FakeGateway(answer="{}")
-        with (
-            mock.patch.object(trip_ai_suggestions, "get_gateway", return_value=gateway),
-            mock.patch.object(trip_ai_suggestions, "build_trip_context"),
-        ):
-            result = trip_ai_suggestions.generate_trip_suggestions(mock.Mock(pk=1), self.profile)
-        self.assertEqual(gateway.calls, 0)
-        self.assertFalse(result.generated)
 
 
 class MessagingTests(TestCase):
@@ -612,28 +392,6 @@ class MessagingTests(TestCase):
             self.assertEqual(push.send_push_to_devices([1, 2], {"title": "x"}), 0)
         post.assert_not_called()
         record.assert_not_called()
-
-
-class StripeTests(SimpleTestCase):
-    def test_stripe_is_unconfigured_off_production(self) -> None:
-        from urbanlens.dashboard.plugins import plugin_available
-
-        if not plugin_available("billing"):
-            self.skipTest("billing plugin is not installed")
-        from urbanlens.dashboard.services.billing import stripe_client
-
-        with (
-            deployment("staging"),
-            mock.patch("urbanlens.dashboard.services.billing.config.billing_settings.stripe_secret_key", "sk_test_x"),
-        ):
-            self.assertFalse(stripe_client.is_configured())
-            with self.assertRaises(ImproperlyConfigured):
-                stripe_client.configure()
-        with (
-            deployment("production"),
-            mock.patch("urbanlens.dashboard.services.billing.config.billing_settings.stripe_secret_key", "sk_test_x"),
-        ):
-            self.assertTrue(stripe_client.is_configured())
 
 
 class WaybackSaveTests(SimpleTestCase):
@@ -698,20 +456,6 @@ class BackgroundTaskGateTests(SimpleTestCase):
         ):
             sweep_unarchived_links()
         sweep.assert_called_once()
-
-    def test_a_chained_stripe_reconcile_stops_too(self) -> None:
-        from urbanlens.dashboard.plugins import plugin_available
-        from urbanlens.dashboard.plugins.builtin.billing import reconcile_unlisted_stripe_subscriptions
-
-        if not plugin_available("billing"):
-            self.skipTest("billing plugin is not installed")
-
-        with (
-            deployment("development"),
-            mock.patch("urbanlens.dashboard.services.billing.stripe_client.is_configured") as configured,
-        ):
-            self.assertIsNone(reconcile_unlisted_stripe_subscriptions(0.0, 0))
-        configured.assert_not_called()
 
     def test_only_an_external_entry_can_be_gated(self) -> None:
         from urbanlens.dashboard.services.core.egress import GATED_BACKGROUND_TASKS, external_background_task

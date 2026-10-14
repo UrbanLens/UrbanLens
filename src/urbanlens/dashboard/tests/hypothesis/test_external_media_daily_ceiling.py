@@ -12,7 +12,7 @@ applies" - and per-item is not a bound on an account: 20MB times however many
 distinct external photos one user cares to upvote is unbounded, written to the
 shared media volume, with the storage quota explicitly off. Filling that
 filesystem takes the database down with it, which is every user's availability
-lost to one user's clicking (N21 H19).
+lost to one user's clicking.
 
 So the exemption stays and a rolling per-profile ceiling goes beside it. Nobody
 is charged for caching someone else's photo; nobody can cache an unbounded

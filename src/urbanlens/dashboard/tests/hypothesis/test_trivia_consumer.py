@@ -179,7 +179,7 @@ class TriviaSessionConsumerTests(TransactionTestCase):
         _run(self._a_heartbeat_ping_is_ignored())
 
     async def _a_heartbeat_ping_is_ignored(self) -> None:
-        # Every game client pings every 45s so Cloudflare's ~100s idle cutoff
+        # Every game client pings every 45s so a proxy's ~100s idle cutoff
         # can't kill a lobby waiting on the host. The ping gets no reply, and
         # the socket must survive it - this is the shared
         # _ParticipantSessionConsumer.receive() all three games use.

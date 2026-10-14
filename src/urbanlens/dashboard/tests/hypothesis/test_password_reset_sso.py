@@ -1,4 +1,4 @@
-"""Tests for UL-257: password reset must not silently drop SSO-only accounts."""
+"""Password reset must not silently drop SSO-only accounts."""
 
 from __future__ import annotations
 

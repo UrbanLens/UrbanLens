@@ -15,8 +15,8 @@ class TestDatabaseNameTests(SimpleTestCase):
             self.assertEqual(isolated_test_database_name(), "test_ul_fast")
 
     def test_a_prefixed_name_is_kept(self) -> None:
-        with mock.patch.dict("os.environ", {"UL_TEST_DB_NAME": "test_p98_a"}):
-            self.assertEqual(isolated_test_database_name(), "test_p98_a")
+        with mock.patch.dict("os.environ", {"UL_TEST_DB_NAME": "test_run_a"}):
+            self.assertEqual(isolated_test_database_name(), "test_run_a")
 
     def test_unset_or_blank_leaves_django_to_name_it(self) -> None:
         for env in ({}, {"UL_TEST_DB_NAME": ""}, {"UL_TEST_DB_NAME": "  "}):

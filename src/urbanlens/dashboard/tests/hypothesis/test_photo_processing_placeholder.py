@@ -1,5 +1,5 @@
 """
-A photo whose re-encode has not landed is listed as processing, never by its stored path (P142).
+A photo whose re-encode has not landed is listed as processing, never by its stored path.
 
 The stored file of a pending upload is replaced, and deleted, by the re-encode; a listing that names
 it hands the browser a URL that 404s moments later.
@@ -122,7 +122,7 @@ class VaultListingTests(TestCase):
         with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"):
             response = self.client.post(
                 reverse("vault.photos.upload"),
-                {"image": SimpleUploadedFile("p142.jpg", _tiny_jpeg(), content_type="image/jpeg")},
+                {"image": SimpleUploadedFile("processing.jpg", _tiny_jpeg(), content_type="image/jpeg")},
             )
         self.assertEqual(response.status_code, 201, response.content)
         body = response.json()
@@ -135,7 +135,7 @@ class PinGalleryTests(TestCase):
         super().setUp()
         self.user = baker.make(User)
         self.profile = self.user.profile
-        self.pin = baker.make(Pin, profile=self.profile, slug="p142-pin")
+        self.pin = baker.make(Pin, profile=self.profile, slug="processing-pin")
         self.client = Client()
         self.client.force_login(self.user)
 

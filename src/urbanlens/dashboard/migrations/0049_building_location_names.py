@@ -1,4 +1,4 @@
-"""Building locations drop a campus's name for their own CRIS record's, and their wikis nest under the parcel's (P231, P255).
+"""Building locations drop a campus's name for their own CRIS record's, and their wikis nest under the parcel's.
 
 A building's location is one that only child pins, or a child wiki, stand on (``name_tiers.naming_scope``). On it:
 

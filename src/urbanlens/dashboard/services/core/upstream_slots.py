@@ -3,7 +3,7 @@ How many upstream fetches may be in flight: per process for a proxy, or fleet-wi
 
 A tile viewport is ~30 tiles and the browser asks for all of them at once, so on a cold cache a
 proxy can hold every request thread in the process for as long as the upstream takes per tile -
-measured at ~1.5s against REData (``P131``). Unbounded, one map load stalls the whole site.
+measured at ~1.5s against a tile service. Unbounded, one map load stalls the whole site.
 
 Each proxy gets its own subclass and its own count. Sharing one would let an overlay nobody can
 see starve the base layer under it, and the two upstreams fail independently anyway.

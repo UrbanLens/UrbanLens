@@ -26,16 +26,14 @@ from model_bakery import baker
 import yaml
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
-from urbanlens.dashboard.services.apis.locations.redata_basemap_tiles_gateway import RedataBasemapTilesGateway
 from urbanlens.dashboard.services.core import bounded_cache
 from urbanlens.dashboard.services.map.tile_cache_keys import basemap_tile_cache_key
+from urbanlens.dashboard.tests.hypothesis.tile_catalogue_fake import FakeTileCatalogue, catalogue_on
 from urbanlens.UrbanLens.environments.meta import EnvironmentTypes
 from urbanlens.UrbanLens.settings.app import settings as app_settings
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[5]
 COMPOSE = REPO_ROOT / "docker-compose.yml"
-
-_CONFIGURED = "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured"
 
 
 def _tile_cache_service() -> dict:
@@ -93,9 +91,8 @@ class ProxiedBytesGoToTheirOwnAliasTests(SimpleTestCase):
 
         for path in sources:
             text = path.read_text()
-            for prefix in ('f"ul_basemap_tile_', 'f"ul_histmap_tile_'):
-                with self.subTest(module=str(path.relative_to(REPO_ROOT)), prefix=prefix):
-                    self.assertNotIn(prefix, text, "builds a tile cache key instead of importing one")
+            with self.subTest(module=str(path.relative_to(REPO_ROOT))):
+                self.assertNotIn('f"ul_basemap_tile_', text, "builds a tile cache key instead of importing one")
 
     def test_the_tile_authorisation_grant_stays_in_the_same_store_as_the_tile(self) -> None:
         """
@@ -205,9 +202,9 @@ class WhatSeedsATileWritesWhereTheProxyReadsTests(TestCase):
         self._seed()
 
         with (
-            mock.patch(_CONFIGURED, return_value=True),
+            catalogue_on(),
             mock.patch.object(
-                RedataBasemapTilesGateway,
+                FakeTileCatalogue,
                 "download_tile",
                 side_effect=AssertionError("went upstream for a seeded tile"),
             ),

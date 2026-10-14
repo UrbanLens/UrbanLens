@@ -2,7 +2,7 @@
  * MapLibre-native counterpart to `markup-engine.ts`'s `renderShape` - draws the same stored
  * `ShapeSpec` shapes (comment/DM map attachments, pin/wiki annotations) but as MapLibre GL JS
  * sources/layers/markers instead of Leaflet vectors, for maps rendered by the MapLibre engine
- * (PL8 item 2's WebGL2 path). Reuses `markup-engine.ts`'s own pure HTML builders
+ * (the WebGL2 path). Reuses `markup-engine.ts`'s own pure HTML builders
  * (`arrowheadSvg`, `textLabelHtml`) rather than re-deriving them, so an arrow/text label looks
  * identical on either engine.
  *

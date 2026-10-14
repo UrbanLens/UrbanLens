@@ -20,8 +20,9 @@ _RESOLVE_URL = "/dashboard/api/external/v1/locations/resolve/"
 
 #: Patch targets are the names bound in ``external_api.views``, not the ones in
 #: the autocomplete service - the view imported them at module load.
-_SEARCH_PLACES = "urbanlens.dashboard.external_api.views.search_google_places"
-_RESOLVE_PLACE = "urbanlens.dashboard.external_api.views.resolve_google_place"
+_SEARCH_PLACES = "urbanlens.dashboard.external_api.views.search_places"
+_RESOLVE_PLACE = "urbanlens.dashboard.external_api.views.resolve_place"
+_PLACES_AVAILABLE = "urbanlens.dashboard.external_api.views.places_resolution.available"
 
 
 def _bearer(raw_key: str) -> dict:
@@ -133,9 +134,19 @@ class PlaceResolveTests(LocationSearchTestCase):
         self.assertEqual(response.status_code, 403)
         resolve_place.assert_not_called()
 
+    def test_no_places_provider_is_a_503_and_asks_nothing(self) -> None:
+        with (
+            patch(_PLACES_AVAILABLE, return_value=False),
+            patch(_RESOLVE_PLACE) as resolve_place,
+        ):
+            response = self._resolve(place_id="place-123")
+
+        self.assertEqual(response.status_code, 503)
+        resolve_place.assert_not_called()
+
     def test_resolved_place_returns_coordinates_and_name(self) -> None:
         with (
-            patch("urbanlens.dashboard.external_api.views.settings.google_unrestricted_api_key", "test-key"),
+            patch(_PLACES_AVAILABLE, return_value=True),
             patch(_RESOLVE_PLACE, return_value=_answered((42.5, -73.5, "Old Mill"))) as resolve_place,
         ):
             body = self._resolve(place_id="place-123").json()
@@ -145,14 +156,14 @@ class PlaceResolveTests(LocationSearchTestCase):
 
     def test_unresolvable_place_is_a_404(self) -> None:
         with (
-            patch("urbanlens.dashboard.external_api.views.settings.google_unrestricted_api_key", "test-key"),
+            patch(_PLACES_AVAILABLE, return_value=True),
             patch(_RESOLVE_PLACE, return_value=_answered((None, None, None))),
         ):
             self.assertEqual(self._resolve(place_id="nope").status_code, 404)
 
     def test_a_place_id_no_provider_issues_is_a_400_not_a_503_a_client_retries(self) -> None:
         with (
-            patch("urbanlens.dashboard.external_api.views.settings.google_unrestricted_api_key", "test-key"),
+            patch(_PLACES_AVAILABLE, return_value=True),
             patch(_RESOLVE_PLACE, return_value=UpstreamResult(Outcome.REFUSED)),
         ):
             response = self._resolve(place_id="places/ChIJ abc")
@@ -162,7 +173,7 @@ class PlaceResolveTests(LocationSearchTestCase):
 
     def test_an_unavailable_provider_is_a_503_with_its_wait_not_a_404(self) -> None:
         with (
-            patch("urbanlens.dashboard.external_api.views.settings.google_unrestricted_api_key", "test-key"),
+            patch(_PLACES_AVAILABLE, return_value=True),
             patch(_RESOLVE_PLACE, return_value=UpstreamResult(Outcome.BUSY, retry_after=2)),
         ):
             response = self._resolve(place_id="place-123")

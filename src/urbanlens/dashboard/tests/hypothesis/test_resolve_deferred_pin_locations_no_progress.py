@@ -1,4 +1,4 @@
-"""Regression test: cids stuck pending on REData's own end must not retry forever."""
+"""Regression test: cids stuck pending on the resolver's own end must not retry forever."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard import tasks
 from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType
 from urbanlens.dashboard.models.notifications.model import NotificationLog
-from urbanlens.dashboard.services.apis.locations.cid_resolution import PROVIDER_REDATA, CidResolutionResult
+from urbanlens.dashboard.services.apis.locations.cid_resolution import CidResolutionResult
 
 #: Positions in retry()'s args list, counted from the start so appending a
 #: parameter cannot silently repoint them onto the wrong value.
@@ -37,7 +37,7 @@ class ResolveDeferredPinLocationsNoProgressTests(TestCase):
         ]
 
     def _all_pending_result(self) -> CidResolutionResult:
-        return CidResolutionResult(provider=PROVIDER_REDATA, pending=[111, 222], request_failed=False)
+        return CidResolutionResult(provider="fake", pending=[111, 222], request_failed=False)
 
     def test_no_progress_below_the_cap_still_retries(self) -> None:
         with (
@@ -86,9 +86,9 @@ class ResolveDeferredPinLocationsNoProgressTests(TestCase):
         self.assertEqual(notification.importance, Importance.HIGH)
 
     def test_partial_progress_resets_the_no_progress_counter(self) -> None:
-        """One cid resolving out of the batch is real progress, even if the rest are still pending - it must not inherit whatever no-progress streak preceded it, or a REData queue that's slowly working through a large batch would still get cut off early by a stale counter."""
+        """One cid resolving out of the batch is real progress, even if the rest are still pending - it must not inherit whatever no-progress streak preceded it, or a resolver queue that's slowly working through a large batch would still get cut off early by a stale counter."""
         partial = CidResolutionResult(
-            provider=PROVIDER_REDATA, resolved={111: (41.348754, -71.453896)}, pending=[222], request_failed=False
+            provider="fake", resolved={111: (41.348754, -71.453896)}, pending=[222], request_failed=False
         )
         with (
             mock.patch("urbanlens.dashboard.services.apis.locations.cid_resolution.resolve_cids", return_value=partial),

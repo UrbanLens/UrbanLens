@@ -63,7 +63,7 @@ class StubSocket {
         this.emit("open", {});
     }
 
-    /** The connection went away on its own - a network hiccup, or the tunnel's idle cutoff. */
+    /** The connection went away on its own - a network hiccup, or a proxy's idle cutoff. */
     drop(code = 1006): void {
         this.readyState = StubSocket.CLOSED;
         this.emit("close", { code });
@@ -229,9 +229,9 @@ describe("the heartbeat", () => {
         expect(current().sent).toEqual([PING, PING]);
     });
 
-    test("gets two pings inside Cloudflare's ~100s idle cutoff", () => {
+    test("gets two pings inside a proxy's ~100s idle cutoff", () => {
         // The reason the interval exists: one lost ping must not be enough to
-        // let the tunnel time the connection out.
+        // let the proxy time the connection out.
         open();
         current().accept();
 

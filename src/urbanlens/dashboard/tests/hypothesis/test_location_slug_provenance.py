@@ -1,5 +1,5 @@
 """
-P186: a wiki's URL slug comes only from a provider's name for its Location, or the uuid.
+A wiki's URL slug comes only from a provider's name for its Location, or the uuid.
 
 Community text (wiki names, aliases, child-wiki slugs) never reaches a Location or Wiki slug; pin slugs, which only their
 owner sees, still come from the pin's own name.

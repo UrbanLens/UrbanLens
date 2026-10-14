@@ -4,7 +4,7 @@ A drawn region has to be bounded, because dissolving it runs in the request.
 `dissolve_polygons` unions every component of the region inside the request
 that drew it. Nothing capped the count. It comes from a POST body: `parse_region_geojson` reads
 `include_regions`/`exclude_regions` off the saved-filter form and hands whatever
-parsed straight through (N21 H12).
+parsed straight through.
 
 Vertices matter as much as components. One polygon with a hundred thousand of
 them is a cheap `len()` and an expensive `intersects()`, so a component cap

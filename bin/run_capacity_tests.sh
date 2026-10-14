@@ -7,8 +7,8 @@
 #
 # Usage:
 #   bin/run_capacity_tests.sh --url http://localhost:31000 \
-#       --provision-container ul_perf_app --db-container ul_perf_db \
-#       --container-prefix ul_perf_ --nginx-container ul_perf_nginx --app-container ul_perf_app --population 1000
+#       --provision-container urbanlens_perf_app --db-container urbanlens_perf_db \
+#       --container-prefix urbanlens_perf_ --nginx-container urbanlens_perf_nginx --app-container urbanlens_perf_app --population 1000
 #
 # Anything after `--` is handed to `k6 run` unchanged.
 
@@ -107,8 +107,8 @@ fi
 case "${BASE_URL}" in
 	*staging*) refuse "${BASE_URL} names staging." ;;
 	*prod*) refuse "${BASE_URL} names production." ;;
-	*.dev.urbanlens.org*) ;;
-	*urbanlens.org*) refuse "${BASE_URL} is on urbanlens.org but is not a *.dev.urbanlens.org environment." ;;
+	*.dev.example.com*) ;;
+	*example.com*) refuse "${BASE_URL} is on example.com but is not a *.dev.example.com environment." ;;
 esac
 
 for container in "${PROVISION_CONTAINER}" "${DB_CONTAINER}" "${NGINX_CONTAINER}" "${APP_CONTAINER}" "${CONTAINER_PREFIX}"; do

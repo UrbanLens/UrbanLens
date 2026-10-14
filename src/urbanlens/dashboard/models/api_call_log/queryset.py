@@ -128,7 +128,6 @@ class ApiCallLogQuerySet(abstract.DashboardQuerySet["ApiCallLog"]):
                 errors=Sum("calls", filter=Q(success=False, was_rate_limited=False, was_geo_filtered=False, was_service_disabled=False, was_rejected_input=False), default=0),
                 timed_ms_total=Sum(F("response_ms") * F("calls"), filter=timed),
                 timed_calls=Sum("calls", filter=timed),
-                total_cost=Sum("cost_estimate"),
             )
             .order_by("service")
         )

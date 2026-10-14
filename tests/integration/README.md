@@ -3,8 +3,7 @@
 Playwright suite that drives a **deployed** UrbanLens instance. Run by hand
 against staging; never against production, which the config refuses outright.
 
-Full documentation, including why Playwright, how the accounts work and how to
-write a test: **[`docs/INTEGRATION_TESTS.md`](../../docs/INTEGRATION_TESTS.md)**.
+The helpers in `lib/` and the specs show how the accounts work and how to write a test.
 
 ## Run it
 

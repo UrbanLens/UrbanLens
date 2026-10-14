@@ -2,12 +2,9 @@
 A user's own calendar event is never deleted, a refused event does not stop a push, and the rollout command reaches
 every event that may hold a withheld location.
 
-An import links the user's own event; only an event UrbanLens made may be deleted, on every removal path. See
-UrbanLens#330 ("removing an imported trip deletes the user's own event"). A push writes every event it can, and stops
-early only for a refusal that would refuse the rest too. See UrbanLens#332 ("a push stops at the first refused
-event"). ``clear_withheld_calendar_locations`` also rewrites an unscheduled stop's event and an imported event whose
-fingerprint shows UrbanLens wrote the location now withheld. See UrbanLens#333 ("the rollout command misses
-unscheduled and imported events").
+An import links the user's own event; only an event UrbanLens made may be deleted, on every removal path. A push writes every event it can, and stops
+early only for a refusal that would refuse the rest too. ``clear_withheld_calendar_locations`` also rewrites an unscheduled stop's event and an imported event whose
+fingerprint shows UrbanLens wrote the location now withheld.
 """
 
 from __future__ import annotations

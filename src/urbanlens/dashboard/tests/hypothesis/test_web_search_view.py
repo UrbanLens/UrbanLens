@@ -432,7 +432,7 @@ class WebSearchViewTests(TestCase):
         self.assertIn("http://example.com/page", content)
 
     def test_thumbnails_and_favicons_come_from_this_site(self) -> None:
-        """P165: the browser never asks the result's host, or Google's favicon service, for anything."""
+        """The browser never asks the result's host, or Google's favicon service, for anything."""
         from django.test import RequestFactory
         from django.urls import reverse
 

@@ -154,43 +154,7 @@
                 </div>
                 <span class="attr-list-tag">Parks</span>
             </div>
-            <div class="attr-list-item">
-                <div class="attr-list-main">
-                    <h3><a href="https://openai.com/" rel="noopener noreferrer" target="_blank">OpenAI</a></h3>
-                    <p>
-                        The <a href="https://github.com/openai/openai-python" rel="noopener noreferrer" target="_blank">openai</a>
-                        Python client library powers our OpenAI-compatible API calls. We are not currently using
-                        OpenAI&rsquo;s GPT models, though we may enable them in the future.
-                    </p>
-                </div>
-                <span class="attr-list-tag">AI</span>
-            </div>
-            <div class="attr-list-item">
-                <div class="attr-list-main">
-                    <h3><a href="https://developers.cloudflare.com/workers-ai/" rel="noopener noreferrer" target="_blank">Cloudflare Workers AI</a></h3>
-                    <p>
-                        Optional AI-assisted features are routed through Cloudflare Workers AI.
-                    </p>
-                </div>
-                <span class="attr-list-tag">AI</span>
-            </div>
-            <div class="attr-list-item">
-                <div class="attr-list-main">
-                    <h3><a href="https://mistral.ai/" rel="noopener noreferrer" target="_blank">Mistral AI</a></h3>
-                    <p>
-                        The Mistral 7B Instruct model powers several AI-assisted features, hosted via
-                        Cloudflare Workers AI.
-                    </p>
-                </div>
-                <span class="attr-list-tag">AI</span>
-            </div>
-            <div class="attr-list-item">
-                <div class="attr-list-main">
-                    <h3><a href="https://www.anthropic.com/" rel="noopener noreferrer" target="_blank">Anthropic Claude</a></h3>
-                    <p>Claude models are also used for AI-assisted features.</p>
-                </div>
-                <span class="attr-list-tag">AI</span>
-            </div>
+            {% plugin_slot "thanks.attributions" %}
             <div class="attr-list-item">
                 <div class="attr-list-main">
                     <h3><a href="https://brave.com/search/api/" rel="noopener noreferrer" target="_blank">Brave Search</a></h3>

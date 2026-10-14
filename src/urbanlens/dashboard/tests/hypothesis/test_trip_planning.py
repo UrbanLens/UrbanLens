@@ -1,4 +1,4 @@
-"""Tests for trip-planning upgrades: OSRM drive-time legs, optional trip names (UL-60/UL-360)."""
+"""Tests for trip-planning upgrades: OSRM drive-time legs, optional trip names."""
 
 from __future__ import annotations
 
@@ -87,7 +87,7 @@ class ComputeLegsTests(TestCase):
 
 
 class TripNameTests(TestCase):
-    """Generated trip names (UL-360)."""
+    """Generated trip names."""
 
     def test_random_trip_name_is_nonempty_two_parter(self) -> None:
         for _ in range(20):

@@ -17,6 +17,7 @@ from rest_framework import serializers
 from urbanlens.dashboard.external_api.fields import JSONField
 from urbanlens.dashboard.models.abstract.session_departure import SessionDeparture
 from urbanlens.dashboard.models.spotguessr.model import GameSessionStatus, SpotGuessrMode
+from urbanlens.dashboard.plugins.drf import ExtensibleSerializer
 from urbanlens.dashboard.services.core.numbers import DB_BIGINT_MAX
 from urbanlens.dashboard.services.spotguessr import relevance as spotguessr_relevance, session as spotguessr_session
 
@@ -100,14 +101,14 @@ def build_reveal_payload(round_: GameRound, guess: Guess, bonus_tiers: list[str]
     return {key: internal[key] for key in REVEAL_PAYLOAD_FIELDS if key in internal}
 
 
-class SpotGuessrModeSerializer(serializers.Serializer):
+class SpotGuessrModeSerializer(ExtensibleSerializer):
     """One selectable game mode."""
 
     value = serializers.CharField(read_only=True)
     label = serializers.CharField(read_only=True)
 
 
-class PlayerRatingSerializer(serializers.Serializer):
+class PlayerRatingSerializer(ExtensibleSerializer):
     """A player's Glicko-2 standing in one mode, on the display (Elo-familiar) scale."""
 
     mode = serializers.CharField(read_only=True)
@@ -117,7 +118,7 @@ class PlayerRatingSerializer(serializers.Serializer):
     last_played_at = serializers.DateTimeField(read_only=True, allow_null=True)
 
 
-class FriendRatingSerializer(serializers.Serializer):
+class FriendRatingSerializer(ExtensibleSerializer):
     """
     One friend's visible rating, with their identity already resolved for the viewer.
 
@@ -133,7 +134,7 @@ class FriendRatingSerializer(serializers.Serializer):
     rating = PlayerRatingSerializer(read_only=True, allow_null=True)
 
 
-class SpotGuessrOverviewSerializer(serializers.Serializer):
+class SpotGuessrOverviewSerializer(ExtensibleSerializer):
     """Everything a client needs to draw the SpotGuessr start screen."""
 
     modes = SpotGuessrModeSerializer(many=True, read_only=True)
@@ -148,7 +149,7 @@ class SpotGuessrOverviewSerializer(serializers.Serializer):
     friend_ratings = FriendRatingSerializer(many=True, read_only=True, required=False)
 
 
-class SpotGuessrSessionCreateSerializer(serializers.Serializer):
+class SpotGuessrSessionCreateSerializer(ExtensibleSerializer):
     """
     The body of a solo session start.
 
@@ -226,7 +227,7 @@ class SpotGuessrSessionCreateSerializer(serializers.Serializer):
         return value
 
 
-class SpotGuessrRoundSerializer(serializers.Serializer):
+class SpotGuessrRoundSerializer(ExtensibleSerializer):
     """
     One round as an external client sees it, before the answer is known.
 
@@ -249,7 +250,7 @@ class SpotGuessrRoundSerializer(serializers.Serializer):
     street_view_lng = serializers.FloatField(read_only=True, required=False)
 
 
-class SpotGuessrSessionCreateResponseSerializer(serializers.Serializer):
+class SpotGuessrSessionCreateResponseSerializer(ExtensibleSerializer):
     """The freshly started session, with its first round already generated."""
 
     session_id = serializers.IntegerField(read_only=True)
@@ -260,7 +261,7 @@ class SpotGuessrSessionCreateResponseSerializer(serializers.Serializer):
     round = SpotGuessrRoundSerializer(read_only=True)
 
 
-class SpotGuessrParticipantSerializer(serializers.Serializer):
+class SpotGuessrParticipantSerializer(ExtensibleSerializer):
     """One participant's line on the final scoreboard."""
 
     profile_slug = serializers.CharField(read_only=True, allow_null=True)
@@ -274,7 +275,7 @@ class SpotGuessrParticipantSerializer(serializers.Serializer):
     departure = serializers.ChoiceField(choices=SessionDeparture.choices, read_only=True, allow_null=True)
 
 
-class SpotGuessrSummarySerializer(serializers.Serializer):
+class SpotGuessrSummarySerializer(ExtensibleSerializer):
     """A session's final scoreboard."""
 
     session_id = serializers.IntegerField(read_only=True)
@@ -285,7 +286,7 @@ class SpotGuessrSummarySerializer(serializers.Serializer):
     participants = SpotGuessrParticipantSerializer(many=True, read_only=True)
 
 
-class SpotGuessrRoundResponseSerializer(serializers.Serializer):
+class SpotGuessrRoundResponseSerializer(ExtensibleSerializer):
     """
     The current-round response, which is one of three mutually exclusive states.
 
@@ -300,7 +301,7 @@ class SpotGuessrRoundResponseSerializer(serializers.Serializer):
     no_eligible_locations = serializers.BooleanField(read_only=True, required=False)
 
 
-class SpotGuessrGuessSerializer(serializers.Serializer):
+class SpotGuessrGuessSerializer(ExtensibleSerializer):
     """A guess: where (and optionally when) the player thinks the round's location is."""
 
     latitude = serializers.FloatField(min_value=-90.0, max_value=90.0)
@@ -310,7 +311,7 @@ class SpotGuessrGuessSerializer(serializers.Serializer):
     guessed_date = serializers.DateField(required=False, allow_null=True)
 
 
-class SpotGuessrGuessResponseSerializer(serializers.Serializer):
+class SpotGuessrGuessResponseSerializer(ExtensibleSerializer):
     """One guess's own score, plus the answer once the round is actually revealed."""
 
     round_id = serializers.IntegerField(read_only=True)
@@ -327,7 +328,7 @@ class SpotGuessrGuessResponseSerializer(serializers.Serializer):
     image_caption = serializers.CharField(read_only=True, required=False, allow_null=True)
 
 
-class SpotGuessrSessionSerializer(serializers.Serializer):
+class SpotGuessrSessionSerializer(ExtensibleSerializer):
     """
     One row of the session list, and the whole body of the session detail.
 
@@ -351,31 +352,31 @@ class SpotGuessrSessionSerializer(serializers.Serializer):
     departure = serializers.ChoiceField(choices=SessionDeparture.choices, read_only=True, allow_null=True)
 
 
-class SpotGuessrSessionListQuerySerializer(serializers.Serializer):
+class SpotGuessrSessionListQuerySerializer(ExtensibleSerializer):
     """Query parameters for the session list."""
 
     status = serializers.ChoiceField(choices=GameSessionStatus.choices, required=False)
 
 
-class SpotGuessrRoundExpireResponseSerializer(serializers.Serializer):
+class SpotGuessrRoundExpireResponseSerializer(ExtensibleSerializer):
     """Whether the round timer's expiry call actually revealed the round."""
 
     revealed = serializers.BooleanField(read_only=True)
 
 
-class SpotGuessrFeedbackSerializer(serializers.Serializer):
+class SpotGuessrFeedbackSerializer(ExtensibleSerializer):
     """A player's explicit reaction to the photo/imagery a round just showed."""
 
     kind = serializers.ChoiceField(choices=[(kind, kind) for kind in spotguessr_relevance.EXPLICIT_KINDS])
 
 
-class SpotGuessrFeedbackResponseSerializer(serializers.Serializer):
+class SpotGuessrFeedbackResponseSerializer(ExtensibleSerializer):
     """The feedback kind actually recorded."""
 
     kind = serializers.CharField(read_only=True)
 
 
-class SpotGuessrPreferencesUpdateSerializer(serializers.Serializer):
+class SpotGuessrPreferencesUpdateSerializer(ExtensibleSerializer):
     """
     The one genuinely user-editable SpotGuessr preference.
 
@@ -386,13 +387,13 @@ class SpotGuessrPreferencesUpdateSerializer(serializers.Serializer):
     show_ratings_to_friends = serializers.BooleanField()
 
 
-class SpotGuessrPreferencesResponseSerializer(serializers.Serializer):
+class SpotGuessrPreferencesResponseSerializer(ExtensibleSerializer):
     """The preference row after a write."""
 
     show_ratings_to_friends = serializers.BooleanField(read_only=True)
 
 
-class SpotGuessrEligibleCountQuerySerializer(serializers.Serializer):
+class SpotGuessrEligibleCountQuerySerializer(ExtensibleSerializer):
     """Query parameters for the eligible-pin-count pre-check."""
 
     #: A GeoJSON-encoded string, matching the internal ``SpotGuessrAreaPinCountView`` query param exactly -
@@ -400,13 +401,13 @@ class SpotGuessrEligibleCountQuerySerializer(serializers.Serializer):
     geo_bounds = serializers.CharField()
 
 
-class SpotGuessrEligibleCountResponseSerializer(serializers.Serializer):
+class SpotGuessrEligibleCountResponseSerializer(ExtensibleSerializer):
     """How many of the caller's own pins fall inside a candidate area."""
 
     count = serializers.IntegerField(read_only=True)
 
 
-class SpotGuessrEligiblePinsQuerySerializer(serializers.Serializer):
+class SpotGuessrEligiblePinsQuerySerializer(ExtensibleSerializer):
     """Query parameters for the eligible-pins browse feed."""
 
     #: Optional - omitting it lists every one of the caller's pins, matching
@@ -414,7 +415,7 @@ class SpotGuessrEligiblePinsQuerySerializer(serializers.Serializer):
     geo_bounds = serializers.CharField(required=False)
 
 
-class SpotGuessrEligiblePinSerializer(serializers.Serializer):
+class SpotGuessrEligiblePinSerializer(ExtensibleSerializer):
     """One of the caller's own pins, as a candidate SpotGuessr location."""
 
     label = serializers.CharField(read_only=True)

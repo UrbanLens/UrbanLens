@@ -114,7 +114,7 @@ REVIEWED: dict[str, str] = {
         "apply_0_9_0_defaults writes 0.9.0's limits and notes into ApiRateLimit rows that still hold exactly 0.8.0's. "
         "A reverse leaves them: a row with 0.9.0's values cannot be told from one an admin set the same, so restoring "
         "0.8.0's could lift a cap somebody chose. The values are ordinary integers and text, and 0.8.0 runs with "
-        "REData Places held to 40 a day."
+        "A places provider held to 40 a day."
     ),
     "0067_calendar_export_resumable.py": (
         "raise_calendar_minute_limit moves google_calendar rows still holding every release's 30 a minute to 120; a row "

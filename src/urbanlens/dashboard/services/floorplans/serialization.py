@@ -153,7 +153,7 @@ def document_for(floorplan: Floorplan) -> dict[str, Any]:
         "valid_from": floorplan.valid_from.isoformat() if floorplan.valid_from else None,
         "floor_count": floorplan.floor_count,
         # Deliberately not "origin": resolution.py has long used that key for provenance ("local" /
-        # "community" / "redata"), and the save view merges that in over the document - so a
+        # "community" / a provider's), and the save view merges that in over the document - so a
         # coordinate anchor stored under the same name is silently replaced by the string "local".
         "plan_origin": ({"lat": float(floorplan.origin_lat), "lng": float(floorplan.origin_lng)} if floorplan.origin_lat is not None and floorplan.origin_lng is not None else None),
         "rotation_degrees": floorplan.rotation_degrees,

@@ -4,11 +4,14 @@ This plugin registers the service's rate-limit defaults so calls are throttled a
 
 from __future__ import annotations
 
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.UrbanLens.egress import EgressCategory
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.plugins.base import PluginContext
 
 
 class ImmichPlugin(UrbanLensPlugin):
@@ -20,18 +23,19 @@ class ImmichPlugin(UrbanLensPlugin):
     author: ClassVar[str] = "UrbanLens"
     order: ClassVar[int] = 40
 
-    def get_service_defaults(self) -> dict[str, ServiceDefaults]:
-        """
-        Rate-limit defaults for the Immich API.
+    def setup(self, plugin: PluginContext) -> None:
+        """Rate-limit defaults for Immich, which is self-hosted per user, so the limits only guard against runaway loops."""
+        from urbanlens.dashboard.plugins.points import SERVICE_DEFAULTS
 
-        Returns:
-            Defaults for the ``immich`` service key."""
-        return {
-            "immich": ServiceDefaults(
-                display_name="Immich",
-                category=EgressCategory.INTERNAL,
-                calls_per_minute=60,
-                calls_per_day=5000,
-                notes="Self-hosted per user - each user's calls hit their own server, not a shared quota, so limits here mainly guard against runaway loops.",
-            ),
-        }
+        plugin.register_all(
+            SERVICE_DEFAULTS,
+            {
+                "immich": ServiceDefaults(
+                    display_name="Immich",
+                    category=EgressCategory.INTERNAL,
+                    calls_per_minute=60,
+                    calls_per_day=5000,
+                    notes="Self-hosted per user - each user's calls hit their own server, not a shared quota, so limits here mainly guard against runaway loops.",
+                ),
+            },
+        )

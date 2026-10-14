@@ -1,5 +1,5 @@
 """
-An upload Garage cannot store is a 503 the client may retry, with nothing left behind (P201).
+An upload Garage cannot store is a 503 the client may retry, with nothing left behind.
 
 Garage needs both nodes for a write, and while one is stalled or disconnected it answers 503. That raised out of every
 upload view as a 500. Each test here puts default storage on the real S3 backend, built from production's options, and

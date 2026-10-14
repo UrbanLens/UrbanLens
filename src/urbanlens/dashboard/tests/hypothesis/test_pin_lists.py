@@ -178,7 +178,7 @@ class PinListDetailPaginationTests(TestCase):
 
 
 class PinListExportViewTests(TestCase):
-    """POST /lists/<slug>/export/ downloads every pin on the list (UL-377)."""
+    """POST /lists/<slug>/export/ downloads every pin on the list."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)

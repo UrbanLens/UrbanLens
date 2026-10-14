@@ -1,4 +1,4 @@
-"""Creating a pin through the serializer must not block on an AI call."""
+"""Creating a pin through the serializer must not block on a label-matching call."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ class PinSerializerAutoTagTests(TestCase):
         serializer.is_valid(raise_exception=True)
         return serializer.save(profile=self.profile, location=self.location)
 
-    def test_no_ai_call_happens_inside_the_request(self) -> None:
+    def test_no_label_matching_happens_inside_the_request(self) -> None:
         with mock.patch(_SUGGEST) as suggest, mock.patch(_ENQUEUE):
             self._create()
         suggest.assert_not_called()

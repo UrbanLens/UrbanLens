@@ -36,7 +36,7 @@ class PlaceDetailsUpstream(RequestUpstream):
 
 
 class NearbyLandmarksUpstream(RequestUpstream):
-    """Historical landmarks for the Places layer, from REData or Google."""
+    """Historical landmarks for the Places layer, from the active places provider."""
 
     name = "places.landmarks"
     deadline = 8.0
@@ -44,7 +44,7 @@ class NearbyLandmarksUpstream(RequestUpstream):
 
 
 class NationalParksUpstream(RequestUpstream):
-    """National parks near a map click, from REData's catalogue."""
+    """National parks near a map click, from a park catalogue."""
 
     name = "places.parks"
     deadline = 8.0
@@ -67,40 +67,11 @@ class WeatherForecastUpstream(RequestUpstream):
     rate = Rate(limit=30, window_seconds=60)
 
 
-class HistoricalMapsBrowseUpstream(RequestUpstream):
-    """The list of georeferenced sheets covering a pin or wiki."""
+class ProxiedMediaUpstream(RequestUpstream):
+    """One file proxied from an upstream that keeps its credentials server-side. Throttled on its routes rather than here, since they are anonymous."""
 
-    name = "historical_maps.browse"
-    deadline = 10.0
-    rate = Rate(limit=30, window_seconds=60)
-
-
-class HistoricalMapVolumesUpstream(RequestUpstream):
-    """The catalogued map volumes of the place a pin or wiki is in, listed beside the covering sheets."""
-
-    name = "historical_maps.volumes"
-    deadline = 10.0
-    rate = Rate(limit=30, window_seconds=60)
-
-
-class RedataMediaUpstream(RequestUpstream):
-    """One file proxied from REData. Throttled on its routes rather than here, since they are anonymous."""
-
-    name = "redata.media"
+    name = "proxied.media"
     deadline = 30.0
-
-
-class LandUseAreasUpstream(RequestUpstream):
-    """
-    The Private Pin map's Land Use layer: the pin's parcel, then its Special Land Use Area boundaries, from REData.
-
-    A parcel REData has not met runs its whole tier pipeline; one that outruns the deadline still lands in the parcel
-    lookup's shared answer, so the next toggle is quick.
-    """
-
-    name = "redata.land_use_areas"
-    deadline = 15.0
-    rate = Rate(limit=30, window_seconds=60)
 
 
 class FlickrAlbumUpstream(RequestUpstream):

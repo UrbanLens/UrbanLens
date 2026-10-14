@@ -1,0 +1,9 @@
+{% for source in sources %}
+<div class="map-overlay-historical ul-dialog-body">
+    <h4 class="map-overlay-historical-heading">{{ source.heading }}</h4>
+    <div class="map-overlay-historical-results"
+         hx-get="{{ source.url }}" hx-trigger="{{ trigger }}" hx-swap="innerHTML">
+        <p class="map-overlay-manage-empty">{{ source.empty_text }}</p>
+    </div>
+</div>
+{% endfor %}

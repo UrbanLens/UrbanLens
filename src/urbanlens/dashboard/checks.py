@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import ipaddress
 import os
 import sys
 from typing import TYPE_CHECKING
@@ -234,125 +233,6 @@ def check_object_storage_is_configured(app_configs: Sequence[AppConfig] | None =
     return messages
 
 
-#: Provider keys that belong only in the ai-inference container.
-_PROVIDER_KEY_SETTINGS = ("anthropic_api_key", "openai_api_key", "cloudflare_ai_api_key")
-
-
-@register()
-def check_provider_keys_are_not_on_the_app_tier(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
-    """
-    Warn when a provider key is readable on the app tier instead of ai-inference.
-
-    Args:
-        app_configs: Unused; part of Django's check signature.
-        **kwargs: Unused; part of Django's check signature.
-
-    Returns:
-        One warning naming every provider key that should have been in
-        ``.env.ai`` instead, or an empty list.
-    """
-    from urbanlens.UrbanLens.settings.app import settings as app_settings
-
-    if not getattr(app_settings, "ai_inference_url", None):
-        return []
-    if getattr(settings, "UL_PROCESS_ROLE", "") == "inference":
-        return []
-
-    present = [name for name in _PROVIDER_KEY_SETTINGS if getattr(app_settings, name, None)]
-    if not present:
-        return []
-    return [
-        CheckWarning(
-            f"Provider API key(s) readable by this process: {', '.join(sorted(present))}.",
-            hint=(
-                "This deployment routes inference through ai-inference, so nothing here reads these. "
-                "They are almost certainly set in the root .env, which app and celery-worker load in full - "
-                "putting a provider credential in the same environment as UL_DB_PASS and "
-                "UL_FIELD_ENCRYPTION_KEY. Move them to .env.ai, which only ai-inference reads. "
-                "See .env.ai-sample and docs/AI_PIPELINE.md."
-            ),
-            id="dashboard.W001",
-        ),
-    ]
-
-
-#: Hosts a dev deployment may point REData at without warning.
-_LOCAL_REDATA_HOSTS = ("localhost", "127.0.0.1", "::1")
-
-#: The private IPv4 ranges of RFC 1918.
-_RFC_1918_NETWORKS = (ipaddress.ip_network("10.0.0.0/8"), ipaddress.ip_network("172.16.0.0/12"), ipaddress.ip_network("192.168.0.0/16"))
-
-#: Host fragments that identify a non-production REData.
-_LOCAL_REDATA_MARKERS = (".dev.", "urbanlens_redata", "redata-", "_redata")
-
-
-def _redata_host_is_local(url: str) -> bool:
-    """
-    Whether *url* points at a local or dev REData instance.
-
-    Args:
-        url: The configured ``redata_api_url``.
-
-    Returns:
-        True when the host is this machine, a container beside it, a private
-        address, or a dev environment.
-    """
-    from urllib.parse import urlparse
-
-    host = (urlparse(url).hostname or "").lower()
-    if not host:
-        return True
-    if host in _LOCAL_REDATA_HOSTS or host.endswith(".local"):
-        return True
-    if any(marker in host for marker in _LOCAL_REDATA_MARKERS):
-        return True
-    if "." not in host:
-        return True
-    try:
-        address = ipaddress.ip_address(host)
-    except ValueError:
-        return False
-    return any(address in network for network in _RFC_1918_NETWORKS)
-
-
-@register()
-def check_dev_is_not_pointed_at_a_real_redata(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
-    """
-    Warn when a dev deployment points at a non-local REData.
-
-    Args:
-        app_configs: Unused; part of Django's check signature.
-        **kwargs: Unused; part of Django's check signature.
-
-    Returns:
-        One warning, or an empty list.
-    """
-    from urbanlens.UrbanLens.settings.app import settings as app_settings
-
-    environment = str(getattr(settings, "ENVIRONMENT_NAME", "")).lower()
-    if environment not in {"development", "local"}:
-        return []
-
-    url = getattr(app_settings, "redata_api_url", None)
-    if not url or _redata_host_is_local(str(url)):
-        return []
-
-    return [
-        CheckWarning(
-            f"This {environment} deployment's REData is {url}, which is not a local or dev instance.",
-            hint=(
-                "REData calls are allowed from every environment (D26), so this deployment's calls spend that "
-                "REData's budget - production's, when it is the hosted one. REData reaches billable providers on "
-                "our behalf on a cache miss, and one pin import enqueues thousands of such calls. That is the "
-                "intended way for development to reach real data (REData caches the answer for everyone), but "
-                "point UL_REDATA_API_URL at your own instance (dev_env.py --own-redata), or clear it "
-                "(--no-redata), for bulk work nobody is watching."
-            ),
-            id="dashboard.W003",
-        ),
-    ]
-
-
 @register()
 def check_metrics_endpoint_is_guarded(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
     """
@@ -455,7 +335,7 @@ def check_every_task_declares_a_queue(app_configs: Sequence[AppConfig] | None = 
     Refuse to start when a task this codebase defines names no queue.
 
     A task with no ``queue=`` lands on ``celery``, which is where 87 of 96 of
-    them were when D13 measured it - one pool, drained by one worker, so an
+    them were when it was measured - one pool, drained by one worker, so an
     account-sized job and a safety escalation shared four concurrency slots.
     The classification fixes that; this is what keeps it fixed, because the
     failure mode is silent. A task added without a queue goes on working, on

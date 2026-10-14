@@ -68,7 +68,7 @@
                             hx-vals='{"name": "{{ result.title|escapejs }}", "url": "{{ result.link|escapejs }}"}'>
                         <i class="material-symbols-outlined">bookmark_add</i>
                     </button>
-                    {% include "dashboard/partials/pins/_ai_extract_button.html" with url=result.link %}
+                    {% with url=result.link %}{% plugin_slot "link.actions" %}{% endwith %}
                 </div>
             </div>
         </li>

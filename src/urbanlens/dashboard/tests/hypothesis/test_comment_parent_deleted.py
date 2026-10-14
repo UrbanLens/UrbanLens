@@ -1,4 +1,4 @@
-"""Tests for UL-219: replies must survive their parent comment's deletion with their thread context preserved, not silently become unexplained top-level comments."""
+"""Replies must survive their parent comment's deletion with their thread context preserved, not silently become unexplained top-level comments."""
 
 from __future__ import annotations
 

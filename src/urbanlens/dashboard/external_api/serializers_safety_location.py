@@ -12,8 +12,10 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
+from urbanlens.dashboard.plugins.drf import ExtensibleSerializer
 
-class SafetyCheckinLocationSerializer(serializers.Serializer):
+
+class SafetyCheckinLocationSerializer(ExtensibleSerializer):
     """
     The owner's current shared position on a check-in, as read by the owner or a watching partner.
 
@@ -29,7 +31,7 @@ class SafetyCheckinLocationSerializer(serializers.Serializer):
     updated_at = serializers.DateTimeField(read_only=True, allow_null=True, source="live_location_updated_at")
 
 
-class SafetyCheckinLocationUpdateSerializer(serializers.Serializer):
+class SafetyCheckinLocationUpdateSerializer(ExtensibleSerializer):
     """
     Validates a live-location PATCH. Owner-only; every field is optional and independent.
 

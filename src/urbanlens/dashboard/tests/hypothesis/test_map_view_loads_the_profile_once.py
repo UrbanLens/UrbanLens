@@ -2,7 +2,7 @@
 A map request selects the viewer's profile row once.
 
 Measured: the row was selected three times - the middleware's descriptor read, ``view_map``'s own
-``get_or_create``, and the assistant template tag's. ``get_or_create`` selects whether or not the
+``get_or_create``, and the page-chrome template tag's. ``get_or_create`` selects whether or not the
 descriptor cache is already populated, so each extra call site pays again for a row the request holds.
 """
 

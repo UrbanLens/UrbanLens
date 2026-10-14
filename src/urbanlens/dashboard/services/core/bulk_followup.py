@@ -1,7 +1,7 @@
 """
 Bounds how many discrete Celery tasks one bulk action's per-row signals can create.
 
-A signal that queues one follow-on task per saved row (P109) turns an N-row bulk action into N
+A signal that queues one follow-on task per saved row turns an N-row bulk action into N
 broker messages sharing a FIFO queue with every other account's bulk work, drained at that queue's
 own low concurrency - one account's import can hold another account's job behind thousands of rows
 for hours, none of which even belong to it. Wrapping the bulk action's per-row loop in

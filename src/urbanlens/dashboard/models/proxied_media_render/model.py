@@ -1,4 +1,4 @@
-"""A browser-viewable rendering of a file an in-app REData proxy serves, kept so the file is downloaded and decoded once."""
+"""A browser-viewable rendering of a file an in-app media proxy serves, kept so the file is downloaded and decoded once."""
 
 from __future__ import annotations
 

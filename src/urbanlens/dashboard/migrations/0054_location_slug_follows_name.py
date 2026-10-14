@@ -1,4 +1,4 @@
-"""Re-mint every Location and Wiki slug its provider name could no longer have given (P250).
+"""Re-mint every Location and Wiki slug its provider name could no longer have given.
 
 A provider rename or a cleared name now re-mints a Location's slug as it happens (``Location._sync_slug_after_save``);
 rows renamed after 0041 ran still carry their old name's slug. As in 0041, a slug with no provider name behind it

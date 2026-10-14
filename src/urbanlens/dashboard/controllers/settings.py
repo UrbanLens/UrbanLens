@@ -15,7 +15,6 @@ from django.urls import reverse
 from django.views import View
 
 from urbanlens.dashboard.forms.settings_form import (
-    AISettingsForm,
     CommunitySettingsForm,
     ContactSettingsForm,
     DirectMessageSettingsForm,
@@ -152,7 +151,6 @@ class SettingsView(LoginRequiredMixin, View):
             "places_layer_form": PlacesLayerForm(instance=profile),
             "markup_defaults_form": MarkupDefaultsForm(instance=profile),
             "hotkey_form": HotkeySettingsForm(instance=profile),
-            "ai_form": AISettingsForm(instance=profile),
             "keyword_tagging_form": KeywordTaggingSettingsForm(instance=profile),
             "history_form": HistorySettingsForm(instance=profile),
             "community_form": CommunitySettingsForm(instance=profile),
@@ -187,7 +185,6 @@ class SettingsView(LoginRequiredMixin, View):
         places_layer_form = PlacesLayerForm(instance=profile)
         markup_defaults_form = MarkupDefaultsForm(instance=profile)
         hotkey_form = HotkeySettingsForm(instance=profile)
-        ai_form = AISettingsForm(instance=profile)
         keyword_tagging_form = KeywordTaggingSettingsForm(instance=profile)
         history_form = HistorySettingsForm(instance=profile)
         community_form = CommunitySettingsForm(instance=profile)
@@ -203,14 +200,6 @@ class SettingsView(LoginRequiredMixin, View):
                     places_layer_form.save()
                     messages.success(request, "Places layer sources saved.")
                     return _settings_redirect("places-layer-settings-section")
-
-        elif section == "ai":
-            if user_has_feature(request.user, SiteFeature.AI):
-                ai_form = AISettingsForm(request.POST, instance=profile)
-                if ai_form.is_valid():
-                    ai_form.save()
-                    messages.success(request, "AI settings saved.")
-                    return _settings_redirect("ai-settings-section")
 
         elif section == "keyword_tagging":
             keyword_tagging_form = KeywordTaggingSettingsForm(request.POST, instance=profile)
@@ -357,7 +346,6 @@ class SettingsView(LoginRequiredMixin, View):
             "places_layer_form": places_layer_form,
             "markup_defaults_form": markup_defaults_form,
             "hotkey_form": hotkey_form,
-            "ai_form": ai_form,
             "keyword_tagging_form": keyword_tagging_form,
             "history_form": history_form,
             "community_form": community_form,
@@ -382,7 +370,6 @@ class SettingsView(LoginRequiredMixin, View):
                 places_layer_form,
                 markup_defaults_form,
                 hotkey_form,
-                ai_form,
                 keyword_tagging_form,
                 history_form,
                 community_form,

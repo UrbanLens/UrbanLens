@@ -1,6 +1,6 @@
 """
 Plugin-driven place-name candidates and the resolver that picks a winner.
-The resolver is a strategy interface: :class:`RuleBasedNameResolver` is the default (source agreement first, then admin-configured priority), and a future AI-backed arbiter can slot in behind :func:`default_name_resolver` without any caller changing."""
+The resolver is a strategy interface: :class:`RuleBasedNameResolver` is the default (source agreement first, then admin-configured priority), and a different arbiter can slot in behind :func:`default_name_resolver` without any caller changing."""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.models.place.model import Place
     from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
@@ -39,16 +40,47 @@ class NameCandidate:
 class NameProvider:
     """One source of place-name candidates, contributed by a plugin."""
 
-    def __init__(self, *, source: str, verbose_name: str = "") -> None:
+    def __init__(self, *, source: str, verbose_name: str = "", tier: NameTier | None = None, child_pin_preference: int | None = None) -> None:
         """
         Initialize the provider.
 
         Args:
             source: Stable slug identifying this source (e.g. ``"wikipedia"``).
             verbose_name: Human-readable name for admin UI; defaults to the slug.
+            tier: What kind of name the source always gives; None for a source that does not declare one, whose names
+                rank as :data:`~urbanlens.dashboard.services.locations.name_tiers.DEFAULT_TIER`.
+            child_pin_preference: Set to have this source's candidate win outright when naming a detail (child) pin's
+                location; lower wins among the sources that set it. A building child pin is named from its own building's record.
         """
         self.source = source
         self.verbose_name = verbose_name or source
+        self.tier = tier
+        self.child_pin_preference = child_pin_preference
+
+    def stands_on_location(self, location: Location) -> bool:
+        """
+        Whether a building name from this source is the building the location's own page describes.
+
+        Args:
+            location: A location that describes one building.
+
+        Returns:
+            False when the source's building is a neighbour's, so its name must not name the page.
+        """
+        return True
+
+    def stands_on_parcel(self, location: Location, parcel: Place) -> bool:
+        """
+        Whether a building name from this source is that of a building on ``parcel``.
+
+        Args:
+            location: The location being named.
+            parcel: The property the location is on.
+
+        Returns:
+            False when the source's building is off the parcel.
+        """
+        return True
 
     def candidates(self, location: Location) -> list[str | None]:
         """
@@ -67,7 +99,16 @@ class NameProvider:
 class LocationCacheNameProvider(NameProvider):
     """Declarative provider reading top-level keys from a fresh LocationCache row."""
 
-    def __init__(self, *, source: str, cache_source: str, keys: tuple[str, ...], verbose_name: str = "") -> None:
+    def __init__(
+        self,
+        *,
+        source: str,
+        cache_source: str,
+        keys: tuple[str, ...],
+        verbose_name: str = "",
+        tier: NameTier | None = None,
+        child_pin_preference: int | None = None,
+    ) -> None:
         """
         Initialize the provider.
 
@@ -77,8 +118,10 @@ class LocationCacheNameProvider(NameProvider):
             keys: Top-level keys of the cached payload that may hold a name,
                 in preference order.
             verbose_name: Human-readable name for admin UI; defaults to the slug.
+            tier: See :class:`NameProvider`.
+            child_pin_preference: See :class:`NameProvider`.
         """
-        super().__init__(source=source, verbose_name=verbose_name)
+        super().__init__(source=source, verbose_name=verbose_name, tier=tier, child_pin_preference=child_pin_preference)
         self.cache_source = cache_source
         self.keys = keys
 
@@ -189,11 +232,12 @@ class RuleBasedNameResolver(NameResolver):
         return min(groups[best_key], key=lambda item: (rank_key(item[1].tier, self._scope), self._rank(item[1].source, item[0])))[1]
 
 
-#: Name-provider sources whose candidate wins outright when naming a detail (child) pin's location, in preference
-#: order. CRIS leads because a building child pin is named from its CRIS record.
-#: Hardcodes specific plugins' source slugs into this core module, the same kind of named-source
-#: special-case as ``naming.FALLBACK_ONLY_NAME_SOURCES``.
-_CHILD_PIN_PREFERRED_SOURCES = ("cris", "redata_building")
+def child_pin_preferred_sources() -> tuple[str, ...]:
+    """The sources whose candidate wins outright when naming a detail (child) pin's location, most preferred first."""
+    from urbanlens.dashboard.plugins.points import NAME_PROVIDERS
+
+    preferring = [provider for provider in NAME_PROVIDERS if provider.child_pin_preference is not None]
+    return tuple(provider.source for provider in sorted(preferring, key=lambda provider: provider.child_pin_preference or 0))
 
 
 def default_name_resolver(profile: Profile | None = None, *, location: Location | None = None) -> NameResolver:
@@ -211,6 +255,6 @@ def default_name_resolver(profile: Profile | None = None, *, location: Location 
 
     override_sources: tuple[str, ...] = ()
     if location is not None and location.pk and location.pins.filter(parent_pin__isnull=False).exists():
-        override_sources = _CHILD_PIN_PREFERRED_SOURCES
+        override_sources = child_pin_preferred_sources()
 
     return RuleBasedNameResolver(SiteSettings.get_current().name_source_priority_list, override_sources=override_sources, scope=naming_scope(location))

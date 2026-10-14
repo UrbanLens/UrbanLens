@@ -83,7 +83,6 @@ from urbanlens.dashboard.models.images import Image, ImageAttachment, ImageKeywo
 from urbanlens.dashboard.models.immich import ImmichAccount
 from urbanlens.dashboard.models.labels import COLOR_CHOICES, ICON_CHOICES, Label, LabelCustomization, LabelSerializer
 from urbanlens.dashboard.models.labels.profile_assignment import ProfileLabelAssignment
-from urbanlens.dashboard.models.link_extraction import LinkExtraction, LinkExtractionStatus
 from urbanlens.dashboard.models.links import PinLink, WikiLink
 from urbanlens.dashboard.models.location import Location, LocationSlugHistory
 from urbanlens.dashboard.models.map_overlay import MapImageOverlay
@@ -110,7 +109,6 @@ from urbanlens.dashboard.models.push_device import PushDevice, PushTransport
 from urbanlens.dashboard.models.reactions import Reaction
 from urbanlens.dashboard.models.remote_image_copy import RemoteImageCopy
 from urbanlens.dashboard.models.remote_tiles import RemoteTile, RemoteTileSource
-from urbanlens.dashboard.models.reputation import ProfileReputation, ReputationEvent, TargetKind
 from urbanlens.dashboard.models.reviews import Review
 from urbanlens.dashboard.models.routes import Route, RouteSource
 from urbanlens.dashboard.models.safety import (

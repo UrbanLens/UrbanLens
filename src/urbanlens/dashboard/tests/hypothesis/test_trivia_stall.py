@@ -132,7 +132,7 @@ class ForceRevealRoundTests(TestCase):
 
 
 class LateAnswerTests(TestCase):
-    """A revealed round broadcasts its answer, so an answer sent after the reveal must not score (P29)."""
+    """A revealed round broadcasts its answer, so an answer sent after the reveal must not score."""
 
     def assert_refused(self, session: TriviaSession, round_: TriviaRound, guest: Profile) -> None:
         with self.assertRaises(RoundAlreadyRevealedError):

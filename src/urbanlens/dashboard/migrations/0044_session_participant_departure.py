@@ -1,4 +1,4 @@
-"""Record how a player left a SpotGuessr or Trivia game under way, so they stay on its scoreboard and in their history (P198).
+"""Record how a player left a SpotGuessr or Trivia game under way, so they stay on its scoreboard and in their history.
 
 Rows that left before this have no record of whether they had joined, or of a kick. A departed row with a guess or
 answer in its session certainly played, so it becomes ``left``; one that left before answering anything stays blank.

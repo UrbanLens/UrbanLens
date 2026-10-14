@@ -118,7 +118,7 @@ def _wiki_detail_building_entries(wiki: Wiki, viewer: Profile, drawn: GEOSGeomet
     Returns:
         List of ``{"wiki_id", "polygon"}`` dicts.
     """
-    from urbanlens.dashboard.services.wiki.concealment import visible_rows
+    from urbanlens.dashboard.services.wiki.viewer_projection import visible_rows
 
     descendants = list(visible_rows(wiki.descendants(), wiki, viewer))
     polygons = Boundary.objects.own_polygons_for_wikis(descendants, BoundaryType.BUILDING, viewer)
@@ -354,7 +354,7 @@ class WikiBoundaryView(LoginRequiredMixin, View):
         already_ran = boundary_generation_ran(location)
         in_flight = schedule_location_boundary_generation(location, profile)
         # A clear needs no override: with the row gone, resolve_for_wiki correctly falls through to place/circle
-        # for every viewer alike, concealed or not.
+        # for every viewer alike.
         just_drawn = (boundary_type, geom) if geom is not None else None
         payload = _wiki_boundary_payload(wiki, pending=in_flight and not already_ran, refreshing=in_flight and already_ran, just_drawn=just_drawn, viewer=profile, include_children=request.GET.get("children") == "1")
         payload["ok"] = True

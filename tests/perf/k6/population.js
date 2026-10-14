@@ -154,7 +154,7 @@ export function setup() {
     }
     // A run that measures 30,000 misses looks like a fast deployment, so a wrong layer, an unseeded
     // cache or a proxy this deployment cannot serve has to be a refusal to start rather than a
-    // result. Sampled across the grid rather than at one coordinate: X26's run had exactly one cell
+    // result. Sampled across the grid rather than at one coordinate: a recorded run had exactly one cell
     // hand-seeded, so a single-tile guard passed and the other 1,020 answered 503.
     if (TILES) {
         const cold = gridProbeTiles()

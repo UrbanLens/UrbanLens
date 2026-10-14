@@ -94,7 +94,7 @@
         <p class="po-panel-locked">
             <i class="material-symbols-outlined">lock</i>
             {{ withheld_official_count }} official owner record{{ withheld_official_count|pluralize }} on file from county
-            assessor data.{% plugin_slot "pin.ownership.hint" %}
+            assessor data.{% with feature="property_owners" %}{% plugin_slot "features.locked" %}{% endwith %}
         </p>
         {% endif %}
 

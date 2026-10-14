@@ -49,7 +49,7 @@ class AutoTagAvailabilityTests(TestCase):
             self.assertFalse(self._available(kind), f"{kind} labels should never auto-tag")
 
     def test_the_capability_is_its_own_feature(self) -> None:
-        """Not folded into AI: suggestions come from REData, not an LLM call."""
+        """The capability is a feature of its own."""
         self.assertIn("auto_tagging", SiteFeature.values)
 
 
@@ -86,7 +86,7 @@ class OrganizeFormTests(TestCase):
 
         markup = self._render(label, show_toggle=True)
 
-        self.assertNotIn('name="keywords"', markup, "keyword-based tagging was replaced by REData suggestions")
+        self.assertNotIn('name="keywords"', markup, "keyword-based tagging was replaced by taxonomy suggestions")
 
     def test_the_control_is_the_opt_out(self) -> None:
         from urbanlens.dashboard.models.labels.model import Label
@@ -121,7 +121,7 @@ class ControlMatchesServerTests(TestCase):
     """
     The dialog must not offer a control the server ignores, or hide one it honours.
 
-    This is the invariant the previous gating test existed for (a checkbox was once shown on AI grounds alone,
+    This is the invariant the previous gating test existed for (a checkbox was once shown on a site-wide grant alone,
     while the server decided on the user's own settings)."""
 
     def setUp(self) -> None:

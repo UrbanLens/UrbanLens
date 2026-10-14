@@ -1,5 +1,5 @@
 """
-Retire places too large to be what they claim, and release every domain they joined (P148, UrbanLens#285).
+Retire places too large to be what they claim, and release every domain they joined.
 
 Offline and idempotent: it asks no provider. Detached locations are marked unresolved, so the fixed provider chain
 places them again the next time they are viewed.

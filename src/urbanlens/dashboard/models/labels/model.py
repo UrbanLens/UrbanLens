@@ -62,7 +62,7 @@ class Label(HeldUploadModel, abstract.FrontendDashboardModel):
     order = IntegerField(default=0)
     # Protected labels (e.g. the built-in "Visited" status) cannot be deleted or renamed.
     is_protected = BooleanField(default=False)
-    # When False, auto-tagging (keyword or AI) will never attach this label to a pin.
+    # When False, auto-tagging will never attach this label to a pin.
     allow_auto_tag = BooleanField(default=True)
     # Comma-separated keywords/phrases used by the keyword auto-tagger in addition to the label name.
     keywords = TextField(null=True, blank=True)
@@ -88,8 +88,6 @@ class Label(HeldUploadModel, abstract.FrontendDashboardModel):
         profile_id: int | None
         pins: ManyToManyField[Pin, Pin]
         wikis: ManyToManyField[Wiki, Wiki]
-        # Transient bookkeeping for the pre/post-save REData-taxonomy kind-change hook.
-        redata_prior_kind: str | None
 
     objects = LabelManager()
 

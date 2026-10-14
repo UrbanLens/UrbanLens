@@ -20,6 +20,9 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.place.model import Place, PlaceKind
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
+from urbanlens.dashboard.plugins.points import BOUNDARY_PROVIDERS
+from urbanlens.dashboard.services.apis.locations.base import BoundaryProvider
+from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
 from urbanlens.dashboard.services.geo.boundary_voting import (
     HALF_LIFE_DAYS,
     BoundaryVoteError,
@@ -35,6 +38,27 @@ from urbanlens.dashboard.services.locations.boundaries import ResolvedBoundaries
 from urbanlens.dashboard.services.places import resolution
 
 _coordinate_counter = count()
+
+#: The ``Boundary.source`` of a survey-grade provider that sits ahead of Overpass in the chain.
+_COUNTY = "county"
+
+
+class _CountyBoundaries(BoundaryProvider):
+    """A provider of authoritative property outlines, ahead of Overpass."""
+
+    service_key = "county_boundary"
+    vote_source = _COUNTY
+    vote_label = "County records"
+
+    def get_boundary(self, latitude: float, longitude: float, *, name: str | None = None) -> Polygon | None:
+        return None
+
+
+def _county_chain(case: SimpleTestCase) -> None:
+    """Hold the chain a county provider ahead of Overpass for the test."""
+    context = BOUNDARY_PROVIDERS.overridden([_CountyBoundaries, OverpassGateway])
+    context.__enter__()
+    case.addCleanup(context.__exit__, None, None, None)
 
 
 def _square(lon: float, lat: float, size: float = 0.001) -> MultiPolygon:
@@ -139,13 +163,14 @@ class BoundaryOptionsTests(TestCase):
     """Which Boundary rows count as votable candidates."""
 
     def setUp(self) -> None:
+        _county_chain(self)
         baker.make("auth.User")
         self.location = _make_location()
         self.place = _make_place(_square(-73.9, 42.4))
         resolution.attach_location(self.location, self.place)
 
     def test_only_externally_sourced_property_candidates_qualify(self) -> None:
-        redata = _make_candidate(self.place, BoundarySource.REDATA, _square(-73.76, 42.65))
+        county = _make_candidate(self.place, _COUNTY, _square(-73.76, 42.65))
         overpass = _make_candidate(self.place, BoundarySource.OVERPASS, _square(-73.761, 42.65))
         # The canonical default, a building candidate, and a wiki-drawn row
         # must never be votable - the vote is strictly between official
@@ -174,7 +199,7 @@ class BoundaryOptionsTests(TestCase):
         )
 
         options = boundary_options(self.place)
-        self.assertEqual([option.pk for option in options], [redata.pk, overpass.pk])
+        self.assertEqual([option.pk for option in options], [county.pk, overpass.pk])
 
     def test_candidates_without_geometry_are_skipped(self) -> None:
         baker.make(
@@ -182,7 +207,7 @@ class BoundaryOptionsTests(TestCase):
             place=self.place,
             location=None,
             boundary_type=BoundaryType.PROPERTY,
-            source=BoundarySource.REDATA,
+            source=_COUNTY,
             generated_polygon=None,
         )
         self.assertEqual(boundary_options(self.place), [])
@@ -203,7 +228,7 @@ class BoundaryOptionsTests(TestCase):
         """
         A coordinate no provider has resolved to a place - real candidates
         exist (for a different place), but there's nothing to vote on here."""
-        _make_candidate(self.place, BoundarySource.REDATA, _square(-73.76, 42.65))
+        _make_candidate(self.place, _COUNTY, _square(-73.76, 42.65))
         self.assertEqual(boundary_options(None), [])
 
 
@@ -211,33 +236,34 @@ class WinningBoundaryTests(TestCase):
     """The spec's weighting scenarios, verbatim."""
 
     def setUp(self) -> None:
+        _county_chain(self)
         baker.make("auth.User")
         self.location = _make_location()
         self.place = _make_place(_square(-73.9, 42.4))
         resolution.attach_location(self.location, self.place)
-        self.redata = _make_candidate(self.place, BoundarySource.REDATA, _square(-73.76, 42.65))
+        self.county = _make_candidate(self.place, _COUNTY, _square(-73.76, 42.65))
         self.overpass = _make_candidate(self.place, BoundarySource.OVERPASS, _square(-73.761, 42.65))
         self.voters = _make_profiles(3)
 
-    def test_zero_votes_defaults_to_redata(self) -> None:
-        self.assertEqual(_winner_pk(self.place), self.redata.pk)
+    def test_zero_votes_defaults_to_the_first_provider(self) -> None:
+        self.assertEqual(_winner_pk(self.place), self.county.pk)
 
-    def test_single_overpass_vote_beats_redata(self) -> None:
+    def test_single_overpass_vote_beats_the_default(self) -> None:
         baker.make(BoundaryVote, place=self.place, boundary=self.overpass, profile=self.voters[0])
         self.assertEqual(_winner_pk(self.place), self.overpass.pk)
 
-    def test_newer_redata_vote_outweighs_older_overpass_vote(self) -> None:
+    def test_newer_county_vote_outweighs_older_overpass_vote(self) -> None:
         overpass_vote = baker.make(BoundaryVote, place=self.place, boundary=self.overpass, profile=self.voters[0])
         _backdate(overpass_vote, 30)
-        baker.make(BoundaryVote, place=self.place, boundary=self.redata, profile=self.voters[1])
-        self.assertEqual(_winner_pk(self.place), self.redata.pk)
+        baker.make(BoundaryVote, place=self.place, boundary=self.county, profile=self.voters[1])
+        self.assertEqual(_winner_pk(self.place), self.county.pk)
 
-    def test_exact_same_age_tie_goes_to_redata(self) -> None:
+    def test_exact_same_age_tie_goes_to_the_earlier_provider(self) -> None:
         vote_a = baker.make(BoundaryVote, place=self.place, boundary=self.overpass, profile=self.voters[0])
-        vote_b = baker.make(BoundaryVote, place=self.place, boundary=self.redata, profile=self.voters[1])
+        vote_b = baker.make(BoundaryVote, place=self.place, boundary=self.county, profile=self.voters[1])
         stamp = timezone.now() - timedelta(days=7)
         BoundaryVote.objects.filter(pk__in=[vote_a.pk, vote_b.pk]).update(updated=stamp)
-        self.assertEqual(_winner_pk(self.place), self.redata.pk)
+        self.assertEqual(_winner_pk(self.place), self.county.pk)
 
     def test_no_candidates_means_no_winner(self) -> None:
         empty_place = _make_place()
@@ -258,12 +284,12 @@ class WinningBoundaryTests(TestCase):
         vote = baker.make(BoundaryVote, place=self.place, boundary=self.overpass, profile=self.voters[0])
         self.assertTrue(has_consensus(self.place))
         # A same-age 1v1 split is far below the 1.5x ratio: contested again.
-        rival = baker.make(BoundaryVote, place=self.place, boundary=self.redata, profile=self.voters[1])
+        rival = baker.make(BoundaryVote, place=self.place, boundary=self.county, profile=self.voters[1])
         stamp = timezone.now()
         BoundaryVote.objects.filter(pk__in=[vote.pk, rival.pk]).update(updated=stamp)
         self.assertFalse(has_consensus(self.place))
         # 2v1 at the same age crosses the 1.5x ratio: settled.
-        third = baker.make(BoundaryVote, place=self.place, boundary=self.redata, profile=self.voters[2])
+        third = baker.make(BoundaryVote, place=self.place, boundary=self.county, profile=self.voters[2])
         BoundaryVote.objects.filter(pk=third.pk).update(updated=stamp)
         self.assertTrue(has_consensus(self.place))
 
@@ -277,13 +303,13 @@ class WinningBoundaryTests(TestCase):
         for profile in _make_profiles(3):
             baker.make(BoundaryVote, place=self.place, boundary=self.overpass, profile=profile)
         for profile in _make_profiles(2):
-            baker.make(BoundaryVote, place=self.place, boundary=self.redata, profile=profile)
+            baker.make(BoundaryVote, place=self.place, boundary=self.county, profile=profile)
         BoundaryVote.objects.filter(place=self.place).update(updated=stamp)
         self.assertTrue(has_consensus(self.place))
 
     def test_consensus_false_with_fewer_than_two_candidates(self) -> None:
         lone_place = _make_place()
-        _make_candidate(lone_place, BoundarySource.REDATA, _square(-73.70, 42.60))
+        _make_candidate(lone_place, _COUNTY, _square(-73.70, 42.60))
         self.assertFalse(has_consensus(lone_place))
 
 
@@ -291,16 +317,17 @@ class WinnerMatchingIntegrationTests(TestCase):
     """The vote winner must become the geometry matching actually uses."""
 
     def setUp(self) -> None:
+        _county_chain(self)
         baker.make("auth.User")
         self.location = _make_location()
         self.place = _make_place(_square(-73.9, 42.4))
         resolution.attach_location(self.location, self.place)
-        self.redata_polygon = _square(-73.76, 42.65)
+        self.county_polygon = _square(-73.76, 42.65)
         self.overpass_polygon = _square(-73.90, 42.80)
-        self.redata = _make_candidate(self.place, BoundarySource.REDATA, self.redata_polygon)
+        self.county = _make_candidate(self.place, _COUNTY, self.county_polygon)
         self.overpass = _make_candidate(self.place, BoundarySource.OVERPASS, self.overpass_polygon)
-        # The place's own outline starts as the chain default: REData-first.
-        Place.objects.filter(pk=self.place.pk).update(geometry=self.redata_polygon)
+        # The place's own outline starts as the chain default: the county's, the first provider's.
+        Place.objects.filter(pk=self.place.pk).update(geometry=self.county_polygon)
         self.place.refresh_from_db()
         (self.voter,) = _make_profiles(1)
 
@@ -344,16 +371,16 @@ class WinnerMatchingIntegrationTests(TestCase):
         self.assertIsNone(apply_winning_boundary(self.place))
         self.place.refresh_from_db()
         assert self.place.geometry is not None
-        self.assertEqual(self.place.geometry.wkb, self.redata_polygon.wkb)
+        self.assertEqual(self.place.geometry.wkb, self.county_polygon.wkb)
 
     def test_generation_persists_candidates_and_respects_existing_votes(self) -> None:
         location = _make_location()
-        redata_polygon = _square(-73.50, 42.50)
+        county_polygon = _square(-73.50, 42.50)
         overpass_polygon = _square(-73.51, 42.50)
         resolved = ResolvedBoundaries(
-            property_polygon=redata_polygon,
+            property_polygon=county_polygon,
             building_polygon=None,
-            property_candidates=[("redata_boundary", redata_polygon), ("overpass", overpass_polygon)],
+            property_candidates=[("county_boundary", county_polygon), ("overpass", overpass_polygon)],
         )
         with patch(
             "urbanlens.dashboard.services.locations.boundaries.BoundaryProviderChain.get_boundaries",
@@ -363,10 +390,8 @@ class WinnerMatchingIntegrationTests(TestCase):
 
         assert place is not None
         candidates = boundary_options(place)
-        self.assertEqual(
-            [candidate.source for candidate in candidates], [BoundarySource.REDATA, BoundarySource.OVERPASS]
-        )
-        self.assertEqual(place.geometry.wkb, redata_polygon.wkb)
+        self.assertEqual([candidate.source for candidate in candidates], [_COUNTY, BoundarySource.OVERPASS])
+        self.assertEqual(place.geometry.wkb, county_polygon.wkb)
 
         # A vote for overpass, then a regeneration: the vote must survive.
         cast_boundary_vote(place, self.voter, candidates[1].pk)
@@ -383,12 +408,13 @@ class BoundaryVoteEndpointTests(TestCase):
     """POST /location/<slug>/wiki/boundary/vote/."""
 
     def setUp(self) -> None:
+        _county_chain(self)
         baker.make("auth.User")
         self.location = _make_location()
         self.place = _make_place(_square(-73.9, 42.4))
         resolution.attach_location(self.location, self.place)
         self.wiki = baker.make(Wiki, location=self.location)
-        self.redata = _make_candidate(self.place, BoundarySource.REDATA, _square(-73.76, 42.65))
+        self.county = _make_candidate(self.place, _COUNTY, _square(-73.76, 42.65))
         self.overpass = _make_candidate(self.place, BoundarySource.OVERPASS, _square(-73.761, 42.65))
         (self.voter,) = _make_profiles(1)
         baker.make(Pin, profile=self.voter, location=self.location)
@@ -402,16 +428,16 @@ class BoundaryVoteEndpointTests(TestCase):
         self.assertEqual(BoundaryVote.objects.for_place(self.place).count(), 1)
 
         first_updated = BoundaryVote.objects.get(profile=self.voter).updated
-        response = self.client.post(self.url, {"boundary_id": self.redata.pk})
+        response = self.client.post(self.url, {"boundary_id": self.county.pk})
         self.assertEqual(response.status_code, 200)
         vote = BoundaryVote.objects.get(profile=self.voter)
-        self.assertEqual(vote.boundary_id, self.redata.pk)
+        self.assertEqual(vote.boundary_id, self.county.pk)
         self.assertEqual(BoundaryVote.objects.for_place(self.place).count(), 1)
         self.assertGreaterEqual(vote.updated, first_updated)
 
     def test_rejects_boundary_from_another_place(self) -> None:
         elsewhere = _make_place(_square(-73.70, 42.60))
-        foreign = _make_candidate(elsewhere, BoundarySource.REDATA, _square(-73.70, 42.60))
+        foreign = _make_candidate(elsewhere, _COUNTY, _square(-73.70, 42.60))
         response = self.client.post(self.url, {"boundary_id": foreign.pk})
         self.assertEqual(response.status_code, 400)
         self.assertEqual(BoundaryVote.objects.count(), 0)
@@ -437,11 +463,12 @@ class BoundaryVoteContextTests(TestCase):
     """Dialog gating: auto-open only pre-vote, button context otherwise."""
 
     def setUp(self) -> None:
+        _county_chain(self)
         baker.make("auth.User")
         self.location = _make_location()
         self.place = _make_place(_square(-73.9, 42.4))
         resolution.attach_location(self.location, self.place)
-        self.redata = _make_candidate(self.place, BoundarySource.REDATA, _square(-73.76, 42.65))
+        self.county = _make_candidate(self.place, _COUNTY, _square(-73.76, 42.65))
         self.overpass = _make_candidate(self.place, BoundarySource.OVERPASS, _square(-73.761, 42.65))
         (self.viewer,) = _make_profiles(1)
 
@@ -452,7 +479,7 @@ class BoundaryVoteContextTests(TestCase):
         self.assertFalse(context["has_votes"])
         self.assertIsNone(context["my_vote_id"])
         self.assertEqual(len(context["options"]), 2)
-        self.assertEqual(context["options"][0]["source"], BoundarySource.REDATA)
+        self.assertEqual(context["options"][0]["source"], _COUNTY)
         self.assertIsInstance(context["options"][0]["polygon"], dict)
 
     def test_any_vote_stops_auto_open(self) -> None:
@@ -471,7 +498,7 @@ class BoundaryVoteContextTests(TestCase):
         self.assertEqual(context["my_vote_id"], self.overpass.pk)
         marked = {option["id"]: option["is_my_choice"] for option in context["options"]}
         self.assertTrue(marked[self.overpass.pk])
-        self.assertFalse(marked[self.redata.pk])
+        self.assertFalse(marked[self.county.pk])
         # Your own vote must not count as an "other" - the dialog gating is
         # keyed on other people's votes only (see the module docstring), so a
         # viewer who has only ever voted for themselves still gets auto_open.
@@ -480,7 +507,7 @@ class BoundaryVoteContextTests(TestCase):
 
     def test_single_candidate_renders_nothing(self) -> None:
         lone_place = _make_place()
-        _make_candidate(lone_place, BoundarySource.REDATA, _square(-73.70, 42.60))
+        _make_candidate(lone_place, _COUNTY, _square(-73.70, 42.60))
         self.assertIsNone(boundary_vote_context(lone_place, self.viewer))
 
     def test_none_place_yields_no_context(self) -> None:
@@ -499,3 +526,60 @@ class BoundaryVoteContextTests(TestCase):
         self.overpass.save(update_fields=["boundary_type"])
         with pytest.raises(BoundaryVoteError):
             cast_boundary_vote(self.place, self.viewer, self.overpass.pk)
+
+
+class VoteSourceVocabularyTests(TestCase):
+    """The providers, not core, say which sources can be voted on, how they rank and what they are called."""
+
+    def setUp(self) -> None:
+        baker.make("auth.User")
+        self.location = _make_location()
+        self.place = _make_place(_square(-73.9, 42.4))
+        resolution.attach_location(self.location, self.place)
+        (self.viewer,) = _make_profiles(1)
+
+    def test_the_chain_order_breaks_ties(self) -> None:
+        county = _make_candidate(self.place, _COUNTY, _square(-73.76, 42.65))
+        overpass = _make_candidate(self.place, BoundarySource.OVERPASS, _square(-73.761, 42.65))
+        with BOUNDARY_PROVIDERS.overridden([_CountyBoundaries, OverpassGateway]):
+            self.assertEqual(_winner_pk(self.place), county.pk)
+        with BOUNDARY_PROVIDERS.overridden([OverpassGateway, _CountyBoundaries]):
+            self.assertEqual(_winner_pk(self.place), overpass.pk)
+
+    def test_a_source_no_provider_produces_ranks_last_and_keeps_its_raw_label(self) -> None:
+        """Rows a withdrawn provider stored still vote and show, under the value they were stored with."""
+        withdrawn = _make_candidate(self.place, "withdrawn_source", _square(-73.76, 42.65))
+        overpass = _make_candidate(self.place, BoundarySource.OVERPASS, _square(-73.761, 42.65))
+        with BOUNDARY_PROVIDERS.overridden([OverpassGateway]):
+            self.assertEqual([option.pk for option in boundary_options(self.place)], [overpass.pk, withdrawn.pk])
+            context = boundary_vote_context(self.place, self.viewer)
+        assert context is not None
+        self.assertEqual(
+            [option["label"] for option in context["options"]], ["OpenStreetMap (Overpass)", "withdrawn_source"]
+        )
+
+    def test_labels_come_from_the_providers(self) -> None:
+        _make_candidate(self.place, _COUNTY, _square(-73.76, 42.65))
+        _make_candidate(self.place, BoundarySource.OVERPASS, _square(-73.761, 42.65))
+        with BOUNDARY_PROVIDERS.overridden([_CountyBoundaries, OverpassGateway]):
+            context = boundary_vote_context(self.place, self.viewer)
+        assert context is not None
+        self.assertEqual(
+            [option["label"] for option in context["options"]], ["County records", "OpenStreetMap (Overpass)"]
+        )
+
+    def test_a_candidate_is_recorded_only_for_a_provider_that_sets_a_vote_source(self) -> None:
+        from urbanlens.dashboard.services.places.provisioning import record_boundary_candidates
+
+        class Footprints(BoundaryProvider):
+            service_key = "footprints"
+
+            def get_boundary(self, latitude: float, longitude: float, *, name: str | None = None) -> Polygon | None:
+                return None
+
+        with BOUNDARY_PROVIDERS.overridden([_CountyBoundaries, Footprints]):
+            record_boundary_candidates(
+                self.place, [("county_boundary", _square(-73.76, 42.65)), ("footprints", _square(-73.77, 42.65))]
+            )
+
+        self.assertEqual(sorted(Boundary.objects.filter(place=self.place).values_list("source", flat=True)), [_COUNTY])

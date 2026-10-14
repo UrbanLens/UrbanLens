@@ -13,6 +13,7 @@ from model_bakery import baker
 
 from hypothesis import given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.celery_inline import tasks_run_inline
+from urbanlens.core.tests.provider_fakes import FakeWeatherProvider, hold_providers
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.controllers.trip import (
     _build_activity_forecasts,
@@ -22,6 +23,7 @@ from urbanlens.dashboard.controllers.trip import (
 )
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
+from urbanlens.dashboard.plugins.points import WEATHER_PROVIDERS
 
 # Imported from the service that defines them, not through the controller. The
 # controller re-exported both under a `_`-prefixed alias it never called, which
@@ -416,7 +418,7 @@ class BuildActivityForecastsTests(SimpleTestCase):
     """
     _build_activity_forecasts matches activities to weather slots.
 
-    ``get_raw_forecast_slots`` (REData-first, OWM/Open-Meteo-fallback - see
+    ``get_raw_forecast_slots`` (the weather provider chain - see
     ``services.apis.locations.weather_resolution``) is mocked directly rather than a gateway instance, since
     ``_build_activity_forecasts`` no longer picks a provider itself."""
 
@@ -726,15 +728,11 @@ _HISTORY_ROW = {
 
 
 class TripRecordedWeatherTests(TestCase):
-    """A past trip's weather panel was empty: the view filtered to activities scheduled today or later, so a finished trip had nothing to forecast and the whole card hid. REData's `/weather/history/` answers the question that actually applies to a finished trip."""
+    """A past trip's weather panel was empty: the view filtered to activities scheduled today or later, so a finished trip had nothing to forecast and the whole card hid. A history-capable weather provider answers the question that actually applies to a finished trip."""
 
     def setUp(self) -> None:
         super().setUp()
-        configured = patch(
-            "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured", return_value=True
-        )
-        configured.start()
-        self.addCleanup(configured.stop)
+        hold_providers(self, WEATHER_PROVIDERS, [FakeWeatherProvider()])
         self.user: User = baker.make("auth.User")
         self.profile = Profile.objects.get(user=self.user)
         self.profile.external_apis_enabled = True

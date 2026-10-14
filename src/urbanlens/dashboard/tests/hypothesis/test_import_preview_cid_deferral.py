@@ -66,7 +66,7 @@ class ImportPreviewCidDeferralTests(TestCase):
 
     def test_deferred_pin_carries_its_source_maps_url_for_the_background_lookup(self) -> None:
         """
-        resolve_deferred_pin_locations passes this to REData, which resolves via a
+        resolve_deferred_pin_locations passes this to a CID provider, which resolves via a
         place's own URL faster and more reliably than the bare cid alone."""
         url = "https://www.google.com/maps/place/Cresson+Sanatorium/data=!4m2!3m1!1s0x0:0x3039"
         with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:

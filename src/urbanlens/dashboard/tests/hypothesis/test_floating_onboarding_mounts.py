@@ -1,5 +1,5 @@
 """
-P211: a page's floating onboarding card is drawn above the page hero, not beneath it.
+A page's floating onboarding card is drawn above the page hero, not beneath it.
 
 `.container` is a stacking context (`position: relative; z-index: 1`), so a fixed panel inside it can never rise
 above a hero's own positioned elements, such as a wiki's "Community wiki" notice. The mounts live outside it.

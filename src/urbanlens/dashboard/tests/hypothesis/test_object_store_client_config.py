@@ -1,5 +1,5 @@
 """
-The media object store's client gives up inside the proxy's timeout, after a bounded number of attempts (P201).
+The media object store's client gives up inside the proxy's timeout, after a bounded number of attempts.
 
 botocore's defaults are five attempts with a 60 s read timeout, so a stalled Garage write could hold a request for
 about five minutes, long after Cloudflare had answered the browser with an error at 100 s.

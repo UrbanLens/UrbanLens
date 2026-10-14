@@ -1,5 +1,5 @@
 """
-P250's data migration: slugs left behind by a rename since 0041 move onto the current provider name.
+A data migration: slugs left behind by a rename since 0041 move onto the current provider name.
 
 Rows are written past ``Location.save`` (``queryset.update``) so they stand as the runtime left them before it
 re-minted on a rename, and the migration runs against the models as ``migrate`` renders them.

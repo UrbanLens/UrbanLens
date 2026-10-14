@@ -1,4 +1,4 @@
-"""The media gate serves an avatar only to viewers the profile is visible to (G2-23)."""
+"""The media gate serves an avatar only to viewers the profile is visible to."""
 
 from __future__ import annotations
 

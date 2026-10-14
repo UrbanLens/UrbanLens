@@ -2,7 +2,7 @@
 Billed APIs stay inside the vendor's free tier summed over every deployment that holds a key.
 
 A vendor's free allowance belongs to the billing account, which UrbanLens's production, staging
-and development deployments share with REData's. Each deployment therefore enforces the
+and development deployments share with other first-party deployments'. Each deployment therefore enforces the
 vendor's allowance, times UrbanLens's allotment of it, times its own share.
 """
 
@@ -22,8 +22,8 @@ from urbanlens.dashboard.services.core.egress import environment_share
 from urbanlens.dashboard.services.core.rate_limiter import check_rate_limit, free_tier_ceiling
 from urbanlens.UrbanLens.egress import ENVIRONMENT_SHARE_DEFAULTS, UNKNOWN_ENVIRONMENT_SHARE
 
-#: The Google Maps Platform SKUs REData can also bill on the same account; UrbanLens takes at most 0.4.
-SHARED_WITH_REDATA = ("google_geocoding", "google_places", "azure_maps")
+#: The Google Maps Platform SKUs another first-party service can also bill on the same account; UrbanLens takes at most 0.4.
+SHARED_WITH_FIRST_PARTY = ("google_geocoding", "google_places", "azure_maps")
 BILLED_WITH_A_FREE_TIER = ("google_geocoding", "google_places", "google_maps", "azure_maps")
 
 
@@ -37,7 +37,7 @@ def _configured(value: float | None):
 
 
 class EnvironmentShareTests(SimpleTestCase):
-    """``UL_ENVIRONMENT_SHARE`` replaced ``UL_BILLED_API_SHARE`` (D26); billed keeps #210's free-tier formula."""
+    """``UL_ENVIRONMENT_SHARE`` replaced ``UL_BILLED_API_SHARE``; billed keeps the free-tier formula."""
 
     def test_the_deployment_defaults_sum_to_no_more_than_the_whole_allotment(self) -> None:
         deployments = ("production", "staging", "development", "local")

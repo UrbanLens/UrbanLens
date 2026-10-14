@@ -2,7 +2,7 @@
  * Frontend JS build wrapper for the `build`/`deploy` npm scripts.
  */
 
-import { readdirSync, rmSync } from "node:fs";
+import { existsSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -12,6 +12,8 @@ const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const OUT_DIR = join(ROOT, "src/urbanlens/dashboard/frontend/static/dashboard/js");
 const ENTRIES_DIR = join(ROOT, "src/urbanlens/dashboard/frontend/ts/entries");
 const ENTRIES_CLASSIC_DIR = join(ROOT, "src/urbanlens/dashboard/frontend/ts/entries-classic");
+/** Each package plugin's entries (`<plugin>/frontend/ts/entries/*.ts`) build into its own `static/<plugin>/js/`. */
+const PLUGINS_DIR = join(ROOT, "src/urbanlens/plugins");
 
 const minify = process.argv.includes("--minify");
 
@@ -29,10 +31,10 @@ function tsFiles(dir: string): string[] {
 }
 
 /** Runs `bun build` over `files` with `extraArgs`, or does nothing if `files` is empty. */
-async function buildGroup(files: string[], extraArgs: string[], entryNaming = "[name].[ext]"): Promise<void> {
+async function buildGroup(files: string[], extraArgs: string[], entryNaming = "[name].[ext]", outDir = OUT_DIR): Promise<void> {
     if (!files.length) return;
     // Bun's default --entry-naming ("[dir]/[name].[ext]") mirrors each entry's source directory under --outdir on some Bun versions.
-    const proc = Bun.spawn([process.execPath, "build", ...files, "--outdir", OUT_DIR, `--entry-naming=${entryNaming}`, ...extraArgs], {
+    const proc = Bun.spawn([process.execPath, "build", ...files, "--outdir", outDir, `--entry-naming=${entryNaming}`, ...extraArgs], {
         stdout: "inherit",
         stderr: "inherit",
     });
@@ -69,3 +71,12 @@ await buildGroup(
     ["--target", "browser", "--format", "esm", ...(minify ? ["--minify"] : [])],
     `[name]-${maplibreVersion}.js`,
 );
+
+const pluginNames = existsSync(PLUGINS_DIR) ? readdirSync(PLUGINS_DIR, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name) : [];
+for (const plugin of pluginNames) {
+    const entries = tsFiles(join(PLUGINS_DIR, plugin, "frontend/ts/entries"));
+    if (!entries.length) continue;
+    const outDir = join(PLUGINS_DIR, plugin, "static", plugin, "js");
+    rmSync(outDir, { recursive: true, force: true });
+    await buildGroup(entries, ["--target", "browser", "--splitting", "--format", "esm", ...(minify ? ["--minify"] : [])], "[name].[ext]", outDir);
+}

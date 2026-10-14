@@ -7,7 +7,7 @@ from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_C
 
 
 def _reresolve_fiat_building_places(apps, schema_editor):
-    """P181: put each Location the pre-0.8.0 sweep attached to an outline-less building back where containment puts it.
+    """Put each Location the pre-0.8.0 sweep attached to an outline-less building back where containment puts it.
 
     Containment is ``Place.objects.resolve_for_point``'s, restated against historical models. A Location left on no place
     is unstamped, as ``detach_oversized_place`` does, so the provider chain is asked about it again.

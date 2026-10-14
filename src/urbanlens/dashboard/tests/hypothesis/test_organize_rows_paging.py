@@ -1,5 +1,5 @@
 """
-The Organize page's label rows arrive a page at a time (P66).
+The Organize page's label rows arrive a page at a time.
 
 The tab renders its first page, a sentinel row fetches the next as it scrolls into view, and anything that
 needs every row - a filter, the tree view, select-all - asks for the rest in one request. A write

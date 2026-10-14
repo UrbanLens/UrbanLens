@@ -1,5 +1,5 @@
 /**
- * A building child's own details open in place from its property's "Buildings on this Property" list (P172).
+ * A building child's own details open in place from its property's "Buildings on this Property" list.
  * Only that list's own requests are let through, so no panel is fetched and no upstream is spent by the page.
  */
 

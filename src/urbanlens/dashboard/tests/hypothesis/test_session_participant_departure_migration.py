@@ -1,4 +1,4 @@
-"""Migration 0044's backfill: a departed row that guessed or answered counts as having left mid-game (P198)."""
+"""Migration 0044's backfill: a departed row that guessed or answered counts as having left mid-game."""
 
 from __future__ import annotations
 

@@ -169,7 +169,7 @@ class FloorplanJsonView(LoginRequiredMixin, View):
         place = _building_place(pin)
         if place is None:
             # A placeless plan belongs to this pin alone, so there is no
-            # community/REData cascade to consult - just the user's own row.
+            # community/provider cascade to consult - just the user's own row.
             from urbanlens.dashboard.models.floorplans.model import Floorplan
 
             own = Floorplan.objects.filter(place__isnull=True, pin=pin, profile=pin.profile).order_by("-created").first()

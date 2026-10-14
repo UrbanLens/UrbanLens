@@ -2,6 +2,7 @@
 
 import { expect, ifSecondaryAccount, test } from "../../lib/fixtures.js";
 import { apiUrl, env, resourceName } from "../../lib/env.js";
+import { pluginEntries } from "../../lib/plugin-entries.js";
 import { mediaRoute, oauthRoutes, restRoutes, toolsRoutes } from "../../lib/routes.js";
 import {
     anonymousContext,
@@ -212,17 +213,19 @@ test.describe("OAuth and webhooks", () => {
         }
     });
 
-    test("the Stripe webhook does not accept an unsigned POST", async ({ request }) => {
-        const response = await request.post("/dashboard/billing/webhooks/stripe/", {
-            data: { type: "ping" },
-            headers: { "Content-Type": "application/json" },
+    for (const surface of pluginEntries.unsignedPosts) {
+        test(`the ${surface.name} does not accept an unsigned POST`, async ({ request }) => {
+            const response = await request.post(surface.path, {
+                data: surface.body,
+                headers: { "Content-Type": "application/json" },
+            });
+            await expectNotServerError(response, `unsigned ${surface.name}`);
+            expect(
+                [400, 401, 403, 404, 405],
+                `an unsigned ${surface.name} answered ${response.status()}, which would let anyone ${surface.risk}`,
+            ).toContain(response.status());
         });
-        await expectNotServerError(response, "unsigned stripe webhook");
-        expect(
-            [400, 401, 403, 404, 405],
-            `an unsigned Stripe webhook answered ${response.status()}, which would let anyone forge billing events`,
-        ).toContain(response.status());
-    });
+    }
 });
 
 test.describe("password reset is not an account oracle", () => {

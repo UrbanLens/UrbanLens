@@ -26,12 +26,19 @@ export const DEFAULT_HOTKEYS = {
         label: "Toggle fullscreen",
         description: "Enter or exit fullscreen while playing a game.",
     },
-    openAssistant: {
-        keys: ["shift+?", "?"],
-        label: "Open assistant",
-        description: "Open the AI assistant.",
-    },
 };
+
+const pluginHotkeys: Record<string, HotkeyDefault> = {};
+
+/** Add a default binding a plugin owns. Call it while the plugin's script loads, before any lookup or the settings page reads the defaults. */
+export function registerHotkeyDefault(actionId: string, def: HotkeyDefault): void {
+    pluginHotkeys[actionId] = def;
+}
+
+/** Every action's default binding: core's, then the ones plugins registered. */
+export function allHotkeyDefaults(): Record<string, HotkeyDefault> {
+    return { ...DEFAULT_HOTKEYS, ...pluginHotkeys };
+}
 
 /** Turn a KeyboardEvent into a comparable "ctrl+shift+z"-style combo string. */
 export function normalizeCombo(event: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "shiftKey" | "altKey">): string {
@@ -63,7 +70,7 @@ function hotkeyOverrides(): Record<string, string> {
 export function loadHotkeys(): Record<string, string[]> {
     const overrides = hotkeyOverrides();
     const resolved: Record<string, string[]> = {};
-    for (const [actionId, def] of Object.entries(DEFAULT_HOTKEYS)) {
+    for (const [actionId, def] of Object.entries(allHotkeyDefaults())) {
         const override = overrides[actionId];
         resolved[actionId] = override ? [override] : def.keys;
     }

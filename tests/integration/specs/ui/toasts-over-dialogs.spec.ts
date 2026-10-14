@@ -71,7 +71,7 @@ test.beforeEach(async ({ page }) => {
     await page.goto(appRoutes.settings);
     await page.evaluate(() => {
         const dialog = document.createElement("dialog");
-        dialog.id = "p194-dialog";
+        dialog.id = "toast-dialog";
         dialog.className = "ul-dialog";
         dialog.textContent = "A dialog covering the page";
         document.body.append(dialog);
@@ -81,7 +81,7 @@ test.beforeEach(async ({ page }) => {
 test("a toast raised over an open modal dialog is as bright as one with no dialog", async ({ page }) => {
     const alone = await toastWithoutDialog(page);
     await page.evaluate(() => {
-        document.querySelector<HTMLDialogElement>("#p194-dialog")?.showModal();
+        document.querySelector<HTMLDialogElement>("#toast-dialog")?.showModal();
         window.toastr?.info("A toast");
     });
 
@@ -93,7 +93,7 @@ test("the comparison sees a toast left under the backdrop", async ({ page }) => 
     await page.evaluate(() => {
         // Before the fix: nothing lifts the stack.
         Object.defineProperty(HTMLElement.prototype, "showPopover", { value: undefined });
-        document.querySelector<HTMLDialogElement>("#p194-dialog")?.showModal();
+        document.querySelector<HTMLDialogElement>("#toast-dialog")?.showModal();
         window.toastr?.info("A toast");
     });
 
@@ -104,7 +104,7 @@ test("a toast raised before a dialog opens is lifted above it with the next toas
     const alone = await toastWithoutDialog(page);
     await page.evaluate(() => {
         window.toastr?.info("Before the dialog");
-        document.querySelector<HTMLDialogElement>("#p194-dialog")?.showModal();
+        document.querySelector<HTMLDialogElement>("#toast-dialog")?.showModal();
         window.toastr?.info("A toast");
     });
 
@@ -127,7 +127,7 @@ async function toastTakesThePointer(page: Page): Promise<boolean> {
 
 test("a toast over an open modal dialog takes a click, and the dialog stays open", async ({ page }) => {
     await page.evaluate(() => {
-        document.querySelector<HTMLDialogElement>("#p194-dialog")?.showModal();
+        document.querySelector<HTMLDialogElement>("#toast-dialog")?.showModal();
         window.toastr?.info("Over the dialog");
     });
 
@@ -135,12 +135,12 @@ test("a toast over an open modal dialog takes a click, and the dialog stays open
     const box = await settledToast(page);
     await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
     await expect(page.locator(TOAST)).toHaveCount(0);
-    expect(await page.evaluate(() => document.querySelector<HTMLDialogElement>("#p194-dialog")?.open)).toBe(true);
+    expect(await page.evaluate(() => document.querySelector<HTMLDialogElement>("#toast-dialog")?.open)).toBe(true);
 });
 
 test("hovering a toast over an open modal dialog holds it past its timeout", async ({ page }) => {
     await page.evaluate(() => {
-        document.querySelector<HTMLDialogElement>("#p194-dialog")?.showModal();
+        document.querySelector<HTMLDialogElement>("#toast-dialog")?.showModal();
         window.toastr?.info("Held by the pointer");
     });
     const box = await settledToast(page);
@@ -154,7 +154,7 @@ test("a toast already showing when a dialog opens is above it and takes a click"
     const alone = await toastWithoutDialog(page);
     await page.evaluate(() => window.toastr?.info("Before the dialog"));
     await settledToast(page);
-    await page.evaluate(() => document.querySelector<HTMLDialogElement>("#p194-dialog")?.showModal());
+    await page.evaluate(() => document.querySelector<HTMLDialogElement>("#toast-dialog")?.showModal());
 
     await expect.poll(() => toastTakesThePointer(page)).toBe(true);
     expect(await peakBrightness(page)).toBeGreaterThan(alone * 0.9);
@@ -163,12 +163,12 @@ test("a toast already showing when a dialog opens is above it and takes a click"
 test("a toast outlives the dialog it was shown over, closed or removed from the page", async ({ page }) => {
     for (const end of ["close", "remove"] as const) {
         await page.evaluate(() => {
-            document.querySelector<HTMLDialogElement>("#p194-dialog")?.showModal();
+            document.querySelector<HTMLDialogElement>("#toast-dialog")?.showModal();
             window.toastr?.info("Over the dialog");
         });
         await settledToast(page);
         await page.evaluate((how) => {
-            const dialog = document.querySelector<HTMLDialogElement>("#p194-dialog");
+            const dialog = document.querySelector<HTMLDialogElement>("#toast-dialog");
             if (how === "close") dialog?.close();
             else dialog?.remove();
         }, end);

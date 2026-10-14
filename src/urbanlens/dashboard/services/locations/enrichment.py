@@ -52,7 +52,7 @@ _DENSITY_SCORE_CAP = 20
 class EnrichmentSource(ABC):
     """
     One kind of background-enrichable data for a Location.
-    Core sources are registered in :func:`enrichment_sources`; integrations contribute theirs via ``UrbanLensPlugin.get_enrichment_sources`` so new enrichment kinds can be added without touching this module.
+    Core sources are registered in :func:`enrichment_sources`; integrations contribute theirs to ``ENRICHMENT_SOURCES`` so new enrichment kinds can be added without touching this module.
 
     Attributes:
         key: Unique slug identifying this source in run summaries and logs.
@@ -64,10 +64,14 @@ class EnrichmentSource(ABC):
 
     key: ClassVar[str] = ""
     verbose_name: ClassVar[str] = ""
-    service_keys: tuple[str, ...] = ()
     calls_per_item: ClassVar[int] = 1
     geo_boundary: ClassVar[GeoBoundary | None] = None
     refreshes_names: ClassVar[bool] = False
+
+    @property
+    def service_keys(self) -> tuple[str, ...]:
+        """Rate-limiter service keys consumed per enriched item; a subclass sets a class attribute, or computes it from what is configured."""
+        return ()
 
     def gate(self) -> bool:
         """
@@ -243,13 +247,13 @@ def enrichment_sources() -> list[EnrichmentSource]:
     Returns:
         Sources in registration order, deduplicated by ``key`` (first wins).
     """
-    from urbanlens.dashboard.plugins.registry import plugin_registry
+    from urbanlens.dashboard.plugins.points import ENRICHMENT_SOURCES
 
     sources: list[EnrichmentSource] = [
         AddressEnrichmentSource(),
         BoundaryEnrichmentSource(),
     ]
-    sources.extend(plugin_registry.enrichment_sources())
+    sources.extend(ENRICHMENT_SOURCES)
 
     seen: set[str] = set()
     unique: list[EnrichmentSource] = []
@@ -410,7 +414,7 @@ def prioritized_location_candidates(missing: Q, *, limit: int, geo_boundary: Geo
     bootstrapping = locations_bootstrapping(candidate.pk for candidate in shortlist)
     shortlist = [candidate for candidate in shortlist if candidate.pk not in bootstrapping]
     if len(shortlist) > limit:
-        scored = [(candidate.priority_score + _nearby_density_score(candidate), candidate) for candidate in shortlist]  # type: ignore[attr-defined]  # annotation django-stubs loses (P85)
+        scored = [(candidate.priority_score + _nearby_density_score(candidate), candidate) for candidate in shortlist]  # type: ignore[attr-defined]  # annotation django-stubs loses
         scored.sort(key=lambda pair: pair[0], reverse=True)
         return [candidate for _score, candidate in scored[:limit]]
     return shortlist
@@ -514,7 +518,7 @@ def run_enrichment_cycle(*, force: bool = False, sleep: Callable[[float], None] 
                     break
                 except GatewayRateLimitedError as exc:
                     # The upstream service reported its own request budget is exhausted (e.g.
-                    # REData's Google Places budget, or this key's share of it) - expected and
+                    # a provider's Places budget, or this key's share of it) - expected and
                     # self-clearing, not a bug.
                     logger.info("Enrichment source %s stopped early: %s", source.key, exc)
                     entry["skipped"] = "rate_limited"

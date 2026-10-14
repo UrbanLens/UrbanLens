@@ -18,8 +18,7 @@ must not be confused with each other:
   linked-wikis list) until it's actually earned.
 
 - **Engagement grandfathering** (:class:`WikiEngagementGrandfatheringTests`,
-  :class:`WikiEngagementAcrossSurfacesTests`, :class:`PlacelessWikiEngagementTests`;
-  D19). Independent of any split: a profile who actually viewed a wiki,
+  :class:`WikiEngagementAcrossSurfacesTests`, :class:`PlacelessWikiEngagementTests`). Independent of any split: a profile who actually viewed a wiki,
   or shared content to it, while they held access keeps that access even
   after every qualifying pin is later moved or deleted
   (:meth:`PlaceAccessGrantManager.record_engagement`). Viewing once while
@@ -325,7 +324,7 @@ API_BASE = "/dashboard/api/external/v1/wikis"
 
 
 class WikiEngagementAcrossSurfacesTests(TestCase):
-    """The engagement grant (D19) holds on every wiki surface, and only a surface that admitted the viewer records it."""
+    """The engagement grant holds on every wiki surface, and only a surface that admitted the viewer records it."""
 
     def setUp(self) -> None:
         super().setUp()

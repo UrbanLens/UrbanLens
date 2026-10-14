@@ -337,7 +337,7 @@ class ExportDownloadView(LoginRequiredMixin, View):
 
 class ExportFormatDownloadView(LoginRequiredMixin, View):
     """
-    Download ALL of the requester's root pins as a single GeoJSON/KML/GPX/CSV file (UL-382).
+    Download ALL of the requester's root pins as a single GeoJSON/KML/GPX/CSV file.
 
     The quick, synchronous counterpart to the full ZIP export above: no Celery job, no polling - one GET
     straight to a file download, using the same per-format writers the targeted bulk export uses

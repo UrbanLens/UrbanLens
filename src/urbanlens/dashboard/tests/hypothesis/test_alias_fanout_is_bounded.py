@@ -8,7 +8,7 @@ committing request - and each of those writes fires two further receivers
 (the pin->wiki mirror, and the name-sensitive cache invalidation). So the
 cost of one person adding a name to a popular place was set by how many
 *other* people had pinned it, which is the shape the availability work
-exists to remove (N21 H25).
+exists to remove.
 
 The fan-out itself is still correct and still has to happen. What changes is
 where: a bulk task, on the queue whose whole purpose is work whose size is

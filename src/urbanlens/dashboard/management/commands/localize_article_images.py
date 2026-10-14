@@ -1,5 +1,5 @@
 """
-Point every remote image in a stored article at this site's copy (P165).
+Point every remote image in a stored article at this site's copy.
 
 Articles saved from now on are rewritten as they are saved (``articles.localize_article_images``). This does the same
 for articles saved before, each as a new revision, so the history keeps what the author wrote.

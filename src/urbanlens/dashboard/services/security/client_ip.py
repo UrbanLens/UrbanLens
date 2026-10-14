@@ -67,7 +67,7 @@ def parse_networks(raw: str) -> tuple[ipaddress.IPv4Network | ipaddress.IPv6Netw
     Cached on the raw string, because callers re-derive this from a setting on every request and the result only changes when the setting does.
 
     Args:
-        raw: Comma-separated CIDRs, e.g. ``"10.2.0.0/24, 127.0.0.1/32"``.
+        raw: Comma-separated CIDRs, e.g. ``"10.0.0.0/24, 127.0.0.1/32"``.
 
     Returns:
         The networks that parsed, as a tuple - immutable because it is shared between every caller that passes the same string."""

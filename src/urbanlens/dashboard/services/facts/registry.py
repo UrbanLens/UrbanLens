@@ -16,7 +16,7 @@ class FactKeyDefinition:
         key: The ``Fact.key``/``FactEvidence`` value this definition governs.
         data_type: Which ``FactDataType`` values recorded under this key are stored/compared as.
         allowed_subject_types: Which ``FactSubjectType`` values this key may attach to - e.g. ``photo_coordinates`` is Image-only.
-        display_name: Human-readable label, for admin/debug UI and AI prompts."""
+        display_name: Human-readable label, for admin/debug UI and generated text."""
 
     key: str
     data_type: str

@@ -5,7 +5,7 @@ The outbound-API daily budget check must be able to use its index.
 rows with ``created__date = <today>``. Wrapping the column in a date extraction
 makes the predicate unusable by ``idxdb_apilog_svc_cdt`` (service, created), so
 the count degraded to a scan of a 400-day append-only log that every user's
-activity makes longer - N21 H57. The site's own traffic sets what the next call
+activity makes longer. The site's own traffic sets what the next call
 costs, which is the coupling the availability requirement forbids.
 
 A half-open range over the stored column is the same question asked in a form

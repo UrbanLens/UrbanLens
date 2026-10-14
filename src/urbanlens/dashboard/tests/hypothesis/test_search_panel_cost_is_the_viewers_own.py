@@ -8,7 +8,7 @@ engine's fan-out nor its plain-text fallback is ever inside a measurement. This 
 whether search scales with users:
 
 * **Rows read are the viewer's own.** A stranger adding rows must not make the viewer's search read
-  more of the database. This is the property P123 and P100 are both about, applied to every
+  more of the database. This is the property that two earlier findings were both about, applied to every
   provider at once.
 * **Statements are the viewer's own.** The count must not grow with anybody's row count - neither a
   stranger's (which would be a leak) nor the viewer's own (which would be an N+1).

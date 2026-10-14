@@ -5,7 +5,7 @@
 # Dumps are plain SQL, gzip-compressed or uncompressed; restore from the app container into
 # an empty DB with ON_ERROR_STOP + --single-transaction.
 #
-# Never writes to the live database - see docs/BACKUPS.md.
+# Never writes to the live database.
 #
 # Usage:
 #   bin/restore_backup.sh --list
@@ -92,7 +92,7 @@ LIVE_DB=$(in_app "$CONTAINER" printenv UL_DB_NAME)
 [ -n "$LIVE_DB" ] \
     || die "'$CONTAINER' has no UL_DB_NAME, so the guard against restoring over the live database cannot be evaluated. Refusing rather than guessing."
 [ "$TARGET" != "$LIVE_DB" ] \
-    || die "'$TARGET' is the live database this deployment serves. Restore into a scratch database and cut over deliberately - see docs/BACKUPS.md."
+    || die "'$TARGET' is the live database this deployment serves. Restore into a scratch database and cut over deliberately."
 
 # The owner's password crosses from one container to the other over a pipe, never into a process table.
 # `shift`, not "${@:4}": the container's /bin/sh is dash.

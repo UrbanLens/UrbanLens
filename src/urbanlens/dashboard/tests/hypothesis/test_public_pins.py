@@ -1,4 +1,4 @@
-"""Tests for public-pin voting (UL-58): eligibility engine, vote lifecycle, endpoint, suggestions."""
+"""Tests for public-pin voting: eligibility engine, vote lifecycle, endpoint, suggestions."""
 
 from __future__ import annotations
 

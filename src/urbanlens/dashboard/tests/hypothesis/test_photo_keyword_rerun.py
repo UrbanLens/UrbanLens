@@ -12,6 +12,7 @@ from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.plugins.points import PHOTO_KEYWORD_PROVIDERS
 from urbanlens.dashboard.services.photos.photo_keywords import KeywordResult, generate_keywords_for_image
 
 
@@ -44,9 +45,7 @@ class PhotoKeywordRerunTests(TestCase):
 
     def _run(self, keywords: list[str]) -> dict:
         provider = _StubProvider(keywords)
-        with mock.patch(
-            "urbanlens.dashboard.plugins.registry.plugin_registry.photo_keyword_providers", return_value=[provider]
-        ):
+        with PHOTO_KEYWORD_PROVIDERS.overridden([provider]):
             return generate_keywords_for_image(self.image.pk)
 
     def _stored(self) -> set[str]:

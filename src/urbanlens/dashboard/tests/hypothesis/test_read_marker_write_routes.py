@@ -1,5 +1,5 @@
 """
-Read markers and per-member preferences: group read and mute, notifications read-all, the map dark-mode setting (P29).
+Read markers and per-member preferences: group read and mute, notifications read-all, the map dark-mode setting.
 
 Each asserts that the caller's own row changes and nobody else's, that a non-member is refused with nothing changed,
 that anonymous is sent to log in (or refused on the external API), and that a malformed body is a 4xx.

@@ -46,6 +46,31 @@ describe("PinMediaGallery sort options", () => {
     });
 });
 
+describe("PinMediaGallery source tabs", () => {
+    const tabLabels = (): string[] => Array.from(document.querySelectorAll<HTMLElement>("#media-tabs .media-tab"), (el) => el.textContent ?? "");
+
+    function tabsPage(tiles: string): void {
+        document.body.innerHTML = `
+            <div id="media-gallery-section" class="card" data-media-view="all" data-media-sort="recent">
+                <div id="media-tabs"></div>
+                <div id="media-gallery-grid">${tiles}</div>
+            </div>`;
+    }
+
+    const tile = (key: string, source: string, label = ""): string =>
+        `<div class="media-item" data-media-source="${source}"${label ? ` data-media-source-label="${label}"` : ""} data-media-key="${key}" data-media-url="https://example.test/${key}.jpg"></div>`;
+
+    test("a tab is named by the label its tiles carry, and by its key when they carry none", () => {
+        tabsPage(tile("a", "one", "First Provider") + tile("b", "two"));
+        const loader = document.createElement("div");
+        loader.className = "media-provider-loader";
+        document.body.appendChild(loader);
+        const xhr = { status: 200, getResponseHeader: () => null };
+        document.body.dispatchEvent(new CustomEvent("htmx:afterOnLoad", { detail: { elt: loader, xhr } }));
+        expect(tabLabels()).toEqual(expect.arrayContaining(["First Provider1", "two1"]));
+    });
+});
+
 describe("PinMediaGallery dragging a tile toward the map", () => {
     function drag(tile: Element): Map<string, string> {
         const data = new Map<string, string>();

@@ -675,49 +675,9 @@ class TripActivitiesView(LoginRequiredMixin, View):
         return _render_activities_panel(request, trip, profile)
 
 
-class TripAiSuggestionsView(LoginRequiredMixin, View):
-    """
-    AI-generated trip suggestions: pins worth adding, and a possible reorder.
-
-    GET /trips/<slug>/ai-suggestions/ -> render panel (cached)
-    POST /trips/<slug>/ai-suggestions/ -> force a fresh generation (cooldown-limited)
-
-    Read-only: this view never creates or changes anything by itself.
-    Adding a suggested pin re-uses the normal add-activity endpoint (the suggestion already carries the
-    requester's own pin slug); applying a suggested order is a separate, explicit action (see
-    TripApplySuggestedOrderView).
-    """
-
-    def get(self, request, trip_slug):
-        return self._respond(request, trip_slug, force_refresh=False)
-
-    def post(self, request, trip_slug):
-        return self._respond(request, trip_slug, force_refresh=True)
-
-    def _respond(self, request, trip_slug, *, force_refresh: bool):
-        from urbanlens.dashboard.services.ai.access import ai_refused_here
-        from urbanlens.dashboard.services.trips.trip_ai_suggestions import get_trip_suggestions
-
-        profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = trip_or_not_found(request, trip_slug, profile)
-        if isinstance(result, HttpResponse):
-            return result
-        trip = result
-
-        if not _viewer_has_joined(profile, trip):
-            return HttpResponse("Join this trip to see suggestions.", status=403)
-
-        suggestions = get_trip_suggestions(trip, profile, force_refresh=force_refresh)
-        return render(
-            request,
-            "dashboard/partials/trips/_trip_ai_suggestions_panel.html",
-            {"trip": trip, "profile": profile, "suggestions": suggestions, "unavailable_here": ai_refused_here("trip_suggestions")},
-        )
-
-
 class TripApplySuggestedOrderView(LoginRequiredMixin, View):
     """
-    Apply an AI-suggested activity order.
+    Apply a suggested activity order.
 
     POST /trips/<slug>/activities/apply-order/
 
@@ -1507,7 +1467,7 @@ def _build_activity_forecasts(activities: list[TripActivity], *, caller: str | N
     """
     For each activity, find the closest forecast slot at its location and time.
 
-    Tries REData first, then the direct OpenWeatherMap/Open-Meteo chain - see
+    Asks each weather provider in priority order - see
     ``services.apis.locations.weather_resolution.get_raw_forecast_slots``.
 
     Args:
@@ -1589,7 +1549,7 @@ def _build_activity_history(activities: list[TripActivity]) -> tuple[list[dict],
         Dicts with ``activity``, ``location_name``, ``scheduled_at`` and ``recorded`` (a ``RecordedDay``),
         earliest first, and whether some wanted days are not stored yet.
     """
-    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
+    from urbanlens.dashboard.services.apis.locations.weather_resolution import history_providers
     from urbanlens.dashboard.services.locations.visit_weather import cached_records, convert_records, missing_days, queue_missing_days, weather_cell
 
     by_cell: dict[tuple[int, int], list[TripActivity]] = {}
@@ -1610,7 +1570,7 @@ def _build_activity_history(activities: list[TripActivity]) -> tuple[list[dict],
         stored = cached_records(wanted)
 
     results: list[dict] = []
-    fetchable = redata_configured()
+    fetchable = bool(history_providers())
     pending = False
     for cell, group in by_cell.items():
         days = wanted[cell]
@@ -1722,7 +1682,7 @@ class TripWeatherView(LoginRequiredMixin, View):
                 "recorded_days": recorded_days,
                 "error": error,
                 # Asked once more after a pause while something is still arriving; the retry never asks again, so a
-                # day REData cannot answer does not poll forever.
+                # day no provider can answer does not poll forever.
                 "refresh_url": f"{request.path}?retry=1" if pending and not request.GET.get("retry") else "",
             },
         )

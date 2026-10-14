@@ -1,5 +1,5 @@
 """
-The uploader is never handed the URL of a file that the upload's re-encode renames away (P58).
+The uploader is never handed the URL of a file that the upload's re-encode renames away.
 
 The re-encode stores the upload under a new name and deletes the old file, after which the old path has no
 owning row and 404s, correctly. These run a real upload and a real ``process_image_upload`` and check that
@@ -60,7 +60,7 @@ def _stored_name(image: Image) -> str:
 class _UploadLifecycle(TestCase):
     def setUp(self) -> None:
         super().setUp()
-        self.media_root = tempfile.mkdtemp(prefix="ul_p58_")
+        self.media_root = tempfile.mkdtemp(prefix="ul_renamed_upload_")
         self.addCleanup(shutil.rmtree, self.media_root, ignore_errors=True)
         overrides = override_settings(MEDIA_ROOT=self.media_root, MEDIA_X_ACCEL=False)
         overrides.enable()
@@ -112,7 +112,7 @@ class _UploadLifecycle(TestCase):
 class PhotoUploadTests(_UploadLifecycle):
     def test_no_surface_names_the_upload_and_the_settled_tile_is_served(self) -> None:
         image = self.upload(
-            reverse("vault.photos.upload"), "image", SimpleUploadedFile("p58.jpg", _jpeg_bytes(), "image/jpeg")
+            reverse("vault.photos.upload"), "image", SimpleUploadedFile("renamed.jpg", _jpeg_bytes(), "image/jpeg")
         )
         raw_name = _stored_name(image)
         self.show("Vault Photos page", reverse("vault.photos"))
@@ -131,7 +131,7 @@ class PhotoUploadTests(_UploadLifecycle):
 
     def test_the_stable_link_holds_a_placeholder_then_follows_the_rename(self) -> None:
         image = self.upload(
-            reverse("vault.photos.upload"), "image", SimpleUploadedFile("p58.jpg", _jpeg_bytes(), "image/jpeg")
+            reverse("vault.photos.upload"), "image", SimpleUploadedFile("renamed.jpg", _jpeg_bytes(), "image/jpeg")
         )
         link = reverse("media.image", args=[image.uuid])
         pending = self.client.get(link)
@@ -156,7 +156,7 @@ class DocumentUploadTests(_UploadLifecycle):
         document = self.upload(
             reverse("vault.documents.upload"),
             "document",
-            SimpleUploadedFile("p58-notes.txt", b"minutes of the meeting", "text/plain"),
+            SimpleUploadedFile("renamed-notes.txt", b"minutes of the meeting", "text/plain"),
         )
         self.assertEqual(document.media_type, MediaKind.DOCUMENT)
         return document

@@ -1,4 +1,4 @@
-"""Migration 0038 drops cached searches that may have been built from someone's own names; nothing else (P188)."""
+"""Migration 0038 drops cached searches that may have been built from someone's own names; nothing else."""
 
 from __future__ import annotations
 
@@ -41,8 +41,9 @@ class DropNameBuiltSearchesTests(TestCase):
         remaining = set(LocationCache.objects.filter(location=self.location).values_list("source", flat=True))
         self.assertEqual(remaining, set(KEPT))
 
-    def test_the_list_matches_every_source_that_now_caches_per_audience(self) -> None:
+    def test_the_list_covers_every_source_that_now_caches_per_audience(self) -> None:
+        """A plugin's sources are listed too, so the list can be longer than the sources installed here."""
         from urbanlens.dashboard.services.pins.external_data import NameSearchSource, panel_sources
 
         audienced = {source.cache_source for source in panel_sources().values() if isinstance(source, NameSearchSource)}
-        self.assertEqual(audienced | {"web_search"}, set(_MIGRATION.NAME_BUILT_SOURCES))
+        self.assertLessEqual(audienced | {"web_search"}, set(_MIGRATION.NAME_BUILT_SOURCES))

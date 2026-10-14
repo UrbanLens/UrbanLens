@@ -105,7 +105,7 @@ def sync_trip_on_activity_delete(sender: type[TripActivity], instance: TripActiv
 def flag_replies_on_parent_delete(sender: type[TripComment], instance: TripComment, **kwargs: Any) -> None:
     """
     Mark every reply of a trip comment about to be deleted as parent-deleted.
-    Mirrors ``models.comments.signals.flag_replies_on_parent_delete`` (UL-219) for ``TripComment``, which has the identical ``parent = ForeignKey("self", on_delete=SET_NULL)`` shape.
+    Mirrors ``models.comments.signals.flag_replies_on_parent_delete`` for ``TripComment``, which has the identical ``parent = ForeignKey("self", on_delete=SET_NULL)`` shape.
     Runs pre-delete so the affected replies are flagged before Django's collector nulls their ``parent`` FK - by post-delete time there is no reliable way to find them again.
 
     Args:

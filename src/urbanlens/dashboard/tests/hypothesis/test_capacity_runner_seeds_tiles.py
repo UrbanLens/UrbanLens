@@ -1,11 +1,11 @@
 """
-X26: a capacity run given a ready-made manifest seeded no tiles and measured 503s.
+A capacity run given a ready-made manifest seeded no tiles and measured 503s.
 
 ``run_capacity_tests.sh`` seeded the basemap tile cache inside its ``--provision-container``
 branch, so the cheap way to re-measure - reuse the 1,000-account population already in the
 database and pass ``--manifest`` - skipped seeding entirely. Every tile then missed, hit the
 proxy's upstream slot bound and answered 503, and the report still rendered a full table of
-plausible latencies. X26 records 8,360 of 8,352 tile requests answering 503 in exactly that way.
+plausible latencies. The run that exposed this recorded 8,360 of 8,352 tile requests answering 503 in exactly that way.
 
 The run is driven here with stub ``docker`` and ``bun`` on ``PATH``, so what is asserted is the
 command the script would have issued rather than the shape of its source.

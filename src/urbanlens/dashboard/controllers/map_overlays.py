@@ -6,7 +6,7 @@ import contextlib
 import json
 import logging
 import math
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q
@@ -21,11 +21,8 @@ from urbanlens.dashboard.models.markup.model import CustomLayer
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.apis.request_upstreams import HistoricalMapsBrowseUpstream, HistoricalMapVolumesUpstream
-from urbanlens.dashboard.services.core.counters import Outage
 from urbanlens.dashboard.services.core.numbers import safe_int_or_none
 from urbanlens.dashboard.services.core.request_body import MalformedBodyError, decode_json
-from urbanlens.dashboard.services.core.request_upstream import Outcome, Pending, UpstreamResult, wait_all
 from urbanlens.dashboard.services.core.text_limits import column_max_length
 from urbanlens.dashboard.services.map.image_overlays import (
     MAX_OVERLAYS_PER_MAP,
@@ -33,19 +30,15 @@ from urbanlens.dashboard.services.map.image_overlays import (
     OverlayLimitError,
     at_overlay_limit,
     create_overlay,
-    historical_tile_template,
     image_from_external_url,
     owner_kwargs,
 )
-from urbanlens.dashboard.services.media.remote_copies import RemoteImage, copy_urls
 from urbanlens.dashboard.services.media.storage import StorageUnavailableError
-from urbanlens.dashboard.services.security.throttle import Rate, account_or_address
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
 
-    from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.map_overlay.queryset import MapImageOverlayQuerySet
 
 logger = logging.getLogger(__name__)
@@ -56,7 +49,7 @@ _MAX_NAME_LENGTH = column_max_length(MapImageOverlay, "name")
 OVERLAY_UUID_PLACEHOLDER = "00000000-0000-0000-0000-000000000000"
 
 
-def _resolve_owner(request: HttpRequest, pin_slug: str | None, location_slug: str | None) -> tuple[Pin | Wiki, MapImageOverlayQuerySet]:
+def resolve_owner(request: HttpRequest, pin_slug: str | None, location_slug: str | None) -> tuple[Pin | Wiki, MapImageOverlayQuerySet]:
     """
     Resolve the overlay owner (Pin or Wiki) from URL kwargs.
 
@@ -78,13 +71,13 @@ def _resolve_owner(request: HttpRequest, pin_slug: str | None, location_slug: st
         raise Http404
     # Filtered by who created it, not hidden outright - see the matching note
     # in controllers/custom_layers.py._resolve_layer_owner.
-    from urbanlens.dashboard.services.wiki.concealment import visible_rows
+    from urbanlens.dashboard.services.wiki.viewer_projection import visible_rows
 
     _location, wiki, profile = resolve_visible_wiki(request, location_slug)
     return wiki, visible_rows(MapImageOverlay.objects.for_wiki(wiki), wiki, profile)
 
 
-def _owner_location(owner: Pin | Wiki):
+def owner_location(owner: Pin | Wiki):
     """The ``Location`` behind either owner - both hold one."""
     return owner.location
 
@@ -118,7 +111,7 @@ def _default_corners(owner: Pin | Wiki) -> list[list[float]] | None:
         Four ``[lat, lng]`` pairs around the location, or None when the owner has no coordinates to seed
         from.
     """
-    location = _owner_location(owner)
+    location = owner_location(owner)
     if location is None or location.latitude is None or location.longitude is None:
         return None
     latitude = float(location.latitude)
@@ -194,7 +187,7 @@ def _parse_corners(raw: str | None) -> list[list[float]] | None:
     return corners
 
 
-def _clamped_opacity(raw: str | None, fallback: int) -> int:
+def clamped_opacity(raw: str | None, fallback: int) -> int:
     """Parse a posted opacity percent, falling back when absent/unparseable."""
     try:
         return max(0, min(100, int(raw)))  # type: ignore[arg-type]
@@ -263,7 +256,7 @@ def _image_from_request(request: HttpRequest, owner: Pin | Wiki, profile: Profil
 
         try:
             image = materialize_media_item(
-                location=_owner_location(owner),
+                location=owner_location(owner),
                 profile=profile,
                 source=(request.POST.get("media_source") or "").strip(),
                 url=media_url,
@@ -295,7 +288,7 @@ def overlay_payload(qs: MapImageOverlayQuerySet, visible_layer_ids: set[int] | N
 
     Args:
         qs: An owner-scoped ``MapImageOverlay`` queryset, already narrowed to what this viewer may see
-        (see ``_resolve_owner``).
+        (see ``resolve_owner``).
         visible_layer_ids: The ``CustomLayer`` pks this viewer may list, when the owner is a wiki -
         wiki-scoped layer assignment isn't restricted to an overlay's...
 
@@ -320,18 +313,18 @@ def _visible_layer_ids(owner: Pin | Wiki, request: HttpRequest) -> set[int] | No
         request: The current request, for the viewer.
 
     Returns:
-        None for a pin-scoped owner (concealment never applies there, so callers should leave layer
+        None for a pin-scoped owner (a viewer projection never applies there, so callers should leave layer
         references untouched); otherwise the set of...
     """
     if isinstance(owner, Pin):
         return None
-    from urbanlens.dashboard.services.wiki.concealment import visible_rows
+    from urbanlens.dashboard.services.wiki.viewer_projection import visible_rows
 
     profile, _ = Profile.objects.get_or_create(user=request.user)
     return set(visible_rows(CustomLayer.objects.filter(**owner_kwargs(owner)), owner, profile).values_list("pk", flat=True))
 
 
-def _render_overlay_list(
+def render_overlay_list(
     request: HttpRequest,
     owner: Pin | Wiki,
     qs: MapImageOverlayQuerySet,
@@ -374,7 +367,7 @@ def _render_overlay_list(
         for overlay in overlays
     ]
     # The layer picker in this dialog offers the same set _resolve_layer_owner would list for this viewer - a
-    # concealed viewer must not be offered a stranger's layer name to file an overlay under, any more than
+    # viewer must not be offered the name of a layer they are not shown to file an overlay under, any more than
     # controllers.custom_layers would list it in the layers panel.
     layers_qs = CustomLayer.objects.filter(**owner_kwargs(owner)).order_by("order", "id")
     if visible_layer_ids is not None:
@@ -448,7 +441,7 @@ class OverlayMediaPickerView(LoginRequiredMixin, View):
 
     def get(self, request: HttpRequest, pin_slug: str | None = None, location_slug: str | None = None) -> JsonResponse:
         """List this owner's images, most recent first."""
-        owner, _qs = _resolve_owner(request, pin_slug, location_slug)
+        owner, _qs = resolve_owner(request, pin_slug, location_slug)
         # visible_to for the same reason the wiki gallery uses it: contributing a photo to a wiki does not
         # withdraw what its uploader said about who may see their photos, and this picker was the one wiki photo
         # surface that did not ask.
@@ -466,18 +459,18 @@ class MapOverlayListView(LoginRequiredMixin, View):
 
     def get(self, request: HttpRequest, pin_slug: str | None = None, location_slug: str | None = None) -> HttpResponse:
         """Render the manage-overlays dialog body."""
-        owner, qs = _resolve_owner(request, pin_slug, location_slug)
-        return _render_overlay_list(request, owner, qs)
+        owner, qs = resolve_owner(request, pin_slug, location_slug)
+        return render_overlay_list(request, owner, qs)
 
     def post(self, request: HttpRequest, pin_slug: str | None = None, location_slug: str | None = None) -> HttpResponse:
         """Create one overlay from an upload, a Media-gallery pick, or a URL."""
-        owner, qs = _resolve_owner(request, pin_slug, location_slug)
+        owner, qs = resolve_owner(request, pin_slug, location_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
         def fail(message: str) -> HttpResponse:
             if _wants_json(request):
                 return JsonResponse({"error": message}, status=400)
-            return _render_overlay_list(request, owner, qs, error=message)
+            return render_overlay_list(request, owner, qs, error=message)
 
         # Also checked inside create_overlay; this one saves a full map from first paying for a download.
         if at_overlay_limit(owner):
@@ -508,7 +501,7 @@ class MapOverlayListView(LoginRequiredMixin, View):
         if existing_overlay is not None:
             if _wants_json(request):
                 return _created_overlay_json(owner, existing_overlay)
-            return _render_overlay_list(
+            return render_overlay_list(
                 request,
                 owner,
                 qs,
@@ -523,13 +516,13 @@ class MapOverlayListView(LoginRequiredMixin, View):
                 corners=corners,
                 image=image,
                 name=request.POST.get("name") or "",
-                opacity=_clamped_opacity(request.POST.get("opacity"), 70),
+                opacity=clamped_opacity(request.POST.get("opacity"), 70),
             )
         except OverlayLimitError as exc:
             return fail(exc.message)
         if _wants_json(request):
             return _created_overlay_json(owner, overlay)
-        return _render_overlay_list(
+        return render_overlay_list(
             request,
             owner,
             qs,
@@ -543,11 +536,11 @@ class MapOverlayEditView(LoginRequiredMixin, View):
 
     def post(self, request: HttpRequest, overlay_uuid: str, pin_slug: str | None = None, location_slug: str | None = None) -> HttpResponse:
         """Update name, opacity, lock state, visibility, order, and layer."""
-        owner, qs = _resolve_owner(request, pin_slug, location_slug)
+        owner, qs = resolve_owner(request, pin_slug, location_slug)
         overlay = get_object_or_404(qs, uuid=overlay_uuid)
 
         overlay.name = (request.POST.get("name") or "").strip()[:_MAX_NAME_LENGTH]
-        overlay.opacity = _clamped_opacity(request.POST.get("opacity"), overlay.opacity)
+        overlay.opacity = clamped_opacity(request.POST.get("opacity"), overlay.opacity)
         overlay.locked = request.POST.get("locked") in ("1", "true", "on")
         overlay.default_visible = request.POST.get("default_visible") in ("1", "true", "on")
         with contextlib.suppress(TypeError, ValueError):
@@ -560,7 +553,7 @@ class MapOverlayEditView(LoginRequiredMixin, View):
             # visible options, so a posted uuid outside that set can only be a stale or crafted request.
             layer_qs = CustomLayer.objects.filter(**owner_kwargs(owner), uuid=layer_uuid)
             if isinstance(owner, Wiki):
-                from urbanlens.dashboard.services.wiki.concealment import visible_rows
+                from urbanlens.dashboard.services.wiki.viewer_projection import visible_rows
 
                 profile, _ = Profile.objects.get_or_create(user=request.user)
                 layer_qs = visible_rows(layer_qs, owner, profile)
@@ -569,7 +562,7 @@ class MapOverlayEditView(LoginRequiredMixin, View):
             overlay.layer = None
         else:
             # The form always posts this field, and the <select> that fills it only ever lists visible_layer_ids
-            # - so an empty value here is indistinguishable from a concealed viewer's own read side having
+            # - so an empty value here is indistinguishable from the viewer's own read side having
             # nulled a real, invisible layer assignment for display (see overlay_payload's visible_layer_ids
             # parameter) and echoed straight back by editing some other field.
             visible_ids = _visible_layer_ids(owner, request)
@@ -577,7 +570,7 @@ class MapOverlayEditView(LoginRequiredMixin, View):
                 overlay.layer = None
 
         overlay.save(update_fields=["name", "opacity", "locked", "default_visible", "order", "layer", "updated"])
-        return _render_overlay_list(request, owner, qs)
+        return render_overlay_list(request, owner, qs)
 
 
 class MapOverlayCornersView(LoginRequiredMixin, View):
@@ -591,7 +584,7 @@ class MapOverlayCornersView(LoginRequiredMixin, View):
 
     def post(self, request: HttpRequest, overlay_uuid: str, pin_slug: str | None = None, location_slug: str | None = None) -> JsonResponse:
         """Persist a dragged overlay's four corners."""
-        _owner, qs = _resolve_owner(request, pin_slug, location_slug)
+        _owner, qs = resolve_owner(request, pin_slug, location_slug)
         overlay = get_object_or_404(qs, uuid=overlay_uuid)
 
         corners = _parse_corners(request.POST.get("corners"))
@@ -618,336 +611,6 @@ class MapOverlayDeleteView(LoginRequiredMixin, View):
 
     def delete(self, request: HttpRequest, overlay_uuid: str, pin_slug: str | None = None, location_slug: str | None = None) -> HttpResponse:
         """Remove one overlay from its map."""
-        owner, qs = _resolve_owner(request, pin_slug, location_slug)
+        owner, qs = resolve_owner(request, pin_slug, location_slug)
         get_object_or_404(qs, uuid=overlay_uuid).delete()
-        return _render_overlay_list(request, owner, qs)
-
-
-#: Georeference transformations whose ``rmse_meters`` is not an accuracy figure. A thin-plate spline
-#: interpolates its control points by construction, so its residual is ~0 whatever the fit is actually like -
-#: reporting that as "±0 m" would advertise a perfect placement for what may be the worst one in the list.
-_UNINFORMATIVE_RMSE_TRANSFORMS = frozenset({"thinPlateSpline"})
-
-#: Above this, a georeference is placing the sheet by metres rather than centimetres and the user should know
-#: before drawing a building on it. Below it, the number is noise on a scanned historical map.
-_NOTABLE_RMSE_METERS = 25.0
-
-
-def georeference_accuracy(georeference: dict) -> str:
-    """
-    A short honest note about how well a sheet is placed, or ``""``.
-
-    Args:
-        georeference: REData's ``georeference`` block - ``transformation``, ``rmse_meters``,
-        ``gcp_count``.
-
-    Returns:
-        Something like ``"±40 m (6 control points)"``, or ``""`` when the figure would be absent,
-        meaningless, or too small to be worth the pixels.
-    """
-    if str(georeference.get("transformation") or "") in _UNINFORMATIVE_RMSE_TRANSFORMS:
-        return ""
-    rmse = georeference.get("rmse_meters")
-    if not isinstance(rmse, (int, float)) or rmse < _NOTABLE_RMSE_METERS:
-        return ""
-    points = georeference.get("gcp_count")
-    suffix = f" ({points} control points)" if isinstance(points, int) and points else ""
-    return f"±{rmse:,.0f} m{suffix}"
-
-
-def historical_map_row(match: dict) -> dict | None:
-    """
-    One picker row from a REData historical-map match, or None to skip it.
-
-    ``thumbnail_url`` and ``landing_page_url`` are the *institution's* own public URLs, not
-    REData-authenticated ones. The page shows this site's copy of the thumbnail rather than the institution's.
-
-    Args:
-        match: One entry from ``RedataHistoricalMapsGateway.get_maps_covering``.
-
-    Returns:
-        A template-ready row, or None when the match cannot be drawn.
-    """
-    sheet = match.get("sheet") or {}
-    georeference = match.get("georeference") or {}
-    if not georeference.get("uuid") or not georeference.get("bounds"):
-        return None
-    return {
-        "georeference_uuid": georeference["uuid"],
-        "title": sheet.get("title") or "Untitled map",
-        "date_text": sheet.get("date_text") or "",
-        "kind": (sheet.get("kind") or "other").replace("_", " "),
-        "attribution": sheet.get("attribution") or "",
-        "contains_point": bool(match.get("contains_point")),
-        "thumbnail_url": sheet.get("thumbnail_url") or "",
-        "landing_page_url": sheet.get("landing_page_url") or "",
-        "accuracy": georeference_accuracy(georeference),
-    }
-
-
-#: Per account. Each browse asks REData which sheets cover the point.
-HISTORICAL_MAP_BROWSE_RATE = Rate(limit=60, window_seconds=60, on_outage=Outage.REFUSE)
-HISTORICAL_MAP_BROWSE_METHODS = frozenset({"GET"})
-
-
-#: REData's sheet list for a spot changes only when an institution publishes or rewarps a sheet.
-HISTORICAL_MAPS_CACHE_TTL = 86400
-
-
-def _start_historical_maps(request: HttpRequest, location: Location) -> Pending[list[dict[str, Any]]]:
-    from urbanlens.dashboard.services.apis.locations.redata_historical_maps_gateway import RedataHistoricalMapsGateway, maps_answer_complete
-
-    latitude, longitude = float(location.latitude), float(location.longitude)
-    return HistoricalMapsBrowseUpstream.start(
-        lambda: RedataHistoricalMapsGateway().get_maps_covering(latitude, longitude, radius_meters=2000, limit=25),
-        key=f"{latitude:.6f}:{longitude:.6f}",
-        ttl=HISTORICAL_MAPS_CACHE_TTL,
-        caller=account_or_address(request),
-        # An answer REData cut short at its deadline is shown but not kept, so the next browse asks again.
-        cacheable=maps_answer_complete,
-    )
-
-
-def historical_maps_covering(request: HttpRequest, location: Location) -> UpstreamResult[list[dict[str, Any]]]:
-    """
-    REData's georeferenced sheets covering a location, from cache or under the request-path policy.
-
-    Args:
-        request: The current request, charged against the per-account rate on a miss.
-        location: The spot to search around.
-
-    Returns:
-        Match dicts, most detailed first, or why there are none.
-    """
-    return _start_historical_maps(request, location).result()
-
-
-#: How far a catalogued town or county may be from the spot for its atlases to list: a town's volumes cover its outskirts.
-HISTORICAL_MAP_VOLUME_RADIUS_METERS = 2000
-#: Placed sheets listed under one volume, nearest first. A county atlas can hold a hundred; the rest are a click away
-#: at the institution.
-HISTORICAL_MAP_VOLUME_SHEETS = 5
-
-
-def _volumes_settled(volumes: list[dict[str, Any]]) -> bool:
-    """Whether every volume's sheets are listed; one REData is still listing reads differently a little later."""
-    return not any((match.get("volume") or {}).get("sheets_status") == "pending" for match in volumes)
-
-
-def _start_historical_map_volumes(request: HttpRequest, location: Location) -> Pending[list[dict[str, Any]]]:
-    from urbanlens.dashboard.services.apis.locations.redata_historical_maps_gateway import RedataHistoricalMapsGateway
-
-    latitude, longitude = float(location.latitude), float(location.longitude)
-    return HistoricalMapVolumesUpstream.start(
-        lambda: RedataHistoricalMapsGateway().get_volumes_near(latitude, longitude, radius_meters=HISTORICAL_MAP_VOLUME_RADIUS_METERS),
-        key=f"{latitude:.6f}:{longitude:.6f}",
-        ttl=HISTORICAL_MAPS_CACHE_TTL,
-        caller=account_or_address(request),
-        cacheable=_volumes_settled,
-    )
-
-
-def historical_map_volumes_near(request: HttpRequest, location: Location) -> UpstreamResult[list[dict[str, Any]]]:
-    """
-    REData's catalogued map volumes of the place a location is in, from cache or under the request-path policy.
-
-    An answer with a volume whose sheets REData is still listing is not cached, so the next browse shows them.
-
-    Args:
-        request: The current request, charged against the per-account rate on a miss.
-        location: The spot to search around.
-
-    Returns:
-        Volume match dicts, most specific place first, or why there are none.
-    """
-    return _start_historical_map_volumes(request, location).result()
-
-
-def _meters_to_bounds(latitude: float, longitude: float, bounds: list[float]) -> float:
-    """Metres from a point to a ``[min_lon, min_lat, max_lon, max_lat]`` box; zero inside it."""
-    from urbanlens.dashboard.services.geo.distance import haversine_meters
-
-    min_lon, min_lat, max_lon, max_lat = bounds
-    return haversine_meters(latitude, longitude, min(max(latitude, min_lat), max_lat), min(max(longitude, min_lon), max_lon))
-
-
-def _volume_sheet_row(sheet: dict[str, Any], latitude: float, longitude: float) -> dict[str, Any] | None:
-    """One placed sheet of a volume, as an addable row; None for a sheet nobody has placed."""
-    georeference = sheet.get("georeference") or {}
-    bounds = georeference.get("bounds")
-    if not georeference.get("uuid") or not isinstance(bounds, list) or len(bounds) != 4:
-        return None
-    try:
-        meters = _meters_to_bounds(latitude, longitude, [float(value) for value in bounds])
-    except (TypeError, ValueError):
-        return None
-    return {
-        "georeference_uuid": georeference["uuid"],
-        "label": sheet.get("label") or "Sheet",
-        "landing_page_url": sheet.get("landing_page_url") or "",
-        "meters": meters,
-        "km": meters / 1000,
-        "contains_point": meters == 0,
-        "accuracy": georeference_accuracy(georeference),
-    }
-
-
-def historical_volume_row(match: dict[str, Any], latitude: float, longitude: float, listed: set[str]) -> dict[str, Any] | None:
-    """
-    One catalogued volume as a picker row, or None to skip it.
-
-    Its placed sheets nearest the spot are addable here unless the covering list above already offers them; the
-    rest of the volume - usually most of it, since few scans are placed - is at the institution's landing page.
-
-    Args:
-        match: One entry from ``RedataHistoricalMapsGateway.get_volumes_near``.
-        latitude: The spot's latitude.
-        longitude: The spot's longitude.
-        listed: Georeference uuids the covering-sheets list already offers.
-
-    Returns:
-        A template-ready row.
-    """
-    volume = match.get("volume") or {}
-    if not volume.get("uuid"):
-        return None
-    sheets = [row for row in (_volume_sheet_row(sheet, latitude, longitude) for sheet in match.get("sheets") or [] if isinstance(sheet, dict)) if row is not None]
-    placed = len(sheets)
-    addable = sorted((row for row in sheets if row["georeference_uuid"] not in listed), key=lambda row: row["meters"])[:HISTORICAL_MAP_VOLUME_SHEETS]
-    years = [year for year in (volume.get("year_start"), volume.get("year_end")) if isinstance(year, int)]
-    year_text = "-".join(str(year) for year in sorted(set(years)))
-    return {
-        "title": volume.get("title") or "Untitled atlas",
-        "date_text": volume.get("date_text") or year_text,
-        "kind": (volume.get("kind") or "other").replace("_", " "),
-        "attribution": volume.get("attribution") or "",
-        "place_name": (match.get("place") or {}).get("name") or volume.get("place_name") or "",
-        "same_county": match.get("match") == "same_county",
-        "thumbnail_url": volume.get("thumbnail_url") or "",
-        "landing_page_url": volume.get("landing_page_url") or "",
-        "sheet_count": volume.get("sheet_count") or len(match.get("sheets") or []),
-        "placed_count": placed,
-        "status": volume.get("sheets_status") or "",
-        "sheets": addable,
-    }
-
-
-def _historical_maps_unavailable_message(found: UpstreamResult[list[dict[str, Any]]]) -> str:
-    if found.outcome is Outcome.THROTTLED:
-        return "Too many historical map searches at once. Try again in a minute."
-    return "Historical map search is temporarily unavailable."
-
-
-def _chosen_georeference(request: HttpRequest, location: Location, georeference_uuid: str) -> tuple[dict[str, Any], str] | str:
-    """
-    The georeference a browse POST chose and the overlay's name, from REData's own lists for the spot; else why not.
-
-    The lists (usually still cached from the browse) are the authority rather than posted bounds or titles: the uuid
-    must be a sheet covering this location or a placed sheet of a volume catalogued to its place, and the canonical
-    metadata comes with it.
-
-    Args:
-        request: The current request, charged on a cache miss.
-        location: The pin's or wiki's location.
-        georeference_uuid: What the POST named.
-
-    Returns:
-        ``(georeference, overlay name)``, or the message to show instead.
-    """
-    found = historical_maps_covering(request, location)
-    if not found.ok:
-        return _historical_maps_unavailable_message(found)
-    for match in found.value_or([]):
-        georeference = match.get("georeference") or {}
-        if georeference.get("uuid") == georeference_uuid:
-            sheet = match.get("sheet") or {}
-            return georeference, " - ".join(part for part in (sheet.get("title"), sheet.get("date_text")) if part)
-    volumes = historical_map_volumes_near(request, location)
-    for match in volumes.value_or([]):
-        volume = match.get("volume") or {}
-        for sheet in match.get("sheets") or []:
-            georeference = (sheet.get("georeference") if isinstance(sheet, dict) else None) or {}
-            if georeference.get("uuid") == georeference_uuid:
-                return georeference, " - ".join(part for part in (volume.get("title"), sheet.get("label"), volume.get("date_text")) if part)
-    if not volumes.ok:
-        return _historical_maps_unavailable_message(volumes)
-    return "That historical map doesn't cover this location."
-
-
-class HistoricalMapBrowseView(LoginRequiredMixin, View):
-    """
-    Browse REData's georeferenced historical maps covering this pin/wiki and the catalogued map volumes of its place, and add a sheet as an overlay.
-
-    The overlay's ``tile_url_template`` points at UrbanLens's own tile proxy (``map.historical_tiles``)
-    rather than REData's template - REData's API key must never reach the browser.
-    """
-
-    def get(self, request: HttpRequest, pin_slug: str | None = None, location_slug: str | None = None) -> HttpResponse:
-        """Render the georeferenced sheets covering the owner's location, most detailed first, then its place's catalogued volumes."""
-        from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
-
-        owner, _qs = _resolve_owner(request, pin_slug, location_slug)
-        is_pin = isinstance(owner, Pin)
-        url_prefix = "pin.overlays" if is_pin else "location.wiki.overlays"
-        owner_slug = owner.slug if is_pin else owner.location.slug
-        context: dict = {"post_url": reverse(f"{url_prefix}.historical", args=[owner_slug]), "maps": [], "error": None}
-
-        if not redata_configured():
-            context["error"] = "Historical map search isn't available on this install."
-            return render(request, "dashboard/partials/layout/_historical_maps_list.html", context)
-
-        location = _owner_location(owner)
-        maps_call, volumes_call = _start_historical_maps(request, location), _start_historical_map_volumes(request, location)
-        wait_all([maps_call, volumes_call], timeout=HistoricalMapsBrowseUpstream.deadline)
-        found, volumes = maps_call.result(0), volumes_call.result(0)
-        if not found.ok:
-            context["error"] = _historical_maps_unavailable_message(found)
-            return render(request, "dashboard/partials/layout/_historical_maps_list.html", context)
-
-        rows = [row for row in (historical_map_row(match) for match in found.value_or([])) if row is not None]
-        listed = {row["georeference_uuid"] for row in rows}
-        latitude, longitude = float(location.latitude), float(location.longitude)
-        volume_rows = [row for row in (historical_volume_row(match, latitude, longitude, listed) for match in volumes.value_or([]) if isinstance(match, dict)) if row is not None]
-        copies = copy_urls([RemoteImage(row["thumbnail_url"], "redata_historical_sheet", row["landing_page_url"]) for row in rows] + [RemoteImage(row["thumbnail_url"], "redata_map_volume", row["landing_page_url"]) for row in volume_rows])
-        context["maps"] = [{**row, "thumbnail_url": copies.get(row["thumbnail_url"], "")} for row in rows]
-        context["volumes"] = [{**row, "thumbnail_url": copies.get(row["thumbnail_url"], "")} for row in volume_rows]
-        context["volumes_unavailable"] = not volumes.ok
-        return render(request, "dashboard/partials/layout/_historical_maps_list.html", context)
-
-    def post(self, request: HttpRequest, pin_slug: str | None = None, location_slug: str | None = None) -> HttpResponse:
-        """Create a tile overlay for one georeferenced sheet from the GET list."""
-        from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
-
-        owner, qs = _resolve_owner(request, pin_slug, location_slug)
-        profile, _ = Profile.objects.get_or_create(user=request.user)
-
-        if at_overlay_limit(owner):
-            return _render_overlay_list(request, owner, qs, error=OverlayLimitError().message)
-        if not redata_configured():
-            return _render_overlay_list(request, owner, qs, error="Historical map search isn't available on this install.")
-
-        georeference_uuid = (request.POST.get("georeference_uuid") or "").strip()
-        chosen = _chosen_georeference(request, _owner_location(owner), georeference_uuid)
-        if isinstance(chosen, str):
-            return _render_overlay_list(request, owner, qs, error=chosen)
-        georeference, name = chosen
-        bounds = georeference.get("bounds") or []
-        if len(bounds) != 4:
-            return _render_overlay_list(request, owner, qs, error="That historical map doesn't cover this location.")
-        min_lon, min_lat, max_lon, max_lat = bounds
-
-        tile_template = historical_tile_template(georeference_uuid)
-        try:
-            create_overlay(
-                owner,
-                profile=profile,
-                corners=[[max_lat, min_lon], [max_lat, max_lon], [min_lat, max_lon], [min_lat, min_lon]],
-                tile_url_template=tile_template,
-                name=name,
-                opacity=_clamped_opacity(request.POST.get("opacity"), 70),
-                # Pre-placed by its georeference: the corner handles don't apply, so it is born locked.
-                locked=True,
-            )
-        except OverlayLimitError as exc:
-            return _render_overlay_list(request, owner, qs, error=exc.message)
-        return _render_overlay_list(request, owner, qs)
+        return render_overlay_list(request, owner, qs)

@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 EXPORT_TTL_SECONDS = 3600
 
 #: Largest export ZIP that gets attached to the "your export is ready" email
-#: directly (UL-373); anything bigger gets a download link instead, so the
+#: directly; anything bigger gets a download link instead, so the
 #: email never blows past typical mailbox attachment limits.
 EMAIL_ATTACHMENT_MAX_BYTES = 15 * 1024 * 1024
 
@@ -166,7 +166,7 @@ def run_export(user_id: int, export_types: list[str], export_dir_path: str, base
         export_dir_path: Filesystem path for this job (created by ``export_dir(job_id)``).
         base_url: Absolute site root URL, used to build pin detail URLs.
         job_id: UUID string for this export job.
-        email_to_user: When True, email the finished export to the user's account address (UL-373) - see :func:`send_export_email`."""
+        email_to_user: When True, email the finished export to the user's account address - see :func:`send_export_email`."""
     from django.contrib.auth import get_user_model
 
     User = get_user_model()
@@ -289,7 +289,7 @@ def _build_zip(export_dir_path: str, temp_dir: str) -> None:
 
 def send_export_email(user: Any, export_dir_path: str, base_url: str, *, job_id: str) -> str:
     """
-    Email the finished export ZIP to the user's account address (UL-373).
+    Email the finished export ZIP to the user's account address.
     Small archives (up to ``EMAIL_ATTACHMENT_MAX_BYTES``) are attached directly; larger ones get a link to the existing authenticated download endpoint instead, which stays valid until the job's artifacts expire (``EXPORT_TTL_SECONDS``).
 
     Args:
@@ -418,7 +418,7 @@ def _write_json(temp_dir: str, filename: str, data: Any) -> None:
 def _copy_into_archive(stored: FieldFile | None, dest_dir: str, *, unique_suffix: object) -> str | None:
     """
     Stream a stored media file into the archive through its storage, disambiguating name collisions.
-    Never through a local path: object storage, which production uses, has none, and asking for one failed the whole export (see UrbanLens#300, "an export with photos fails outright on object storage"). Two rows can hold files with the same basename, so a collision gets the row's own identifier appended rather than silently overwriting the first copy.
+    Never through a local path: object storage, which production uses, has none, and asking for one failed the whole export. Two rows can hold files with the same basename, so a collision gets the row's own identifier appended rather than silently overwriting the first copy.
 
     Args:
         stored: The row's file field, or None when the row has none.
@@ -576,12 +576,6 @@ def _export_settings(profile: Any, temp_dir: str, *, base_url: str = "") -> None
         "media_gallery_sort": profile.media_gallery_sort,
         "show_wiki_cover_photos": profile.show_wiki_cover_photos,
         "auto_create_pin_article_from_wikipedia": profile.auto_create_pin_article_from_wikipedia,
-        "ai": {
-            "ai_enabled": profile.ai_enabled,
-            "ai_label_tags": profile.ai_label_tags,
-            "ai_label_categories": profile.ai_label_categories,
-            "ai_label_statuses": profile.ai_label_statuses,
-        },
         "keyword_tagging": {
             "keyword_tagging_enabled": profile.keyword_tagging_enabled,
             "keyword_label_tags": profile.keyword_label_tags,
@@ -630,6 +624,9 @@ def _export_settings(profile: Any, temp_dir: str, *, base_url: str = "") -> None
         },
         "notification_preferences": _notification_preferences_dict(profile),
     }
+    from urbanlens.dashboard.plugins.points import SETTINGS_EXPORT
+
+    data = SETTINGS_EXPORT.apply(data, profile)
     with open(os.path.join(temp_dir, "settings.json"), "w", encoding="utf-8") as fh:
         json.dump(data, fh, indent=2, ensure_ascii=False)
 
@@ -722,7 +719,7 @@ def _export_pins(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
                     "priority": pin.priority,
                     "vulnerability": pin.vulnerability,
                     "danger": pin.danger,
-                    "rating": pin.export_rating,  # type: ignore[attr-defined]  # annotation django-stubs loses (P85)
+                    "rating": pin.export_rating,  # type: ignore[attr-defined]  # annotation django-stubs loses
                     "security": {field_name: getattr(pin, field_name) for field_name, _label in SECURITY_FIELDS},
                     "pin_type": pin.pin_type,
                     "latitude": str(pin.effective_latitude) if pin.effective_latitude is not None else None,
@@ -799,7 +796,7 @@ def _export_labels(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
                     "is_user_label": label.profile_id is not None,
                     "is_protected": label.is_protected,
                     "parent_uuids": [str(p.uuid) for p in label.parents.all()],
-                    "pin_uuids": [str(p.uuid) for p in label.own_pins],  # type: ignore[attr-defined]  # Prefetch to_attr (P85)
+                    "pin_uuids": [str(p.uuid) for p in label.own_pins],  # type: ignore[attr-defined]  # Prefetch to_attr
                 },
             )
 
@@ -889,7 +886,7 @@ def _export_direct_messages(profile: Any, temp_dir: str, *, base_url: str = "") 
                 # identify them just as surely as their name.
                 "partner_uuid": None if identity["is_anonymized"] else str(partner.uuid),
                 "is_tombstoned": bool(tombstone),
-                "image_count": 0 if tombstone else message.exported_image_count,  # type: ignore[attr-defined]  # annotation django-stubs loses (P85)
+                "image_count": 0 if tombstone else message.exported_image_count,  # type: ignore[attr-defined]  # annotation django-stubs loses
                 "has_map": bool(message.markup_map_id) and not tombstone,
                 "created": str(message.created),
                 "read": message.read_at is not None,

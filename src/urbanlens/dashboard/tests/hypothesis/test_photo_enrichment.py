@@ -12,14 +12,16 @@ from model_bakery import baker
 from PIL import Image as PILImage
 import requests
 
+from urbanlens.core.tests.provider_fakes import FakePlacesProvider
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.images.model import Image, ImageSource, MediaKind
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.wiki.model import Wiki
+from urbanlens.dashboard.plugins.points import PLACES_PROVIDERS
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
-from urbanlens.dashboard.services.apis.locations.google.redata_places_gateway import PlacesRateLimitedError
-from urbanlens.dashboard.services.apis.locations.places_resolution import PhotoNotFoundError
+from urbanlens.dashboard.services.apis.locations.places_resolution import GooglePlacesProvider, PhotoNotFoundError
+from urbanlens.dashboard.services.core.gateway import GatewayRateLimitedError
 from urbanlens.dashboard.services.photos import photo_enrichment
 from urbanlens.dashboard.tests.hypothesis.test_proxied_media_is_capped import _streamed
 from urbanlens.UrbanLens.settings.app import settings as app_settings
@@ -114,26 +116,29 @@ class PlacePhotoEnrichmentSourceTests(TestCase):
     def setUp(self) -> None:
         self.source = photo_enrichment.PlacePhotoEnrichmentSource()
 
-    def test_gate_requires_google_or_redata(self) -> None:
-        with (
-            mock.patch.object(app_settings, "google_unrestricted_api_key", ""),
-            mock.patch.object(app_settings, "redata_api_url", None),
-            mock.patch.object(app_settings, "redata_api_key", None),
-        ):
-            self.assertFalse(self.source.gate())
-        with mock.patch.object(app_settings, "google_unrestricted_api_key", "key"):
-            self.assertTrue(self.source.gate())
+    def test_gate_requires_an_available_places_provider(self) -> None:
+        with PLACES_PROVIDERS.overridden([GooglePlacesProvider()]):
+            with mock.patch.object(app_settings, "google_unrestricted_api_key", ""):
+                self.assertFalse(self.source.gate())
+            with mock.patch.object(app_settings, "google_unrestricted_api_key", "key"):
+                self.assertTrue(self.source.gate())
 
-    def test_service_keys_prefers_redata_when_configured(self) -> None:
+    def test_service_keys_follow_the_provider_that_would_answer(self) -> None:
         with (
-            mock.patch.object(app_settings, "redata_api_url", "https://redata.example.test"),
-            mock.patch.object(app_settings, "redata_api_key", "k"),
+            PLACES_PROVIDERS.overridden(
+                [FakePlacesProvider(budget_keys=("first_party_places",)), GooglePlacesProvider()]
+            ),
+            mock.patch.object(app_settings, "google_unrestricted_api_key", "key"),
         ):
-            self.assertEqual(self.source.service_keys, ("redata_places",))
+            self.assertEqual(self.source.service_keys, ("first_party_places",))
         with (
-            mock.patch.object(app_settings, "redata_api_url", None),
-            mock.patch.object(app_settings, "redata_api_key", None),
+            PLACES_PROVIDERS.overridden([GooglePlacesProvider()]),
+            mock.patch.object(app_settings, "google_unrestricted_api_key", "key"),
         ):
+            self.assertEqual(self.source.service_keys, ("google_places",))
+
+    def test_service_keys_default_to_googles_when_no_provider_is_available(self) -> None:
+        with PLACES_PROVIDERS.overridden([]):
             self.assertEqual(self.source.service_keys, ("google_places",))
 
     def test_missing_filter_excludes_already_attempted_locations(self) -> None:
@@ -174,7 +179,7 @@ class PlacePhotoEnrichmentSourceTests(TestCase):
     def test_one_bad_photo_does_not_abort_the_others(self) -> None:
         location = _make_location()
 
-        def fake_download(photo_name: str, *, api_key: str):
+        def fake_download(photo_name: str):
             if photo_name == "bad":
                 raise PhotoNotFoundError("gone")
             return _jpeg_bytes(), "image/jpeg"
@@ -209,10 +214,8 @@ class PlacePhotoEnrichmentSourceTests(TestCase):
         location = _make_location()
         with (
             mock.patch(f"{_PLACES_MODULE}.find_nearest_place_photos", return_value=("place1", ["a", "b"])),
-            mock.patch(
-                f"{_PLACES_MODULE}.download_photo", side_effect=PlacesRateLimitedError("budget spent", retry_after=600)
-            ),
-            self.assertRaises(PlacesRateLimitedError),
+            mock.patch(f"{_PLACES_MODULE}.download_photo", side_effect=GatewayRateLimitedError("budget spent")),
+            self.assertRaises(GatewayRateLimitedError),
         ):
             self.source.enrich(location)
 
@@ -232,9 +235,9 @@ class PlacePhotoEnrichmentSourceTests(TestCase):
 
     def test_a_rerun_after_an_outage_saves_no_photo_twice(self) -> None:
         location = _make_location()
-        outage = iter([None, PlacesRateLimitedError("budget spent", retry_after=600)])
+        outage = iter([None, GatewayRateLimitedError("budget spent")])
 
-        def first_run(photo_name: str, *, api_key: str):
+        def first_run(photo_name: str):
             if (failure := next(outage)) is not None:
                 raise failure
             return _jpeg_bytes(), "image/jpeg"
@@ -242,7 +245,7 @@ class PlacePhotoEnrichmentSourceTests(TestCase):
         with (
             mock.patch(f"{_PLACES_MODULE}.find_nearest_place_photos", return_value=("place1", ["a", "b", "c"])),
             mock.patch(f"{_PLACES_MODULE}.download_photo", side_effect=first_run),
-            self.assertRaises(PlacesRateLimitedError),
+            self.assertRaises(GatewayRateLimitedError),
         ):
             self.source.enrich(location)
         self.assertEqual(Image.objects.filter(location=location).count(), 1)

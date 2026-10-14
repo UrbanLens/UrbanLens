@@ -1,11 +1,11 @@
 """
 A hidden stop never shows a member who may not see it a name taken from its place.
 
-A stop picked from a place search with no title typed stores the place's name as its title (P186), and an imported
+A stop picked from a place search with no title typed stores the place's name as its title, and an imported
 calendar event's location becomes an activity's title. ``TripActivity.title_from_place`` records that, and every
 surface that masks a hidden stop masks such a title with its location: the activities panel (its text and its data
 attributes), the external API (``title`` and ``effective_title``), the Google Calendar export, the weather panel and
-``@act`` mentions in comments. A title the author typed is still shown. See UrbanLens#303 ("a hidden stop shows its place's name").
+``@act`` mentions in comments. A title the author typed is still shown.
 """
 
 from __future__ import annotations
@@ -57,9 +57,9 @@ class _HiddenStopCase(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        self.viewer_user = User.objects.create_user(username="p338-viewer")
+        self.viewer_user = User.objects.create_user(username="trip-viewer")
         self.viewer = Profile.objects.get(user=self.viewer_user)
-        self.mate_user = User.objects.create_user(username="p338-mate")
+        self.mate_user = User.objects.create_user(username="trip-mate")
         self.mate = Profile.objects.get(user=self.mate_user)
         Profile.objects.filter(pk=self.mate.pk).update(
             trip_pin_location_visibility=VisibilityChoice.NO_ONE, comment_visibility=VisibilityChoice.ANYONE
@@ -495,7 +495,7 @@ class BackfillTests(TestCase):
     to be the place's until its author types one. A stop with no place has a place's name only from an import."""
 
     def test_every_title_that_may_be_a_places_is_marked_and_no_other(self) -> None:
-        profile = User.objects.create_user(username="p338-backfill").profile
+        profile = User.objects.create_user(username="trip-backfill").profile
         trip = Trip.objects.create(name="Old trip", creator=profile)
         mill = Location.objects.create(latitude=42.38, longitude=-83.03)
         located = TripActivity.objects.create(trip=trip, added_by=profile, location=mill, title="Meet at the gate")

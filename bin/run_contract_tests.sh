@@ -8,7 +8,7 @@
 #   bin/run_contract_tests.sh                        # in-process, safe methods
 #   bin/run_contract_tests.sh --methods all          # include writes
 #   bin/run_contract_tests.sh --examples 40          # search harder
-#   bin/run_contract_tests.sh --url https://s1.dev.urbanlens.org
+#   bin/run_contract_tests.sh --url https://s1.dev.example.com
 #   bin/run_contract_tests.sh --local                # host venv, not the container
 #   bin/run_contract_tests.sh -- -k pins -x          # pass through to pytest
 #
@@ -55,7 +55,7 @@ env_args=("UL_CONTRACT_METHODS=$METHODS")
 
 if [ -n "$URL" ]; then
     case "$URL" in
-        https://urbanlens.org|https://www.urbanlens.org|https://app.urbanlens.org)
+        https://example.com|https://www.example.com|https://app.example.com)
             echo "error: refusing to fuzz production ($URL)." >&2
             exit 2
             ;;

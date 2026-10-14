@@ -10,13 +10,13 @@ from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 from urbanlens.dashboard.models.wiki_stat_vote import WikiStatField, WikiStatVote
 from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identities
 from urbanlens.dashboard.services.wiki.articles import latest_revision_id
-from urbanlens.dashboard.services.wiki.community_counts import wiki_community_summary
 from urbanlens.dashboard.services.wiki.wiki_aliases import alias_is_current_name
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.wiki.model import Wiki
+    from urbanlens.dashboard.services.wiki.viewer_projection import ViewerProjection
 
 
 def _isoformat_or_none(value: Any) -> str | None:
@@ -67,14 +67,14 @@ def _article_summary(wiki: Wiki, profile: Profile) -> dict[str, Any] | None:
     Returns:
         A summary dict, or None when this viewer has no article to see."""
     from urbanlens.dashboard.services.wiki.articles import get_article
-    from urbanlens.dashboard.services.wiki.concealment import conceal_article, is_concealed, visible_rows
+    from urbanlens.dashboard.services.wiki.viewer_projection import is_projected, project_article, viewer_projection
 
-    article = conceal_article(get_article(wiki=wiki), wiki, profile)
+    article = project_article(get_article(wiki=wiki), wiki, profile)
     if article is None:
         return None
 
-    if is_concealed(article):
-        visible = visible_rows(article.revisions.all(), wiki, profile).order_by("-created", "-pk").first()
+    if is_projected(article):
+        visible = viewer_projection(wiki, profile).newest_revision(article)
         return {
             "id": article.pk,
             "word_count": article.word_count(),
@@ -92,25 +92,24 @@ def _article_summary(wiki: Wiki, profile: Profile) -> dict[str, Any] | None:
     }
 
 
-def _stats(wiki: Wiki, profile: Profile, *, conceal: bool = False) -> dict[str, dict[str, Any]]:
+def _stats(projection: ViewerProjection, profile: Profile) -> dict[str, dict[str, Any]]:
     """
     The four community stat composites plus the viewer's own votes.
 
     Args:
-        wiki: The wiki whose stats to read.
+        projection: How the requesting profile reads the wiki whose stats to read.
         profile: The requesting profile, for ``my_vote``.
-        conceal: Whether this viewer sees the concealed form of the wiki.
 
     Returns:
         ``{field: {rounded, exact, count, my_vote}}`` for every stat field."""
     stats: dict[str, dict[str, Any]] = {}
     for field in WikiStatField.values:
-        composite = WikiStatVote.objects.composite(wiki, field, viewer_conceals=conceal, viewer=profile)
+        composite = projection.stat_composite(field)
         stats[field] = {
             "rounded": composite.rounded,
             "exact": composite.exact,
             "count": composite.count,
-            "my_vote": WikiStatVote.objects.my_vote(wiki, field, profile),
+            "my_vote": WikiStatVote.objects.my_vote(projection.wiki, field, profile),
         }
     return stats
 
@@ -122,31 +121,29 @@ def build_wiki_detail(wiki: Wiki, location: Location, profile: Profile) -> dict[
     Args:
         wiki: The wiki to serialize.
         location: The wiki's Location, already resolved by that same call.
-        profile: The requesting profile, needed for own-vote lookup, author masking, and the concealment decision.
+        profile: The requesting profile, needed for own-vote lookup, author masking, and how they read the wiki.
 
     Returns:
         A JSON-serializable dict covering identity, description, dates, security, coordinates, boundary, aliases, links, community stats and counts, the article summary, and the comment count."""
-    from urbanlens.dashboard.services.wiki.concealment import conceal_rows, conceal_wiki, concealed_community_summary, concealment_active
+    from urbanlens.dashboard.services.wiki.viewer_projection import project_wiki, viewer_projection
     from urbanlens.dashboard.services.wiki.wiki_edits import wiki_revision_marker
 
-    conceal = concealment_active(wiki, profile)
+    projection = viewer_projection(wiki, profile)
     # Field values come from `shown`; row sets are filtered separately. Reading
     # the raw row here is what let this payload drift from the HTML page, which
     # the comment in controllers/location_wiki.py claimed could not happen.
-    shown = conceal_wiki(wiki, profile)
+    shown = project_wiki(wiki, profile)
 
     latitude = wiki.latitude
     longitude = wiki.longitude
-    cover_photo = None if conceal else wiki.cover_photo
+    cover_photo = wiki.cover_photo if projection.shows_cover_photo() else None
 
-    aliases = conceal_rows(wiki.aliases.all(), profile) if conceal else wiki.aliases.all()
-    links = wiki.links.order_by("order", "pk")
-    links = conceal_rows(links, profile) if conceal else links
+    aliases = projection.rows(wiki.aliases.all())
+    links = projection.rows(wiki.links.order_by("order", "pk"))
     from urbanlens.dashboard.models.comments.model import Comment
     from urbanlens.dashboard.services.comments.comments import visible_comment_count
 
-    wiki_comments = Comment.objects.filter(wiki=wiki)
-    comments = conceal_rows(wiki_comments, profile) if conceal else wiki_comments
+    comments = projection.rows(Comment.objects.filter(wiki=wiki))
 
     payload: dict[str, Any] = {
         # The navigable identifier: wiki routes resolve a Location, so this is
@@ -173,7 +170,7 @@ def build_wiki_detail(wiki: Wiki, location: Location, profile: Profile) -> dict[
         # the field, or from the delete guard, which decides what the rule means.
         "aliases": [{"id": alias.pk, "name": alias.name, "kind": alias.kind, "source": alias.source, "is_current": alias_is_current_name(alias, wiki)} for alias in aliases],
         "links": [{"id": link.pk, "name": link.name, "url": link.url, "wayback_url": link.wayback_url or None, "auto_source": link.auto_source or None, "order": link.order} for link in links],
-        "stats": _stats(wiki, profile, conceal=conceal),
+        "stats": _stats(projection, profile),
         "article": _article_summary(wiki, profile),
         # Gated, so the number cannot disagree with the thread the viewer is
         # shown - see services.comments.comments.visible_comment_count.
@@ -183,7 +180,7 @@ def build_wiki_detail(wiki: Wiki, location: Location, profile: Profile) -> dict[
     }
 
     # pin_count_low / pin_count_approx / first_pinned / first_pinned_precision.
-    community = concealed_community_summary() if conceal else wiki_community_summary(wiki, location)
+    community = projection.community_summary(location)
     payload.update(community)
     payload["first_pinned"] = _isoformat_or_none(community["first_pinned"])
 

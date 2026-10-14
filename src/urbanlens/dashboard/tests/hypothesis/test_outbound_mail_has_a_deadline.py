@@ -1,7 +1,7 @@
 """
 Mail is sent on the request path, and nothing bounds how long a send may take.
 
-H51's other half, and the half `throttled(...)` does not reach. That decorator
+The half `throttled(...)` does not reach. That decorator
 caps how *often* an anonymous caller may hit signup, resend-verification and
 password reset. A rate limit bounds frequency, not duration: with
 ``EMAIL_TIMEOUT`` unset Django passes no ``timeout`` to ``smtplib`` at all, so

@@ -1,6 +1,6 @@
 """
 BoundaryVote - one profile's pick of a location's most accurate official boundary.
-When more than one external provider has geometry for a place (REData's county parcel vs.
+When more than one external provider has geometry for a place (a county parcel against an OpenStreetMap one, say), the community votes on which looks right.
 Votes are recency-weighted (see ``services.geo.boundary_voting``), so a newer vote outweighs an equally-split older one and the consensus can drift as the underlying data improves.
 """
 

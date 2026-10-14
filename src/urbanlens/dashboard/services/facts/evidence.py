@@ -247,39 +247,3 @@ def record_wiki_edit_evidence(edit: WikiEdit) -> list[FactEvidence]:
         if evidence is not None:
             created.append(evidence)
     return created
-
-
-def record_ai_evidence(
-    *,
-    key: str,
-    value: Any,
-    source_name: str,
-    location: Location | None = None,
-    wiki: Wiki | None = None,
-    image: Image | None = None,
-    context: dict[str, Any] | None = None,
-) -> FactEvidence | None:
-    """
-    Log one AI-agent-sourced observation.
-
-    Args:
-        key: A key registered in ``services.facts.registry``.
-        value: The extracted value, already shaped for the key's data type.
-        source_name: Free slug identifying the specific AI source/model.
-        location: Subject, when this fact is Location-scoped.
-        wiki: Subject, when this fact is Wiki-scoped.
-        image: Subject, when this fact is Image-scoped.
-        context: Free provenance metadata (e.g. the source document/URL).
-
-    Returns:
-        The created evidence row, or None if ``key`` isn't registered."""
-    return record_evidence(
-        key=key,
-        value=value,
-        source_kind=FactSourceKind.AI_AGENT,
-        source_name=source_name,
-        location=location,
-        wiki=wiki,
-        image=image,
-        context=context,
-    )

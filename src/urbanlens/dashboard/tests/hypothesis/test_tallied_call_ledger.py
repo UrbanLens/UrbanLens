@@ -50,7 +50,7 @@ _NOW = _MINUTE_START + 30
 def deployment(
     environment: str, *, share: float | None = None, overrides: dict[str, float] | None = None
 ) -> Iterator[None]:
-    """Pretend to be one deployment: its ``UL_ENVIRONMENT``, ``UL_ENVIRONMENT_SHARE`` and overrides (D26)."""
+    """Pretend to be one deployment: its ``UL_ENVIRONMENT``, ``UL_ENVIRONMENT_SHARE`` and overrides."""
     with (
         override_settings(ENVIRONMENT_NAME=environment, TESTING=False),
         mock.patch("urbanlens.UrbanLens.settings.app.settings.environment_share", share),
@@ -94,7 +94,6 @@ class TheTileServiceIsTalliedTests(SimpleTestCase):
                 with self.subTest(service=name):
                     self.assertIsNone(defaults.calls_per_30_days)
                     self.assertIsNone(defaults.free_tier_per_calendar_month)
-                    self.assertIsNone(defaults.cost_per_call)
 
 
 class TheCountersHoldTheLimitTests(_TalliedTestCase):
@@ -201,7 +200,7 @@ class TheCountersHoldTheLimitTests(_TalliedTestCase):
 
 
 class TheEnvironmentShareStillAppliesTests(_TalliedTestCase):
-    """D26: a ``quota`` service's limits are this deployment's share of them, and no share is no call."""
+    """A ``quota`` service's limits are this deployment's share of them, and no share is no call."""
 
     def test_staging_gets_its_share_of_the_minute(self) -> None:
         self.limits(calls_per_minute=4)
@@ -357,8 +356,8 @@ class ACounterOutageRefusesTests(_TalliedTestCase):
         self.assertFalse(check_rate_limit(_SERVICE))
 
 
-class TheRollUpKeepsSpendVisibleTests(_TalliedTestCase):
-    """What the API-limits page, the costs page and provider health read is still there, a minute late."""
+class TheRollUpKeepsUsageVisibleTests(_TalliedTestCase):
+    """What the API-limits page and provider health read is still there, a minute late."""
 
     def _make_a_mixed_minute(self) -> None:
         answers = iter(
@@ -456,7 +455,7 @@ class TheRollUpKeepsSpendVisibleTests(_TalliedTestCase):
         self._make_a_mixed_minute()
 
         with (
-            mock.patch.object(call_tally, "_cost", side_effect=RuntimeError("defaults moved")),
+            mock.patch.object(call_tally, "_flags", side_effect=RuntimeError("flags moved")),
             self.assertRaises(RuntimeError),
         ):
             call_tally.roll_up()

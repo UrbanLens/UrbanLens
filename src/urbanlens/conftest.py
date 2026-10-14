@@ -18,8 +18,8 @@ from urbanlens.core.testing_network import (
     LocalhostOnlyNetwork,
     verify_external_network_blocked,
 )
-from urbanlens.core.tests.ai_guard import patched_ai_gateway
 from urbanlens.core.tests.database_role_guard import refusal_for_role
+from urbanlens.core.tests.plugin_guards import plugin_test_guards
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -212,21 +212,31 @@ def bind_real_dispatcher() -> None:
     Several are first imported lazily, from a signal or a view; a test that patched ``celery.safely_enqueue_task``
     at that moment left the module holding the mock for the rest of the run.
     """
+    from django.conf import settings
+
+    from urbanlens.dashboard.plugins.loader import find_plugin_sources
+
+    # A plugin disabled by UL_DISABLED_PLUGINS is not an installed app, so its models cannot import.
+    installed = set(settings.INSTALLED_APPS)
+    uninstalled = tuple(source.module for source in find_plugin_sources() if source.is_package and source.module not in installed)
+
     root = Path(__file__).resolve().parent
     for path in root.rglob("*.py"):
         if {"tests", "migrations"} & set(path.parts):
             continue
+        module = ".".join(("urbanlens", *path.relative_to(root).with_suffix("").parts))
+        if module.startswith(tuple(f"{name}." for name in uninstalled)) or module in uninstalled:
+            continue
         if _BINDS_DISPATCHER.search(path.read_text(encoding="utf-8")):
-            importlib.import_module(".".join(("urbanlens", *path.relative_to(root).with_suffix("").parts)))
+            importlib.import_module(module)
 
 
 @pytest.fixture(scope="session", autouse=True)
-def block_ai_gateway() -> Iterator[None]:
+def block_plugin_guards() -> Iterator[None]:
     """
-    Stop any test reaching a real LLM provider.
+    Enter the guards plugins contribute to ``TEST_GUARDS``, for the whole session.
 
-    Mirrors ``TestRunner.setup_test_environment``'s patching, which pytest
-    never runs since pytest-django ignores ``TEST_RUNNER``.
+    Mirrors ``TestRunner.setup_test_environment``, which pytest never runs since pytest-django ignores ``TEST_RUNNER``.
     """
-    with patched_ai_gateway():
+    with plugin_test_guards():
         yield

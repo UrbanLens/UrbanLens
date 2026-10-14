@@ -39,7 +39,7 @@ class _Located(Protocol):
 def _nearest_uncovered[T: _Located](marker: _Located, candidates: list[T]) -> T | None:
     """
     The candidate closest to ``marker``, within building-match range - or None.
-    The proximity-only fallback: for anything not typed as a building (an entrance, a POI, a hazard - see :func:`_find_existing_match`), or when no REData footprint data settles it.
+    The proximity-only fallback: for anything not typed as a building (an entrance, a POI, a hazard - see :func:`_find_existing_match`), or when no footprint data settles it.
 
     Args:
         marker: A pin or wiki to find a match for.
@@ -60,11 +60,11 @@ def _nearest_uncovered[T: _Located](marker: _Located, candidates: list[T]) -> T 
 
 def _building_containing(marker: _Located, buildings: list[dict[str, Any]]) -> dict[str, Any] | None:
     """
-    The first REData building record whose real footprint contains ``marker``'s point.
+    The first building record whose real footprint contains ``marker``'s point.
 
     Args:
         marker: A pin or wiki to locate.
-        buildings: Cached REData building records for the parcel (see ``plugins.builtin.parcel_buildings``); records with no footprint (a bare point, or nothing parseable) never match here.
+        buildings: Cached building records for the parcel (see ``services.places.building_records``); records with no footprint (a bare point, or nothing parseable) never match here.
 
     Returns:
         The containing building record, or None."""
@@ -83,7 +83,7 @@ def _find_existing_match[T: _Located](marker: _Located, candidates: list[T], bui
     Args:
         marker: The pin or wiki being matched.
         candidates: Markers of the other kind, not yet matched to anything.
-        buildings: The parcel's cached REData building records (``[]`` when none have ever been fetched for this location).
+        buildings: The parcel's cached building records (``[]`` when none have ever been fetched for this location).
 
     Returns:
         The matching candidate, or None."""

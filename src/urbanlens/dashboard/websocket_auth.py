@@ -113,7 +113,7 @@ class ApiKeyAuthMiddleware:
 
         ``database_sync_to_async`` is thread-sensitive by default, so every call to it in this process
         runs in the one executor thread all of Channels' database work queues on. A current-format key
-        verifies in one SHA-256, but a key issued before P146 still costs a full PBKDF2 until its first
+        verifies in one SHA-256, but a key issued before the switch to SHA-256 still costs a full PBKDF2 until its first
         use rewrites it, and one client reconnecting in a loop with such a key would stall every other
         socket's database access. So only the lookup and the writes run there.
 

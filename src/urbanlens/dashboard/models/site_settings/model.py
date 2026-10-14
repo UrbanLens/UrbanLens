@@ -11,20 +11,11 @@ from django.db.models.fields import BooleanField, CharField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.fields import EncryptedTextField
-from urbanlens.dashboard.models.site_settings.meta import (
-    DEFAULT_ANTHROPIC_MODEL,
-    DEFAULT_CLOUDFLARE_MODEL,
-    DEFAULT_OPENAI_MODEL,
-    AiProviderChoice,
-    EnvironmentOverrideChoice,
-)
+from urbanlens.dashboard.models.site_settings.meta import EnvironmentOverrideChoice
 from urbanlens.dashboard.models.site_settings.queryset import SiteSettingsManager
 from urbanlens.UrbanLens.environments.factory import select_environment
 from urbanlens.UrbanLens.environments.meta import EnvironmentTypes
 from urbanlens.UrbanLens.settings._env import env_bool
-
-if TYPE_CHECKING:
-    from urbanlens.dashboard.models.subscriptions.model import SiteFeature
 
 
 class SiteSettings(abstract.FrontendDashboardModel):
@@ -148,118 +139,6 @@ class SiteSettings(abstract.FrontendDashboardModel):
         default=1.0,
         help_text="Maximum allowed area (km²) for a location bounding box. Hard Maximum ≈ Chernobyl Exclusion Zone.",
         validators=[MinValueValidator(0.0), MaxValueValidator(2600.0)],
-    )
-
-    # --- AI - Global controls ---
-
-    ai_enabled = BooleanField(
-        default=True,
-        help_text="Master toggle for all AI features. Disabling this prevents all AI API calls.",
-        verbose_name="AI enabled",
-    )
-    ai_provider = CharField(
-        max_length=20,
-        choices=AiProviderChoice.choices,
-        default=AiProviderChoice.CLOUDFLARE,
-        help_text="Which AI provider to use for all AI-powered features.",
-        verbose_name="AI provider",
-    )
-
-    # --- AI - Model selection ---
-
-    openai_model = CharField(
-        max_length=100,
-        default=DEFAULT_OPENAI_MODEL,
-        help_text="OpenAI model name (e.g. gpt-4o, gpt-4o-mini, gpt-5-nano). Only used when provider is OpenAI.",
-        verbose_name="OpenAI model",
-    )
-    cloudflare_model = CharField(
-        max_length=200,
-        default=DEFAULT_CLOUDFLARE_MODEL,
-        help_text="Cloudflare Workers AI model name. Only used when provider is Cloudflare.",
-        verbose_name="Cloudflare model",
-    )
-    anthropic_model = CharField(
-        max_length=100,
-        default=DEFAULT_ANTHROPIC_MODEL,
-        help_text="Anthropic (Claude) model name (e.g. claude-haiku-4-5, claude-sonnet-5). Only used when provider is Anthropic.",
-        verbose_name="Anthropic model",
-    )
-
-    # --- AI - Feature toggles ---
-
-    ai_category_suggestions_enabled = BooleanField(
-        default=True,
-        help_text="Allow AI to suggest categories for pins and locations based on their metadata.",
-        verbose_name="Category suggestions",
-    )
-    ai_document_import_enabled = BooleanField(
-        default=True,
-        help_text="Allow AI to extract pins from uploaded plain-text and Word documents during pin import.",
-        verbose_name="Document pin import",
-    )
-    ai_document_import_max_chars = IntegerField(
-        default=20_000,
-        help_text=(
-            "Maximum number of characters read from an uploaded .txt/.docx file before AI import rejects it outright, to bound token usage per document. Uploads longer than this are not truncated - the user is asked to shorten the file instead."
-        ),
-        verbose_name="Document import max length (characters)",
-        validators=[MinValueValidator(500), MaxValueValidator(200_000)],
-    )
-    ai_link_extraction_enabled = BooleanField(
-        default=True,
-        help_text="Allow users with the AI feature to have external links on their pins read by AI to fill in supported pin fields.",
-        verbose_name="Link extraction",
-    )
-    ai_link_extraction_daily_limit = IntegerField(
-        default=20,
-        help_text="Maximum AI link-extraction runs each user may start per day, bounding per-user token spend.",
-        verbose_name="Link extraction daily limit (per user)",
-        validators=[MinValueValidator(0), MaxValueValidator(1000)],
-    )
-    ai_article_expansion_enabled = BooleanField(
-        default=True,
-        help_text=(
-            "Allow the link-extraction pipeline to ask a writing assistant for new plain-text "
-            "paragraphs to append to the pin article (and the location wiki article when one "
-            "exists). Every draft still passes through article safety moderation before it is saved; "
-            "when this toggle is off, field extraction still runs and article expansion is skipped."
-        ),
-        verbose_name="Article expansion from links",
-    )
-    ai_article_safety_enabled = BooleanField(
-        default=True,
-        help_text=(
-            "Allow AI to judge article text drafted from a linked page for appropriateness and "
-            "safety-related implications (entry methods, trespass how-tos, harassment, etc.) before "
-            "it is appended. When off, article expansion is skipped entirely — moderation is never bypassed."
-        ),
-        verbose_name="Article expansion safety review",
-    )
-    ai_trip_suggestions_enabled = BooleanField(
-        default=True,
-        help_text="Allow AI to suggest pins worth adding to a trip and a drive/weather/vote-aware activity order. Only ever sees pins every trip member already has and members' external-sharing preferences are honored.",
-        verbose_name="Trip suggestions",
-    )
-    ai_trivia_moderation_enabled = BooleanField(
-        default=True,
-        help_text="Allow AI to classify user-submitted and AI-generated Trivia questions for person/bullying/in-group content before they enter rotation. When off, user submissions are held in pending review indefinitely and AI question generation is skipped entirely (moderation is never bypassed).",
-        verbose_name="Trivia question moderation",
-    )
-    ai_trivia_generation_enabled = BooleanField(
-        default=True,
-        help_text="Allow AI to generate candidate Trivia questions from wiki articles with substantial content. Every generated question still passes through the same moderation classifier before entering rotation.",
-        verbose_name="Trivia question generation",
-    )
-    ai_trivia_answer_check_enabled = BooleanField(
-        default=True,
-        help_text="Allow AI to judge a Trivia answer that doesn't exact-match as possibly correct but differently phrased. Only ever consulted on a normalized-string mismatch; users without the AI subscription feature always fall back to exact match only.",
-        verbose_name="Trivia AI answer checking",
-    )
-    ai_trivia_wiki_incorporation_enabled = BooleanField(
-        default=True,
-        help_text="Allow AI to draft a plain-text paragraph folding a well-upvoted user-submitted Trivia question into its location's wiki article. Every draft still passes through the same article safety moderation as link-based article expansion before it is appended; when off, well-upvoted questions are simply never considered (moderation is never bypassed).",
-        verbose_name="Trivia wiki incorporation",
     )
 
     # --- Storage quotas & upload processing ---
@@ -513,8 +392,8 @@ class SiteSettings(abstract.FrontendDashboardModel):
         default=60,
         help_text=(
             "How many days to cache a location's generated property/building boundary before refreshing it in the "
-            "background (REData, Overpass, Overture, Microsoft, Google). Parcel geometry rarely changes, and REData "
-            "already caches upstream, so a long cache avoids unnecessary provider calls. A stale boundary is still "
+            "background (county records, Overpass, Overture, Microsoft, Google). Parcel geometry rarely changes, and "
+            "upstream providers already cache it, so a long cache avoids unnecessary provider calls. A stale boundary is still "
             "served immediately while the refresh runs in the background."
         ),
         verbose_name="Boundary cache (days)",
@@ -594,14 +473,6 @@ class SiteSettings(abstract.FrontendDashboardModel):
         verbose_name="Restrict sign-ups (invite-only)",
     )
 
-    # --- Cost tracking ---
-
-    public_costs_page_enabled = BooleanField(
-        default=False,
-        help_text="Show the public /costs/ page with the site's estimated running costs and cost-per-user. Off by default.",
-        verbose_name="Public costs page",
-    )
-
     # --- Bootstrap admin ---
     bootstrap_admin_onboarding_complete = BooleanField(
         default=False,
@@ -637,12 +508,13 @@ class SiteSettings(abstract.FrontendDashboardModel):
     @property
     def feature_labels(self) -> list[str]:
         """Human-readable labels for the default features, in declaration order."""
-        from urbanlens.dashboard.models.subscriptions.model import SiteFeature
 
         feature_set = self.feature_set
-        return [label for value, label in SiteFeature.choices if value in feature_set]
+        from urbanlens.dashboard.models.subscriptions.model import site_feature_choices
 
-    def grants(self, feature: SiteFeature | str) -> bool:
+        return [label for value, label in site_feature_choices() if value in feature_set]
+
+    def grants(self, feature: str) -> bool:
         """Return whether the site-wide default grants ``feature`` to every user."""
         return str(feature) in self.feature_set
 

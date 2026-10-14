@@ -1,4 +1,4 @@
-/** A pin's detail page. The busiest page in the application: it resolves boundaries, asks REData about the parcel, looks for a wiki, loads enrichment panels contributed by plugins, and renders its own map. */
+/** A pin's detail page. The busiest page in the application: it resolves boundaries, asks its data providers about the parcel, looks for a wiki, loads enrichment panels contributed by plugins, and renders its own map. */
 
 import { expect, type Locator, type Page } from "@playwright/test";
 

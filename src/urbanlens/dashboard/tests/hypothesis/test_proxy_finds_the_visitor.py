@@ -40,7 +40,7 @@ class TheProxyFindsTheVisitorTests(SimpleTestCase):
                 self.assertTrue(_trusted(name), f"{name} trusts no hop, so X-Forwarded-For is never read")
 
     def test_every_docker_default_pool_is_trusted(self) -> None:
-        """A stack on a 192.168 network - a perf environment is one - loses every visitor's address."""
+        """A stack on a 192.168 network loses every visitor's address."""
         for name in CONFIGS:
             trusted = _trusted(name)
             for pool in DOCKER_DEFAULT_POOLS:

@@ -13,6 +13,7 @@ from urbanlens.dashboard.models.boundary.model import Boundary, BoundarySource, 
 from urbanlens.dashboard.models.boundary_vote.model import BoundaryVote
 from urbanlens.dashboard.models.place.model import is_plausible_area
 from urbanlens.dashboard.services.geo.area import area_sqm
+from urbanlens.dashboard.services.geo.boundary_sources import vote_labels, vote_rank
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -29,14 +30,6 @@ HALF_LIFE_DAYS = 180
 
 #: A leader needs at least this multiple of the runner-up's weight to count
 CONSENSUS_RATIO = 1.5
-
-#: Deterministic tie-break order: REData is survey-grade county GIS geometry,
-#: Overpass is community-tagged - prefer authoritative data on exact ties,
-#: exactly as the chain in ``services.locations.boundaries`` orders providers.
-_SOURCE_PRIORITY = {
-    BoundarySource.REDATA.value: 0,
-    BoundarySource.OVERPASS.value: 1,
-}
 
 
 class BoundaryVoteError(Exception):
@@ -63,7 +56,7 @@ def vote_weight(voted_at: datetime, now: datetime | None = None) -> float:
 
 def _priority(boundary: Boundary) -> tuple[int, str, int]:
     """Deterministic tie-break key for a candidate (lower sorts first)."""
-    return (_SOURCE_PRIORITY.get(boundary.source, len(_SOURCE_PRIORITY)), boundary.source, boundary.pk)
+    return (vote_rank(boundary.source), boundary.source, boundary.pk)
 
 
 def boundary_options(place: Place | None) -> list[Boundary]:
@@ -75,11 +68,11 @@ def boundary_options(place: Place | None) -> list[Boundary]:
         place: The place whose official boundary may be voted on; None (a coordinate no provider knows) has nothing to vote on.
 
     Returns:
-        Candidate Boundary rows, REData first; empty when the provider chain hasn't produced per-source candidates for this place."""
+        Candidate Boundary rows, in the provider chain's order (authoritative data first); empty when the provider chain hasn't produced per-source candidates for this place."""
     if place is None:
         return []
     candidates = Boundary.objects.source_candidates_for_place(place).of_type(BoundaryType.PROPERTY).exclude(generated_polygon__isnull=True)
-    # Rows recorded before the chain refused implausible outlines stay in the table; none may win (P148).
+    # Rows recorded before the chain refused implausible outlines stay in the table; none may win.
     plausible = [candidate for candidate in candidates if candidate.generated_polygon is not None and is_plausible_area(place.kind, area_sqm(candidate.generated_polygon))]
     return sorted(plausible, key=_priority)
 
@@ -192,14 +185,13 @@ def cast_boundary_vote(place: Place | None, profile: Profile, boundary_id: int) 
     return vote
 
 
-def boundary_vote_context(place: Place | None, profile: Profile | None, *, conceal: bool = False) -> dict | None:
+def boundary_vote_context(place: Place | None, profile: Profile | None) -> dict | None:
     """
     Template context for the wiki page's boundary-vote dialog and button.
 
     Args:
         place: The wiki's place.
         profile: The viewing profile (for their current choice).
-        conceal: Whether this viewer sees the concealed form of the wiki.
 
     Returns:
         None when fewer than two candidates exist (nothing to vote on - no button, no dialog)."""
@@ -208,25 +200,22 @@ def boundary_vote_context(place: Place | None, profile: Profile | None, *, conce
     options = boundary_options(place)
     if len(options) < 2:
         return None
+    labels = vote_labels()
     my_vote = BoundaryVote.objects.my_vote(place, profile)
     my_vote_id = my_vote.boundary_id if my_vote else None
 
-    # Other people's votes only, and this is deliberately not "all votes".
-    # `auto_open` is an *inverted* tell: a place nobody has voted on opens this dialog on arrival,
-    # so a concealed viewer who does not get it has been shown that other people have been here -
-    # the concealment announcing itself by staying quiet.
+    # Other people's votes only, deliberately not "all votes": `auto_open` opens the dialog on arrival at a place nobody
+    # else has voted on.
     others = BoundaryVote.objects.for_place(place)
     if profile is not None:
         others = others.exclude(profile=profile)
-    if conceal:
-        others = others.none()
     has_votes = others.exists()
     return {
         "options": [
             {
                 "id": option.pk,
                 "source": option.source,
-                "label": BoundarySource(option.source).label if option.source in BoundarySource.values else option.source,
+                "label": labels.get(option.source) or (BoundarySource(option.source).label if option.source in BoundarySource.values else option.source),
                 "polygon": geometry_to_geojson(option.generated_polygon),
                 "is_my_choice": option.pk == my_vote_id,
             }
@@ -234,7 +223,6 @@ def boundary_vote_context(place: Place | None, profile: Profile | None, *, conce
         ],
         "my_vote_id": my_vote_id,
         "has_votes": has_votes,
-        # Either reading defeats the concealment two lines above.
-        "has_consensus": False if conceal else has_consensus(place),
+        "has_consensus": has_consensus(place),
         "auto_open": not has_votes,
     }

@@ -10,7 +10,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { fetchVectorStyle, isVectorStyleDocument, namespaceVectorStyle, resolveStyleUrl } from "./maplibre-vector-style";
 import type { StyleSpecification } from "maplibre-gl";
 
-const STYLE_URL = "https://redata.example/tiles/styles/street/style.json";
+const STYLE_URL = "https://tiles.example/tiles/styles/street/style.json";
 
 const realFetch = globalThis.fetch;
 
@@ -49,22 +49,22 @@ describe("resolveStyleUrl", () => {
     });
 
     test("resolves a relative path against the style's own address, not the page's", () => {
-        expect(resolveStyleUrl("../../data/tiles.json", STYLE_URL)).toBe("https://redata.example/tiles/data/tiles.json");
+        expect(resolveStyleUrl("../../data/tiles.json", STYLE_URL)).toBe("https://tiles.example/tiles/data/tiles.json");
     });
 
     test("resolves a root-relative path against the style's origin", () => {
-        expect(resolveStyleUrl("/data/tiles.json", STYLE_URL)).toBe("https://redata.example/data/tiles.json");
+        expect(resolveStyleUrl("/data/tiles.json", STYLE_URL)).toBe("https://tiles.example/data/tiles.json");
     });
 
     test("keeps MapLibre's own tile tokens as braces rather than percent-encoding them", () => {
         // URL() encodes braces, which would ask the tile server for the literal string "%7Bz%7D"
         // on every request - a layer that loads nothing and reports nothing.
-        expect(resolveStyleUrl("../data/{z}/{x}/{y}.pbf", STYLE_URL)).toBe("https://redata.example/tiles/styles/data/{z}/{x}/{y}.pbf");
+        expect(resolveStyleUrl("../data/{z}/{x}/{y}.pbf", STYLE_URL)).toBe("https://tiles.example/tiles/styles/data/{z}/{x}/{y}.pbf");
     });
 
     test("keeps the glyph tokens too", () => {
         expect(resolveStyleUrl("fonts/{fontstack}/{range}.pbf", STYLE_URL)).toBe(
-            "https://redata.example/tiles/styles/street/fonts/{fontstack}/{range}.pbf",
+            "https://tiles.example/tiles/styles/street/fonts/{fontstack}/{range}.pbf",
         );
     });
 });
@@ -141,7 +141,7 @@ describe("namespaceVectorStyle", () => {
         const style = namespaceVectorStyle("ul-vec-", styleDocument(), STYLE_URL);
 
         expect((style.sources["ul-vec-openmaptiles"] as { tiles: string[] }).tiles).toEqual([
-            "https://redata.example/tiles/data/{z}/{x}/{y}.pbf",
+            "https://tiles.example/tiles/data/{z}/{x}/{y}.pbf",
         ]);
     });
 
@@ -150,7 +150,7 @@ describe("namespaceVectorStyle", () => {
 
         const style = namespaceVectorStyle("ul-vec-", doc, STYLE_URL);
 
-        expect((style.sources["ul-vec-omt"] as { url: string }).url).toBe("https://redata.example/tiles/data/v3.json");
+        expect((style.sources["ul-vec-omt"] as { url: string }).url).toBe("https://tiles.example/tiles/data/v3.json");
     });
 
     test("resolves a GeoJSON source's data URL but leaves inline data alone", () => {
@@ -161,15 +161,15 @@ describe("namespaceVectorStyle", () => {
 
         const style = namespaceVectorStyle("ul-vec-", doc, STYLE_URL);
 
-        expect((style.sources["ul-vec-remote"] as { data: string }).data).toBe("https://redata.example/tiles/styles/features.json");
+        expect((style.sources["ul-vec-remote"] as { data: string }).data).toBe("https://tiles.example/tiles/styles/features.json");
         expect((style.sources["ul-vec-local"] as { data: unknown }).data).toEqual(inline);
     });
 
     test("resolves glyphs and normalises a single sprite under MapLibre's default id", () => {
         const style = namespaceVectorStyle("ul-vec-", styleDocument(), STYLE_URL);
 
-        expect(style.glyphs).toBe("https://redata.example/tiles/fonts/{fontstack}/{range}.pbf");
-        expect(style.sprites).toEqual([{ id: "default", url: "https://redata.example/tiles/styles/sprites/street" }]);
+        expect(style.glyphs).toBe("https://tiles.example/tiles/fonts/{fontstack}/{range}.pbf");
+        expect(style.sprites).toEqual([{ id: "default", url: "https://tiles.example/tiles/styles/sprites/street" }]);
     });
 
     test("keeps every entry of a multi-sprite style, since icon-image names carry those ids", () => {
@@ -183,7 +183,7 @@ describe("namespaceVectorStyle", () => {
         const style = namespaceVectorStyle("ul-vec-", doc, STYLE_URL);
 
         expect(style.sprites).toEqual([
-            { id: "default", url: "https://redata.example/tiles/styles/sprites/base" },
+            { id: "default", url: "https://tiles.example/tiles/styles/sprites/base" },
             { id: "poi", url: "https://cdn.example/poi" },
         ]);
     });
@@ -270,16 +270,16 @@ describe("pmtiles sources", () => {
 
     test("leaves it unregistered for a style that names a tile endpoint instead of an archive", () => {
         const stub = stubMaplibre();
-        // REData is switching street.json/dark.json off `pmtiles://` and onto this; the `pmtiles`
+        // The catalogue is switching street.json/dark.json off `pmtiles://` and onto this; the `pmtiles`
         // package becomes removable only if nothing here still reaches for it.
         const doc = styleDocument({
-            sources: { protomaps: { type: "vector", tiles: ["https://tiles.urbanlens.org/basemap/{z}/{x}/{y}"], maxzoom: 15 } },
+            sources: { protomaps: { type: "vector", tiles: ["https://tiles.example.com/basemap/{z}/{x}/{y}"], maxzoom: 15 } },
         } as Partial<StyleSpecification>);
 
         const style = namespaceVectorStyle("ul-vec-", doc, STYLE_URL);
 
         expect(stub.registered).toEqual([]);
-        expect((style.sources["ul-vec-protomaps"] as { tiles: string[] }).tiles).toEqual(["https://tiles.urbanlens.org/basemap/{z}/{x}/{y}"]);
+        expect((style.sources["ul-vec-protomaps"] as { tiles: string[] }).tiles).toEqual(["https://tiles.example.com/basemap/{z}/{x}/{y}"]);
     });
 
     test("leaves a pmtiles:// URL unresolved - it is a scheme, not a relative path", () => {
@@ -338,7 +338,7 @@ describe("fetchVectorStyle", () => {
     });
 
     test("gives up when the body is not a style document", async () => {
-        // A proxy's HTML error page, or a REData version serving something else at this URL.
+        // A proxy's HTML error page, or a catalogue version serving something else at this URL.
         stubFetch({ body: { detail: "Not found" } });
 
         expect(await fetchVectorStyle("ul-vec-", STYLE_URL)).toBeNull();

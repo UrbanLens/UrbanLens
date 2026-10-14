@@ -1,4 +1,4 @@
-"""Tests for the multiplayer lobby lifecycle (UL-392): invite, join, begin, joined-only round/guess logic."""
+"""Tests for the multiplayer lobby lifecycle: invite, join, begin, joined-only round/guess logic."""
 
 from __future__ import annotations
 

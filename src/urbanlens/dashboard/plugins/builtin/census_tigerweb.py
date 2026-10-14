@@ -11,7 +11,7 @@ from urbanlens.UrbanLens.egress import EgressCategory
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
-    from urbanlens.dashboard.services.pins.external_data import PanelSource
+    from urbanlens.dashboard.plugins.base import PluginContext
 
 
 class CensusTigerwebPanelSource(CoordinateGatedInfoPanelSource):
@@ -72,19 +72,22 @@ class CensusTigerwebPlugin(UrbanLensPlugin):
     description: ClassVar[str] = "Free, keyless US Census Bureau geography (state/county/place/tract) for the pin's coordinates. USA only."
     author: ClassVar[str] = "UrbanLens"
 
-    def get_service_defaults(self) -> dict[str, ServiceDefaults]:
-        """Rate-limit defaults for the TIGERweb ArcGIS REST service."""
-        return {
-            "census_tigerweb": ServiceDefaults(
-                display_name="US Census TIGERweb",
-                category=EgressCategory.QUOTA,
-                calls_per_minute=30,
-                calls_per_day=2000,
-                usa_only=True,
-                notes="Free, keyless ArcGIS REST service.",
-            ),
-        }
+    def setup(self, plugin: PluginContext) -> None:
+        """TIGERweb rate-limit defaults and the Census geography pin-detail panel."""
+        from urbanlens.dashboard.plugins.points import PANEL_SOURCES, SERVICE_DEFAULTS
 
-    def get_panel_sources(self) -> list[PanelSource]:
-        """Contribute the Census geography pin-detail panel."""
-        return [CensusTigerwebPanelSource()]
+        plugin.register_all(
+            SERVICE_DEFAULTS,
+            {
+                "census_tigerweb": ServiceDefaults(
+                    display_name="US Census TIGERweb",
+                    category=EgressCategory.QUOTA,
+                    calls_per_minute=30,
+                    calls_per_day=2000,
+                    usa_only=True,
+                    notes="Free, keyless ArcGIS REST service.",
+                ),
+            },
+        )
+
+        plugin.extend(PANEL_SOURCES, [CensusTigerwebPanelSource()])

@@ -1,6 +1,6 @@
 /**
  * Pin data reaches a wiki only as an opt-in, per-field copy, never as a live reference
- * (the privacy model: "Pin → wiki", and the litmus test; see docs/PRIVACY_MODEL.md).
+ * (the privacy model: "Pin → wiki", and the litmus test).
  */
 
 import type { APIRequestContext, APIResponse } from "@playwright/test";

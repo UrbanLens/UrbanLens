@@ -7,7 +7,9 @@ from unittest import mock
 
 from hypothesis import given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
+from urbanlens.dashboard.plugins.points import PLACES_PROVIDERS
 from urbanlens.dashboard.services.apis.locations.base import best_polygon_from_geometry, default_bbox
+from urbanlens.dashboard.services.apis.locations.places_resolution import GooglePlacesProvider
 from urbanlens.dashboard.services.locations.google import PlaceNameResolverChain
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 
@@ -102,9 +104,11 @@ class PlaceNameResolverChainTests(SimpleTestCase):
         from urbanlens.dashboard.services.locations.google import GooglePlacesNameResolver
 
         with (
-            mock.patch("urbanlens.dashboard.services.locations.google.settings.google_unrestricted_api_key", "key"),
-            mock.patch("urbanlens.dashboard.services.apis.locations.places_resolution.settings.redata_api_url", None),
-            mock.patch("urbanlens.dashboard.services.apis.locations.places_resolution.settings.redata_api_key", None),
+            PLACES_PROVIDERS.overridden([GooglePlacesProvider()]),
+            mock.patch(
+                "urbanlens.dashboard.services.apis.locations.places_resolution.settings.google_unrestricted_api_key",
+                "key",
+            ),
             mock.patch("urbanlens.dashboard.services.apis.locations.places_resolution.GooglePlacesGateway") as gateway,
         ):
             gateway.return_value.get_data.side_effect = ValueError("bad response")
@@ -116,9 +120,11 @@ class PlaceNameResolverChainTests(SimpleTestCase):
         from urbanlens.dashboard.services.locations.google import GooglePlacesNameResolver
 
         with (
-            mock.patch("urbanlens.dashboard.services.locations.google.settings.google_unrestricted_api_key", "key"),
-            mock.patch("urbanlens.dashboard.services.apis.locations.places_resolution.settings.redata_api_url", None),
-            mock.patch("urbanlens.dashboard.services.apis.locations.places_resolution.settings.redata_api_key", None),
+            PLACES_PROVIDERS.overridden([GooglePlacesProvider()]),
+            mock.patch(
+                "urbanlens.dashboard.services.apis.locations.places_resolution.settings.google_unrestricted_api_key",
+                "key",
+            ),
             mock.patch("urbanlens.dashboard.services.apis.locations.places_resolution.GooglePlacesGateway") as gateway,
         ):
             gateway.return_value.get_data.side_effect = RateLimitExceededError("google_places")
@@ -143,9 +149,11 @@ class PlaceNameResolverChainTests(SimpleTestCase):
         from urbanlens.dashboard.services.locations.google import GooglePlacesNameResolver
 
         with (
-            mock.patch("urbanlens.dashboard.services.locations.google.settings.google_unrestricted_api_key", "key"),
-            mock.patch("urbanlens.dashboard.services.apis.locations.places_resolution.settings.redata_api_url", None),
-            mock.patch("urbanlens.dashboard.services.apis.locations.places_resolution.settings.redata_api_key", None),
+            PLACES_PROVIDERS.overridden([GooglePlacesProvider()]),
+            mock.patch(
+                "urbanlens.dashboard.services.apis.locations.places_resolution.settings.google_unrestricted_api_key",
+                "key",
+            ),
             mock.patch("urbanlens.dashboard.services.apis.locations.places_resolution.GooglePlacesGateway") as gateway,
         ):
             gateway.return_value.get_data.return_value = [
@@ -158,9 +166,11 @@ class PlaceNameResolverChainTests(SimpleTestCase):
         from urbanlens.dashboard.services.locations.google import GooglePlacesNameResolver
 
         with (
-            mock.patch("urbanlens.dashboard.services.locations.google.settings.google_unrestricted_api_key", "key"),
-            mock.patch("urbanlens.dashboard.services.apis.locations.places_resolution.settings.redata_api_url", None),
-            mock.patch("urbanlens.dashboard.services.apis.locations.places_resolution.settings.redata_api_key", None),
+            PLACES_PROVIDERS.overridden([GooglePlacesProvider()]),
+            mock.patch(
+                "urbanlens.dashboard.services.apis.locations.places_resolution.settings.google_unrestricted_api_key",
+                "key",
+            ),
             mock.patch("urbanlens.dashboard.services.apis.locations.places_resolution.GooglePlacesGateway") as gateway,
         ):
             gateway.return_value.get_data.return_value = [{"name": "Poughkeepsie", "types": ["locality", "political"]}]
@@ -198,15 +208,6 @@ class PlaceNameResolverChainTests(SimpleTestCase):
 
 class BoundaryProviderChainTests(SimpleTestCase):
     """Typed boundary resolution fills property/building slots independently, with no bbox fallback."""
-
-    def test_default_chain_tries_redata_first(self) -> None:
-        """
-        RedataBoundaryProvider is authoritative when it has data - see boundaries.py's
-        own docstring for why it runs before the community/ML-derived providers."""
-        from urbanlens.dashboard.services.apis.locations.boundaries.redata import RedataBoundaryProvider
-        from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain
-
-        self.assertIsInstance(BoundaryProviderChain().providers[0], RedataBoundaryProvider)
 
     def test_chain_returns_first_provider_boundary(self) -> None:
         from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain
@@ -316,16 +317,21 @@ class BoundaryProviderChainTests(SimpleTestCase):
 
 
 class OverpassGatewayTests(SimpleTestCase):
-    """Overpass helpers build bounded, reusable API requests."""
+    """Overpass helpers build bounded, reusable API requests, against a deployment with a primary endpoint of its own."""
 
     def setUp(self) -> None:
         # Down-endpoint flags live in the shared Django cache; clear it so one
         # test's simulated outages never leak into the next.
         from django.core.cache import cache
 
+        from urbanlens.UrbanLens.settings.app import settings as app_settings
+
         super().setUp()
         cache.clear()
         self.addCleanup(cache.clear)
+        primary = mock.patch.object(app_settings, "overpass_api_url", "https://overpass.primary.test/api/interpreter")
+        primary.start()
+        self.addCleanup(primary.stop)
 
     def test_nearby_features_query_can_include_nodes_without_geometry(self) -> None:
         from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway

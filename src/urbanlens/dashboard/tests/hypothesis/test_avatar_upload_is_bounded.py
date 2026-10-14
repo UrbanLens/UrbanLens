@@ -1,7 +1,7 @@
 """
 An avatar is scanned synchronously, and bounded by the site's photo ceiling.
 
-N21 H45. `set_profile_avatar` runs the shared `image_upload_error` gauntlet
+`set_profile_avatar` runs the shared `image_upload_error` gauntlet
 without `skip_malware_scan`, so the antivirus scan happens inside the request:
 the file is copied into a BytesIO in the gunicorn worker and streamed to the
 shared clamd daemon. The only size bound on it is `file_size_error_for_upload`,

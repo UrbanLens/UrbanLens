@@ -85,7 +85,7 @@ class LooksFloatRoundedTests(SimpleTestCase):
     def test_nothing_a_float64_holds_exactly_looks_float_rounded(self, cid: int) -> None:
         self.assertFalse(looks_float_rounded(cid))
 
-    def test_a_cid_from_reDatas_staging_rows(self) -> None:
+    def test_a_cid_from_a_data_services_staging_rows(self) -> None:
         self.assertTrue(looks_float_rounded(6827058720975719000))
         self.assertFalse(looks_float_rounded(11148154607565040795))
 

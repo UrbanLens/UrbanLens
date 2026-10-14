@@ -187,16 +187,15 @@ def connect_invalidation() -> None:
 
     from urbanlens.dashboard.models.site_settings.model import SiteSettings
     from urbanlens.dashboard.models.subscriptions.model import SubscriptionRole, UserSubscription
-    from urbanlens.dashboard.plugins.hooks import hooks
+    from urbanlens.dashboard.plugins.points import ACCESS_STATE_SENDERS
 
-    # Plugins watch their own tables through the access_state_invalidation_senders filter.
     rows = (
         SiteSettings,
         UserSubscription,
         SubscriptionRole,
         Group,
         Permission,
-        *hooks.apply_filters("access_state_invalidation_senders", []),
+        *ACCESS_STATE_SENDERS.apply([]),
     )
     for sender in rows:
         post_save.connect(forget, sender=sender, dispatch_uid=f"access_state_forget_{sender.__name__}_save")

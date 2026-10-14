@@ -2,7 +2,7 @@
  * The street and dark vector basemaps' tiles from Protomaps' hosted API, fetched by the browser directly, with
  * this deployment's own tiles as the automatic fallback.
  *
- * Only the tile source moves. The style, its glyphs and its sprites stay the ones REData publishes on this
+ * Only the tile source moves. The style, its glyphs and its sprites stay the ones the catalogue publishes on this
  * deployment's own tile host, and that style's `protomaps` source keeps naming our own tiles.
  * Where `{% hosted_basemap_tiles %}` embedded a hosted template (production and staging), this module points that
  * one source at it, and points it back at the style's own tiles when the hosted ones fail. Both serve the

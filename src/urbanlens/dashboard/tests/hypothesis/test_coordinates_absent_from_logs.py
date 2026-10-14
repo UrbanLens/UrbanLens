@@ -1,4 +1,4 @@
-"""A private pin's coordinates never reach a log line (P112, `py/clear-text-logging-sensitive-data`)."""
+"""A private pin's coordinates never reach a log line (`py/clear-text-logging-sensitive-data`)."""
 
 from __future__ import annotations
 

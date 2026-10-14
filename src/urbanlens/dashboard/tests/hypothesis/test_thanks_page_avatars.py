@@ -1,4 +1,4 @@
-"""The Thanks page shows contributors' GitHub avatars from this site's copies, which img-src admits (P165)."""
+"""The Thanks page shows contributors' GitHub avatars from this site's copies, which img-src admits."""
 
 from __future__ import annotations
 

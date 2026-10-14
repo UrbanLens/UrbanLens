@@ -1,5 +1,5 @@
 """
-A delivery stays unacknowledged while its countdown runs and its task runs, and the broker must outwait both (P290).
+A delivery stays unacknowledged while its countdown runs and its task runs, and the broker must outwait both.
 
 RabbitMQ's default consumer timeout is 30 minutes. Past it the broker closes the worker's channel, and the worker
 exits with "Unrecoverable error: PreconditionFailed", taking every task it was running with it. On dev the interactive

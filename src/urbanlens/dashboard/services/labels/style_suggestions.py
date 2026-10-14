@@ -1,23 +1,14 @@
-"""AI-assisted label presentation suggestions."""
+"""Presentation suggestions for a newly created label: an icon and a colour, from the first suggester that offers one."""
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
-import logging
-import re
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.labels.model import Label
     from urbanlens.dashboard.models.profile.model import Profile
-
-from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, ICON_CATEGORIES
-from urbanlens.dashboard.services.ai.access import ai_features_enabled
-from urbanlens.dashboard.services.security.redact import redact_text
-
-logger = logging.getLogger(__name__)
-
-_HEX_RE = re.compile(r"#[0-9a-fA-F]{6}\b")
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,46 +19,34 @@ class LabelStyleSuggestion:
     color: str | None = None
 
 
+class LabelStyleSuggester(ABC):
+    """Chooses an icon and colour for a label being created."""
+
+    @abstractmethod
+    def suggest(self, name: str, profile: Profile) -> LabelStyleSuggestion | None:
+        """
+        Return a suggestion, or None to abstain, leaving the next suggester to decide.
+
+        Args:
+            name: The label name.
+            profile: The profile creating the label.
+        """
+
+
 def suggest_label_style(name: str, profile: Profile) -> LabelStyleSuggestion:
-    """Ask AI to choose an emoji and color for a label when the user may use AI."""
-    if not ai_features_enabled(profile):
-        return LabelStyleSuggestion()
+    """Ask the suggesters in priority order; the first suggestion decides, and none leaves the label unstyled."""
+    from urbanlens.dashboard.plugins.points import LABEL_STYLE_SUGGESTERS
 
-    prompt = _build_prompt(name)
-    if not prompt:
-        return LabelStyleSuggestion()
-
-    from urbanlens.dashboard.services.ai.factory import get_gateway
-
-    try:
-        gateway = get_gateway("label_style_suggestions", profile=profile, instructions=_build_instructions())
-    except (RuntimeError, ValueError, OSError) as exc:
-        logger.warning("AI gateway unavailable for label style suggestion %s: %s", redact_text(name), exc)
-        return LabelStyleSuggestion()
-    if not gateway:
-        return LabelStyleSuggestion()
-
-    from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, api_call_slot
-
-    try:
-        with api_call_slot("label_style_suggestions", endpoint=gateway.model) as slot:
-            cost_before = gateway.cost
-            answers = gateway.send_prompt_list(prompt, max_results=2)
-            # The gateway marks an answered call itself; an answer with nothing usable in it is still an answer.
-            slot.success, slot.cost_estimate = slot.success or bool(answers), gateway.cost - cost_before
-    except RequestCancelledError as exc:
-        logger.info("AI label style suggestion for %s was refused before its call: %s", redact_text(name), exc)
-        return LabelStyleSuggestion()
-    except (RuntimeError, ValueError, OSError) as exc:
-        logger.warning("AI label style suggestion failed for %s: %s", redact_text(name), exc)
-        return LabelStyleSuggestion()
-
-    return _parse_answers(answers)
+    for suggester in LABEL_STYLE_SUGGESTERS.items():
+        suggestion = suggester.suggest(name, profile)
+        if suggestion is not None:
+            return suggestion
+    return LabelStyleSuggestion()
 
 
 def resolve_or_create_styled_label(profile: Profile, name: str, kind: str) -> tuple[Label, bool]:
     """
-    Resolve *name* as ``Label.objects.resolve_or_create`` does, giving a label it creates an AI-suggested icon and colour.
+    Resolve *name* as ``Label.objects.resolve_or_create`` does, giving a label it creates a suggested icon and colour.
 
     The suggestion is a model call, so only for callers off the request path.
 
@@ -90,54 +69,3 @@ def resolve_or_create_styled_label(profile: Profile, name: str, kind: str) -> tu
     style = suggest_label_style(name, profile)
     defaults = {field: value for field, value in (("icon", style.icon), ("color", style.color)) if value}
     return Label.objects.resolve_or_create(profile, name, kind, defaults=defaults)
-
-
-def _build_prompt(name: str) -> str:
-    from urbanlens.dashboard.services.ai.scanner import wrap_user_data
-
-    clean_name = (name or "").strip()[:255]
-    if not clean_name:
-        return ""
-    return "Label name:\n" + wrap_user_data(clean_name)
-
-
-def _build_instructions() -> str:
-    colors = ", ".join(color for color, _label in COLOR_CHOICES)
-    emojis = ", ".join(_emoji_options())
-    return (
-        "Choose a clear visual style for a newly-created Urban Lens pin-import label.\n"
-        "Return exactly two ANSWER tags: first one emoji, then one hex color.\n"
-        f"The emoji MUST be one of these options: {emojis}.\n"
-        f"The color MUST be one of these options: {colors}.\n"
-        "Do not return explanations or any values outside those lists."
-    )
-
-
-def _emoji_options() -> list[str]:
-    seen: set[str] = set()
-    options: list[str] = []
-    for _label, icons in ICON_CATEGORIES.values():
-        for icon, _icon_label in icons:
-            if icon not in seen:
-                seen.add(icon)
-                options.append(icon)
-    return options
-
-
-def _parse_answers(answers: list[str]) -> LabelStyleSuggestion:
-    valid_emojis = set(_emoji_options())
-    valid_colors = {color.upper(): color for color, _label in COLOR_CHOICES}
-    icon: str | None = None
-    color: str | None = None
-
-    for raw in answers:
-        value = raw.strip()
-        if icon is None and value in valid_emojis:
-            icon = value
-            continue
-        if color is None:
-            match = _HEX_RE.search(value)
-            if match:
-                color = valid_colors.get(match.group(0).upper())
-
-    return LabelStyleSuggestion(icon=icon, color=color)

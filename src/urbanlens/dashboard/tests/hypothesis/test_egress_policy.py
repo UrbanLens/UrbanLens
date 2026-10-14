@@ -1,7 +1,7 @@
 """
-The egress policy itself (D26): which category each environment may call, and on what share.
+The egress policy itself: which category each environment may call, and on what share.
 
-Every UrbanLens host shares one residential address with production REData, so a keyless API's per-address
+Every UrbanLens host shares one residential address with production's first-party services, so a keyless API's per-address
 tolerance and a billed API's free tier are one budget, and production is meant to spend it. These pin the
 table in ``urbanlens.UrbanLens.egress`` without the rest of the app.
 """
@@ -45,33 +45,13 @@ def _decide(
 class TheTableTests(SimpleTestCase):
     """Each category against each environment, with the default share."""
 
-    def test_redata_and_internal_are_allowed_everywhere_unscaled(self) -> None:
-        for category in (EgressCategory.REDATA, EgressCategory.INTERNAL):
+    def test_first_party_and_internal_are_allowed_everywhere_unscaled(self) -> None:
+        for category in (EgressCategory.FIRST_PARTY, EgressCategory.INTERNAL):
             for environment in (*DEPLOYMENTS, TESTING):
                 with self.subTest(category=category, environment=environment):
                     decision = _decide(category, environment)
                     self.assertTrue(decision.allowed)
                     self.assertEqual(decision.share, 1.0)
-
-    def test_hosted_ai_is_called_from_production_and_staging_unscaled(self) -> None:
-        for environment in (PRODUCTION, STAGING, TESTING):
-            with self.subTest(environment=environment):
-                decision = _decide(EgressCategory.AI, environment)
-                self.assertTrue(decision.allowed)
-                self.assertEqual(decision.share, 1.0)
-                self.assertFalse(decision.overridden)
-
-    def test_development_refuses_hosted_ai(self) -> None:
-        """Dev should not call AI providers. Refused the way quota and billed are."""
-        for environment in (DEVELOPMENT, LOCAL):
-            with self.subTest(environment=environment):
-                decision = _decide(EgressCategory.AI, environment)
-                self.assertFalse(decision.allowed)
-                self.assertEqual(decision.share, 0.0)
-
-    def test_an_unknown_environment_gets_no_hosted_ai(self) -> None:
-        self.assertFalse(_decide(EgressCategory.AI, "someones-laptop").allowed)
-        self.assertFalse(_decide(EgressCategory.AI, "").allowed)
 
     def test_quota_and_billed_take_the_environment_s_share(self) -> None:
         expected = {PRODUCTION: 0.9, STAGING: 0.05, DEVELOPMENT: 0.0, LOCAL: 0.0, TESTING: 1.0}
@@ -100,7 +80,6 @@ class TheTableTests(SimpleTestCase):
         for category in (
             EgressCategory.QUOTA,
             EgressCategory.BILLED,
-            EgressCategory.AI,
             EgressCategory.MESSAGING,
             EgressCategory.PUBLIC_WRITE,
         ):
@@ -134,32 +113,15 @@ class OverrideTests(SimpleTestCase):
         )
         self.assertFalse(_decide(EgressCategory.MESSAGING, PRODUCTION, overrides={"sms": 0.0}, service="sms").allowed)
 
-    def test_an_override_opts_one_hosted_ai_service_in_on_development(self) -> None:
-        decision = _decide(
-            EgressCategory.AI, DEVELOPMENT, overrides={"trivia_generation": 1.0}, service="trivia_generation"
-        )
-        self.assertTrue(decision.allowed)
-        self.assertTrue(decision.overridden)
-
-    def test_an_override_opts_a_provider_key_in_on_development(self) -> None:
-        decision = _decide(EgressCategory.AI, LOCAL, overrides={"ai_cloudflare": 0.5}, service="ai_cloudflare")
-        self.assertTrue(decision.allowed)
-        self.assertEqual(decision.share, 0.5)
-
-    def test_an_ai_override_names_one_service_only(self) -> None:
-        self.assertFalse(
-            _decide(EgressCategory.AI, DEVELOPMENT, overrides={"assistant": 1.0}, service="link_extraction").allowed
-        )
-
-    def test_zero_switches_a_hosted_ai_service_off_on_production(self) -> None:
-        self.assertFalse(
-            _decide(EgressCategory.AI, PRODUCTION, overrides={"assistant": 0.0}, service="assistant").allowed
-        )
-
     def test_an_unrestricted_category_ignores_it(self) -> None:
-        """REData and our own hosts are switched off on the API-limits page, not by environment."""
+        """First-party and our own hosts are switched off on the API-limits page, not by environment."""
         self.assertTrue(
-            _decide(EgressCategory.REDATA, DEVELOPMENT, overrides={"redata_api": 0.0}, service="redata_api").allowed
+            _decide(
+                EgressCategory.FIRST_PARTY,
+                DEVELOPMENT,
+                overrides={"first_party_probe": 0.0},
+                service="first_party_probe",
+            ).allowed
         )
 
     def test_parsing(self) -> None:
@@ -245,7 +207,7 @@ class HostedBasemapTests(SimpleTestCase):
 
     def test_development_and_local_draw_our_own_tiles(self) -> None:
         """Our own tiles are internal and free, matching development's share of 0."""
-        for environment in (DEVELOPMENT, LOCAL, "", "shadow-site-a"):
+        for environment in (DEVELOPMENT, LOCAL, "", "shadow-example"):
             with self.subTest(environment=environment):
                 self.assertEqual(hosted_basemap_key(environment, "key"), "")
 

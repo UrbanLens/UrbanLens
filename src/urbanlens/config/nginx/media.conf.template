@@ -7,7 +7,7 @@
 # `server_name` block to django.conf: a Host header cannot walk from this vhost
 # into the application, because this vhost does not know how to get there.
 #
-# Point NGINX Proxy Manager's media.example.com host at ${UL_MEDIA_PORT}.
+# Point your reverse proxy's media.example.com host at ${UL_MEDIA_PORT}.
 #
 # Requests still reach Django - the media gate authenticates and authorizes every
 # byte (dashboard/controllers/media.py). What changes on this origin is *how* it

@@ -2,7 +2,7 @@
 Which of a pin's enrichment panels are already known to have nothing to show, decided from what is stored.
 
 The Private Pin page renders a placeholder only for the panels that may have something, so a panel that would answer
-204 costs no request (P53). Each decision is the panel's own - its gate, :func:`~external_data.fetch_blocked`, and
+204 costs no request. Each decision is the panel's own - its gate, :func:`~external_data.fetch_blocked`, and
 whether its landed payload shows anything - so the page never leaves out a panel that would show something. A panel
 whose answer is not stored yet, or whose check raised, counts as possibly having content and loads as it always did.
 

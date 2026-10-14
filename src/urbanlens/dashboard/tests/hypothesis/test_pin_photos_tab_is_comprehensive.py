@@ -19,8 +19,8 @@ from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
 from urbanlens.dashboard.services.media.remote_copies import url_digest
-from urbanlens.dashboard.services.photos.pin_photos import MAX_PAGE_SIZE, PIN_MEDIA_GALLERY_SOURCES
-from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
+from urbanlens.dashboard.services.photos.pin_photos import MAX_PAGE_SIZE
+from urbanlens.dashboard.services.pins.external_data import gallery_sources
 
 _PNG_BYTES = (
     b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00"
@@ -48,7 +48,7 @@ def _wikimedia_item(n: int, **overrides) -> dict:
     return item
 
 
-class PinPhotosTabTestCase(RedataConfiguredMixin, TestCase):
+class PinPhotosTabTestCase(TestCase):
     def setUp(self) -> None:
         super().setUp()
         baker.make(User)
@@ -162,19 +162,21 @@ class ExternalPhotosTests(PinPhotosTabTestCase):
         self.assertEqual(item["view_url"], _copy_of("https://upload.wikimedia.org/hrsh/1.jpg"))
 
     def test_an_item_whose_address_is_a_page_has_no_view_to_offer(self) -> None:
-        self._cache("loc", [_wikimedia_item(1, source="loc", url="https://www.loc.gov/item/123/")])
+        self._cache(
+            "wikipedia_media", [_wikimedia_item(1, source="Wikipedia", url="https://en.wikipedia.org/wiki/Old_Mill")]
+        )
 
         [item] = self._all("external")
 
         self.assertEqual(item["view_url"], "")
 
     def test_photos_from_several_sources_are_all_listed(self) -> None:
-        for n, source in enumerate(("wikimedia", "loc", "smithsonian")):
+        for n, source in enumerate(("wikimedia", "wikipedia_media")):
             self._cache(source, [_wikimedia_item(n, source=source)])
 
         listed = {item["source"] for item in self._all("external")}
 
-        self.assertEqual(listed, {"wikimedia", "loc", "smithsonian"})
+        self.assertEqual(listed, {"wikimedia", "wikipedia_media"})
 
     def test_a_photo_both_sources_return_is_listed_once(self) -> None:
         self._cache("wikimedia", [_wikimedia_item(1)])
@@ -288,7 +290,7 @@ class ExternalPhotosTests(PinPhotosTabTestCase):
         html = self.client.get(reverse("pin.details", args=[self.pin.slug])).content.decode()
         loaders = set(re.findall(r'id="media-loader-([a-z_]+)"', html)) - {"photos"}
 
-        self.assertEqual(loaders, set(PIN_MEDIA_GALLERY_SOURCES))
+        self.assertEqual(loaders, {source.key for source in gallery_sources()})
 
 
 class PhotosPanelTests(PinPhotosTabTestCase):

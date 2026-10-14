@@ -7,7 +7,7 @@
     var RETRY_MAX_MS = 30000;
     var POLL_MS = 60000;
     var FAILURES_BEFORE_POLLING = 2;
-    // Cloudflare closes an idle tunnelled WebSocket after ~100s (not configurable below Enterprise).
+    // A reverse proxy often closes an idle WebSocket after ~100s.
     // A quiet account sends nothing for hours; without a ping the socket dies while the page
     // still believes it's connected. Same interval and reasoning as ts/shared/live-socket.ts.
     // UserNotificationConsumer ignores client frames, so the ping needs no reply.

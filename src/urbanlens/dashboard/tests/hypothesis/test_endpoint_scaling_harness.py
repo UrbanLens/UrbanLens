@@ -68,7 +68,7 @@ class ABoundedEndpointPassesTests(_AchievementSeedMixin, TestCase):
 
 @override_settings(ROOT_URLCONF=_URLCONF)
 class ObjectsPerRowIsCaughtTests(_AchievementSeedMixin, TestCase):
-    """The axis R27 needed: one model instance per row of output."""
+    """The axis this harness needed: one model instance per row of output."""
 
     def test_building_a_model_per_row_fails(self) -> None:
         with pytest.raises(AssertionError, match="objects/row"):

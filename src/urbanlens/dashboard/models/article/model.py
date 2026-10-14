@@ -15,6 +15,9 @@ from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.article.queryset import ArticleManager, ArticleRevisionManager
 from urbanlens.dashboard.services.core.text_limits import MAX_ARTICLE_LENGTH
 
+if TYPE_CHECKING:
+    from urbanlens.dashboard.services.wiki.viewer_projection import ViewerProjection
+
 EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA = "Seeded from Wikipedia"
 SYSTEM_EDIT_SUMMARIES = frozenset({EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA})
 #: ``localize_article_images``'s rewrite of whatever text an article held, a person's included, so not a system summary.
@@ -32,11 +35,9 @@ class Article(abstract.DashboardModel):
     edit trail lives in :class:`ArticleRevision`.
     """
 
-    #: True only on a concealed projection built by ``services.wiki.concealment.conceal_article`` -
-    #: a copy of this row carrying the newest revision one viewer is entitled to see, rather than
-    #: the live one.
-    #: Declared here so the distinction is visible from the model and reading it is a plain
-    _ul_concealed: bool = False
+    #: Set only on a copy built by ``services.wiki.viewer_projection.projected_copy``: the projection under which
+    #: one viewer reads this article rather than the live row. Declared here so the distinction is visible from the model.
+    _ul_projection: ViewerProjection | None = None
 
     # Markdown source of the current article text.
     content = TextField(blank=True, default="", max_length=MAX_ARTICLE_LENGTH, validators=[MaxLengthValidator(MAX_ARTICLE_LENGTH)])

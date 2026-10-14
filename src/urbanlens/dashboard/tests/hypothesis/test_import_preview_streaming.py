@@ -1,4 +1,4 @@
-"""Regression tests for UL-150: pins imported with a new "create category" label"""
+"""Regression tests: pins imported with a new "create category" label"""
 
 from __future__ import annotations
 
@@ -212,7 +212,7 @@ class ImportPreviewLegacyRepairFlagTests(TestCase):
 
 
 class ImportPreviewMapsUrlPassthroughTests(TestCase):
-    """_preview_pins() carries a row's source Google Maps URL through to the preview dict unchanged - not displayed, but re-used by a deferred REData lookup (cid_resolution.resolve_cids), which resolves via the place's own URL faster and more reliably than the bare cid alone. See GoogleMapsGateway._csv_row_iter."""
+    """_preview_pins() carries a row's source Google Maps URL through to the preview dict unchanged - not displayed, but re-used by a deferred provider lookup (cid_resolution.resolve_cids), which resolves via the place's own URL faster and more reliably than the bare cid alone. See GoogleMapsGateway._csv_row_iter."""
 
     def setUp(self) -> None:
         super().setUp()

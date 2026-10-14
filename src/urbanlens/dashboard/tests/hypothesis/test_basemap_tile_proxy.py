@@ -1,4 +1,4 @@
-"""REData's basemap layers, proxied so its API key stays server-side."""
+"""The tile catalogue's basemap layers, proxied so the service's credentials stay server-side."""
 
 from __future__ import annotations
 
@@ -11,20 +11,16 @@ from django.core.cache import cache
 from django.urls import reverse
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
+from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.controllers import basemap_tiles
 from urbanlens.dashboard.services.map.basemap_vendors import VENDOR_TILES
-from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
+from urbanlens.dashboard.tests.hypothesis.tile_catalogue_fake import FakeCatalogueMixin, catalogue_off, catalogue_on
 from urbanlens.UrbanLens.settings.app import settings as app_settings
 
-_GATEWAY = "urbanlens.dashboard.services.apis.locations.redata_basemap_tiles_gateway.RedataBasemapTilesGateway"
-#: Patched at its source module, not in the controller's namespace: the
-#: controller imports it inside the request method, so there is no attribute
-#: on the controller module to replace.
-_CONFIGURED = "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured"
+_GATEWAY = "urbanlens.dashboard.tests.hypothesis.tile_catalogue_fake.FakeTileCatalogue"
 
 
-class BasemapTileProxyTests(RedataConfiguredMixin, TestCase):
+class BasemapTileProxyTests(FakeCatalogueMixin, TestCase):
     def setUp(self) -> None:
         super().setUp()
         cache.clear()
@@ -35,7 +31,7 @@ class BasemapTileProxyTests(RedataConfiguredMixin, TestCase):
 
     def test_a_tile_is_served_and_cached(self) -> None:
         with (
-            mock.patch(_CONFIGURED, return_value=True),
+            catalogue_on(),
             mock.patch(f"{_GATEWAY}.download_tile", return_value=(200, b"PNGDATA", "image/png")) as download,
         ):
             first = self.client.get(self.url)
@@ -50,7 +46,7 @@ class BasemapTileProxyTests(RedataConfiguredMixin, TestCase):
     def test_the_vendor_content_type_is_preserved_through_the_cache(self) -> None:
         """Not every layer is PNG; the cache stores ``(body, content_type)`` as a pair. A cache-hit path that dropped the type (or hardcoded image/png) would only surface once a non-PNG layer was already cached - exactly the failure the controller's own comment warns about."""
         with (
-            mock.patch(_CONFIGURED, return_value=True),
+            catalogue_on(),
             mock.patch(f"{_GATEWAY}.download_tile", return_value=(200, b"WEBPDATA", "image/webp")),
         ):
             first = self.client.get(self.url)
@@ -64,7 +60,7 @@ class BasemapTileProxyTests(RedataConfiguredMixin, TestCase):
     def test_a_definitive_miss_is_cached(self) -> None:
         """Most of a layer's pyramid is empty; re-asking on every pan is the cost."""
         with (
-            mock.patch(_CONFIGURED, return_value=True),
+            catalogue_on(),
             mock.patch(f"{_GATEWAY}.download_tile", return_value=(404, b"", "")) as download,
         ):
             first = self.client.get(self.url)
@@ -80,7 +76,7 @@ class BasemapTileProxyTests(RedataConfiguredMixin, TestCase):
         cache branch narrowed to ``status == 404`` would still pass every
         other test in this file."""
         with (
-            mock.patch(_CONFIGURED, return_value=True),
+            catalogue_on(),
             mock.patch(f"{_GATEWAY}.download_tile", return_value=(400, b"", "")) as download,
         ):
             first = self.client.get(self.url)
@@ -96,9 +92,9 @@ class BasemapTileProxyTests(RedataConfiguredMixin, TestCase):
         Caching a layer-level refusal per coordinate would cause an outage when the layer
         switches back to raster, until those entries expire.
         """
-        refusal = b'{"error":"vector_layer_not_served","message":"\'street\' is a vector layer published at \'https://tiles.urbanlens.org/styles/street.json\'"}'
+        refusal = b'{"error":"vector_layer_not_served","message":"\'street\' is a vector layer published at \'https://tiles.example.com/styles/street.json\'"}'
         with (
-            mock.patch(_CONFIGURED, return_value=True),
+            catalogue_on(),
             mock.patch(f"{_GATEWAY}.download_tile", return_value=(400, refusal, "application/json")) as download,
         ):
             first = self.client.get(self.url)
@@ -113,7 +109,7 @@ class BasemapTileProxyTests(RedataConfiguredMixin, TestCase):
         The catalogue is what told the client this layer was raster, so it is the stale thing.
 
         Same reasoning as the ``ServiceDisabledError`` branch: a map draws what the catalogue named,
-        so leaving a catalogue that advertises a proxied ``url_template`` for a layer REData now
+        so leaving a catalogue that advertises a proxied ``url_template`` for a layer the service now
         refuses tile-by-tile keeps every client asking for tiles nothing can serve.
         """
         from urbanlens.dashboard.services.map.basemap_catalogue import CATALOGUE_CACHE_KEY
@@ -123,7 +119,7 @@ class BasemapTileProxyTests(RedataConfiguredMixin, TestCase):
         )
         refusal = b'{"error":"vector_layer_not_served","message":"a vector layer"}'
         with (
-            mock.patch(_CONFIGURED, return_value=True),
+            catalogue_on(),
             mock.patch(f"{_GATEWAY}.download_tile", return_value=(400, refusal, "application/json")),
         ):
             self.client.get(self.url)
@@ -137,7 +133,7 @@ class BasemapTileProxyTests(RedataConfiguredMixin, TestCase):
         The narrowing above must not cost the common case: an out-of-range coordinate is still
         a definitive per-coordinate answer and is still worth remembering."""
         with (
-            mock.patch(_CONFIGURED, return_value=True),
+            catalogue_on(),
             mock.patch(
                 f"{_GATEWAY}.download_tile", return_value=(400, b'{"error":"invalid_parameter"}', "application/json")
             ) as download,
@@ -150,7 +146,7 @@ class BasemapTileProxyTests(RedataConfiguredMixin, TestCase):
     def test_a_vendor_outage_is_never_cached(self) -> None:
         """The whole point: an outage must not become a permanently blank map."""
         with (
-            mock.patch(_CONFIGURED, return_value=True),
+            catalogue_on(),
             mock.patch(f"{_GATEWAY}.download_tile", return_value=(503, b"", "")) as download,
         ):
             self.client.get(self.url)
@@ -159,13 +155,11 @@ class BasemapTileProxyTests(RedataConfiguredMixin, TestCase):
         self.assertEqual(download.call_count, 2, "caching a 503 memorises an outage as 'no map here'")
 
     def test_a_failed_request_answers_503_rather_than_500(self) -> None:
-        from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
+        from urbanlens.dashboard.services.core.gateway import ProviderUnavailableError
 
         with (
-            mock.patch(_CONFIGURED, return_value=True),
-            mock.patch(
-                f"{_GATEWAY}.download_tile", side_effect=LocationContextUnavailableError("source_error", "down")
-            ),
+            catalogue_on(),
+            mock.patch(f"{_GATEWAY}.download_tile", side_effect=ProviderUnavailableError("down")),
         ):
             response = self.client.get(self.url)
 
@@ -177,7 +171,7 @@ class BasemapTileProxyTests(RedataConfiguredMixin, TestCase):
         gateway's own structured error type - is the other member of the
         except tuple; dropping it from the tuple would 500 on an outage."""
         with (
-            mock.patch(_CONFIGURED, return_value=True),
+            catalogue_on(),
             mock.patch(f"{_GATEWAY}.download_tile", side_effect=OSError("connection reset")),
         ):
             response = self.client.get(self.url)
@@ -195,7 +189,7 @@ class BasemapTileProxyTests(RedataConfiguredMixin, TestCase):
         from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 
         with (
-            mock.patch(_CONFIGURED, return_value=True),
+            catalogue_on(),
             mock.patch(
                 f"{_GATEWAY}.download_tile",
                 side_effect=GatewayRequestError("basemap tile is larger than the 25MB limit for proxied media"),
@@ -205,8 +199,8 @@ class BasemapTileProxyTests(RedataConfiguredMixin, TestCase):
 
         self.assertEqual(response.status_code, 503)
 
-    def test_unconfigured_redata_is_a_404_not_a_crash(self) -> None:
-        with mock.patch(_CONFIGURED, return_value=False):
+    def test_no_catalogue_is_a_404_not_a_crash(self) -> None:
+        with catalogue_off():
             self.assertEqual(self.client.get(self.url).status_code, 404)
 
     def test_the_proxy_requires_a_login(self) -> None:
@@ -217,16 +211,16 @@ class BasemapTileProxyTests(RedataConfiguredMixin, TestCase):
     def test_a_refused_call_stops_the_catalogue_offering_layers_this_deployment_cannot_serve(self) -> None:
         """
         The catalogue is cached for a day, and a map that draws only what the catalogue named is
-        entirely grey for that day once this deployment can no longer call REData at all - a
+        entirely grey for that day once this deployment can no longer call the catalogue's service at all - a
         disabled service, an exhausted budget, an environment that permits no outbound calls. The
         vendor layers it replaced were working; dropping the catalogue puts them back."""
         from urbanlens.dashboard.services.core.rate_limiter import ServiceDisabledError
         from urbanlens.dashboard.services.map import basemap_catalogue
 
-        cache.set(basemap_catalogue.CATALOGUE_CACHE_KEY, [{"id": "street", "attribution": "REData"}], 60)
+        cache.set(basemap_catalogue.CATALOGUE_CACHE_KEY, [{"id": "street", "attribution": "Example Tiles"}], 60)
         with (
-            mock.patch(_CONFIGURED, return_value=True),
-            mock.patch(f"{_GATEWAY}.download_tile", side_effect=ServiceDisabledError("redata_basemap_tiles")),
+            catalogue_on(),
+            mock.patch(f"{_GATEWAY}.download_tile", side_effect=ServiceDisabledError("tile_catalogue")),
         ):
             response = self.client.get(self.url)
 
@@ -237,18 +231,18 @@ class BasemapTileProxyTests(RedataConfiguredMixin, TestCase):
     def test_a_busy_minute_keeps_the_catalogue(self) -> None:
         """
         Being over budget, or unable to reach the vendor, is not evidence this deployment cannot
-        serve the layer at all - and rebuilding the catalogue costs a ~1.45s REData call (``P131``),
+        serve the layer at all - and rebuilding the catalogue costs a ~1.45s call to the service,
         so dropping it every time a burst crosses the limit would flap under exactly the load that
         caused it."""
         from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
         from urbanlens.dashboard.services.map import basemap_catalogue
 
-        cached = [{"id": "street", "attribution": "REData"}]
-        for failure in (RateLimitExceededError("redata_basemap_tiles"), OSError("connection reset")):
+        cached = [{"id": "street", "attribution": "Example Tiles"}]
+        for failure in (RateLimitExceededError("tile_catalogue"), OSError("connection reset")):
             with self.subTest(failure=type(failure).__name__):
                 cache.set(basemap_catalogue.CATALOGUE_CACHE_KEY, cached, 60)
                 with (
-                    mock.patch(_CONFIGURED, return_value=True),
+                    catalogue_on(),
                     mock.patch(f"{_GATEWAY}.download_tile", side_effect=failure),
                 ):
                     self.client.get(self.url)
@@ -256,7 +250,7 @@ class BasemapTileProxyTests(RedataConfiguredMixin, TestCase):
                 self.assertEqual(cache.get(basemap_catalogue.CATALOGUE_CACHE_KEY), cached)
 
 
-class BasemapCatalogueTests(RedataConfiguredMixin, TestCase):
+class BasemapCatalogueTests(FakeCatalogueMixin, TestCase):
     def setUp(self) -> None:
         super().setUp()
         cache.clear()
@@ -273,21 +267,21 @@ class BasemapCatalogueTests(RedataConfiguredMixin, TestCase):
         return mock.patch(f"{_GATEWAY}.list_sources", return_value=rows)
 
     def test_layers_point_at_the_proxy_not_the_vendor(self) -> None:
-        """Handing the browser REData's own template gives it a layer it cannot load."""
+        """Handing the browser the catalogue service's own template gives it a layer it cannot load."""
         rows = [
             {
                 "id": "usgs-topo",
                 "name": "USGS Topo",
                 "attribution": "USGS",
-                "url_template": "https://redata.example/api/v1/tiles/usgs-topo/{z}/{x}/{y}/",
+                "url_template": "https://catalogue.example/api/v1/tiles/usgs-topo/{z}/{x}/{y}/",
             }
         ]
 
-        with mock.patch(_CONFIGURED, return_value=True), self._sources(rows):
+        with catalogue_on(), self._sources(rows):
             layers = self.client.get(self.url).json()["layers"]
 
         self.assertEqual(len(layers), 1)
-        self.assertNotIn("redata.example", layers[0]["url_template"])
+        self.assertNotIn("catalogue.example", layers[0]["url_template"])
         # Filling the template in the way Leaflet would - and comparing against a URL this view is independently
         # known to serve - pins the sentinel substitution itself, not just the fixed prefix around it.
         filled = layers[0]["url_template"].replace("{z}", "12").replace("{x}", "1204").replace("{y}", "1539")
@@ -297,41 +291,41 @@ class BasemapCatalogueTests(RedataConfiguredMixin, TestCase):
 
     def test_a_layer_without_attribution_is_not_offered(self) -> None:
         """Every vendor here requires attribution on the rendered map."""
-        with mock.patch(_CONFIGURED, return_value=True), self._sources([{"id": "mystery", "name": "Mystery"}]):
+        with catalogue_on(), self._sources([{"id": "mystery", "name": "Mystery"}]):
             self.assertEqual(self.client.get(self.url).json()["layers"], [])
 
     def test_an_unreachable_catalogue_is_not_cached_as_empty(self) -> None:
         """Otherwise one bad moment costs this deployment its extra layers for a day."""
-        from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
+        from urbanlens.dashboard.services.core.gateway import ProviderUnavailableError
 
         with (
-            mock.patch(_CONFIGURED, return_value=True),
-            mock.patch(f"{_GATEWAY}.list_sources", side_effect=LocationContextUnavailableError("source_error", "down")),
+            catalogue_on(),
+            mock.patch(f"{_GATEWAY}.list_sources", side_effect=ProviderUnavailableError("down")),
         ):
             self.assertEqual(self.client.get(self.url).json()["layers"], [])
 
         rows = [{"id": "usgs-topo", "name": "USGS Topo", "attribution": "USGS"}]
-        with mock.patch(_CONFIGURED, return_value=True), self._sources(rows):
+        with catalogue_on(), self._sources(rows):
             self.assertEqual(len(self.client.get(self.url).json()["layers"]), 1)
 
     def test_the_catalogue_is_cached_between_requests(self) -> None:
         rows = [{"id": "usgs-topo", "name": "USGS Topo", "attribution": "USGS"}]
 
-        with mock.patch(_CONFIGURED, return_value=True), self._sources(rows) as list_sources:
+        with catalogue_on(), self._sources(rows) as list_sources:
             self.client.get(self.url)
             self.client.get(self.url)
 
         self.assertEqual(list_sources.call_count, 1, "documented as called once per session, not once per map load")
 
-    def test_unconfigured_redata_yields_no_layers(self) -> None:
-        with mock.patch(_CONFIGURED, return_value=False):
+    def test_no_catalogue_yields_no_layers(self) -> None:
+        with catalogue_off():
             self.assertEqual(self.client.get(self.url).json()["layers"], [])
 
     def test_a_raster_entry_without_source_type_is_treated_as_raster(self) -> None:
-        """A REData deployment that predates D11 sends no source_type field at all."""
+        """A catalogue from before source types existed sends no source_type field at all."""
         rows = [{"id": "usgs-topo", "name": "USGS Topo", "attribution": "USGS"}]
 
-        with mock.patch(_CONFIGURED, return_value=True), self._sources(rows):
+        with catalogue_on(), self._sources(rows):
             layers = self.client.get(self.url).json()["layers"]
 
         self.assertEqual(len(layers), 1)
@@ -340,38 +334,38 @@ class BasemapCatalogueTests(RedataConfiguredMixin, TestCase):
         self.assertNotIn("style_url", layers[0])
 
     def test_a_vector_entry_passes_through_its_style_url_unproxied(self) -> None:
-        """REData never proxies a single vector tile (D11) - the client fetches style_url directly, so this view must not try to rewrite it into a proxy url_template the way a raster entry gets."""
+        """The service never proxies a single vector tile - the client fetches style_url directly, so this view must not try to rewrite it into a proxy url_template the way a raster entry gets."""
         rows = [
             {
                 "id": "street",
                 "name": "Street",
                 "source_type": "vector",
                 "attribution": "OSM",
-                "style_url": "https://redata.example/styles/street.json",
+                "style_url": "https://catalogue.example/styles/street.json",
             }
         ]
 
-        with mock.patch(_CONFIGURED, return_value=True), self._sources(rows):
+        with catalogue_on(), self._sources(rows):
             layers = self.client.get(self.url).json()["layers"]
 
         self.assertEqual(len(layers), 1)
         self.assertEqual(layers[0]["source_type"], "vector")
-        self.assertEqual(layers[0]["style_url"], "https://redata.example/styles/street.json")
+        self.assertEqual(layers[0]["style_url"], "https://catalogue.example/styles/street.json")
         self.assertNotIn("url_template", layers[0])
 
     def test_a_vector_entry_with_no_style_url_is_not_offered(self) -> None:
         rows = [{"id": "street", "name": "Street", "source_type": "vector", "attribution": "OSM"}]
 
-        with mock.patch(_CONFIGURED, return_value=True), self._sources(rows):
+        with catalogue_on(), self._sources(rows):
             self.assertEqual(self.client.get(self.url).json()["layers"], [])
 
-    def test_a_d15_entry_keeps_both_shapes(self) -> None:
+    def test_a_entry_keeps_both_shapes(self) -> None:
         """
-        Since REData's D15 a self-hosted layer serves both ways, the rewriter must keep both
+        A self-hosted layer serves both ways, so the rewriter must keep both
         entries so clients can choose vector or raster."""
-        rows = [_D15_STREET]
+        rows = [_STREET_ROW]
 
-        with mock.patch(_CONFIGURED, return_value=True), self._sources(rows):
+        with catalogue_on(), self._sources(rows):
             layers = self.client.get(self.url).json()["layers"]
 
         self.assertEqual(len(layers), 1)
@@ -385,11 +379,11 @@ class BasemapCatalogueTests(RedataConfiguredMixin, TestCase):
             + f"?v={VENDOR_TILES['street'].cache_tag}",
         )
 
-    def test_a_d15_entry_carries_the_raster_half_s_own_credit_and_depth(self) -> None:
+    def test_a_entry_carries_the_raster_half_s_own_credit_and_depth(self) -> None:
         """
         The two halves are different datasets, so a client drawing one must not show the other's
         attribution or pan past its ceiling."""
-        with mock.patch(_CONFIGURED, return_value=True), self._sources([_D15_STREET]):
+        with catalogue_on(), self._sources([_STREET_ROW]):
             entry = self.client.get(self.url).json()["layers"][0]
 
         self.assertEqual(entry["attribution"], "OSM/Protomaps")
@@ -399,8 +393,8 @@ class BasemapCatalogueTests(RedataConfiguredMixin, TestCase):
         self.assertEqual(entry["fallback_min_zoom"], 0)
 
 
-#: A `street` entry in REData's post-D15 shape: self-hosted vector style *and* a proxied raster half.
-_D15_STREET = {
+#: A `street` entry with a self-hosted vector style *and* a proxied raster half.
+_STREET_ROW = {
     "id": "street",
     "name": "Street",
     "source_type": "vector",
@@ -408,14 +402,14 @@ _D15_STREET = {
     "min_zoom": 0,
     "max_zoom": 15,
     "style_url": "https://tiles.example/street.json",
-    "url_template": "https://redata.example/api/v1/tiles/street/{z}/{x}/{y}/",
+    "url_template": "https://catalogue.example/api/v1/tiles/street/{z}/{x}/{y}/",
     "fallback_attribution": "Esri",
     "fallback_min_zoom": 0,
     "fallback_max_zoom": 19,
 }
 
 
-class SignedOutCatalogueTests(RedataConfiguredMixin, TestCase):
+class SignedOutCatalogueTests(FakeCatalogueMixin, TestCase):
     """
     What a public share page may be handed: the proxy is login-required, so a template offered to
     an anonymous visitor paints 404s where a working layer would be."""
@@ -433,7 +427,7 @@ class SignedOutCatalogueTests(RedataConfiguredMixin, TestCase):
         from urbanlens.dashboard.services.map.basemap_catalogue import catalogue_for_viewer
 
         with (
-            mock.patch(_CONFIGURED, return_value=True),
+            catalogue_on(),
             mock.patch(f"{_GATEWAY}.list_sources", return_value=rows),
         ):
             return catalogue_for_viewer(authenticated=authenticated)
@@ -442,7 +436,7 @@ class SignedOutCatalogueTests(RedataConfiguredMixin, TestCase):
         """
         Dropping the raster *entries* is no longer enough once a vector entry carries a template
         of its own - it has to come off the entries that stay."""
-        entries = self._viewer([_D15_STREET], authenticated=False)
+        entries = self._viewer([_STREET_ROW], authenticated=False)
 
         self.assertEqual(len(entries), 1)
         self.assertEqual(entries[0]["style_url"], "https://tiles.example/street.json")
@@ -454,67 +448,25 @@ class SignedOutCatalogueTests(RedataConfiguredMixin, TestCase):
                 "id": "satellite",
                 "name": "Satellite",
                 "attribution": "Esri",
-                "url_template": "https://redata.example/t/{z}/{x}/{y}/",
+                "url_template": "https://catalogue.example/t/{z}/{x}/{y}/",
             }
         ]
 
         self.assertEqual(self._viewer(rows, authenticated=False), [])
 
     def test_a_signed_in_viewer_keeps_the_proxy_template(self) -> None:
-        entries = self._viewer([_D15_STREET], authenticated=True)
+        entries = self._viewer([_STREET_ROW], authenticated=True)
 
         self.assertIn("url_template", entries[0])
 
     def test_stripping_the_template_does_not_mutate_the_shared_catalogue(self) -> None:
         """The entries are the cached catalogue every other reader gets handed."""
-        self._viewer([_D15_STREET], authenticated=False)
+        self._viewer([_STREET_ROW], authenticated=False)
         # Cached now, so this reads the same dicts the signed-out pass just filtered.
-        self.assertIn("url_template", self._viewer([_D15_STREET], authenticated=True)[0])
+        self.assertIn("url_template", self._viewer([_STREET_ROW], authenticated=True)[0])
 
 
-class TileLogPrivacyTests(SimpleTestCase):
-    """
-    A tile URL is a coordinate somebody was looking at.
-
-    `ApiCallLog` records the endpoint of every gateway call to track volume and cost per service."""
-
-    def _normalize(self, url: str) -> str:
-        from urbanlens.dashboard.services.apis.locations.redata_basemap_tiles_gateway import RedataBasemapTilesGateway
-
-        return RedataBasemapTilesGateway.endpoint_for_log(url)
-
-    def test_the_tile_coordinate_is_not_logged(self) -> None:
-        logged = self._normalize("https://redata.example/api/v1/tiles/usgs-topo/18/77238/98543/")
-
-        self.assertNotIn("77238", logged)
-        self.assertNotIn("98543", logged)
-        self.assertNotIn("/18/", logged)
-
-    def test_the_layer_is_kept(self) -> None:
-        """Volume and cost per layer is the question the log exists to answer."""
-        logged = self._normalize("https://redata.example/api/v1/tiles/usgs-topo/18/77238/98543/")
-
-        self.assertEqual(logged, "https://redata.example/api/v1/tiles/usgs-topo/")
-
-    def test_the_catalogue_url_is_unchanged(self) -> None:
-        url = "https://redata.example/api/v1/tiles/sources/"
-
-        self.assertEqual(self._normalize(url), url)
-
-    def test_an_unrelated_url_passes_through(self) -> None:
-        url = "https://redata.example/api/v1/imagery/?lat=41.7&lng=-73.9"
-
-        self.assertEqual(self._normalize(url), url)
-
-    def test_the_default_gateway_still_logs_the_full_url(self) -> None:
-        """Only this gateway opts out; the rest keep the detail they rely on."""
-        from urbanlens.dashboard.services.core.gateway import Gateway
-
-        url = "https://redata.example/api/v1/geocode/?q=poughkeepsie"
-        self.assertEqual(Gateway.endpoint_for_log(url), url)
-
-
-class BasemapTileConcurrencyTests(RedataConfiguredMixin, TestCase):
+class BasemapTileConcurrencyTests(FakeCatalogueMixin, TestCase):
     """
     The bound that keeps a cold map load from occupying every request thread in the process.
 
@@ -555,7 +507,7 @@ class BasemapTileConcurrencyTests(RedataConfiguredMixin, TestCase):
     def test_a_tile_over_the_cap_is_refused_without_reaching_the_upstream(self) -> None:
         """503 at once, not a wait: a thread blocked waiting for a slot is occupying the very resource the slot rations, so queueing would defend nothing."""
         with (
-            mock.patch(_CONFIGURED, return_value=True),
+            catalogue_on(),
             mock.patch(f"{_GATEWAY}.download_tile", return_value=(200, b"PNGDATA", "image/png")) as download,
             self._every_slot_taken(),
         ):
@@ -573,7 +525,7 @@ class BasemapTileConcurrencyTests(RedataConfiguredMixin, TestCase):
         """Caching it would turn a momentary burst into a permanently blank square for a week."""
         url = self._url(1206)
         with (
-            mock.patch(_CONFIGURED, return_value=True),
+            catalogue_on(),
             mock.patch(f"{_GATEWAY}.download_tile", return_value=(200, b"PNGDATA", "image/png")),
         ):
             with self._every_slot_taken():
@@ -587,7 +539,7 @@ class BasemapTileConcurrencyTests(RedataConfiguredMixin, TestCase):
         """The bound is on the slow path only; a warm tile must serve no matter how busy the upstream is."""
         url = self._url(1207)
         with (
-            mock.patch(_CONFIGURED, return_value=True),
+            catalogue_on(),
             mock.patch(f"{_GATEWAY}.download_tile", return_value=(200, b"PNGDATA", "image/png")),
         ):
             self.assertEqual(self.client.get(url).status_code, 200)
@@ -600,7 +552,7 @@ class BasemapTileConcurrencyTests(RedataConfiguredMixin, TestCase):
     def test_the_slot_is_released_when_the_upstream_raises(self) -> None:
         """A leaked slot would permanently shrink this process's capacity after one network blip."""
         with (
-            mock.patch(_CONFIGURED, return_value=True),
+            catalogue_on(),
             mock.patch.object(basemap_tiles.app_settings, "basemap_tile_upstream_concurrency", 1),
         ):
             basemap_tiles.UpstreamSlots.reset()

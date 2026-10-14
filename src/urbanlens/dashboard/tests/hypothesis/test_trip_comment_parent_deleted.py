@@ -1,4 +1,4 @@
-"""UL-219, ported to trips: a reply must survive its parent comment's deletion with its thread context preserved, not silently become an unexplained top-level comment."""
+"""Trip comments: a reply must survive its parent comment's deletion with its thread context preserved, not silently become an unexplained top-level comment."""
 
 from __future__ import annotations
 

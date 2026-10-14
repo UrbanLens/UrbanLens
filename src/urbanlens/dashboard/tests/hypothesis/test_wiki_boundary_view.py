@@ -63,7 +63,7 @@ class WikiBoundaryViewTests(TestCase):
         self.assertEqual(row.location_id, self.location.pk, "the row carries the wiki's location")
 
     def test_the_writer_sees_their_own_drawing_in_the_saving_response(self) -> None:
-        """`just_drawn`: concealment must not hide this request's own write from it."""
+        """`just_drawn`: a viewer's projection must not hide this request's own write from it."""
         polygon = _square(-74.0, 40.0, 0.001)
         response = self._post({"boundary_type": "building", "polygon": json.loads(polygon.geojson)})
 

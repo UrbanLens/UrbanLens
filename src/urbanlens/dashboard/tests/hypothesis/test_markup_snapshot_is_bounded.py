@@ -1,8 +1,8 @@
 """
 The snapshot composer writes markup rows with no ceiling at either axis.
 
-The fourth door onto ``PinMarkup``, and the one the H39 audit line actually
-named. ``controllers/markup.py`` refuses an oversized ``geometry`` at both of
+The fourth door onto ``PinMarkup``, and the one the others' caps do not reach.
+``controllers/markup.py`` refuses an oversized ``geometry`` at both of
 its own write doors, but the snapshot composer reaches the same table through
 ``map_snapshot.sanitize_map_data`` -> ``replace_items_from_snapshot``, which
 caps neither how many shapes a snapshot carries nor how many points each one

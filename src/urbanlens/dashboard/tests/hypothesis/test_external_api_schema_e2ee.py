@@ -124,7 +124,7 @@ class SchemaDocumentContentTests(TestCase):
         """
         Every bearer-capable E2EE route is documented.
 
-        This is the assertion whose absence cost the mobile team a P0: the endpoints already worked, so nothing
+        This is the assertion whose absence cost the mobile team a release blocker: the endpoints already worked, so nothing
         but the schema could have told them so."""
         body = self._schema_body()
         for path in E2EE_SCHEMA_PATHS:

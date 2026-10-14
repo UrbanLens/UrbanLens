@@ -31,7 +31,7 @@ export interface ProbeOptions {
      * How long to hold the socket open after it connects, in milliseconds.
      *
      * The default only proves the upgrade succeeded. Raise it past the proxy's
-     * idle timeout (Cloudflare's is about 100 seconds) to prove the keep-alive
+     * idle timeout (a typical proxy's is about 100 seconds) to prove the keep-alive
      * ping actually keeps a quiet connection alive - see `_notification_push.html`.
      */
     holdMs?: number;

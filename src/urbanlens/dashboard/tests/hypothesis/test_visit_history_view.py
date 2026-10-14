@@ -63,7 +63,7 @@ class VisitHistoryViewTests(TestCase):
 
     def test_visit_count_badge_shows_the_true_total_not_just_the_current_page(self):
         """
-        UL-114: the header badge used to render {{ visits|length }} - the
+        The header badge used to render {{ visits|length }} - the
         current server-side page's slice, not the true total - so once a pin
         had more visits than one page holds, the badge understated the real
         count (and changed misleadingly as you paged/toggled children),

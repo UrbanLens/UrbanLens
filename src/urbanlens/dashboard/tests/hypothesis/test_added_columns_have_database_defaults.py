@@ -1,5 +1,5 @@
 """
-A column a migration adds to an existing table has a database default, so the release before it can keep writing (P291).
+A column a migration adds to an existing table has a database default, so the release before it can keep writing.
 
 A deploy migrates while the previous release's processes still run, and their inserts name only the columns they know.
 A NOT NULL column with only a Python default refuses each of them: on dev, an upgrade window logged

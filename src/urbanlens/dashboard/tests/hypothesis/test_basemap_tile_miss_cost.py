@@ -33,17 +33,17 @@ from django.core.cache import caches
 from django.core.servers.basehttp import ThreadedWSGIServer
 from django.db import connections
 from django.db.backends.signals import connection_created
-from django.test import LiveServerTestCase
 from django.test.testcases import LiveServerThread
 from django.urls import reverse
 from model_bakery import baker
 
+from urbanlens.core.tests.testcase import LiveServerTestCase
 from urbanlens.dashboard.controllers import basemap_tiles
 from urbanlens.dashboard.services.core import call_tally, provider_health
 from urbanlens.dashboard.services.core.counters import reset_local_fallback
 from urbanlens.dashboard.services.map.basemap_vendors import VENDOR_TILES, VendorTiles
+from urbanlens.dashboard.tests.hypothesis.tile_catalogue_fake import catalogue_on
 
-_CONFIGURED = "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured"
 #: What Esri took per tile from production, near the low end of 0.09-0.33s.
 _VENDOR_SECONDS = 0.15
 _TILE = b"\xff\xd8\xff" + b"j" * 12_000
@@ -193,7 +193,7 @@ class MissLatencyTests(LiveServerTestCase):
 
     def test_twenty_simultaneous_misses(self) -> None:
         with (
-            mock.patch(_CONFIGURED, return_value=True),
+            catalogue_on(),
             mock.patch.object(basemap_tiles.app_settings, "basemap_tile_upstream_concurrency", _MISSES),
             _vendor() as vendor,
         ):
@@ -229,7 +229,7 @@ class MissLatencyTests(LiveServerTestCase):
         after a second; this replays a 30-tile viewport that way against the server's default slot count, at a
         few queue widths, to see whether a wider queue would be served or refused."""
         for width in (6, 12):
-            with mock.patch(_CONFIGURED, return_value=True), _vendor() as vendor:
+            with catalogue_on(), _vendor() as vendor:
                 self._get(1, 1)
                 started = time.perf_counter()
                 refusals = self._paced_viewport(width, 30, y=200 + width)

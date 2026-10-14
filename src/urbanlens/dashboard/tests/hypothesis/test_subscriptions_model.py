@@ -2,33 +2,19 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
 from importlib import import_module
-from unittest import skipUnless
 
 from django.apps import apps as django_apps
 from django.contrib.auth.models import User
 from django.urls import reverse
-from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.subscriptions import (
-    SiteFeature,
     SubscriptionRole,
-    active_subscription_roles,
-    user_has_feature,
 )
-from urbanlens.dashboard.plugins import plugin_available
 from urbanlens.dashboard.services.admin.site_admin import add_user_to_site_admin_group
-
-try:
-    from urbanlens.dashboard.models.billing import BillingSubscriptionStatus, RoleSubscription, set_pricing
-except ImportError:
-    BillingSubscriptionStatus = None
-    RoleSubscription = None
-    set_pricing = None
 
 _seed_vip_role = import_module("urbanlens.dashboard.migrations.0020_seed_vip_subscription_role").seed_vip_role
 
@@ -56,7 +42,6 @@ class VipRoleSeedTests(TestCase):
 
         self.assertEqual(list(SubscriptionRole.objects.filter(slug="vip").values_list("name", flat=True)), ["Patrons"])
 
-    @skipUnless(plugin_available("billing"), "billing plugin is not installed")
     def test_deleting_it_is_permanent(self) -> None:
         _seed_vip_role(django_apps, None)
         SubscriptionRole.objects.get(slug="vip").delete()
@@ -86,90 +71,3 @@ class UniqueSlugTests(TestCase):
 
     def test_falls_back_to_role_for_unslugifiable_names(self) -> None:
         self.assertEqual(SubscriptionRole.unique_slug("!!!"), "role")
-
-
-@skipUnless(plugin_available("billing"), "billing plugin is not installed")
-class PaidSubscriptionFeatureGrantTests(TestCase):
-    """user_has_feature()/active_subscription_roles() also honor paid RoleSubscriptions."""
-
-    def setUp(self) -> None:
-        super().setUp()
-        # A prior user absorbs the first-user site-admin bootstrap promotion
-        # (see promote_first_user_if_needed) - a site admin bypasses every
-        # SiteFeature gate, which would otherwise make self.user appear to
-        # have the feature regardless of its RoleSubscription state.
-        baker.make(User)
-        self.user = baker.make(User)
-        self.role = baker.make(SubscriptionRole, features=SiteFeature.NEARBY_RESEARCH)
-
-    def test_active_threshold_met_subscription_grants_the_feature(self) -> None:
-        baker.make(
-            RoleSubscription,
-            user=self.user,
-            role=self.role,
-            status=BillingSubscriptionStatus.ACTIVE,
-            threshold_met=True,
-        )
-        self.assertTrue(user_has_feature(self.user, SiteFeature.NEARBY_RESEARCH))
-
-    def test_active_threshold_met_subscription_is_in_active_subscription_roles(self) -> None:
-        baker.make(
-            RoleSubscription,
-            user=self.user,
-            role=self.role,
-            status=BillingSubscriptionStatus.ACTIVE,
-            threshold_met=True,
-        )
-        self.assertIn(self.role, active_subscription_roles(self.user))
-
-    def test_threshold_not_met_does_not_grant_the_feature(self) -> None:
-        baker.make(
-            RoleSubscription,
-            user=self.user,
-            role=self.role,
-            status=BillingSubscriptionStatus.ACTIVE,
-            threshold_met=False,
-        )
-        self.assertFalse(user_has_feature(self.user, SiteFeature.NEARBY_RESEARCH))
-        self.assertNotIn(self.role, active_subscription_roles(self.user))
-
-    def test_canceled_subscription_does_not_grant_the_feature(self) -> None:
-        baker.make(
-            RoleSubscription,
-            user=self.user,
-            role=self.role,
-            status=BillingSubscriptionStatus.CANCELED,
-            threshold_met=True,
-        )
-        self.assertFalse(user_has_feature(self.user, SiteFeature.NEARBY_RESEARCH))
-        self.assertNotIn(self.role, active_subscription_roles(self.user))
-
-    def test_no_subscription_at_all_does_not_grant_the_feature(self) -> None:
-        self.assertFalse(user_has_feature(self.user, SiteFeature.NEARBY_RESEARCH))
-        self.assertNotIn(self.role, active_subscription_roles(self.user))
-
-    def test_canceled_subscription_with_unexpired_banked_access_still_grants_the_feature(self) -> None:
-        set_pricing(self.role, pay_what_you_want=True)
-        baker.make(
-            RoleSubscription,
-            user=self.user,
-            role=self.role,
-            status=BillingSubscriptionStatus.CANCELED,
-            threshold_met=False,
-            usage_covered_until=timezone.now() + timedelta(days=10),
-        )
-        self.assertTrue(user_has_feature(self.user, SiteFeature.NEARBY_RESEARCH))
-        self.assertIn(self.role, active_subscription_roles(self.user))
-
-    def test_canceled_subscription_with_expired_banked_access_does_not_grant_the_feature(self) -> None:
-        set_pricing(self.role, pay_what_you_want=True)
-        baker.make(
-            RoleSubscription,
-            user=self.user,
-            role=self.role,
-            status=BillingSubscriptionStatus.CANCELED,
-            threshold_met=False,
-            usage_covered_until=timezone.now() - timedelta(days=1),
-        )
-        self.assertFalse(user_has_feature(self.user, SiteFeature.NEARBY_RESEARCH))
-        self.assertNotIn(self.role, active_subscription_roles(self.user))

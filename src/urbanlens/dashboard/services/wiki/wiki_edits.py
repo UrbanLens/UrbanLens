@@ -113,7 +113,7 @@ def apply_wiki_edit(wiki: Wiki, profile: Profile, changes: dict[str, Any], *, ba
         wiki: The wiki to edit.
         profile: The editing profile, recorded as ``WikiEdit.editor``.
         changes: Raw submitted ``{field: value}`` mapping.
-        baseline: The wiki as the submitter saw it, when that differs from the row being written - a concealed projection.
+        baseline: The wiki as the submitter saw it, when that differs from the row being written - a viewer's projection.
         base_revision_id: :func:`wiki_revision_marker` as it was when the editor loaded the form, if the client sent it.
 
     Returns:
@@ -132,10 +132,8 @@ def apply_wiki_edit(wiki: Wiki, profile: Profile, changes: dict[str, Any], *, ba
     new_vals: dict[str, object] = {}
     audit: dict[str, dict] = {}
 
-    # The wider problem this guards against is not concealment-specific: forms here post every field
-    # rather than the changed ones, so a diff is the only thing standing between an untouched field
-    # and a write.
-    # See UrbanLens#265 ("dialog forms still post every field").
+    # Forms here post every field rather than the changed ones, so a diff is the only thing standing between an
+    # untouched field and a write.
     shown = baseline if baseline is not None else wiki
 
     for field in WIKI_EDITABLE_FIELDS:
@@ -143,7 +141,7 @@ def apply_wiki_edit(wiki: Wiki, profile: Profile, changes: dict[str, Any], *, ba
             continue
         raw = changes[field]
         # Detected against what they saw; recorded as what was actually there.
-        # The audit trail has to hold the truth, and `redact_edit_changes`
+        # The audit trail has to hold the truth, and `ViewerProjection.edit_changes`
         # already keeps the "from" side away from a viewer who may not see it.
         old_val = getattr(wiki, field, None)
         if str(raw) == str(getattr(shown, field, None)):
@@ -289,42 +287,12 @@ def revert_wiki_edit(wiki: Wiki, profile: Profile, target_edit: WikiEdit) -> tup
         undone_ids = list(target_edit.reverts.values_list("pk", flat=True))
         if undone_ids:
             WikiEdit.objects.filter(pk__in=undone_ids).update(reverted=False, reverted_by=None)
-            _restore_reputation_for(undone_ids)
-            # Same queryset-update blind spot, same remedy - see that function.
+            # A queryset update() sends no post_save, so whatever watches the flag is told directly.
+            from urbanlens.dashboard.plugins.points import WIKI_EDITS_RESTORED
+
+            WIKI_EDITS_RESTORED.fire(undone_ids)
             from urbanlens.dashboard.services.consensus.points import restore_consensus_points_for
 
             restore_consensus_points_for(undone_ids)
 
     return revert_edit, skipped_fields
-
-
-def _restore_reputation_for(edit_ids: list[int]) -> None:
-    """
-    Undo whichever reputation adjustment a now-undone revert had applied.
-    Called here rather than left to the reputation signal, because the line above is a queryset ``update()`` and emits no ``post_save`` - so the handler watching for the flag to clear never sees it.
-
-    Args:
-        edit_ids: WikiEdit pks whose reverts have just been undone."""
-    from decimal import Decimal
-
-    from django.db.models import Q
-
-    from urbanlens.dashboard.models.reputation.meta import TargetKind
-    from urbanlens.dashboard.models.reputation.model import ReputationEvent
-    from urbanlens.dashboard.services.reputation.scoring import restore_event, weight_events_for_target
-
-    rows = ReputationEvent.objects.filter(
-        rule_key="wiki_field_edit",
-        target_kind=TargetKind.WIKI_EDIT,
-        target_id__in=edit_ids,
-    ).filter(Q(retracted=True) | ~Q(weight=Decimal(1)))
-    weighted_edit_ids: list[int] = []
-    for event in rows:
-        if event.retracted:
-            restore_event(event)
-        elif event.target_id is not None:
-            weighted_edit_ids.append(event.target_id)
-    # weight_events_for_target resolves its own target_kind from the instance
-    # it's given, so it needs the WikiEdit rows themselves, not the ledger rows.
-    for wiki_edit in WikiEdit.objects.filter(pk__in=weighted_edit_ids):
-        weight_events_for_target(wiki_edit, weight=Decimal(1), reason="")

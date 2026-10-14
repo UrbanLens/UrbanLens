@@ -210,8 +210,10 @@
                 <div class="card__body wiki-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
             </div>
 
-            {# -- Building Attributes (REData building number/name/year built) -- #}
-            <div hx-get="{% url 'location.wiki.building_attributes' location.slug %}"
+            {# -- Building Attributes (a plugin contributes the route) -- #}
+            {% url 'location.wiki.building_attributes' location.slug as building_attributes_url %}
+            {% if building_attributes_url %}
+            <div hx-get="{{ building_attributes_url }}"
                  hx-trigger="ul:lazy-load, ul:unhide" data-ul-lazy-section="wiki:building_attributes"
                  hx-swap="outerHTML"
                  id="location-building-attributes-panel"
@@ -224,8 +226,9 @@
                 </div>
                 <div class="card__body wiki-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
             </div>
+            {% endif %}
 
-            {# -- Buildings on this property (REData / OSM) --------------------- #}
+            {# -- Buildings on this property --------------------- #}
             <div hx-get="{% url 'location.wiki.buildings' location.slug %}"
                  hx-trigger="ul:lazy-load, ul:unhide" data-ul-lazy-section="wiki:parcel_buildings"
                  hx-swap="outerHTML"
@@ -275,54 +278,11 @@
             <div class="media-provider-loader" id="wiki-media-loader-photos"
                 hx-get="{% url 'location.wiki.media' location.slug 'photos' %}"
                 hx-trigger="load" hx-target="#wiki-media-grid" hx-swap="beforeend" hx-timeout="25000" hidden></div>
-            <div class="media-provider-loader" id="wiki-media-loader-smithsonian"
-                hx-get="{% url 'location.wiki.media' location.slug 'smithsonian' %}"
+            {% for source in wiki_media_loaders %}
+            <div class="media-provider-loader" id="wiki-media-loader-{{ source }}"
+                hx-get="{% url 'location.wiki.media' location.slug source %}"
                 hx-trigger="load" hx-target="#wiki-media-grid" hx-swap="beforeend" hx-timeout="25000" hidden></div>
-            <div class="media-provider-loader" id="wiki-media-loader-wikimedia"
-                hx-get="{% url 'location.wiki.media' location.slug 'wikimedia' %}"
-                hx-trigger="load" hx-target="#wiki-media-grid" hx-swap="beforeend" hx-timeout="25000" hidden></div>
-            <div class="media-provider-loader" id="wiki-media-loader-wikipedia_media"
-                hx-get="{% url 'location.wiki.media' location.slug 'wikipedia_media' %}"
-                hx-trigger="load" hx-target="#wiki-media-grid" hx-swap="beforeend" hx-timeout="25000" hidden></div>
-            <div class="media-provider-loader" id="wiki-media-loader-loc"
-                hx-get="{% url 'location.wiki.media' location.slug 'loc' %}"
-                hx-trigger="load" hx-target="#wiki-media-grid" hx-swap="beforeend" hx-timeout="25000" hidden></div>
-            <div class="media-provider-loader" id="wiki-media-loader-internet_archive"
-                hx-get="{% url 'location.wiki.media' location.slug 'internet_archive' %}"
-                hx-trigger="load" hx-target="#wiki-media-grid" hx-swap="beforeend" hx-timeout="25000" hidden></div>
-            <div class="media-provider-loader" id="wiki-media-loader-digital_commonwealth"
-                hx-get="{% url 'location.wiki.media' location.slug 'digital_commonwealth' %}"
-                hx-trigger="load" hx-target="#wiki-media-grid" hx-swap="beforeend" hx-timeout="25000" hidden></div>
-            <div class="media-provider-loader" id="wiki-media-loader-yelp"
-                hx-get="{% url 'location.wiki.media' location.slug 'yelp' %}"
-                hx-trigger="load" hx-target="#wiki-media-grid" hx-swap="beforeend" hx-timeout="25000" hidden></div>
-            <div class="media-provider-loader" id="wiki-media-loader-google_images"
-                hx-get="{% url 'location.wiki.media' location.slug 'google_images' %}"
-                hx-trigger="load" hx-target="#wiki-media-grid" hx-swap="beforeend" hx-timeout="25000" hidden></div>
-            <div class="media-provider-loader" id="wiki-media-loader-searxng_images"
-                hx-get="{% url 'location.wiki.media' location.slug 'searxng_images' %}"
-                hx-trigger="load" hx-target="#wiki-media-grid" hx-swap="beforeend" hx-timeout="25000" hidden></div>
-            <div class="media-provider-loader" id="wiki-media-loader-google_maps"
-                hx-get="{% url 'location.wiki.media' location.slug 'google_maps' %}"
-                hx-trigger="load" hx-target="#wiki-media-grid" hx-swap="beforeend" hx-timeout="25000" hidden></div>
-            <div class="media-provider-loader" id="wiki-media-loader-loopnet"
-                hx-get="{% url 'location.wiki.media' location.slug 'loopnet' %}"
-                hx-trigger="load" hx-target="#wiki-media-grid" hx-swap="beforeend" hx-timeout="25000" hidden></div>
-            <div class="media-provider-loader" id="wiki-media-loader-cris_building"
-                hx-get="{% url 'location.wiki.media' location.slug 'cris_building' %}"
-                hx-trigger="load" hx-target="#wiki-media-grid" hx-swap="beforeend" hx-timeout="25000" hidden></div>
-            <div class="media-provider-loader" id="wiki-media-loader-redata_media"
-                hx-get="{% url 'location.wiki.media' location.slug 'redata_media' %}"
-                hx-trigger="load" hx-target="#wiki-media-grid" hx-swap="beforeend" hx-timeout="25000" hidden></div>
-            <div class="media-provider-loader" id="wiki-media-loader-redata_aerial"
-                hx-get="{% url 'location.wiki.media' location.slug 'redata_aerial' %}"
-                hx-trigger="load" hx-target="#wiki-media-grid" hx-swap="beforeend" hx-timeout="25000" hidden></div>
-            <div class="media-provider-loader" id="wiki-media-loader-redata_street_level"
-                hx-get="{% url 'location.wiki.media' location.slug 'redata_street_level' %}"
-                hx-trigger="load" hx-target="#wiki-media-grid" hx-swap="beforeend" hx-timeout="25000" hidden></div>
-            <div class="media-provider-loader" id="wiki-media-loader-redata_photo_pool"
-                hx-get="{% url 'location.wiki.media' location.slug 'redata_photo_pool' %}"
-                hx-trigger="load" hx-target="#wiki-media-grid" hx-swap="beforeend" hx-timeout="25000" hidden></div>
+            {% endfor %}
 
         </div>
 

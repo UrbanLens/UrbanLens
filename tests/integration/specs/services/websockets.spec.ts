@@ -15,7 +15,7 @@ const REFUSED = 4404;
 /**
  * How long to hold a quiet socket open, in seconds.
  *
- * 0 skips the test. Cloudflare closes a tunnelled socket that has carried no
+ * 0 skips the test. A reverse proxy closes a socket that has carried no
  * traffic for about 100 seconds, so 120 is the smallest value that actually
  * proves the 45-second keep-alive ping is doing its job.
  */

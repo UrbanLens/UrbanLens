@@ -1,4 +1,4 @@
-"""Tests for UL-345: sunrise/sunset and golden-hour times on the pin weather panel."""
+"""Tests for sunrise/sunset and golden-hour times on the pin weather panel."""
 
 from __future__ import annotations
 
@@ -10,6 +10,8 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
+from urbanlens.dashboard.plugins.points import WEATHER_PROVIDERS
+from urbanlens.dashboard.services.apis.locations.weather_resolution import OpenMeteoProvider, OpenWeatherMapProvider
 from urbanlens.dashboard.services.apis.weather.open_meteo import OpenMeteoGateway
 
 
@@ -53,10 +55,10 @@ class GetSunTimesTests(SimpleTestCase):
 
 class WeatherPanelSunTimesTests(TestCase):
     """
-    The weather panel's *direct-provider* path.
+    The weather panel with only the public providers.
 
-    Both the forecast and the sun-times lookup now go through ``weather_resolution``, which asks REData first
-    whenever it is configured and only then falls back to OpenWeatherMap/Open-Meteo."""
+    Both the forecast and the sun-times lookup go through ``weather_resolution``, which asks OpenWeatherMap
+    (when keyed) and then Open-Meteo."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -65,11 +67,9 @@ class WeatherPanelSunTimesTests(TestCase):
         self.location = baker.make("dashboard.Location", latitude="40.0", longitude="-74.0")
         self.pin = baker.make("dashboard.Pin", profile=self.profile, location=self.location)
         self.client.force_login(self.user)
-        redata_off = patch(
-            "urbanlens.dashboard.services.apis.locations.weather_resolution.redata_configured", return_value=False
-        )
-        redata_off.start()
-        self.addCleanup(redata_off.stop)
+        public_providers = WEATHER_PROVIDERS.overridden([OpenWeatherMapProvider(), OpenMeteoProvider()])
+        public_providers.__enter__()
+        self.addCleanup(public_providers.__exit__, None, None, None)
 
     def test_weather_panel_shows_sun_times(self) -> None:
         sun_times = {

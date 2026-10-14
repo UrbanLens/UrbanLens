@@ -25,19 +25,19 @@ _MEMENTO_TIMEMAP_URL = "https://web.archive.org/web/timemap"
 # Always excluded regardless of this deployment's own SITE_URL, so a
 # self-hosted instance (running under a different domain) still won't submit
 # the canonical site's own URLs either.
-_ALWAYS_EXCLUDED_DOMAINS = ("urbanlens.org",)
+_ALWAYS_EXCLUDED_DOMAINS = ("example.com",)
 
 
 def is_own_site_url(url: str) -> bool:
     """
-    True when ``url`` points at this deployment's own domain (or urbanlens.org).
+    True when ``url`` points at this deployment's own domain (or example.com).
     Most pages on this site require being logged in, so archiving them on the Wayback Machine wouldn't produce anything a future anonymous visitor could actually read - checked before submitting any link a user adds for a pin/wiki.
 
     Args:
         url: The URL a user is asking to be archived.
 
     Returns:
-        True if the URL's host is this site's own domain or urbanlens.org (or a subdomain of either), meaning it should not be submitted."""
+        True if the URL's host is this site's own domain or example.com (or a subdomain of either), meaning it should not be submitted."""
     from django.conf import settings
 
     hostname = (urlparse(url).hostname or "").lower().rstrip(".")
@@ -127,7 +127,7 @@ class WaybackMachineGateway(Gateway):
             Dict with ``"archived_url"`` (the saved copy's URL) and ``"status_code"`` (HTTP status of the final response).
 
         Raises:
-            EnvironmentRefusedError: This environment does not write to the archive (``wayback_save``, D26).
+            EnvironmentRefusedError: This environment does not write to the archive (``wayback_save``).
             requests.RequestException: The save failed, outlasted its deadline, or redirected off archive.org.
         """
         from urbanlens.dashboard.services.core.egress import require_egress

@@ -18,7 +18,7 @@ from urbanlens.dashboard.services.apis.locations.basemap_vendor_tiles_gateway im
 from urbanlens.dashboard.services.map.basemap_catalogue import _offered_layers, tile_url_template
 from urbanlens.dashboard.services.map.basemap_vendors import VENDOR_TILES, VendorTiles, vendor_for
 from urbanlens.dashboard.services.map.tile_cache_keys import basemap_tile_cache_key
-from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
+from urbanlens.dashboard.tests.hypothesis.tile_catalogue_fake import FakeCatalogueMixin, FakeTileCatalogue
 
 
 class VendorUrlTemplateTests(SimpleTestCase):
@@ -75,40 +75,40 @@ class VendorUrlTemplateTests(SimpleTestCase):
             self.assertNotIn("cartocdn", vendor.url_template, layer)
 
 
-class WhichUpstreamAnswersTests(RedataConfiguredMixin, SimpleTestCase):
+class WhichUpstreamAnswersTests(FakeCatalogueMixin, SimpleTestCase):
     """The routing decision itself."""
 
-    def test_a_layer_with_a_vendor_never_reaches_redata(self) -> None:
+    def test_a_layer_with_a_vendor_never_reaches_the_catalogue(self) -> None:
         with (
             mock.patch.object(
                 BasemapVendorTilesGateway, "download_tile", return_value=(200, b"png", "image/png")
             ) as vendor,
             mock.patch(
-                "urbanlens.dashboard.services.apis.locations.redata_basemap_tiles_gateway.RedataBasemapTilesGateway.download_tile"
-            ) as redata,
+                "urbanlens.dashboard.tests.hypothesis.tile_catalogue_fake.FakeTileCatalogue.download_tile"
+            ) as catalogue,
         ):
-            result = _fetch_tile("satellite", 12, 1205, 1539)
+            result = _fetch_tile(FakeTileCatalogue(), "satellite", 12, 1205, 1539)
 
         self.assertEqual(result, (200, b"png", "image/png"))
         vendor.assert_called_once_with("satellite", 12, 1205, 1539)
-        redata.assert_not_called()
+        catalogue.assert_not_called()
 
-    def test_a_layer_with_no_vendor_still_goes_through_redata(self) -> None:
+    def test_a_layer_with_no_vendor_still_goes_through_the_catalogue(self) -> None:
         """
-        REData may publish a layer this table does not name - a future one, or a deployment's
+        A catalogue may publish a layer this table does not name - a future one, or a deployment's
         own. Dropping it would be a blank layer rather than a slower one."""
         self.assertIsNone(vendor_for("some_future_layer"))
 
         with (
             mock.patch.object(BasemapVendorTilesGateway, "download_tile") as vendor,
             mock.patch(
-                "urbanlens.dashboard.services.apis.locations.redata_basemap_tiles_gateway.RedataBasemapTilesGateway.download_tile",
+                "urbanlens.dashboard.tests.hypothesis.tile_catalogue_fake.FakeTileCatalogue.download_tile",
                 return_value=(200, b"x", "image/png"),
-            ) as redata,
+            ) as catalogue,
         ):
-            _fetch_tile("some_future_layer", 12, 1205, 1539)
+            _fetch_tile(FakeTileCatalogue(), "some_future_layer", 12, 1205, 1539)
 
-        redata.assert_called_once()
+        catalogue.assert_called_once()
         vendor.assert_not_called()
 
     def test_asking_the_vendor_gateway_for_a_layer_it_has_no_url_for_is_loud(self) -> None:
@@ -163,7 +163,7 @@ class TheCreditFollowsTheBytesTests(SimpleTestCase):
                 "attribution": "Esri, Maxar, Earthstar Geographics",
                 "min_zoom": 0,
                 "max_zoom": 19,
-                "url_template": "https://redata.example.test/tiles/satellite/{z}/{x}/{y}/",
+                "url_template": "https://catalogue.example.test/tiles/satellite/{z}/{x}/{y}/",
             },
             {
                 "id": "terrain",
@@ -172,7 +172,7 @@ class TheCreditFollowsTheBytesTests(SimpleTestCase):
                 "attribution": "© OpenTopoMap contributors",
                 "min_zoom": 0,
                 "max_zoom": 17,
-                "url_template": "https://redata.example.test/tiles/terrain/{z}/{x}/{y}/",
+                "url_template": "https://catalogue.example.test/tiles/terrain/{z}/{x}/{y}/",
             },
             {
                 "id": "dark",
@@ -183,11 +183,11 @@ class TheCreditFollowsTheBytesTests(SimpleTestCase):
                 "min_zoom": 0,
                 "max_zoom": 15,
                 "style_url": "https://tiles.example.test/styles/dark.json",
-                "url_template": "https://redata.example.test/tiles/dark/{z}/{x}/{y}/",
+                "url_template": "https://catalogue.example.test/tiles/dark/{z}/{x}/{y}/",
             },
         ]
 
-    def test_a_layer_we_fetch_from_redatas_own_vendor_keeps_redatas_credit(self) -> None:
+    def test_a_layer_we_fetch_from_the_catalogues_own_vendor_keeps_its_credit(self) -> None:
         """
         Satellite is the same Esri endpoint either way, so there is nothing to override - and
         inventing a credit here would be its own licence error."""
@@ -210,16 +210,16 @@ class TheCreditFollowsTheBytesTests(SimpleTestCase):
 
     def test_every_overridden_vendor_declares_a_credit(self) -> None:
         """The table is the only place that knows the bytes changed vendor."""
-        redata_vendors = {
+        catalogue_vendors = {
             "street": "server.arcgisonline.com",
             "satellite": "server.arcgisonline.com",
             "borders": "server.arcgisonline.com",
             "terrain": "tile.opentopomap.org",
         }
         for layer, vendor in VENDOR_TILES.items():
-            expected_host = redata_vendors.get(layer)
+            expected_host = catalogue_vendors.get(layer)
             if expected_host and expected_host in vendor.url_template:
-                continue  # same vendor REData names; REData's credit is correct
+                continue  # same vendor The catalogue names; the catalogue's credit is correct
             self.assertIsNotNone(vendor.attribution, f"{layer} changed vendor without changing its credit")
 
 
@@ -227,7 +227,7 @@ class TheDepthFollowsTheBytesTests(SimpleTestCase):
     """
     A vendor swap can change how deep the layer goes, and Esri does not say so with a 404.
 
-    Past its coverage Esri answers 200 with a constant blank JPEG, so publishing REData's depth for
+    Past its coverage Esri answers 200 with a constant blank JPEG, so publishing the catalogue's depth for
     a vendor that is shallower means the proxy fetches blanks, caches them for a week, and the map
     draws empty squares; publishing it for one that is deeper crops the layer silently instead.
     Most of these drive the mechanism through a synthetic vendor rather than whichever endpoint
@@ -243,11 +243,11 @@ class TheDepthFollowsTheBytesTests(SimpleTestCase):
         with mock.patch.dict(VENDOR_TILES, {"terrain": self._capped_at("terrain", 14)}):
             entry = next(e for e in _offered_layers(TheCreditFollowsTheBytesTests._sources()) if e["id"] == "terrain")
 
-        self.assertEqual(entry["max_zoom"], 14, "published REData's depth over a shallower vendor's bytes")
+        self.assertEqual(entry["max_zoom"], 14, "published the catalogue's depth over a shallower vendor's bytes")
 
-    def test_a_vendor_that_declares_no_depth_leaves_redatas_alone(self) -> None:
+    def test_a_vendor_that_declares_no_depth_leaves_the_catalogues_alone(self) -> None:
         """
-        Most layers are as deep as the endpoint REData names, so there is nothing to correct -
+        Most layers are as deep as the endpoint The catalogue names, so there is nothing to correct -
         and inventing a ceiling here would crop a layer that was fine."""
         self.assertIsNone(VENDOR_TILES["satellite"].max_native_zoom)
 
@@ -257,7 +257,7 @@ class TheDepthFollowsTheBytesTests(SimpleTestCase):
 
     def test_a_deeper_vendor_raises_the_published_depth(self) -> None:
         """
-        A layer named in the table is fetched from the vendor and never from REData, so REData's
+        A layer named in the table is fetched from the vendor and never from the catalogue, so the catalogue's
         depth describes an endpoint that is not being used. Publishing it crops the layer: the
         client stops asking past that level and upscales tiles the vendor would have drawn."""
         sources = [s for s in TheCreditFollowsTheBytesTests._sources() if s["id"] == "terrain"]
@@ -266,11 +266,11 @@ class TheDepthFollowsTheBytesTests(SimpleTestCase):
         with mock.patch.dict(VENDOR_TILES, {"terrain": self._capped_at("terrain", 19)}):
             entry = next(e for e in _offered_layers(sources) if e["id"] == "terrain")
 
-        self.assertEqual(entry["max_zoom"], 19, "kept REData's depth for a layer it does not serve")
+        self.assertEqual(entry["max_zoom"], 19, "kept the catalogue's depth for a layer it does not serve")
 
     def test_terrain_is_published_as_deep_as_its_vendor_draws_it(self) -> None:
         """
-        REData names OpenTopoMap for this layer and publishes its ceiling of 17; the bytes come
+        The catalogue names OpenTopoMap for this layer and publishes its ceiling of 17; the bytes come
         from Esri, which draws two levels further."""
         entry = next(e for e in _offered_layers(TheCreditFollowsTheBytesTests._sources()) if e["id"] == "terrain")
 
@@ -278,7 +278,7 @@ class TheDepthFollowsTheBytesTests(SimpleTestCase):
 
     def test_darks_raster_half_is_published_as_deep_as_esri_draws_it(self) -> None:
         """
-        REData names CARTO's dark_all for this layer and publishes its ceiling of 20; the bytes
+        The catalogue names CARTO's dark_all for this layer and publishes its ceiling of 20; the bytes
         come from Esri's dark canvas, which draws through 16 and answers every deeper level with
         one 2521-byte "not yet available" JPEG at 200 (measured over Manhattan and Buffalo,
         2026-10-06). The browser's own raster table already stops at 16; the catalogue has to
@@ -354,7 +354,7 @@ class ASwapInvalidatesTheOldVendorsTilesTests(SimpleTestCase):
 
     def test_a_layer_this_deployment_does_not_fetch_keeps_a_key(self) -> None:
         """
-        REData's own layers cannot change vendor without its catalogue changing, so they take a
+        The catalogue's own layers cannot change vendor without its catalogue changing, so they take a
         constant tag rather than none - a key is still a key."""
         self.assertIsNone(vendor_for("usgs-topo"))
 

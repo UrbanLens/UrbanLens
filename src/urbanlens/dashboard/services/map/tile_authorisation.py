@@ -3,7 +3,7 @@ Whether a session may draw basemap tiles, answered without loading the viewer's 
 
 A viewport is ~30 tiles and each one was a full ``LoginRequiredMixin`` check, so a map load spent
 30 ``auth_user`` queries establishing 30 times over that the same person was still signed in.
-``P125`` measured the tile at 13.1% of all app CPU, and that query at roughly 1.5 ms of its ~4 ms.
+The tile measured 13.1% of all app CPU, and that query at roughly 1.5 ms of its ~4 ms.
 
 The decision is remembered against the session key instead, in the same Dragonfly the tile bytes
 come from - so the hot path is one round trip that fetches both, and no database query at all.
@@ -25,7 +25,7 @@ keep rendering with no request reaching this deployment, whatever happened to th
 That is accepted rather than overlooked: the bytes are public vendor imagery, proxied so the vendor
 never learns which coordinates a viewer is looking at, and they carry nothing about the account
 that fetched them. A shorter header would re-fetch every tile a viewer has already seen, which is
-the cost this module exists to remove. No shared cache may hold them (``D27``): one would answer
+the cost this module exists to remove. No shared cache may hold them: one would answer
 anyone, and its hits would say which coordinates somebody here has looked at.
 """
 

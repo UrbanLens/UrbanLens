@@ -1,5 +1,5 @@
 """
-Every custom icon and avatar is re-encoded in the sandbox, and nobody else is served the upload before that (P119).
+Every custom icon and avatar is re-encoded in the sandbox, and nobody else is served the upload before that.
 
 Pin and achievement icons were stored as uploaded and never re-encoded. Label icons and avatars were re-encoded, but
 the field named the upload until the sandbox worker had run, and the media gate serves any icon or avatar path to any

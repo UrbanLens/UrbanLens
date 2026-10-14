@@ -1,7 +1,7 @@
 """
 The library sweep built one hit per photo, for a fix that already existed.
 
-H01's last piece. `sweep_immich_library_locations` appends a `LocationHit` for
+`sweep_immich_library_locations` appends a `LocationHit` for
 every geotagged asset in the library and holds them all until the sweep ends, so
 peak memory tracks the size of someone's photo library rather than the number of
 places in it. The worker it runs on has no `mem_limit`, so that is host memory.

@@ -140,26 +140,24 @@ class PlacePhotoEnrichmentSource(_BackfillMarkerSource):
     @property
     def service_keys(self) -> tuple[str, ...]:
         """
-        Whichever of REData/Google Places ``places_resolution`` would actually dispatch to.
-        Budgeting against the *other*, unused path (e.g. a REData-only install's disabled/never-touched ``google_places`` service row) would wrongly throttle or skip this source."""
-        if _redata_configured():
-            return ("redata_places",)
-        return ("google_places",)
+        Whichever provider's budget ``places_resolution`` would actually dispatch to.
+        Budgeting against the *other*, unused path (e.g. an install whose only provider is not Google, with a disabled/never-touched ``google_places`` service row) would wrongly throttle or skip this source."""
+        from urbanlens.dashboard.services.apis.locations import places_resolution
+
+        return places_resolution.service_keys() or ("google_places",)
 
     def gate(self) -> bool:
-        """Requires either REData or the unrestricted Google API key."""
-        from urbanlens.UrbanLens.settings.app import settings as app_settings
+        """Requires an available places provider."""
+        from urbanlens.dashboard.services.apis.locations import places_resolution
 
-        return bool(app_settings.google_unrestricted_api_key) or _redata_configured()
+        return places_resolution.available()
 
     def enrich(self, location: Location) -> bool:
         """Find and download up to :data:`MAX_PLACE_PHOTOS` business photos for ``location``."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.services.apis.locations import places_resolution
         from urbanlens.dashboard.services.apis.locations.places_resolution import PhotoNotFoundError
-        from urbanlens.UrbanLens.settings.app import settings as app_settings
 
-        api_key = app_settings.google_unrestricted_api_key or ""
         lat, lng = float(location.latitude), float(location.longitude)
 
         cached = LocationCache.get_fresh(location, _PLACE_PHOTO_LIST_CACHE_SOURCE)
@@ -169,7 +167,7 @@ class PlacePhotoEnrichmentSource(_BackfillMarkerSource):
             saved: list[str] = (cached.data or {}).get("saved_names") or []
         else:
             try:
-                place_id, photo_names = places_resolution.find_nearest_place_photos(lat, lng, api_key=api_key)
+                place_id, photo_names = places_resolution.find_nearest_place_photos(lat, lng)
             except ImpossibleInputError as exc:
                 # A point Google has nothing at, such as (0, 0): settled, so the marker retires it like the
                 # Street View and satellite sources do, rather than refusing it again every cycle.
@@ -185,7 +183,7 @@ class PlacePhotoEnrichmentSource(_BackfillMarkerSource):
             if photo_name in saved:
                 continue
             try:
-                content, _content_type = places_resolution.download_photo(photo_name, api_key=api_key)
+                content, _content_type = places_resolution.download_photo(photo_name)
             except (PhotoNotFoundError, GatewayRequestError, requests.exceptions.RequestException) as exc:
                 # An outage ends the run before the marker, which would retire this location for good; the
                 # photos already saved are recorded below, so the next run picks up where this one stopped.
@@ -195,7 +193,7 @@ class PlacePhotoEnrichmentSource(_BackfillMarkerSource):
                 continue
             # No queue_photo_submission here: _save_enriched_image hands the row
             # to process_image_upload, whose tail submits it - after the
-            # downscale, so REData is offered the file that will be served.
+            # downscale, so the photo relevance provider is offered the file that will be served.
             _save_enriched_image(location, content, source=ImageSource.GOOGLE_MAPS, source_url=page_url, max_dimension=_PLACE_PHOTO_MAX_DIMENSION)
             saved = [*saved, photo_name]
             LocationCache.set(
@@ -278,10 +276,3 @@ class SatelliteEnrichmentSource(_BackfillMarkerSource):
 
         LocationCache.set(location, self.marker_source, {"found": bool(content)})
         return True
-
-
-def _redata_configured() -> bool:
-    """Whether REData is configured, mirroring ``places_resolution._redata_configured``."""
-    from urbanlens.UrbanLens.settings.app import settings as app_settings
-
-    return bool(app_settings.redata_api_url and app_settings.redata_api_key)

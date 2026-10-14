@@ -1,7 +1,7 @@
 """
-P210: stored pin-share notifications stop naming the sender's own pin.
+Stored pin-share notifications stop naming the sender's own pin.
 
-Until P193 the recipient's notification read "{sender} shared {the sender's pin name} with you.", a name the share
+Before that fix, the recipient's notification read "{sender} shared {the sender's pin name} with you.", a name the share
 never consented to pass on, and rows written then still say it.
 """
 

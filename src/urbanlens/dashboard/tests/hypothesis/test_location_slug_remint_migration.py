@@ -1,5 +1,5 @@
 """
-P186's data migration: an existing Location keeps a readable slug only when stored provider data proves its name.
+A data migration: an existing Location keeps a readable slug only when stored provider data proves its name.
 
 Rows predate any record of where ``official_name`` came from, so the migration accepts a name only when the linked
 GooglePlace or one of the Location's own cached provider responses holds it. Everything else falls back to the uuid,

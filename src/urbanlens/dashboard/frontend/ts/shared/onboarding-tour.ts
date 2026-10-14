@@ -134,7 +134,7 @@ export function initOnboardingTour(config: OnboardingTourConfig): void {
         setTimeout(tryShow, 250);
     }
 
-    // Fired by assistant-overlay.ts when the model calls reopen_explainer for a kind:"tour" dismissal.
+    // Fired when a tool call asks to reopen a tour dismissal.
     function restart(id: string): void {
         try {
             localStorage.removeItem(`${config.prefix}_${id}_dismissed`);

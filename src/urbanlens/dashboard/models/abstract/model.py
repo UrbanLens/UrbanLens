@@ -41,16 +41,13 @@ class DashboardModel(django_models.Model):
 
     class Meta:
         """
-        Base Meta options shared by every dashboard model.
-        This class only sets ``abstract``/``app_label`` - it does not itself define ``db_table``, ``unique_together``, or ``indexes``.
+        Base Meta options shared by every model.
 
-        Attributes:
-            abstract (bool): Always True - this class is never instantiated directly.
-            app_label (str): The Django app this model belongs to ("dashboard").
+        Sets no ``app_label``: Django takes it from the app whose package defines the model, so a plugin's models
+        subclassing this belong to the plugin's app.
         """
 
         abstract = True
-        app_label = "dashboard"
 
 
 class FrontendDashboardModel(DashboardModel):

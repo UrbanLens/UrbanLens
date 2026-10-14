@@ -9,7 +9,6 @@ from django.urls import reverse
 from urbanlens.dashboard.models.achievements import Achievement, ProfileStreak, UserAchievement
 from urbanlens.dashboard.models.api_call_log import ApiCallLog
 from urbanlens.dashboard.models.api_rate_limit import ApiRateLimit
-from urbanlens.dashboard.models.costs import CostComponent, OperatingCost
 from urbanlens.dashboard.models.facts import Fact, FactEvidence
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.models.site_settings import SiteSettings
@@ -60,10 +59,10 @@ class ApiRateLimitAdmin(admin.ModelAdmin):
 class ApiCallLogAdmin(admin.ModelAdmin):
     """Admin for ApiCallLog - read-only view of API call history."""
 
-    list_display = ["service", "model", "created", "calls", "success", "status_code", "response_ms", "input_tokens", "output_tokens", "cost_estimate", "was_rate_limited", "was_geo_filtered", "was_rejected_input"]
+    list_display = ["service", "model", "created", "calls", "success", "status_code", "response_ms", "input_tokens", "output_tokens", "was_rate_limited", "was_geo_filtered", "was_rejected_input"]
     list_filter = ["service", "model", "success", "status_code", "was_rate_limited", "was_geo_filtered", "was_rejected_input"]
     search_fields = ["service", "endpoint", "model"]
-    readonly_fields = ["service", "endpoint", "model", "created", "updated", "calls", "success", "status_code", "response_ms", "input_tokens", "output_tokens", "cost_estimate", "was_rate_limited", "was_geo_filtered", "was_rejected_input"]
+    readonly_fields = ["service", "endpoint", "model", "created", "updated", "calls", "success", "status_code", "response_ms", "input_tokens", "output_tokens", "was_rate_limited", "was_geo_filtered", "was_rejected_input"]
     ordering = ["-created"]
 
     def has_add_permission(self, request: HttpRequest) -> bool:
@@ -96,28 +95,6 @@ class SiteSettingsAdmin(admin.ModelAdmin):
             {
                 "fields": ["notification_retention_days"],
                 "description": "How long rows are kept before the nightly sweeps delete them. 0 keeps them forever.",
-            },
-        ),
-        (
-            "AI - Global",
-            {
-                "fields": ["ai_enabled", "ai_provider"],
-                "description": ("Master controls for all AI features. Disabling <em>AI enabled</em> prevents every AI API call site-wide."),
-            },
-        ),
-        (
-            "AI - Models",
-            {
-                "fields": ["openai_model", "cloudflare_model", "anthropic_model"],
-                "description": ("Model names are only used for the matching provider. Changing the model here takes effect immediately - no restart needed."),
-                "classes": ["collapse"],
-            },
-        ),
-        (
-            "AI - Feature Toggles",
-            {
-                "fields": ["ai_category_suggestions_enabled", "ai_document_import_enabled", "ai_document_import_max_chars"],
-                "description": "Individual feature toggles. The global <em>AI enabled</em> switch overrides all of these.",
             },
         ),
         (
@@ -391,26 +368,3 @@ class ProfileStreakAdmin(admin.ModelAdmin):
         for streak in queryset.select_related("profile"):
             rebuild_streak(streak.profile, streak.kind)
         self.message_user(request, f"Rebuilt {queryset.count()} streak(s).", messages.SUCCESS)
-
-
-@admin.register(CostComponent)
-class CostComponentAdmin(admin.ModelAdmin):
-    """Admin for CostComponent - depreciating hardware/infrastructure assets."""
-
-    list_display = ["name", "replacement_cost", "deprecation_years", "retired_at", "order"]
-    list_editable = ["order"]
-    search_fields = ["name", "notes"]
-    readonly_fields = ["created", "updated"]
-    ordering = ["order", "name"]
-
-
-@admin.register(OperatingCost)
-class OperatingCostAdmin(admin.ModelAdmin):
-    """Admin for OperatingCost - recurring monthly operating costs."""
-
-    list_display = ["name", "monthly_cost", "retired_at", "order"]
-    list_editable = ["order"]
-    search_fields = ["name", "notes"]
-    readonly_fields = ["created", "updated"]
-    ordering = ["order", "name"]
-

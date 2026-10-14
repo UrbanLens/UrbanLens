@@ -204,10 +204,9 @@ class LabelQuerySet(abstract.FrontendDashboardQuerySet["Label"]):
 
     def suggestable(self) -> Self:
         """
-        Return only tag/category labels - the sole kinds ever synced to REData's label-suggestion service.
+        Return only tag/category labels - the sole kinds an external label-suggestion service is ever told about.
 
-        Status, people, and media labels are never sent (per the explicit
-        product decision - see ``services.labels.redata_suggestions``).
+        Status, people, and media labels are never sent (an explicit product decision).
         """
         return self.filter(kind__in=(KIND_TAG, KIND_CATEGORY))
 
@@ -231,7 +230,7 @@ class LabelQuerySet(abstract.FrontendDashboardQuerySet["Label"]):
     def with_hierarchy(self) -> Self:
         """
         Prefetch parents/children without computing pin or location counts.
-        For callers that render no stats at all. Deferring the stats of a page that does render them is not worth it: measured at 120 labels, the counts cost ~16ms against ~100ms to render the cards they sit in (X25).
+        For callers that render no stats at all. Deferring the stats of a page that does render them is not worth it: measured at 120 labels, the counts cost ~16ms against ~100ms to render the cards they sit in.
         """
         from urbanlens.dashboard.models.labels.model import Label
 

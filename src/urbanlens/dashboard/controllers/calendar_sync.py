@@ -113,7 +113,7 @@ def calendar_context(profile: Profile, trip=None) -> dict:
 
 _RECONNECT_MESSAGE = "Your Google Calendar connection has expired. Please reconnect below to keep importing and exporting."
 
-#: GatewayRequestError is shared across every gateway integration (Calendar, Flickr, Immich, REData, ...); some
+#: GatewayRequestError is shared across every gateway integration (Calendar, Flickr, Immich, ...); some
 #: of them build its message from an upstream response's own error text, which is not safe to return verbatim to
 #: a caller. Never surface it - log it and answer with this fixed message instead.
 _GATEWAY_FAILURE_MESSAGE = "Google Calendar could not be reached. Please try again shortly."

@@ -1,7 +1,7 @@
 """
 A JPEG's pixel size, read from its frame header. Nothing here decodes an image.
 
-Keywording runs on an ordinary, credentialed worker, which must never decode an upload (``docs/MEDIA_PIPELINE.md``):
+Keywording runs on an ordinary, credentialed worker, which must never decode an upload:
 the risk there is memory corruption inside a native decoder. Reading a size needs no decoder. :func:`jpeg_dimensions`
 walks the marker segments before the first frame header (ITU-T T.81, Annex B) and returns the width and height that
 header declares: bounds-checked slicing of a Python ``bytes`` that stops before any image data, with no native code

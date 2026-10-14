@@ -64,6 +64,7 @@ from urbanlens.dashboard.models.safety.model import (
     SafetyCheckinStatus,
 )
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
+from urbanlens.dashboard.plugins.drf import ExtensibleSerializer
 from urbanlens.dashboard.services.core.colors import HEX_COLOR_RE
 from urbanlens.dashboard.services.core.numbers import DB_BIGINT_MAX, DB_INTEGER_MAX, DB_INTEGER_MIN
 from urbanlens.dashboard.services.core.text_limits import (
@@ -92,7 +93,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
 
-class WhoAmISerializer(serializers.Serializer):
+class WhoAmISerializer(ExtensibleSerializer):
     """
     The calling key owner's own identity: their profile uuid and slug.
 
@@ -111,7 +112,7 @@ class WhoAmISerializer(serializers.Serializer):
     slug = serializers.CharField(read_only=True)
 
 
-class PinCreateSerializer(serializers.Serializer):
+class PinCreateSerializer(ExtensibleSerializer):
     """
     Validates an untrusted pin-creation payload from an external application.
 
@@ -152,14 +153,14 @@ class PinCreateSerializer(serializers.Serializer):
         return attrs
 
 
-class LinkInputSerializer(serializers.Serializer):
+class LinkInputSerializer(ExtensibleSerializer):
     """One external link proposed for a pin suggestion."""
 
     name = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
     url = LinkUrlField()
 
 
-class PinSuggestionCreateSerializer(serializers.Serializer):
+class PinSuggestionCreateSerializer(ExtensibleSerializer):
     """
     Validates an untrusted pin-*suggestion* payload from an external application.
 
@@ -199,7 +200,7 @@ class PinSuggestionCreateSerializer(serializers.Serializer):
         return attrs
 
 
-class PinSuggestionCreateResponseSerializer(serializers.Serializer):
+class PinSuggestionCreateResponseSerializer(ExtensibleSerializer):
     """Documents the pin-suggestion-create response (schema-only)."""
 
     suggestion_id = serializers.IntegerField(read_only=True)
@@ -209,7 +210,7 @@ class PinSuggestionCreateResponseSerializer(serializers.Serializer):
     review_url = serializers.CharField(read_only=True)
 
 
-class PinSyncQuerySerializer(serializers.Serializer):
+class PinSyncQuerySerializer(ExtensibleSerializer):
     """Validates the query params of the pin delta-sync endpoint."""
 
     modified_since = serializers.DateTimeField(required=False, allow_null=True, default=None)
@@ -218,7 +219,7 @@ class PinSyncQuerySerializer(serializers.Serializer):
     include_total = serializers.BooleanField(required=False, default=False)
 
 
-class TombstoneSyncQuerySerializer(serializers.Serializer):
+class TombstoneSyncQuerySerializer(ExtensibleSerializer):
     """Validates the query params of the pin-deletions delta-sync endpoint."""
 
     deleted_since = serializers.DateTimeField(required=False, allow_null=True, default=None)
@@ -226,7 +227,7 @@ class TombstoneSyncQuerySerializer(serializers.Serializer):
     limit = serializers.IntegerField(required=False, allow_null=True, default=None, min_value=1, max_value=MapPinPayloadService.MAX_LIMIT)
 
 
-class SyncPinTagSerializer(serializers.Serializer):
+class SyncPinTagSerializer(ExtensibleSerializer):
     """
     One label chip on a synced pin (schema-only).
 
@@ -243,7 +244,7 @@ class SyncPinTagSerializer(serializers.Serializer):
     kind = serializers.CharField(read_only=True)
 
 
-class SyncPinSerializer(serializers.Serializer):
+class SyncPinSerializer(ExtensibleSerializer):
     """
     Documents the pin payload shape served by the delta-sync endpoint.
 
@@ -286,7 +287,7 @@ class SyncPinSerializer(serializers.Serializer):
     updated = serializers.DateTimeField(read_only=True)
 
 
-class PinSyncResponseSerializer(serializers.Serializer):
+class PinSyncResponseSerializer(ExtensibleSerializer):
     """Documents the envelope of the pin delta-sync endpoint (schema-only)."""
 
     pins = SyncPinSerializer(many=True, read_only=True)
@@ -295,7 +296,7 @@ class PinSyncResponseSerializer(serializers.Serializer):
     total = serializers.IntegerField(read_only=True, allow_null=True)
 
 
-class PinNoteSerializer(serializers.Serializer):
+class PinNoteSerializer(ExtensibleSerializer):
     """
     One personal note on a pin - both the read shape and the create payload.
 
@@ -311,7 +312,7 @@ class PinNoteSerializer(serializers.Serializer):
     updated = serializers.DateTimeField(read_only=True)
 
 
-class PinAliasSerializer(serializers.Serializer):
+class PinAliasSerializer(ExtensibleSerializer):
     """One alternate name for a pin - both the read shape and the create payload."""
 
     id = serializers.IntegerField(read_only=True)
@@ -344,7 +345,7 @@ class PinAliasSerializer(serializers.Serializer):
         return bool(current) and normalize_name_for_comparison(alias.name) == current
 
 
-class PinLinkSerializer(serializers.Serializer):
+class PinLinkSerializer(ExtensibleSerializer):
     """
     One external link on a pin (output only).
 
@@ -389,14 +390,14 @@ class PinLinkSerializer(serializers.Serializer):
         return link.auto_source or None
 
 
-class PinLinkCreateSerializer(serializers.Serializer):
+class PinLinkCreateSerializer(ExtensibleSerializer):
     """An external link submitted for a pin (input only)."""
 
     name = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
     url = LinkUrlField()
 
 
-class CustomFieldValueSerializer(serializers.Serializer):
+class CustomFieldValueSerializer(ExtensibleSerializer):
     """
     One custom field's value on a target object (schema-only).
 
@@ -412,7 +413,7 @@ class CustomFieldValueSerializer(serializers.Serializer):
     value = serializers.JSONField(read_only=True, allow_null=True)
 
 
-class PinSecurityDetailSerializer(serializers.Serializer):
+class PinSecurityDetailSerializer(ExtensibleSerializer):
     """The 8 security-indicator fields shared by Pin and Wiki (schema-only)."""
 
     fences = serializers.CharField(read_only=True)
@@ -504,7 +505,7 @@ PinSecurityUpdateSerializer = type(
 )
 
 
-class PinUpdateSerializer(serializers.Serializer):
+class PinUpdateSerializer(ExtensibleSerializer):
     """
     Validates an untrusted pin-update payload.
 
@@ -545,7 +546,7 @@ class PinUpdateSerializer(serializers.Serializer):
     date_last_active = serializers.DateField(required=False, allow_null=True)
     security = PinSecurityUpdateSerializer(required=False)
     #: **Full replacement** of the pin's tag/category/status labels, by uuid - not a delta. Every label dropped
-    #: by the replacement is tombstoned, so keyword/AI auto-tagging cannot quietly put it back on the next run.
+    #: by the replacement is tombstoned, so auto-tagging cannot quietly put it back on the next run.
     label_uuids = serializers.ListField(child=serializers.UUIDField(), required=False, allow_empty=True)
     #: Convenience over the "Visited" status label: true adds it, false removes it *and* clears
     #: ``last_visited``. Mutually exclusive with an explicit ``last_visited`` in the same request - see
@@ -602,7 +603,7 @@ class PinUpdateSerializer(serializers.Serializer):
         return edits
 
 
-class PinVisitSerializer(serializers.Serializer):
+class PinVisitSerializer(ExtensibleSerializer):
     """One logged visit to a pin (output only)."""
 
     id = serializers.IntegerField(read_only=True)
@@ -628,7 +629,7 @@ class PinVisitSerializer(serializers.Serializer):
 MAX_VISIT_CLOCK_SKEW = dt.timedelta(minutes=5)
 
 
-class PinVisitCreateSerializer(serializers.Serializer):
+class PinVisitCreateSerializer(ExtensibleSerializer):
     """A manually logged visit submitted for a pin."""
 
     visited_at = serializers.DateTimeField(required=True)
@@ -654,7 +655,7 @@ class PinVisitCreateSerializer(serializers.Serializer):
         return value
 
 
-class LocationSearchQuerySerializer(serializers.Serializer):
+class LocationSearchQuerySerializer(ExtensibleSerializer):
     """Validates the query params of the location autocomplete endpoint."""
 
     q = serializers.CharField(max_length=200, required=True, trim_whitespace=True)
@@ -665,7 +666,7 @@ class LocationSearchQuerySerializer(serializers.Serializer):
     limit = serializers.IntegerField(required=False, min_value=1, max_value=25, default=15)
 
 
-class LocationSearchResultSerializer(serializers.Serializer):
+class LocationSearchResultSerializer(ExtensibleSerializer):
     """
     One autocomplete hit (schema-only).
 
@@ -691,7 +692,7 @@ class LocationSearchResultSerializer(serializers.Serializer):
     is_child = serializers.BooleanField(read_only=True)
 
 
-class LocationSearchResponseSerializer(serializers.Serializer):
+class LocationSearchResponseSerializer(ExtensibleSerializer):
     """Documents the envelope of the location autocomplete endpoint (schema-only)."""
 
     results = LocationSearchResultSerializer(many=True, read_only=True)
@@ -701,7 +702,7 @@ class LocationSearchResponseSerializer(serializers.Serializer):
     places_disabled = serializers.BooleanField(read_only=True)
 
 
-class PlaceResolveResponseSerializer(serializers.Serializer):
+class PlaceResolveResponseSerializer(ExtensibleSerializer):
     """Documents the place-resolution response (schema-only)."""
 
     lat = serializers.FloatField(read_only=True, allow_null=True)
@@ -709,14 +710,14 @@ class PlaceResolveResponseSerializer(serializers.Serializer):
     name = serializers.CharField(read_only=True, allow_blank=True)
 
 
-class TombstoneSerializer(serializers.Serializer):
+class TombstoneSerializer(ExtensibleSerializer):
     """Documents one pin deletion in the deleted feed (schema-only)."""
 
     pin_uuid = serializers.UUIDField(read_only=True)
     deleted_at = serializers.DateTimeField(read_only=True)
 
 
-class TombstoneSyncResponseSerializer(serializers.Serializer):
+class TombstoneSyncResponseSerializer(ExtensibleSerializer):
     """Documents the envelope of the pin-deletions endpoint (schema-only)."""
 
     tombstones = TombstoneSerializer(many=True, read_only=True)
@@ -724,7 +725,7 @@ class TombstoneSyncResponseSerializer(serializers.Serializer):
     sync_watermark = serializers.DateTimeField(read_only=True)
 
 
-class PinCreateResponseSerializer(serializers.Serializer):
+class PinCreateResponseSerializer(ExtensibleSerializer):
     """Documents the pin-create response (schema-only)."""
 
     uuid = serializers.UUIDField(read_only=True)
@@ -735,13 +736,13 @@ class PinCreateResponseSerializer(serializers.Serializer):
     parent_uuid = serializers.UUIDField(read_only=True, allow_null=True)
 
 
-class ErrorSerializer(serializers.Serializer):
+class ErrorSerializer(ExtensibleSerializer):
     """Documents the error envelope every external endpoint uses (schema-only)."""
 
     error = serializers.CharField(read_only=True)
 
 
-class PushDeviceRegisterSerializer(serializers.Serializer):
+class PushDeviceRegisterSerializer(ExtensibleSerializer):
     """Validates a native client's push-destination registration."""
 
     transport = serializers.ChoiceField(choices=PushTransport.choices, default=PushTransport.UNIFIEDPUSH)
@@ -749,7 +750,7 @@ class PushDeviceRegisterSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=100, required=False, allow_blank=True, default="")
 
 
-class PushDeviceResponseSerializer(serializers.Serializer):
+class PushDeviceResponseSerializer(ExtensibleSerializer):
     """
     The registered device as echoed back to the client.
 
@@ -765,19 +766,18 @@ class PushDeviceResponseSerializer(serializers.Serializer):
     dispatch_enabled = serializers.BooleanField(read_only=True)
 
 
-class SettingsFeaturesSerializer(serializers.Serializer):
+class SettingsFeaturesSerializer(ExtensibleSerializer):
     """
     Which feature-gated settings groups the caller's account can use (schema-only).
 
-    A client uses this to hide the AI and Places cards outright rather than
+    A client uses this to hide a plugin's and the Places cards outright rather than
     offering fields that a PATCH would reject.
     """
 
-    ai = serializers.BooleanField(read_only=True)
     places = serializers.BooleanField(read_only=True)
 
 
-class SettingsSerializer(serializers.Serializer):
+class SettingsSerializer(ExtensibleSerializer):
     """
     The full account-preferences document served by ``GET settings/``.
 
@@ -838,12 +838,7 @@ class SettingsSerializer(serializers.Serializer):
     places_google_enabled = serializers.BooleanField(read_only=True)
     places_nps_enabled = serializers.BooleanField(read_only=True)
     places_wikipedia_enabled = serializers.BooleanField(read_only=True)
-    # AI (feature-gated).
-    ai_enabled = serializers.BooleanField(read_only=True)
-    ai_label_categories = serializers.BooleanField(read_only=True)
     disable_auto_tagging = serializers.BooleanField(read_only=True)
-    ai_label_tags = serializers.BooleanField(read_only=True)
-    ai_label_statuses = serializers.BooleanField(read_only=True)
     # Keyword tagging.
     keyword_tagging_enabled = serializers.BooleanField(read_only=True)
     keyword_label_categories = serializers.BooleanField(read_only=True)
@@ -859,7 +854,7 @@ class SettingsSerializer(serializers.Serializer):
     community_enabled = serializers.BooleanField(read_only=True)
     show_wiki_cover_photos = serializers.BooleanField(read_only=True)
     auto_create_pin_article_from_wikipedia = serializers.BooleanField(read_only=True)
-    show_supporter_badge = serializers.BooleanField(read_only=True)
+    show_member_badge = serializers.BooleanField(read_only=True)
     # Pin suggestions.
     pin_suggestions_enabled = serializers.BooleanField(read_only=True)
     suggest_public_pins = serializers.BooleanField(read_only=True)
@@ -886,7 +881,7 @@ class SettingsSerializer(serializers.Serializer):
     allowed_video_heights = serializers.ListField(child=serializers.IntegerField(), read_only=True)
 
 
-class SettingsPatchSerializer(serializers.Serializer):
+class SettingsPatchSerializer(ExtensibleSerializer):
     """
     Validates a partial account-preferences update from ``PATCH settings/``.
 
@@ -948,12 +943,7 @@ class SettingsPatchSerializer(serializers.Serializer):
     places_google_enabled = serializers.BooleanField(required=False)
     places_nps_enabled = serializers.BooleanField(required=False)
     places_wikipedia_enabled = serializers.BooleanField(required=False)
-    # AI (feature-gated - rejected with 400 while the feature is off).
-    ai_enabled = serializers.BooleanField(required=False)
-    ai_label_categories = serializers.BooleanField(required=False)
     disable_auto_tagging = serializers.BooleanField(required=False)
-    ai_label_tags = serializers.BooleanField(required=False)
-    ai_label_statuses = serializers.BooleanField(required=False)
     # Keyword tagging.
     keyword_tagging_enabled = serializers.BooleanField(required=False)
     keyword_label_categories = serializers.BooleanField(required=False)
@@ -970,7 +960,7 @@ class SettingsPatchSerializer(serializers.Serializer):
     community_enabled = serializers.BooleanField(required=False)
     show_wiki_cover_photos = serializers.BooleanField(required=False)
     auto_create_pin_article_from_wikipedia = serializers.BooleanField(required=False)
-    show_supporter_badge = serializers.BooleanField(required=False)
+    show_member_badge = serializers.BooleanField(required=False)
     # Pin suggestions.
     pin_suggestions_enabled = serializers.BooleanField(required=False)
     suggest_public_pins = serializers.BooleanField(required=False)
@@ -1046,7 +1036,7 @@ CRITERIA_HELP_TEXT = (
 )
 
 
-class PinSummarySerializer(serializers.Serializer):
+class PinSummarySerializer(ExtensibleSerializer):
     """
     The minimal pin identity nested inside list-membership payloads.
 
@@ -1064,7 +1054,7 @@ class PinSummarySerializer(serializers.Serializer):
     longitude = serializers.FloatField(read_only=True, allow_null=True)
 
 
-class PinListSerializer(serializers.Serializer):
+class PinListSerializer(ExtensibleSerializer):
     """
     One of the caller's pin lists, as served by the list endpoint.
 
@@ -1116,7 +1106,7 @@ class PinListDetailSerializer(PinListSerializer):
         return geometry_to_geojson(obj.smart_boundary)
 
 
-class PinListWriteSerializer(serializers.Serializer):
+class PinListWriteSerializer(ExtensibleSerializer):
     """
     Validates an untrusted pin-list create/update payload.
 
@@ -1182,7 +1172,7 @@ class PinListWriteSerializer(serializers.Serializer):
         return geom
 
 
-class PinListItemSerializer(serializers.Serializer):
+class PinListItemSerializer(ExtensibleSerializer):
     """One pin's membership in a list, with its position and provenance."""
 
     id = serializers.IntegerField(read_only=True)
@@ -1193,7 +1183,7 @@ class PinListItemSerializer(serializers.Serializer):
     pin = PinSummarySerializer(read_only=True)
 
 
-class PinListItemsWriteSerializer(serializers.Serializer):
+class PinListItemsWriteSerializer(ExtensibleSerializer):
     """
     Validates a request to add pins to a list.
 
@@ -1206,13 +1196,13 @@ class PinListItemsWriteSerializer(serializers.Serializer):
     pin_uuids = serializers.ListField(child=serializers.UUIDField(), min_length=1, max_length=500)
 
 
-class PinListItemsDeleteSerializer(serializers.Serializer):
+class PinListItemsDeleteSerializer(ExtensibleSerializer):
     """Validates a request to remove pins from a list."""
 
     pin_uuids = serializers.ListField(child=serializers.UUIDField(), min_length=1)
 
 
-class PinListItemsReorderSerializer(serializers.Serializer):
+class PinListItemsReorderSerializer(ExtensibleSerializer):
     """
     Validates a request to renumber a list's items.
 
@@ -1223,14 +1213,14 @@ class PinListItemsReorderSerializer(serializers.Serializer):
     item_ids = serializers.ListField(child=serializers.IntegerField(min_value=1, max_value=DB_BIGINT_MAX), min_length=1, max_length=1000)
 
 
-class PinListQuerySerializer(serializers.Serializer):
+class PinListQuerySerializer(ExtensibleSerializer):
     """Validates the query params of the pin-lists browse endpoint."""
 
     #: Restrict to smart lists (true) or plain ones (false). Omit for both.
     is_smart = serializers.BooleanField(required=False, allow_null=True, default=None)
 
 
-class LabelQuerySerializer(serializers.Serializer):
+class LabelQuerySerializer(ExtensibleSerializer):
     """Validates the query params of the labels browse endpoint."""
 
     kind = serializers.ChoiceField(choices=KIND_CHOICES, required=False)
@@ -1245,19 +1235,19 @@ class LabelQuerySerializer(serializers.Serializer):
     with_counts = serializers.BooleanField(required=False, default=False)
 
 
-class PinListItemsRemoveResponseSerializer(serializers.Serializer):
+class PinListItemsRemoveResponseSerializer(ExtensibleSerializer):
     """Documents the remove-pins response (schema-only)."""
 
     removed = serializers.IntegerField(read_only=True)
 
 
-class PinListItemsReorderResponseSerializer(serializers.Serializer):
+class PinListItemsReorderResponseSerializer(ExtensibleSerializer):
     """Documents the reorder response (schema-only)."""
 
     reordered = serializers.IntegerField(read_only=True)
 
 
-class PinListItemsAddResponseSerializer(serializers.Serializer):
+class PinListItemsAddResponseSerializer(ExtensibleSerializer):
     """Documents the add-pins response (schema-only)."""
 
     added = serializers.IntegerField(read_only=True)
@@ -1267,13 +1257,13 @@ class PinListItemsAddResponseSerializer(serializers.Serializer):
     max_pins = serializers.IntegerField(read_only=True)
 
 
-class PinListResyncResponseSerializer(serializers.Serializer):
+class PinListResyncResponseSerializer(ExtensibleSerializer):
     """Documents the smart-list resync response (schema-only)."""
 
     pin_count = serializers.IntegerField(read_only=True)
 
 
-class PinListMarkupMapResponseSerializer(serializers.Serializer):
+class PinListMarkupMapResponseSerializer(ExtensibleSerializer):
     """Documents the list markup-map create/refresh response (schema-only)."""
 
     markup_map_uuid = serializers.UUIDField(read_only=True)
@@ -1282,7 +1272,7 @@ class PinListMarkupMapResponseSerializer(serializers.Serializer):
 _ALLOWED_SAVED_FILTER_COLORS = {hex_value for hex_value, _label in COLOR_CHOICES}
 
 
-class SavedFilterSerializer(serializers.Serializer):
+class SavedFilterSerializer(ExtensibleSerializer):
     """One of the caller's saved main-map filters."""
 
     uuid = serializers.UUIDField(read_only=True)
@@ -1296,7 +1286,7 @@ class SavedFilterSerializer(serializers.Serializer):
     updated = serializers.DateTimeField(read_only=True)
 
 
-class SavedFilterWriteSerializer(serializers.Serializer):
+class SavedFilterWriteSerializer(ExtensibleSerializer):
     """Validates an untrusted saved-filter create/update payload."""
 
     name = serializers.CharField(max_length=100)
@@ -1356,7 +1346,7 @@ _OPTIONAL_COUNT_SCHEMA = {
 }
 
 
-class LabelSerializer(serializers.Serializer):
+class LabelSerializer(ExtensibleSerializer):
     """
     One label visible to the caller, with their own customizations applied.
 
@@ -1413,7 +1403,7 @@ class LabelSerializer(serializers.Serializer):
         return [str(parent.uuid) for parent in obj.parents.all()]
 
 
-class LabelWriteSerializer(serializers.Serializer):
+class LabelWriteSerializer(ExtensibleSerializer):
     """
     Validates an untrusted label create/update payload.
 
@@ -1435,7 +1425,7 @@ class LabelWriteSerializer(serializers.Serializer):
     parent_uuids = serializers.ListField(child=serializers.UUIDField(), required=False, max_length=50)
 
 
-class LabelCustomizationSerializer(serializers.Serializer):
+class LabelCustomizationSerializer(ExtensibleSerializer):
     """
     Validates a per-profile display override for a label.
 
@@ -1449,7 +1439,7 @@ class LabelCustomizationSerializer(serializers.Serializer):
     color = serializers.CharField(max_length=50, required=False, allow_null=True, allow_blank=True)
 
 
-class LabelMergeSerializer(serializers.Serializer):
+class LabelMergeSerializer(ExtensibleSerializer):
     """
     Validates a label-merge request.
 
@@ -1460,7 +1450,7 @@ class LabelMergeSerializer(serializers.Serializer):
     source_uuids = serializers.ListField(child=serializers.UUIDField(), min_length=1, max_length=100)
 
 
-class LabelMergeResponseSerializer(serializers.Serializer):
+class LabelMergeResponseSerializer(ExtensibleSerializer):
     """Documents the label-merge response (schema-only)."""
 
     target = LabelSerializer(read_only=True)
@@ -1468,7 +1458,7 @@ class LabelMergeResponseSerializer(serializers.Serializer):
     pins_moved = serializers.IntegerField(read_only=True)
 
 
-class SafetyCheckinContactSerializer(serializers.Serializer):
+class SafetyCheckinContactSerializer(ExtensibleSerializer):
     """
     One emergency contact on a check-in (read-only).
 
@@ -1495,7 +1485,7 @@ class SafetyCheckinContactSerializer(serializers.Serializer):
         return obj.contact_profile.username if obj.contact_profile is not None else None
 
 
-class SafetyCheckinPartnerSerializer(serializers.Serializer):
+class SafetyCheckinPartnerSerializer(ExtensibleSerializer):
     """
     One partner on a check-in (read-only).
 
@@ -1523,7 +1513,7 @@ class SafetyCheckinPartnerSerializer(serializers.Serializer):
         return obj.invited_by.username if obj.invited_by is not None else None
 
 
-class SafetyCheckinSummarySerializer(serializers.Serializer):
+class SafetyCheckinSummarySerializer(ExtensibleSerializer):
     """
     A check-in as it appears in the list endpoint.
 
@@ -1609,7 +1599,7 @@ class SafetyCheckinDetailSerializer(SafetyCheckinSummarySerializer):
         return Image.objects.filter(safety_checkin=obj).count()
 
 
-class SafetyContactInputSerializer(serializers.Serializer):
+class SafetyContactInputSerializer(ExtensibleSerializer):
     """
     One submitted emergency contact: either an existing connection or a raw email.
 
@@ -1630,7 +1620,7 @@ class SafetyContactInputSerializer(serializers.Serializer):
         return attrs
 
 
-class SafetyCheckinCreateSerializer(serializers.Serializer):
+class SafetyCheckinCreateSerializer(ExtensibleSerializer):
     """Validates an untrusted safety check-in creation payload."""
 
     title = serializers.CharField(max_length=200, required=False, allow_blank=True, default="")
@@ -1668,7 +1658,7 @@ class SafetyCheckinCreateSerializer(serializers.Serializer):
         return attrs
 
 
-class SafetyCheckinUpdateSerializer(serializers.Serializer):
+class SafetyCheckinUpdateSerializer(ExtensibleSerializer):
     """
     Validates a partial safety check-in update - the six autosave fields.
 
@@ -1694,19 +1684,19 @@ class SafetyCheckinUpdateSerializer(serializers.Serializer):
         return attrs
 
 
-class SafetyPartnerInviteSerializer(serializers.Serializer):
+class SafetyPartnerInviteSerializer(ExtensibleSerializer):
     """Validates a partner invitation by username."""
 
     username = serializers.CharField(max_length=150)
 
 
-class SafetyContactDefaultsSerializer(serializers.Serializer):
+class SafetyContactDefaultsSerializer(ExtensibleSerializer):
     """Validates a whole-list replacement of the caller's default emergency contacts."""
 
     contacts = SafetyContactInputSerializer(many=True)
 
 
-class SafetyDefaultContactSerializer(serializers.Serializer):
+class SafetyDefaultContactSerializer(ExtensibleSerializer):
     """
     One saved default emergency contact (schema-only).
 
@@ -1719,14 +1709,14 @@ class SafetyDefaultContactSerializer(serializers.Serializer):
     username = serializers.CharField(read_only=True, allow_null=True)
 
 
-class SafetyContactDefaultsResponseSerializer(serializers.Serializer):
+class SafetyContactDefaultsResponseSerializer(ExtensibleSerializer):
     """The saved default contacts, plus anything that was refused (schema-only)."""
 
     contacts = SafetyDefaultContactSerializer(many=True, read_only=True)
     rejected = serializers.ListField(child=serializers.CharField(), read_only=True)
 
 
-class SafetyPreferenceSerializer(serializers.Serializer):
+class SafetyPreferenceSerializer(ExtensibleSerializer):
     """The caller's safety defaults: message, grace period, and auto-delete window."""
 
     default_message = serializers.CharField(max_length=5000, required=False, allow_blank=True)
@@ -1735,7 +1725,7 @@ class SafetyPreferenceSerializer(serializers.Serializer):
     auto_delete_after_days = serializers.IntegerField(required=False, allow_null=True, min_value=1, max_value=MAX_AUTO_DELETE_AFTER_DAYS)
 
 
-class SafetyCheckinListResponseSerializer(serializers.Serializer):
+class SafetyCheckinListResponseSerializer(ExtensibleSerializer):
     """Documents the paginated check-in list envelope (schema-only)."""
 
     count = serializers.IntegerField(read_only=True)
@@ -1744,7 +1734,7 @@ class SafetyCheckinListResponseSerializer(serializers.Serializer):
     results = SafetyCheckinSummarySerializer(many=True, read_only=True)
 
 
-class SafetyPhotoSerializer(serializers.Serializer):
+class SafetyPhotoSerializer(ExtensibleSerializer):
     """One photo attached to a safety check-in (schema-only)."""
 
     id = serializers.IntegerField(read_only=True)
@@ -1762,7 +1752,7 @@ class SafetyPhotoSerializer(serializers.Serializer):
         return obj.file_url
 
 
-class SafetyPhotoListResponseSerializer(serializers.Serializer):
+class SafetyPhotoListResponseSerializer(ExtensibleSerializer):
     """Documents the paginated check-in photo list envelope (schema-only)."""
 
     count = serializers.IntegerField(read_only=True)
@@ -1771,7 +1761,7 @@ class SafetyPhotoListResponseSerializer(serializers.Serializer):
     results = SafetyPhotoSerializer(many=True, read_only=True)
 
 
-class SafetyPhotoAttachSerializer(serializers.Serializer):
+class SafetyPhotoAttachSerializer(ExtensibleSerializer):
     """
     Attaches an already-uploaded image to a check-in by uuid.
 
@@ -1786,7 +1776,7 @@ class SafetyPhotoAttachSerializer(serializers.Serializer):
     image_uuid = serializers.UUIDField()
 
 
-class SafetyMapSerializer(serializers.Serializer):
+class SafetyMapSerializer(ExtensibleSerializer):
     """One map linked to a check-in (schema-only)."""
 
     uuid = serializers.UUIDField(read_only=True)
@@ -1795,7 +1785,7 @@ class SafetyMapSerializer(serializers.Serializer):
     is_primary = serializers.BooleanField(read_only=True)
 
 
-class SafetyMapListResponseSerializer(serializers.Serializer):
+class SafetyMapListResponseSerializer(ExtensibleSerializer):
     """Documents the paginated check-in maps list envelope (schema-only)."""
 
     count = serializers.IntegerField(read_only=True)
@@ -1804,13 +1794,13 @@ class SafetyMapListResponseSerializer(serializers.Serializer):
     results = SafetyMapSerializer(many=True, read_only=True)
 
 
-class SafetyMapAttachSerializer(serializers.Serializer):
+class SafetyMapAttachSerializer(ExtensibleSerializer):
     """Attaches one of the caller's existing maps to a check-in as a reference map."""
 
     map_uuid = serializers.UUIDField()
 
 
-class AuthSessionSerializer(serializers.Serializer):
+class AuthSessionSerializer(ExtensibleSerializer):
     """
     Describes the credential the request authenticated with (schema-only).
 
@@ -1831,7 +1821,7 @@ class AuthSessionSerializer(serializers.Serializer):
     user_uuid = serializers.UUIDField(read_only=True)
 
 
-class FriendProfileSerializer(serializers.Serializer):
+class FriendProfileSerializer(ExtensibleSerializer):
     """
     A person as they may be shown to the caller, masking included.
 
@@ -1850,7 +1840,7 @@ class FriendProfileSerializer(serializers.Serializer):
     is_masked = serializers.BooleanField(read_only=True)
 
 
-class FriendshipSerializer(serializers.Serializer):
+class FriendshipSerializer(ExtensibleSerializer):
     """
     One friend relationship from the calling profile's point of view.
 
@@ -1870,7 +1860,7 @@ class FriendshipSerializer(serializers.Serializer):
     updated = serializers.DateTimeField(read_only=True)
 
 
-class FriendMuteSerializer(serializers.Serializer):
+class FriendMuteSerializer(ExtensibleSerializer):
     """
     The desired mute state for a relationship.
 
@@ -1880,7 +1870,7 @@ class FriendMuteSerializer(serializers.Serializer):
     is_muted = serializers.BooleanField(required=True)
 
 
-class FriendListQuerySerializer(serializers.Serializer):
+class FriendListQuerySerializer(ExtensibleSerializer):
     """Validates the friends-list query string."""
 
     status = serializers.ChoiceField(choices=FriendshipStatus.choices, required=False)
@@ -1888,21 +1878,21 @@ class FriendListQuerySerializer(serializers.Serializer):
     limit = serializers.IntegerField(required=False, min_value=1, max_value=100)
 
 
-class FriendListResponseSerializer(serializers.Serializer):
+class FriendListResponseSerializer(ExtensibleSerializer):
     """One page of the caller's friend relationships (schema-only)."""
 
     results = FriendshipSerializer(many=True, read_only=True)
     next_cursor = serializers.CharField(read_only=True, allow_null=True)
 
 
-class FriendRequestCreateSerializer(serializers.Serializer):
+class FriendRequestCreateSerializer(ExtensibleSerializer):
     """Validates a friend request aimed at a profile the caller names by uuid."""
 
     profile_uuid = serializers.UUIDField()
     message = serializers.CharField(max_length=MAX_FRIEND_REQUEST_MESSAGE_LENGTH, required=False, allow_blank=True)
 
 
-class FriendInviteSerializer(serializers.Serializer):
+class FriendInviteSerializer(ExtensibleSerializer):
     """
     Validates an invite-by-email submission.
 
@@ -1916,7 +1906,7 @@ class FriendInviteSerializer(serializers.Serializer):
     message = serializers.CharField(max_length=MAX_FRIEND_REQUEST_MESSAGE_LENGTH, required=False, allow_blank=True)
 
 
-class FriendInviteResponseSerializer(serializers.Serializer):
+class FriendInviteResponseSerializer(ExtensibleSerializer):
     """
     The invite endpoint's single, invariant response (schema-only).
 
@@ -1957,7 +1947,7 @@ ProfileVisibilitySerializer = type(
 )
 
 
-class ProfileContactSerializer(serializers.Serializer):
+class ProfileContactSerializer(ExtensibleSerializer):
     """
     A profile's contact methods, served only when contact visibility permits.
 
@@ -1973,7 +1963,7 @@ class ProfileContactSerializer(serializers.Serializer):
     matrix_handle = serializers.CharField(read_only=True, allow_blank=True)
 
 
-class ProfileDetailSerializer(serializers.Serializer):
+class ProfileDetailSerializer(ExtensibleSerializer):
     """A profile as the caller is permitted to see it."""
 
     uuid = serializers.UUIDField(read_only=True)
@@ -2015,7 +2005,7 @@ class ProfileDetailSerializer(serializers.Serializer):
     visibility = ProfileVisibilitySerializer(read_only=True, allow_null=True)
 
 
-class ProfileUpdateSerializer(serializers.Serializer):
+class ProfileUpdateSerializer(ExtensibleSerializer):
     """
     Validates a partial update to the caller's own profile.
 
@@ -2047,7 +2037,7 @@ class ProfileUpdateSerializer(serializers.Serializer):
     additional_preferences = serializers.CharField(required=False, allow_blank=True, max_length=MAX_ADDITIONAL_PREFERENCES_LENGTH)
 
 
-class ProfileNoteSerializer(serializers.Serializer):
+class ProfileNoteSerializer(ExtensibleSerializer):
     """A private note the caller keeps about another profile."""
 
     uuid = serializers.UUIDField(read_only=True)
@@ -2056,13 +2046,13 @@ class ProfileNoteSerializer(serializers.Serializer):
     updated = serializers.DateTimeField(read_only=True)
 
 
-class ProfileNoteWriteSerializer(serializers.Serializer):
+class ProfileNoteWriteSerializer(ExtensibleSerializer):
     """Validates a profile-note create or update."""
 
     content = serializers.CharField(allow_blank=True, max_length=MAX_PROFILE_BIO_LENGTH)
 
 
-class NotificationSerializer(serializers.Serializer):
+class NotificationSerializer(ExtensibleSerializer):
     """
     One notification from the caller's own inbox.
 
@@ -2083,7 +2073,7 @@ class NotificationSerializer(serializers.Serializer):
     source_profile = FriendProfileSerializer(read_only=True, allow_null=True)
 
 
-class NotificationListQuerySerializer(serializers.Serializer):
+class NotificationListQuerySerializer(ExtensibleSerializer):
     """Validates the notifications-list query string."""
 
     unread_only = serializers.BooleanField(required=False, default=False)
@@ -2091,7 +2081,7 @@ class NotificationListQuerySerializer(serializers.Serializer):
     limit = serializers.IntegerField(required=False, min_value=1, max_value=100)
 
 
-class NotificationListResponseSerializer(serializers.Serializer):
+class NotificationListResponseSerializer(ExtensibleSerializer):
     """One page of the caller's notifications (schema-only)."""
 
     results = NotificationSerializer(many=True, read_only=True)
@@ -2099,13 +2089,13 @@ class NotificationListResponseSerializer(serializers.Serializer):
     unread_count = serializers.IntegerField(read_only=True)
 
 
-class UnreadCountSerializer(serializers.Serializer):
+class UnreadCountSerializer(ExtensibleSerializer):
     """The caller's unread notification count (schema-only)."""
 
     unread_count = serializers.IntegerField(read_only=True)
 
 
-class NotificationPreferenceEntrySerializer(serializers.Serializer):
+class NotificationPreferenceEntrySerializer(ExtensibleSerializer):
     """
     Delivery settings for a single notification-preference stem.
 
@@ -2149,7 +2139,7 @@ NotificationPreferenceSerializer = type(
 )
 
 
-class PhotoSerializer(serializers.Serializer):
+class PhotoSerializer(ExtensibleSerializer):
     """
     One photo/video/document as an external client sees it (schema-only).
 
@@ -2279,7 +2269,7 @@ def build_photo_payload(image: Image, viewer_profile: Profile, pending_image_ids
     }
 
 
-class PhotoListQuerySerializer(serializers.Serializer):
+class PhotoListQuerySerializer(ExtensibleSerializer):
     """
     Validates the filters on ``GET photos/``.
 
@@ -2297,7 +2287,7 @@ class PhotoListQuerySerializer(serializers.Serializer):
     media_type = serializers.ChoiceField(choices=MediaKind.choices, required=False)
 
 
-class PhotoListResponseSerializer(serializers.Serializer):
+class PhotoListResponseSerializer(ExtensibleSerializer):
     """The paginated photo list envelope (schema-only)."""
 
     count = serializers.IntegerField(read_only=True)
@@ -2306,7 +2296,7 @@ class PhotoListResponseSerializer(serializers.Serializer):
     results = PhotoSerializer(many=True, read_only=True)
 
 
-class PhotoUploadSerializer(serializers.Serializer):
+class PhotoUploadSerializer(ExtensibleSerializer):
     """Validates a multipart photo upload from an external client."""
 
     file = serializers.FileField()
@@ -2317,7 +2307,7 @@ class PhotoUploadSerializer(serializers.Serializer):
     visit = serializers.IntegerField(required=False, min_value=1, max_value=DB_BIGINT_MAX)
 
 
-class PhotoLabelsSerializer(serializers.Serializer):
+class PhotoLabelsSerializer(ExtensibleSerializer):
     """Validates a full replacement of one photo's media labels."""
 
     labels = serializers.ListField(
@@ -2327,21 +2317,21 @@ class PhotoLabelsSerializer(serializers.Serializer):
     )
 
 
-class PhotoVoteSerializer(serializers.Serializer):
+class PhotoVoteSerializer(ExtensibleSerializer):
     """Validates a community relevance vote on a materialized media row."""
 
     #: 1 relevant, -1 not relevant, 0 withdraws an existing vote.
     value = serializers.ChoiceField(choices=[-1, 0, 1])
 
 
-class PhotoVoteResponseSerializer(serializers.Serializer):
+class PhotoVoteResponseSerializer(ExtensibleSerializer):
     """The item's new community score after a vote (schema-only)."""
 
     score = serializers.IntegerField(read_only=True)
     your_vote = serializers.IntegerField(read_only=True)
 
 
-class PhotoFileSerializer(serializers.Serializer):
+class PhotoFileSerializer(ExtensibleSerializer):
     """Validates filing an unfiled photo onto a pin, or onto a new one."""
 
     #: An existing pin (slug or uuid) to file onto.
@@ -2352,7 +2342,7 @@ class PhotoFileSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=255, required=False, allow_blank=True)
 
 
-class VisitSuggestionSerializer(serializers.Serializer):
+class VisitSuggestionSerializer(ExtensibleSerializer):
     """One pending photo-derived visit suggestion (schema-only)."""
 
     id = serializers.IntegerField(read_only=True)
@@ -2366,13 +2356,13 @@ class VisitSuggestionSerializer(serializers.Serializer):
     visit_date = serializers.DateTimeField(read_only=True, allow_null=True)
 
 
-class VisitSuggestionListResponseSerializer(serializers.Serializer):
+class VisitSuggestionListResponseSerializer(ExtensibleSerializer):
     """The pending-suggestions list envelope (schema-only)."""
 
     suggestions = VisitSuggestionSerializer(many=True, read_only=True)
 
 
-class PinSuggestionApiSerializer(serializers.Serializer):
+class PinSuggestionApiSerializer(ExtensibleSerializer):
     """
     One pending batch-scan pin suggestion (schema-only).
 
@@ -2400,13 +2390,13 @@ class PinSuggestionApiSerializer(serializers.Serializer):
     created = serializers.DateTimeField(read_only=True)
 
 
-class PinSuggestionListResponseSerializer(serializers.Serializer):
+class PinSuggestionListResponseSerializer(ExtensibleSerializer):
     """The pending pin-suggestions list envelope (schema-only)."""
 
     suggestions = PinSuggestionApiSerializer(many=True, read_only=True)
 
 
-class MemoryEventSerializer(serializers.Serializer):
+class MemoryEventSerializer(ExtensibleSerializer):
     """
     One row in a profile's unified Memories timeline (schema-only).
 
@@ -2427,7 +2417,7 @@ class MemoryEventSerializer(serializers.Serializer):
     extra = serializers.JSONField(read_only=True)
 
 
-class MemoryEventPageSerializer(serializers.Serializer):
+class MemoryEventPageSerializer(ExtensibleSerializer):
     """One cursor page of the Memories timeline (schema-only). ``previous`` and ``count`` are always null."""
 
     count = serializers.IntegerField(read_only=True, allow_null=True)
@@ -2436,7 +2426,7 @@ class MemoryEventPageSerializer(serializers.Serializer):
     results = MemoryEventSerializer(many=True, read_only=True)
 
 
-class MemoriesTimelineQuerySerializer(serializers.Serializer):
+class MemoriesTimelineQuerySerializer(ExtensibleSerializer):
     """Validates the query params of the Memories timeline endpoint."""
 
     start = serializers.DateField(required=False, allow_null=True, default=None)
@@ -2449,7 +2439,7 @@ class MemoriesTimelineQuerySerializer(serializers.Serializer):
     limit = serializers.IntegerField(required=False, min_value=1, max_value=100, default=50)
 
 
-class OnThisDayVisitSerializer(serializers.Serializer):
+class OnThisDayVisitSerializer(ExtensibleSerializer):
     """One past-year visit surfaced by the on-this-day endpoint (schema-only)."""
 
     pin_slug = serializers.CharField(read_only=True, allow_null=True)
@@ -2458,7 +2448,7 @@ class OnThisDayVisitSerializer(serializers.Serializer):
     notes = serializers.CharField(read_only=True, allow_null=True, allow_blank=True)
 
 
-class OnThisDayRouteSerializer(serializers.Serializer):
+class OnThisDayRouteSerializer(ExtensibleSerializer):
     """One past-year route surfaced by the on-this-day endpoint (schema-only)."""
 
     uuid = serializers.UUIDField(read_only=True)
@@ -2469,7 +2459,7 @@ class OnThisDayRouteSerializer(serializers.Serializer):
     path = serializers.JSONField(read_only=True)
 
 
-class OnThisDayResponseSerializer(serializers.Serializer):
+class OnThisDayResponseSerializer(ExtensibleSerializer):
     """The on-this-day recap envelope (schema-only)."""
 
     today = serializers.CharField(read_only=True)
@@ -2478,7 +2468,7 @@ class OnThisDayResponseSerializer(serializers.Serializer):
     photos = PhotoSerializer(many=True, read_only=True)
 
 
-class JournalEntrySerializer(serializers.Serializer):
+class JournalEntrySerializer(ExtensibleSerializer):
     """
     One Memories journal entry (schema-only).
 
@@ -2497,7 +2487,7 @@ class JournalEntrySerializer(serializers.Serializer):
     rating = serializers.IntegerField(read_only=True, allow_null=True)
 
 
-class JournalResponseSerializer(serializers.Serializer):
+class JournalResponseSerializer(ExtensibleSerializer):
     """
     One page of the Memories journal (schema-only).
 
@@ -2521,7 +2511,7 @@ class JournalResponseSerializer(serializers.Serializer):
 # objects alike, so a render row serializes without a second shaping pass.
 
 
-class TripMemberProfileSerializer(serializers.Serializer):
+class TripMemberProfileSerializer(ExtensibleSerializer):
     """
     One person as they may be shown to the requesting viewer.
 
@@ -2550,7 +2540,7 @@ class TripMemberProfileSerializer(serializers.Serializer):
         return None if getattr(profile, "is_masked", False) else profile.slug
 
 
-class TripSummarySerializer(serializers.Serializer):
+class TripSummarySerializer(ExtensibleSerializer):
     """
     One trip as it appears in a list (schema and response shape).
 
@@ -2649,7 +2639,7 @@ class TripSummarySerializer(serializers.Serializer):
         return bool(membership and membership.is_organizer)
 
 
-class TripCalendarSyncStatusSerializer(serializers.Serializer):
+class TripCalendarSyncStatusSerializer(ExtensibleSerializer):
     """
     Whether this trip is mirrored to the caller's Google Calendar (schema-only).
 
@@ -2681,7 +2671,7 @@ class TripCalendarSyncRefusalSerializer(ErrorSerializer):
     last_synced = serializers.DateTimeField(required=False, allow_null=True)
 
 
-class TripPermissionsSerializer(serializers.Serializer):
+class TripPermissionsSerializer(ExtensibleSerializer):
     """The trip's four configurable permission levels (schema and response shape)."""
 
     allow_add_members = serializers.ChoiceField(choices=Trip.PERMISSION_CHOICES, read_only=True)
@@ -2690,7 +2680,7 @@ class TripPermissionsSerializer(serializers.Serializer):
     allow_comments = serializers.ChoiceField(choices=Trip.PERMISSION_CHOICES, read_only=True)
 
 
-class TripViewerSerializer(serializers.Serializer):
+class TripViewerSerializer(ExtensibleSerializer):
     """
     What the requesting caller specifically may see and do on this trip.
 
@@ -2711,7 +2701,7 @@ class TripViewerSerializer(serializers.Serializer):
     can_comment = serializers.BooleanField(read_only=True)
 
 
-class TripMemberSerializer(serializers.Serializer):
+class TripMemberSerializer(ExtensibleSerializer):
     """One membership row: who, and where they stand on the trip."""
 
     profile = TripMemberProfileSerializer(read_only=True)
@@ -2742,7 +2732,7 @@ class TripDetailSerializer(TripSummarySerializer):
     members = TripMemberSerializer(many=True, read_only=True)
 
 
-class TripActivityLegSerializer(serializers.Serializer):
+class TripActivityLegSerializer(ExtensibleSerializer):
     """The driving leg from the previous stop to this one (schema-only)."""
 
     distance_meters = serializers.FloatField(read_only=True)
@@ -2751,7 +2741,7 @@ class TripActivityLegSerializer(serializers.Serializer):
     duration_display = serializers.CharField(read_only=True)
 
 
-class TripActivitySerializer(serializers.Serializer):
+class TripActivitySerializer(ExtensibleSerializer):
     """
     One itinerary entry, serialized from a ``build_activity_rows`` render row.
 
@@ -2827,7 +2817,7 @@ class TripActivitySerializer(serializers.Serializer):
         return row["display_child_trip_uuid"] or None
 
 
-class TripMapPointSerializer(serializers.Serializer):
+class TripMapPointSerializer(ExtensibleSerializer):
     """Documents one trip-map marker (schema-only)."""
 
     #: 1-based marker number, or null on a child trip's ghost marker.
@@ -2844,13 +2834,13 @@ class TripMapPointSerializer(serializers.Serializer):
     child_trip = serializers.BooleanField(read_only=True, required=False)
 
 
-class TripMapResponseSerializer(serializers.Serializer):
+class TripMapResponseSerializer(ExtensibleSerializer):
     """Documents the trip-map envelope (schema-only)."""
 
     points = TripMapPointSerializer(many=True, read_only=True)
 
 
-class TripCommentReactionSerializer(serializers.Serializer):
+class TripCommentReactionSerializer(ExtensibleSerializer):
     """One emoji's tally on a comment, plus whether the caller is among them."""
 
     emoji = serializers.CharField(read_only=True)
@@ -2858,7 +2848,7 @@ class TripCommentReactionSerializer(serializers.Serializer):
     reacted = serializers.BooleanField(read_only=True)
 
 
-class TripCommentSerializer(serializers.Serializer):
+class TripCommentSerializer(ExtensibleSerializer):
     """
     One trip comment, serialized from a ``build_comment_tree`` row.
 
@@ -2910,7 +2900,7 @@ class TripCommentSerializer(serializers.Serializer):
 # -- Trip request payloads -----------------------------------------------------
 
 
-class TripCreateSerializer(serializers.Serializer):
+class TripCreateSerializer(ExtensibleSerializer):
     """Validates an untrusted trip-creation payload."""
 
     #: Optional - a blank submission gets a generated placeholder name, matching
@@ -2943,7 +2933,7 @@ class TripCreateSerializer(serializers.Serializer):
         return attrs
 
 
-class _StoredRangeValidationMixin(serializers.Serializer):
+class _StoredRangeValidationMixin(ExtensibleSerializer):
     """
     Validates a range whose other endpoint may live on the stored row.
 
@@ -3015,20 +3005,20 @@ class TripUpdateSerializer(_StoredRangeValidationMixin):
     end_date = serializers.DateField(required=False, allow_null=True)
 
 
-class TripMemberAddSerializer(serializers.Serializer):
+class TripMemberAddSerializer(ExtensibleSerializer):
     """Validates an add-member submission."""
 
     #: Matched case-insensitively against Django's User.username.
     username = serializers.CharField(max_length=150, allow_blank=False)
 
 
-class TripInvitationCreateSerializer(serializers.Serializer):
+class TripInvitationCreateSerializer(ExtensibleSerializer):
     """Validates an invite-by-email submission."""
 
     email = serializers.EmailField(max_length=254)
 
 
-class TripInvitationSerializer(serializers.Serializer):
+class TripInvitationSerializer(ExtensibleSerializer):
     """One of the caller's own email invitations, as the inviter sees it: the address they typed, nothing more."""
 
     uuid = serializers.UUIDField(read_only=True)
@@ -3037,7 +3027,7 @@ class TripInvitationSerializer(serializers.Serializer):
     created = serializers.DateTimeField(read_only=True)
 
 
-class TripMemberOrganizerSerializer(serializers.Serializer):
+class TripMemberOrganizerSerializer(ExtensibleSerializer):
     """
     Validates an organizer-flag change.
 
@@ -3048,13 +3038,13 @@ class TripMemberOrganizerSerializer(serializers.Serializer):
     is_organizer = serializers.BooleanField()
 
 
-class TripRsvpSerializer(serializers.Serializer):
+class TripRsvpSerializer(ExtensibleSerializer):
     """Validates a trip-wide RSVP; null clears the answer."""
 
     rsvp = serializers.ChoiceField(choices=TripMembership.RSVP_CHOICES, allow_null=True)
 
 
-class TripActivityCreateSerializer(serializers.Serializer):
+class TripActivityCreateSerializer(ExtensibleSerializer):
     """
     Validates an untrusted activity-creation payload.
 
@@ -3127,7 +3117,7 @@ class TripActivityUpdateSerializer(_StoredRangeValidationMixin, TripActivityCrea
     location_hidden = serializers.BooleanField(required=False)
 
 
-class TripActivityPositionSerializer(serializers.Serializer):
+class TripActivityPositionSerializer(ExtensibleSerializer):
     """
     Validates a map-drag position override.
 
@@ -3139,13 +3129,13 @@ class TripActivityPositionSerializer(serializers.Serializer):
     lng = serializers.FloatField(min_value=-180, max_value=180)
 
 
-class TripActivityVoteSerializer(serializers.Serializer):
+class TripActivityVoteSerializer(ExtensibleSerializer):
     """Validates a vote on a proposed activity; null clears it."""
 
     vote = serializers.ChoiceField(choices=["up", "down"], allow_null=True)
 
 
-class TripActivityStatusSerializer(serializers.Serializer):
+class TripActivityStatusSerializer(ExtensibleSerializer):
     """
     Validates an activity status change.
 
@@ -3157,13 +3147,13 @@ class TripActivityStatusSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=["proposed", "confirmed", "completed"])
 
 
-class TripActivityRsvpSerializer(serializers.Serializer):
+class TripActivityRsvpSerializer(ExtensibleSerializer):
     """Validates a per-activity RSVP override; null clears it."""
 
     rsvp = serializers.ChoiceField(choices=TripMembership.RSVP_CHOICES, allow_null=True)
 
 
-class TripCommentCreateSerializer(serializers.Serializer):
+class TripCommentCreateSerializer(ExtensibleSerializer):
     """
     Validates a trip comment submission.
 
@@ -3176,34 +3166,34 @@ class TripCommentCreateSerializer(serializers.Serializer):
     parent_id = serializers.IntegerField(required=False, allow_null=True, default=None, max_value=DB_BIGINT_MAX)
 
 
-class TripCommentReactionSetSerializer(serializers.Serializer):
+class TripCommentReactionSetSerializer(ExtensibleSerializer):
     """Validates a reaction change; explicitly the target state, not a toggle."""
 
     emoji = serializers.ChoiceField(choices=sorted(ALLOWED_COMMENT_EMOJIS))
     reacted = serializers.BooleanField()
 
 
-class TripCalendarSyncToggleSerializer(serializers.Serializer):
+class TripCalendarSyncToggleSerializer(ExtensibleSerializer):
     """Validates a calendar auto-sync toggle for an already-exported trip."""
 
     enabled = serializers.BooleanField()
 
 
-class TripListQuerySerializer(serializers.Serializer):
+class TripListQuerySerializer(ExtensibleSerializer):
     """Validates the trips list's ordering query params."""
 
     sort = serializers.ChoiceField(choices=["start_date", "updated"], required=False, default="updated")
     dir = serializers.ChoiceField(choices=["asc", "desc"], required=False, default="desc")
 
 
-class TripMapQuerySerializer(serializers.Serializer):
+class TripMapQuerySerializer(ExtensibleSerializer):
     """Validates the trip map's query params."""
 
     #: Completed stops are dropped unless asked for.
     include_past = serializers.BooleanField(required=False, default=False)
 
 
-class TripActivityListQuerySerializer(serializers.Serializer):
+class TripActivityListQuerySerializer(ExtensibleSerializer):
     """Validates the activity list's query params."""
 
     #: Off by default - driving legs cost live routing calls, and a plain list

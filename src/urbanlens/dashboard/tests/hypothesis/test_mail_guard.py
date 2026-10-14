@@ -89,7 +89,7 @@ class RecipientGuardEmailBackendTests(SimpleTestCase):
     ) -> int:
         connection = get_connection(_GUARD, fail_silently=fail_silently)
         return EmailMessage(
-            "Subject", "Body", "noreply@urbanlens.org", to=to, cc=cc, bcc=bcc, connection=connection
+            "Subject", "Body", "noreply@example.com", to=to, cc=cc, bcc=bcc, connection=connection
         ).send(fail_silently=fail_silently)
 
     def test_a_message_to_only_undeliverable_addresses_never_reaches_the_delivery_backend(self) -> None:
@@ -118,7 +118,7 @@ class RecipientGuardEmailBackendTests(SimpleTestCase):
     def test_a_batch_sends_only_the_deliverable_messages(self) -> None:
         connection = get_connection(_GUARD)
         messages = [
-            EmailMessage("s", "b", "noreply@urbanlens.org", to=[to]) for to in ("ul-e2e-x@gmail.com", "plain@gmail.com")
+            EmailMessage("s", "b", "noreply@example.com", to=[to]) for to in ("ul-e2e-x@gmail.com", "plain@gmail.com")
         ]
         self.assertEqual(connection.send_messages(messages), 1)
         self.assertEqual([message.to for message in mail.outbox], [["plain@gmail.com"]])

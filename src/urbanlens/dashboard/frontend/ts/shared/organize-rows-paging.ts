@@ -1,5 +1,5 @@
 /**
- * Paged Organize rows (P66). A tab renders its first page and a sentinel row (`organize_label_rows.html`) loads
+ * Paged Organize rows. A tab renders its first page and a sentinel row (`organize_label_rows.html`) loads
  * the next as it scrolls into view; whatever needs every row of a kind - a filter, the tree view, select-all,
  * a bulk action started from Display Order - calls {@link loadAllRows} first.
  */

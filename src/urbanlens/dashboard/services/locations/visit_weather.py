@@ -10,8 +10,6 @@ from typing import TYPE_CHECKING, Any
 
 from django.utils import timezone
 
-from urbanlens.dashboard.services.security.redact import redact_coordinate
-
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
 
@@ -26,11 +24,11 @@ Cell = tuple[int, int]
 #: How long a queued fetch for the same cell and days is not queued again.
 _QUEUE_DEDUPE_SECONDS = 600
 
-#: ERA5 begins in 1940; REData clamps rather than rejects, so an earlier date
+#: ERA5 begins in 1940; a provider clamps rather than rejects, so an earlier date
 #: would cost a request that can only come back empty.
 RECORD_BEGINS = date(1940, 1, 1)
 
-#: How far behind real time ERA5 runs. REData documents about six days; the
+#: How far behind real time ERA5 runs. About six days is documented; the
 #: extra day keeps a boundary case from asking for a day that does not exist
 #: yet just because of a timezone difference.
 PUBLICATION_LAG_DAYS = 7
@@ -175,10 +173,10 @@ def _mph(kmh: Any) -> float | None:
 
 def to_recorded_day(record: dict[str, Any]) -> RecordedDay | None:
     """
-    Convert one REData ``/weather/history/`` row into display units.
+    Convert one recorded-weather row into display units.
 
     Args:
-        record: A row as returned by :meth:`RedataWeatherHistoryGateway.get_history`.
+        record: A row as returned by :meth:`WeatherProvider.historical_days`.
 
     Returns:
         The converted day, or None when the row carries no parseable date.
@@ -202,7 +200,7 @@ def to_recorded_day(record: dict[str, Any]) -> RecordedDay | None:
 
 def _fetch_days(latitude: float, longitude: float, start: date, end: date) -> dict[str, Any]:
     """
-    Ask REData for a date range at a point, keyed by ISO date.
+    Ask the first weather provider that keeps records for a date range at a point, keyed by ISO date.
 
     Args:
         latitude: WGS-84 latitude.
@@ -211,27 +209,13 @@ def _fetch_days(latitude: float, longitude: float, start: date, end: date) -> di
         end: Last day, inclusive.
 
     Returns:
-        ``{iso_date: record}`` for the days REData could answer, empty when it could not answer at all."""
-    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError, redata_configured
+        ``{iso_date: record}`` for the days a provider could answer, empty when none could."""
+    from urbanlens.dashboard.services.apis.locations.weather_resolution import history_providers
 
-    if not redata_configured():
-        return {}
-
-    from urbanlens.dashboard.services.apis.locations.redata_weather_gateway import RedataWeatherHistoryGateway
-
-    try:
-        days = RedataWeatherHistoryGateway().get_history(latitude, longitude, start=start, end=end)
-    except LocationContextUnavailableError as exc:
-        logger.info(
-            "Historical weather unavailable for %s,%s %s..%s: %s",
-            redact_coordinate(latitude),
-            redact_coordinate(longitude),
-            start,
-            end,
-            exc.reason,
-        )
-        return {}
-    return {str(entry["date"]): entry for entry in days if isinstance(entry, dict) and entry.get("date")}
+    for provider in history_providers():
+        if days := provider.historical_days(latitude, longitude, start, end):
+            return days
+    return {}
 
 
 #: How far apart two missing days can be and still be fetched as one range.
@@ -343,23 +327,23 @@ def queue_missing_days(cell: Cell, days: Iterable[date]) -> bool:
     Queue a background fetch of a cell's missing days, unless the same fetch was queued recently.
 
     A page that shows recorded weather reads stored rows only and calls this for the rest, so a slow
-    REData never holds up a render.
+    provider never holds up a render.
 
     Args:
         cell: The cell.
         days: Its missing days.
 
     Returns:
-        Whether a fetch was queued; never on an install with no REData to ask.
+        Whether a fetch was queued; never on an install with no provider that keeps records.
     """
     from django.core.cache import cache
 
-    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
+    from urbanlens.dashboard.services.apis.locations.weather_resolution import history_providers
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
     from urbanlens.dashboard.tasks import fetch_recorded_weather_at
 
     iso_days = sorted({day.isoformat() for day in days})
-    if not iso_days or not redata_configured():
+    if not iso_days or not history_providers():
         return False
     digest = hashlib.sha256(",".join(iso_days).encode()).hexdigest()[:24]
     try:
@@ -373,7 +357,7 @@ def queue_missing_days(cell: Cell, days: Iterable[date]) -> bool:
 
 def recorded_weather(location: Location, day: date, *, allow_fetch: bool = True) -> dict[str, Any] | None:
     """
-    The weather on one day at one location, from stored rows or REData.
+    The weather on one day at one location, from stored rows or a weather provider.
 
     Args:
         location: The shared Location the visit's pin points at.
@@ -381,7 +365,7 @@ def recorded_weather(location: Location, day: date, *, allow_fetch: bool = True)
         allow_fetch: When False, answer only from stored rows.
 
     Returns:
-        That day's record - ``date`` plus REData's fixed-unit ``temperature_max_c``/``temperature_min_c``/``temperature_mean_c``, ``precipitation_mm``, ``snowfall_cm``, ``wind_speed_max_kmh`` and ``wind_gusts_max_kmh`` - or None when the day is outside the record or REData could not answer."""
+        That day's record - ``date`` plus the fixed-unit ``temperature_max_c``/``temperature_min_c``/``temperature_mean_c``, ``precipitation_mm``, ``snowfall_cm``, ``wind_speed_max_kmh`` and ``wind_gusts_max_kmh`` - or None when the day is outside the record or no provider could answer."""
     if not is_recorded_yet(day):
         return None
     cell = location_cell(location)
@@ -401,7 +385,7 @@ def _store(cell: Cell, days: Mapping[str, Any]) -> None:
 
     Args:
         cell: The cell the days were fetched for.
-        days: Mapping of ISO date to record, as returned by REData."""
+        days: Mapping of ISO date to record, as returned by the provider."""
     from urbanlens.dashboard.models.cache.recorded_weather import RecordedWeatherDay
 
     rows = []

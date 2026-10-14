@@ -1,4 +1,4 @@
-"""Profile preview simulates the ghost viewer for the previewed page's own URLs, not for whatever it links to (G2-11)."""
+"""Profile preview simulates the ghost viewer for the previewed page's own URLs, not for whatever it links to."""
 
 from __future__ import annotations
 

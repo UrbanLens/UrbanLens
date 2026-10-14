@@ -43,7 +43,7 @@ class BackfilledGeometryStalenessTests(TestCase):
         """
         The reported case: geometry the provider chain never produced.
 
-        Left as "not stale", REData is never asked for this parcel and the
+        Left as "not stale", the provider is never asked for this parcel and the
         pre-places boundary stands forever.
         """
         place = self._place(generated_at=None)

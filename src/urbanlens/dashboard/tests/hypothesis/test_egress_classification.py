@@ -1,5 +1,5 @@
 """
-Every external service and every scheduled task is classified (D26), so the policy can never silently miss one.
+Every external service and every scheduled task is classified, so the policy can never silently miss one.
 
 An unclassified service is treated as billed at runtime; these fail first, naming it.
 """
@@ -19,7 +19,7 @@ from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.core.egress import GATED_BACKGROUND_TASKS, UNLEDGERED_SERVICES, explicit_category
 from urbanlens.dashboard.services.core.gateway import Gateway
 from urbanlens.dashboard.services.core.rate_limiter import SERVICE_REGISTRY, all_service_defaults
-from urbanlens.UrbanLens.egress import BEAT_EGRESS, BeatEgress, EgressCategory
+from urbanlens.UrbanLens.egress import BEAT_EGRESS, BeatEgress
 
 _SRC = pathlib.Path(__file__).resolve().parents[3]
 
@@ -96,7 +96,7 @@ class EveryServiceIsClassifiedTests(SimpleTestCase):
         missing = sorted(
             f"{cls.__module__}.{cls.__qualname__} ({cls.service_key})"
             for cls in _gateway_classes()
-            # A private base (``_RedataStreetViewProvider``) only carries the key its metaclass derived; its
+            # A private base (a private plugin's base) only carries the key its metaclass derived; its
             # subclasses name their own.
             if cls.service_key
             and not inspect.isabstract(cls)
@@ -108,25 +108,9 @@ class EveryServiceIsClassifiedTests(SimpleTestCase):
     def test_every_service_named_in_the_source_is_classified(self) -> None:
         """``api_call_slot("x")``, ``log_api_call("x")``, ``require_egress("x")`` and the like."""
         keys = _literal_service_keys()
-        self.assertIn("trivia_generation", keys)
+        self.assertIn("wikimedia", keys)
         missing = sorted(f"{key} at {where}" for key, where in keys.items() if explicit_category(key) is None)
         self.assertEqual(missing, [])
-
-    def test_every_ai_provider_s_fallback_key_is_classified(self) -> None:
-        """An ``LLMGateway`` built without a feature logs its calls as ``ai_<provider>``."""
-        from urbanlens.dashboard.services.ai.gateway import LLMGateway
-
-        _import_everything_under("urbanlens.dashboard.services.ai")
-        pending, providers = list(LLMGateway.__subclasses__()), set()
-        while pending:
-            cls = pending.pop()
-            pending.extend(cls.__subclasses__())
-            if "PROVIDER" in vars(cls):
-                providers.add(cls.PROVIDER)
-        self.assertGreaterEqual(providers, {"openai", "cloudflare", "anthropic"})
-        for provider in providers:
-            with self.subTest(provider=provider):
-                self.assertIs(explicit_category(f"ai_{provider}"), EgressCategory.AI)
 
     def test_every_path_that_bypasses_the_session_says_how_it_is_held(self) -> None:
         for service, entry in UNLEDGERED_SERVICES.items():
@@ -134,15 +118,8 @@ class EveryServiceIsClassifiedTests(SimpleTestCase):
                 self.assertTrue(entry.enforced_by.strip())
 
     def test_the_paths_the_audit_named_are_classified(self) -> None:
-        """The LLM features, SMTP, Twilio, Stripe and Google Calendar (2026-10-05 egress audit)."""
+        """The model-backed features, SMTP, Twilio and Google Calendar (2026-10-05 egress audit)."""
         for service in (
-            "trivia_generation",
-            "link_extraction",
-            "document_pin_import",
-            "trip_suggestions",
-            "label_style_suggestions",
-            "category_suggestions",
-            "assistant",
             "email",
             "sms",
             "whatsapp",
@@ -177,4 +154,6 @@ class EveryBeatEntryIsClassifiedTests(SimpleTestCase):
         from urbanlens.UrbanLens.egress import beat_classification
 
         classification = beat_classification()
-        self.assertEqual(sorted(name for name in GATED_BACKGROUND_TASKS if classification.get(name) is not BeatEgress.EXTERNAL), [])
+        self.assertEqual(
+            sorted(name for name in GATED_BACKGROUND_TASKS if classification.get(name) is not BeatEgress.EXTERNAL), []
+        )

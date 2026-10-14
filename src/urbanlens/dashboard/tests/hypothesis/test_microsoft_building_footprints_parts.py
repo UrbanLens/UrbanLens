@@ -1,5 +1,5 @@
 """
-Microsoft's building footprints are read a zoom-9 quadkey's part at a time, and a part runs to 292 MB (P309).
+Microsoft's building footprints are read a zoom-9 quadkey's part at a time, and a part runs to 292 MB.
 
 The links file lists 178 parts over 64 MiB, the largest Tokyo's at 292 MB compressed and one in the US at 170 MB. A
 boundary lookup downloaded the part whole, decompressed it whole and split the text into a list of lines, so its

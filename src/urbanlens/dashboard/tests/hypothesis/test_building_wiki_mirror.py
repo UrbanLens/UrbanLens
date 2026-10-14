@@ -145,7 +145,7 @@ class BuildingImportRequestTests(TestCase):
         LocationCache.set(
             self.location,
             PARCEL_BUILDINGS_CACHE_SOURCE,
-            {"buildings": [_building(1), _building(2)], "provider": "redata"},
+            {"buildings": [_building(1), _building(2)], "provider": "registry"},
             query_key="k",
         )
 

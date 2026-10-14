@@ -1,7 +1,7 @@
 """
 A new wiki is enriched only on behalf of someone who allowed outbound lookups.
 
-Enrichment sends the coordinate to Google, REData, Overpass and Overture. A pin whose owner turned
+Enrichment sends the coordinate to Google, Overpass, Overture and every other data provider. A pin whose owner turned
 ``external_apis_enabled`` off still gives its location a wiki, which is local, but must not cause those calls.
 """
 

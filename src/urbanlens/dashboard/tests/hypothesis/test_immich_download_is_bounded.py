@@ -1,7 +1,7 @@
 """
 The Immich proxy reads a user-supplied server's whole response into memory.
 
-N21 H24/H38. The *cache* half is already fixed - `bounded_cache.set_if_small`
+The *cache* half is already fixed - `bounded_cache.set_if_small`
 refuses to store an oversized body, with a comment noting the server is the
 user's own and `size=thumbnail` is a request rather than a guarantee. What that
 does not touch is the read: `_get_binary` calls `response.content`, which

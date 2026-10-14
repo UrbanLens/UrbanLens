@@ -1,3 +1,5 @@
+import { type OptionalRoute, pluginEntries } from "./plugin-entries.js";
+
 /**
  * Site paths, in one place. Specs address pages through these rather than through string literals,
  * so a route that moves is one edit here instead of a grep across the suite.
@@ -47,10 +49,9 @@ export const appRoutes = {
  * unavailable instead of failing. When one *is* served it still has to render
  * properly, which is the half worth testing.
  */
-export const optionalRoutes: ReadonlyArray<{ name: string; path: string; gate: string }> = [
+export const optionalRoutes: ReadonlyArray<OptionalRoute> = [
     { name: "games", path: "/dashboard/games/", gate: "AlphaFeatureRequiredMixin - the account needs the alpha flag" },
-    { name: "assistant", path: "/dashboard/assistant/", gate: "the account needs a subscription including AI features" },
-    { name: "costs", path: "/dashboard/costs/", gate: "SiteSettings.public_costs_page_enabled, off by default" },
+    ...pluginEntries.optionalRoutes,
 ];
 
 /** Informational pages, reachable signed in or out. */

@@ -24,6 +24,7 @@ from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededErro
 
 logger = logging.getLogger(__name__)
 
+
 def _default_primary() -> str:
     """
     This deployment's primary Overpass endpoint.
@@ -67,7 +68,7 @@ DOWN_CAP_SECONDS = 3600
 DOWN_STATED_MAX_SECONDS = 86_400
 #: How long a run of failures is remembered after its last one.
 _STRIKES_MEMORY_SECONDS = 6 * 3600
-_USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; hello@urbanlens.org) python-requests/2.x"
+_USER_AGENT = "UrbanLens/1.0 (+https://github.com/UrbanLens/UrbanLens) python-requests/2.x"
 
 
 class OverpassUnavailableError(GatewayRequestError):
@@ -232,6 +233,8 @@ class OverpassGateway(Gateway, BoundaryProvider):
 
     service_key: ClassVar[str] = "overpass"
     paid_service: ClassVar[bool] = False
+    vote_source: ClassVar[str | None] = "overpass"
+    vote_label: ClassVar[str] = "OpenStreetMap (Overpass)"
 
     #: Primary endpoint, asked first. Empty means no primary: use ``UL_OVERPASS_API_URL``.
     #: default_factory so settings changes apply per instance; a bare default freezes at import.
@@ -268,7 +271,7 @@ class OverpassGateway(Gateway, BoundaryProvider):
 
         The primary (``UL_OVERPASS_API_URL``) comes first; the public mirrors are their own
         ``quota`` service, :data:`PUBLIC_MIRROR_SERVICE`: where the environment
-        does not call it (off production by default, D26) only the primary is asked,
+        does not call it (off production by default) only the primary is asked,
         and with no primary configured there is nothing to ask.
         """
         from urbanlens.dashboard.services.core.egress import egress_permitted
@@ -312,10 +315,7 @@ class OverpassGateway(Gateway, BoundaryProvider):
         candidates = self._available_endpoints()
         if not candidates:
             if not self._endpoints():
-                raise OverpassUnavailableError(
-                    "No Overpass endpoint is available: UL_OVERPASS_API_URL is unset and the "
-                    "public mirrors are not permitted in this environment"
-                )
+                raise OverpassUnavailableError("No Overpass endpoint is available: UL_OVERPASS_API_URL is unset and the public mirrors are not permitted in this environment")
             raise OverpassUnavailableError("Every Overpass endpoint is flagged down")
         last_error: requests.RequestException | None = None
         suspect_empty: tuple[str, dict[str, Any]] | None = None

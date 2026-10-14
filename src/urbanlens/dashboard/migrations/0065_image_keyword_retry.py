@@ -1,4 +1,4 @@
-"""Record each keyword source that did not answer for a photo, and when to ask it again (P323)."""
+"""Record each keyword source that did not answer for a photo, and when to ask it again."""
 
 from django.db import migrations, models
 import django.db.models.deletion

@@ -179,7 +179,7 @@ def provision_account(
         role: Role name the suite refers to this account by.
         password: Plaintext password to set.
         with_api_keys: Whether to mint external-API keys as well.
-        external_apis: Whether to leave outbound providers and AI enabled.
+        external_apis: Whether to leave outbound providers enabled.
         subscriber: Whether the account holds the suite's subscriber role. False revokes an earlier grant of it.
 
     Returns:
@@ -240,7 +240,7 @@ def provision(
         roles: Role names to provision.
         password: Shared plaintext password.
         with_api_keys: Whether to mint external-API keys.
-        external_apis: Whether to leave outbound providers and AI enabled.
+        external_apis: Whether to leave outbound providers enabled.
         subscriber_roles: Roles that hold the suite's subscriber role; every other role has it revoked.
 
     Returns:
@@ -309,7 +309,7 @@ def prepare_signed_in_account(user: User, *, external_apis: bool = False) -> Pro
 
     Args:
         user: An integration account.
-        external_apis: Whether to leave outbound providers and AI enabled.
+        external_apis: Whether to leave outbound providers enabled.
 
     Returns:
         The account's profile.
@@ -368,16 +368,14 @@ def _prepare_profile(user: User, *, external_apis: bool) -> Profile:
     profile.welcome_onboarding_complete = True
     profile.profile_setup_complete = True
     # These accounts are driven hard and repeatedly. Every provider outside
-    # REData bills per call, so a suite that left these on would turn a test run
+    # first-party data services bills per call, so a suite that left these on would turn a test run
     # into a bill - the same reasoning as the demo seeder's.
     profile.external_apis_enabled = external_apis
-    profile.ai_enabled = external_apis
     profile.save(
         update_fields=[
             "welcome_onboarding_complete",
             "profile_setup_complete",
             "external_apis_enabled",
-            "ai_enabled",
         ],
     )
     profile.ensure_slug()

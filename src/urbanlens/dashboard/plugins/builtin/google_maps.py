@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from decimal import Decimal
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
@@ -10,8 +9,7 @@ from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.UrbanLens.egress import EgressCategory
 
 if TYPE_CHECKING:
-    from urbanlens.dashboard.services.apis.locations.base import SatelliteViewProvider, StreetViewProvider
-    from urbanlens.dashboard.services.locations.enrichment import EnrichmentSource
+    from urbanlens.dashboard.plugins.base import PluginContext
 
 
 class GoogleMapsPlugin(UrbanLensPlugin):
@@ -24,28 +22,39 @@ class GoogleMapsPlugin(UrbanLensPlugin):
     # First in both imagery carousels.
     order: ClassVar[int] = 10
 
-    def get_service_defaults(self) -> dict[str, ServiceDefaults]:
-        """Rate-limit defaults for the Google static imagery APIs and the Street View coverage probe."""
-        return {
-            "google_maps": ServiceDefaults(
-                display_name="Google Maps (Static/StreetView)",
-                category=EgressCategory.BILLED,
-                calls_per_minute=20,
-                calls_per_day=200,
-                # Static Maps and Street View Static are 10,000 a month free each; REData calls neither.
-                free_tier_per_calendar_month=10_000,
-                notes="Static Maps and Street View Static: 10,000 free a month each, then $2 and $7 per 1,000. The coverage probes before a Street View image are counted here too, though Google does not bill them.",
-            ),
-            "google_street_view_metadata": ServiceDefaults(
-                display_name="Google Street View Metadata",
-                category=EgressCategory.QUOTA,
-                calls_per_minute=60,
-                calls_per_day=5000,
-                notes='Map right-click coverage probe. Free: "Street View Static API metadata requests are available at no charge. No quota is consumed" (developers.google.com/maps/documentation/streetview/metadata).',
-                cost_per_call=Decimal(0),
-                billable=False,
-            ),
-        }
+    def setup(self, plugin: PluginContext) -> None:
+        """Google static satellite and Street View providers, their rate-limit defaults, and background backfill of their photos."""
+        from urbanlens.dashboard.plugins.points import ENRICHMENT_SOURCES, SATELLITE_PROVIDERS, SERVICE_DEFAULTS, STREET_VIEW_PROVIDERS
+        from urbanlens.dashboard.services.photos.photo_enrichment import SatelliteEnrichmentSource, StreetViewEnrichmentSource
+
+        plugin.register_all(
+            SERVICE_DEFAULTS,
+            {
+                "google_maps": ServiceDefaults(
+                    display_name="Google Maps (Static/StreetView)",
+                    category=EgressCategory.BILLED,
+                    calls_per_minute=20,
+                    calls_per_day=200,
+                    # Static Maps and Street View Static are 10,000 a month free each; nothing else on the account calls either.
+                    free_tier_per_calendar_month=10_000,
+                    notes="Static Maps and Street View Static: 10,000 free a month each, then billed per call. The coverage probes before a Street View image are counted here too, though Google does not bill them.",
+                ),
+                "google_street_view_metadata": ServiceDefaults(
+                    display_name="Google Street View Metadata",
+                    category=EgressCategory.QUOTA,
+                    calls_per_minute=60,
+                    calls_per_day=5000,
+                    notes='Map right-click coverage probe. Free: "Street View Static API metadata requests are available at no charge. No quota is consumed" (developers.google.com/maps/documentation/streetview/metadata).',
+                    billable=False,
+                ),
+            },
+        )
+
+        plugin.add(SATELLITE_PROVIDERS, self._gateway)
+
+        plugin.add(STREET_VIEW_PROVIDERS, self._gateway)
+
+        plugin.extend(ENRICHMENT_SOURCES, [StreetViewEnrichmentSource(), SatelliteEnrichmentSource()])
 
     def _gateway(self):
         """Build a gateway with the unrestricted API key."""
@@ -53,17 +62,3 @@ class GoogleMapsPlugin(UrbanLensPlugin):
         from urbanlens.UrbanLens.settings.app import settings
 
         return GoogleMapsGateway(api_key=settings.google_unrestricted_api_key or "")
-
-    def get_satellite_providers(self) -> list[SatelliteViewProvider]:
-        """Contribute Google static satellite imagery."""
-        return [self._gateway()]
-
-    def get_street_view_providers(self) -> list[StreetViewProvider]:
-        """Contribute Google Street View imagery."""
-        return [self._gateway()]
-
-    def get_enrichment_sources(self) -> list[EnrichmentSource]:
-        """Contribute static Street View/satellite photo backfill to scheduled background enrichment."""
-        from urbanlens.dashboard.services.photos.photo_enrichment import SatelliteEnrichmentSource, StreetViewEnrichmentSource
-
-        return [StreetViewEnrichmentSource(), SatelliteEnrichmentSource()]

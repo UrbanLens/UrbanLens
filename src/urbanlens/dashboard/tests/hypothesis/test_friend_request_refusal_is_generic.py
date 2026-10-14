@@ -1,4 +1,4 @@
-"""A refused friend request does not say which policy refused it (G3-12)."""
+"""A refused friend request does not say which policy refused it."""
 
 from __future__ import annotations
 

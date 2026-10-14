@@ -96,7 +96,7 @@ class Command(BaseCommand):
         if not key:
             self.stdout.write(self.style.ERROR("ERROR: No API key configured. Set UL_GOOGLE_UNRESTRICTED_API_KEY in your .env file."))
             return
-        # Its requests go straight to the billed Places API, outside the ledger, so it asks the policy itself (D26).
+        # Its requests go straight to the billed Places API, outside the ledger, so it asks the policy itself.
         if not egress_permitted("google_places"):
             self.stdout.write(self.style.ERROR("ERROR: this environment does not call google_places. Set UL_ENVIRONMENT_SHARE_OVERRIDES=google_places=<share> to run it here."))
             return

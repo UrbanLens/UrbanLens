@@ -1,4 +1,4 @@
-"""A building's wiki drops a Wikipedia article seeded from the match at its point, which was its campus's (P262).
+"""A building's wiki drops a Wikipedia article seeded from the match at its point, which was its campus's.
 
 A wiki nested under another, holding no place of its own or one of a multi-building parcel's buildings, takes no
 Wikipedia article from now on (``wiki_seed.takes_wikipedia_article``). One already seeded is removed only while it is

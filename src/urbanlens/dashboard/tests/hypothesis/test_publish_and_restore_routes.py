@@ -138,7 +138,7 @@ class PinWikiSyncRouteTests(_Users):
 class FloorplanPublishRouteTests(_Users):
     def setUp(self) -> None:
         super().setUp()
-        self.place = baker.make(Place, kind=PlaceKind.BUILDING, provider="redata", provider_key="cris:p29-1")
+        self.place = baker.make(Place, kind=PlaceKind.BUILDING, provider="registry", provider_key="cris:b29-1")
         self.location = baker.make(Location, latitude=41.71, longitude=-73.91, place=self.place)
         self.wiki = baker.make(Wiki, place=self.place, location=self.location)
         self.pin = baker.make(Pin, profile=self.profile, location=self.location, name="Old Mill")

@@ -143,8 +143,7 @@ class TheLabelsTravelOncePerResponseTests(TestCase):
     A pin names its labels by id, so the response has to carry the dictionary.
 
     The alternative - each pin carrying its labels' names, colours and icons - is what made one label edit
-    rewrite every payload that carried it, and what made a shared vocabulary the largest thing in the document
-    (D12)."""
+    rewrite every payload that carried it, and what made a shared vocabulary the largest thing in the document."""
 
     def setUp(self) -> None:
         super().setUp()
