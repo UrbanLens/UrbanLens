@@ -77,11 +77,12 @@ const projects: Project[] = [
         use: { ...devices["Desktop Chrome"], ...signedIn },
     },
     {
-        // Specs a package plugin ships beside itself (src/urbanlens/plugins/<name>/integration/specs/*.playwright.ts), so a tree
-        // without the plugin has none of them.
+        // Specs a package plugin ships beside itself (src/urbanlens/plugins/<name>/integration/specs/*.playwright.mts), so a
+        // tree without the plugin has none of them. `.mts`, because a `.ts` there takes the repo root's package.json, which
+        // is not `"type": "module"`, and fails to import this suite's ESM lib/ under Node.
         name: "plugins",
         testDir: "../../src/urbanlens/plugins",
-        testMatch: /integration\/specs\/.*\.playwright\.ts$/,
+        testMatch: /integration\/specs\/.*\.playwright\.mts$/,
         dependencies: ["setup"],
         use: { ...devices["Desktop Chrome"], ...signedIn },
     },

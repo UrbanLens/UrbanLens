@@ -30,7 +30,7 @@ src/urbanlens/plugins/storefront/
     management/commands/
     requirements.txt       # optional; see Dependencies
     build.sh               # optional; run in the image build after its requirements are installed
-    integration/           # optional; Playwright routes and specs for the integration suite
+    integration/           # optional; entries.json and specs/*.playwright.mts for the integration suite
     tests/
 ```
 

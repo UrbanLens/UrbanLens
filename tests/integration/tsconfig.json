@@ -16,6 +16,6 @@
         "forceConsistentCasingInFileNames": true,
         "verbatimModuleSyntax": true
     },
-    "include": ["**/*.ts"],
+    "include": ["**/*.ts", "../../src/urbanlens/plugins/*/integration/**/*.mts"],
     "exclude": ["node_modules", "reports", ".auth"]
 }
