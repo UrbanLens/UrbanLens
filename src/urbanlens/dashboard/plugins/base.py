@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.plugins.hooks import HookRegistry
     from urbanlens.dashboard.services.apis.locations.base import SatelliteViewProvider, StreetViewProvider
+    from urbanlens.dashboard.services.core.egress import Unledgered
     from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
     from urbanlens.dashboard.services.locations.enrichment import EnrichmentSource
     from urbanlens.dashboard.services.locations.name_resolution import NameProvider
     from urbanlens.dashboard.services.photos.photo_keywords import PhotoKeywordProvider
     from urbanlens.dashboard.services.pins.external_data import PanelSource
+    from urbanlens.UrbanLens.egress import BeatEgress
 
 
 class UrbanLensPlugin:
@@ -98,9 +100,8 @@ class UrbanLensPlugin:
         URL routes contributed by this plugin, as ``django.urls.path`` entries.
 
         Collected into the root urlconf, so an install without the plugin simply
-        has no such routes (templates must branch on the generic
-        ``plugin_names`` context variable, and tests with ``skipUnless`` on
-        plugin availability).
+        has no such routes. Templates reach them through a plugin slot, and
+        tests use ``skipUnless`` on plugin availability.
 
         Returns:
             URL patterns; empty when the plugin contributes no routes."""
@@ -117,6 +118,59 @@ class UrbanLensPlugin:
         Returns:
             ``(model, ModelAdmin)`` pairs; empty when the plugin contributes none."""
         return []
+
+    def get_beat_schedule(self) -> dict[str, dict[str, Any]]:
+        """
+        Celery beat entries this plugin's tasks run under, in ``CELERY_BEAT_SCHEDULE`` shape.
+
+        Scheduled after startup, filtered for the environment like the core entries, so an install without
+        the plugin never schedules them.
+
+        Returns:
+            Mapping of entry name to ``{"task": dotted_path, "schedule": ...}``; empty when none.
+        """
+        return {}
+
+    def get_beat_egress(self) -> dict[str, BeatEgress]:
+        """
+        Egress classification of this plugin's beat entries; every name in :meth:`get_beat_schedule` needs one.
+
+        Returns:
+            Mapping of entry name to its classification; empty when none.
+        """
+        return {}
+
+    def get_unledgered_services(self) -> dict[str, Unledgered]:
+        """
+        External calls this plugin makes that have no rate-limited gateway, classified for the egress policy.
+
+        Returns:
+            Mapping of service key to its classification; empty when none.
+        """
+        return {}
+
+    def get_csp_sources(self) -> dict[str, list[str]]:
+        """
+        Content-Security-Policy sources this plugin's pages need, by directive name.
+
+        Added to the policy at startup, after the core directives.
+
+        Returns:
+            Mapping of directive name (for example ``form-action``) to origins; empty when none.
+        """
+        return {}
+
+    def get_template_slots(self) -> dict[str, list[str]]:
+        """
+        Template fragments this plugin adds to core pages.
+
+        Core templates render a slot with ``{% plugin_slot "name" %}``; each template named here renders in place of it,
+        with the page's context. A slot with no contributions renders nothing.
+
+        Returns:
+            Mapping of slot name to template names; empty when none.
+        """
+        return {}
 
     def register(self, hooks: HookRegistry) -> None:
         """

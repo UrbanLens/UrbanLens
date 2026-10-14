@@ -23,9 +23,8 @@ def plugin_available(name: str) -> bool:
 
     Discovery runs in the app's ``ready()``, so this is only meaningful after
     Django setup - which is always the case for requests, tasks, and collected
-    tests. It says nothing about ``UL_DISABLED_PLUGINS``; templates deciding
-    whether a route exists want the generic ``plugin_names`` context variable
-    instead.
+    tests. It says nothing about ``UL_DISABLED_PLUGINS``; a page that links to
+    a plugin's route contributes that link through a plugin slot instead.
 
     Args:
         name: The plugin slug.

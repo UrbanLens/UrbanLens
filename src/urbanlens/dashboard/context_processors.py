@@ -82,26 +82,6 @@ def add_site_settings(request: HttpRequest) -> dict[str, str | bool]:
     }
 
 
-def add_plugin_context(request: HttpRequest) -> dict[str, list[str]]:
-    """
-    Expose the enabled plugins to templates.
-
-    Optional-plugin UI (billing sections, subscription links) branches on
-    ``{% if "billing" in plugin_names %}`` instead of naming plugin modules,
-    so an install without the plugin renders cleanly. The plugin itself only
-    ever appears here by declaring its slug.
-
-    Args:
-        request: The current HttpRequest.
-
-    Returns:
-        dict with ``plugin_names``.
-    """
-    from urbanlens.dashboard.plugins import plugin_registry
-
-    return {"plugin_names": sorted(plugin.name for plugin in plugin_registry.enabled_plugins())}
-
-
 @deferred("show_dev_toolbar", "dev_toolbar_theme_mode", "dev_toolbar_map_dark_mode")
 def add_dev_toolbar(request: HttpRequest) -> dict[str, bool | str]:
     """

@@ -146,7 +146,6 @@ class EveryServiceIsClassifiedTests(SimpleTestCase):
             "email",
             "sms",
             "whatsapp",
-            "stripe",
             "google_calendar",
             "wayback_save",
             "unified_push",
@@ -175,7 +174,7 @@ class EveryBeatEntryIsClassifiedTests(SimpleTestCase):
 
     def test_no_internal_entry_is_gated(self) -> None:
         import urbanlens.dashboard.tasks  # noqa: F401 - registers the gated tasks
+        from urbanlens.UrbanLens.egress import beat_classification
 
-        self.assertEqual(
-            sorted(name for name in GATED_BACKGROUND_TASKS if BEAT_EGRESS.get(name) is not BeatEgress.EXTERNAL), []
-        )
+        classification = beat_classification()
+        self.assertEqual(sorted(name for name in GATED_BACKGROUND_TASKS if classification.get(name) is not BeatEgress.EXTERNAL), [])

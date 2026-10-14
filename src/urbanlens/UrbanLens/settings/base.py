@@ -190,7 +190,6 @@ CONTEXT_PROCESSORS = [
     "django.contrib.messages.context_processors.messages",
     "urbanlens.dashboard.context_processors.add_page_name",
     "urbanlens.dashboard.context_processors.add_site_settings",
-    "urbanlens.dashboard.context_processors.add_plugin_context",
     "urbanlens.dashboard.context_processors.add_dev_toolbar",
     "urbanlens.dashboard.context_processors.add_feature_access",
     "urbanlens.dashboard.context_processors.add_pending_account_deletion",
@@ -214,6 +213,8 @@ TEMPLATES = [
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": CONTEXT_PROCESSORS,
+            # Plugin slots render on any page without a {% load %}.
+            "builtins": ["urbanlens.dashboard.templatetags.plugin_slots"],
         },
     },
     {
@@ -419,29 +420,6 @@ UL_BACKUP_RETENTION = int(os.getenv("UL_BACKUP_RETENTION", "30"))
 UL_MAP_SHARE_ZOOM_THRESHOLD = float(os.getenv("UL_MAP_SHARE_ZOOM_THRESHOLD", "14"))
 
 
-def _task_module_installed(task_path: str) -> bool:
-    """
-    Whether the task's module exists in this install, without importing it.
-
-    A beat entry pointing at an optional plugin's task must not be scheduled
-    where the plugin is absent; a typo'd path is equally missing, and logs.
-
-    Args:
-        task_path: Dotted path to the task function.
-
-    Returns:
-        True when the module part imports.
-    """
-    import importlib.util
-    import logging
-
-    module, _, _ = task_path.rpartition(".")
-    installed = importlib.util.find_spec(module) is not None
-    if not installed:
-        logging.getLogger(__name__).warning("Beat entry for %s is not scheduled: task module %s is not installed", task_path, module)
-    return installed
-
-
 # Hourly work is staggered so same-interval entries don't stampede one queue. Every entry is classified in
 # urbanlens.UrbanLens.egress.BEAT_EGRESS; CELERY_BEAT_SCHEDULE below is what this environment runs.
 FULL_BEAT_SCHEDULE = {
@@ -497,16 +475,6 @@ FULL_BEAT_SCHEDULE = {
     "reputation-sweep": {
         "task": "urbanlens.dashboard.tasks.sweep_reputation",
         "schedule": crontab(hour=6, minute=10),
-    },
-    # Safety net for missed subscription-provider webhooks (billing plugin's task).
-    "stripe-subscriptions-sync": {
-        "task": "urbanlens.dashboard.plugins.builtin.billing.sync_stripe_subscriptions",
-        "schedule": crontab(hour=4, minute=10),
-    },
-    # Counts down banked access after cancel; webhooks stop firing then (billing plugin's task).
-    "pwyw-usage-ledger-sweep": {
-        "task": "urbanlens.dashboard.plugins.builtin.billing.advance_pwyw_usage_ledgers",
-        "schedule": crontab(hour=4, minute=40),
     },
     "safety-checkin-due-reminders": {
         "task": "urbanlens.dashboard.tasks.send_due_checkin_reminders",
@@ -674,10 +642,8 @@ FULL_BEAT_SCHEDULE = {
     },
 }
 # Off production, only work that stays inside this deployment, plus UL_BACKGROUND_TASKS_ALLOWLIST (D26).
-# Entries whose task module is not installed (an optional plugin's tasks on an
-# install without it) are left out: beat would otherwise send them nightly to a
-# worker that can only answer "unregistered task".
-CELERY_BEAT_SCHEDULE = {name: entry for name, entry in scheduled_beat_entries(FULL_BEAT_SCHEDULE, EGRESS_ENVIRONMENT, _app_settings.background_tasks_allowlist).items() if _task_module_installed(entry["task"])}
+# Plugins' entries join this schedule at Celery startup (urbanlens.UrbanLens.celery).
+CELERY_BEAT_SCHEDULE = scheduled_beat_entries(FULL_BEAT_SCHEDULE, EGRESS_ENVIRONMENT, _app_settings.background_tasks_allowlist)
 
 
 # Password validation
@@ -915,13 +881,11 @@ _CSP_DIRECTIVES: dict[str, list[str]] = {
     "frame-ancestors": ["'self'"],
     # controllers/csp_report.py logs each one.
     "report-uri": ["/csp-report/"],
-    # Chrome also checks the redirect a form POST answers with: social login and Stripe hand off to these.
+    # Chrome also checks the redirect a form POST answers with: social login hands off to these. Plugins add theirs.
     "form-action": [
         "'self'",
         "https://accounts.google.com",
         "https://discord.com",
-        "https://checkout.stripe.com",
-        "https://billing.stripe.com",
     ],
 }
 

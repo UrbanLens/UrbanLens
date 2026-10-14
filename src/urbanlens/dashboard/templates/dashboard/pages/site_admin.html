@@ -388,8 +388,7 @@
             <div class="form-row">
                 <label for="storage-quota-gb">Default storage quota (GB)</label>
                 <p class="form-help">
-                    Photo/video storage each regular user may use.{% if "billing" in plugin_names %} Subscription roles can grant a larger
-                    quota on the <a href="{% url 'site_admin_subscriptions' %}">Subscription Access</a> page.{% endif %}
+                    Photo/video storage each regular user may use.{% plugin_slot "site_admin.storage_quota.note" %}
                     Set to <strong>0</strong> for unlimited.
                 </p>
                 <input type="number" name="storage_quota_gb" id="storage-quota-gb"
@@ -498,8 +497,7 @@
                 <label for="email-limit-per-hour">Emails per hour</label>
                 <p class="form-help">
                     Caps on emails a single user can trigger to third parties (friend invitations, visit
-                    invitations, ...).{% if "billing" in plugin_names %} Subscription roles can raise these per tier on the
-                    <a href="{% url 'site_admin_subscriptions' %}">Subscription Access</a> page.{% endif %}
+                    invitations, ...).{% plugin_slot "site_admin.email_limits.note" %}
                     Set a value to <strong>0</strong> for unlimited.
                 </p>
                 <input type="number" name="email_limit_per_hour" id="email-limit-per-hour"

@@ -130,6 +130,17 @@ class DashboardConfig(AppConfig):
             except AlreadyRegistered:
                 continue
 
+        # Plugins name the origins their pages load. django-csp reads the policy per request, so appending here is enough;
+        # the enforcing and report-only policies share one directives dict, hence the de-duplication.
+        from django.conf import settings as django_settings
+
+        for policy_name in ("CONTENT_SECURITY_POLICY", "CONTENT_SECURITY_POLICY_REPORT_ONLY"):
+            policy = getattr(django_settings, policy_name, None)
+            if policy:
+                for directive, origins in plugin_registry.csp_sources().items():
+                    existing = policy["DIRECTIVES"].setdefault(directive, [])
+                    existing.extend(origin for origin in origins if origin not in existing)
+
         # Logs callable egress once per process after discovery, so overrides are never silent.
         from urbanlens.dashboard.services.core.egress import log_egress_policy
 

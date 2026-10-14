@@ -337,7 +337,7 @@ class BeatEgress(StrEnum):
     INTERNAL = "internal"
 
 
-#: Every ``CELERY_BEAT_SCHEDULE`` entry, classified. Off production only ``INTERNAL`` entries are scheduled,
+#: Every core ``CELERY_BEAT_SCHEDULE`` entry, classified (plugins' entries: :func:`beat_classification`). Off production only ``INTERNAL`` entries are scheduled,
 #: plus any named in ``UL_BACKGROUND_TASKS_ALLOWLIST``; an ``EXTERNAL`` task also checks for itself
 #: (``services.core.egress.external_background_task``), so a run enqueued some other way stops too.
 BEAT_EGRESS: Mapping[str, BeatEgress] = {
@@ -353,8 +353,6 @@ BEAT_EGRESS: Mapping[str, BeatEgress] = {
     "consensus-stall-sweep": BeatEgress.INTERNAL,
     "achievements-sweep": BeatEgress.INTERNAL,
     "reputation-sweep": BeatEgress.INTERNAL,
-    "stripe-subscriptions-sync": BeatEgress.EXTERNAL,
-    "pwyw-usage-ledger-sweep": BeatEgress.INTERNAL,
     "safety-checkin-due-reminders": BeatEgress.INTERNAL,
     "safety-checkin-final-warnings": BeatEgress.INTERNAL,
     "safety-checkin-escalation": BeatEgress.INTERNAL,
@@ -408,18 +406,38 @@ def background_egress_permitted(entry: str, environment: str, allowlist: Iterabl
     return full_egress(environment) or entry in set(allowlist)
 
 
-def scheduled_beat_entries(schedule: Mapping[str, Any], environment: str, allowlist: Iterable[str]) -> dict[str, Any]:
+def beat_classification() -> dict[str, BeatEgress]:
+    """
+    Every beat entry's classification: this module's, then each enabled plugin's.
+
+    Plugins are discovered in ``AppConfig.ready()``, so this is complete only after startup.
+
+    Returns:
+        The merged classification; this module's entry wins a name clash.
+    """
+    from urbanlens.dashboard.plugins import plugin_registry
+
+    return {**plugin_registry.beat_egress(), **BEAT_EGRESS}
+
+
+def scheduled_beat_entries(
+    schedule: Mapping[str, Any],
+    environment: str,
+    allowlist: Iterable[str],
+    classification: Mapping[str, BeatEgress] = BEAT_EGRESS,
+) -> dict[str, Any]:
     """
     The beat entries this environment runs.
 
     Args:
-        schedule: The whole ``CELERY_BEAT_SCHEDULE``.
+        schedule: The schedule to filter, such as the whole ``CELERY_BEAT_SCHEDULE``.
         environment: A :func:`policy_environment` value.
         allowlist: ``UL_BACKGROUND_TASKS_ALLOWLIST``.
+        classification: Each entry's egress class; :func:`beat_classification` includes plugins' entries.
 
     Returns:
         Every entry on production and in tests; elsewhere the ``INTERNAL`` ones and the allow-listed ones. An entry
-        :data:`BEAT_EGRESS` does not classify is treated as ``EXTERNAL``.
+        ``classification`` does not name is treated as ``EXTERNAL``.
     """
     allowed = set(allowlist)
-    return {name: entry for name, entry in schedule.items() if BEAT_EGRESS.get(name, BeatEgress.EXTERNAL) is BeatEgress.INTERNAL or background_egress_permitted(name, environment, allowed)}
+    return {name: entry for name, entry in schedule.items() if classification.get(name, BeatEgress.EXTERNAL) is BeatEgress.INTERNAL or background_egress_permitted(name, environment, allowed)}

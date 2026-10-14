@@ -280,7 +280,6 @@ class BeatScheduleTests(SimpleTestCase):
             "scheduled-trivia-generation",
             "scheduled-trivia-wiki-incorporation",
             "calendar-push-sweep",
-            "stripe-subscriptions-sync",
         ):
             self.assertNotIn(name, scheduled)
         for name in (

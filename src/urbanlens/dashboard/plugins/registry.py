@@ -11,18 +11,20 @@ import inspect
 import logging
 import pkgutil
 from types import ModuleType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.plugins.hooks import ACTION_PLUGINS_LOADED, hooks
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.services.apis.locations.base import SatelliteViewProvider, StreetViewProvider
+    from urbanlens.dashboard.services.core.egress import Unledgered
     from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
     from urbanlens.dashboard.services.locations.enrichment import EnrichmentSource
     from urbanlens.dashboard.services.locations.name_resolution import NameProvider
     from urbanlens.dashboard.services.photos.photo_keywords import PhotoKeywordProvider
     from urbanlens.dashboard.services.pins.external_data import PanelSource
+    from urbanlens.UrbanLens.egress import BeatEgress
 
 logger = logging.getLogger(__name__)
 
@@ -252,6 +254,71 @@ class PluginRegistry:
             ``(model, ModelAdmin)`` pairs for ``admin.site.register``.
         """
         return self._collect("get_model_admins")
+
+    def beat_schedule(self) -> dict[str, dict[str, Any]]:
+        """
+        Celery beat entries contributed by enabled plugins; the first plugin to claim a name keeps it.
+
+        Returns:
+            Merged mapping of entry name to schedule entry.
+        """
+        return self._merge("get_beat_schedule")
+
+    def beat_egress(self) -> dict[str, BeatEgress]:
+        """
+        Egress classifications of plugin beat entries; the first plugin to claim a name keeps it.
+
+        Returns:
+            Merged mapping of entry name to classification.
+        """
+        return self._merge("get_beat_egress")
+
+    def unledgered_services(self) -> dict[str, Unledgered]:
+        """
+        Unledgered external services contributed by enabled plugins; the first plugin to claim a key keeps it.
+
+        Returns:
+            Merged mapping of service key to classification.
+        """
+        return self._merge("get_unledgered_services")
+
+    def csp_sources(self) -> dict[str, list[str]]:
+        """
+        Content-Security-Policy origins contributed by enabled plugins, per directive, without duplicates.
+
+        Returns:
+            Mapping of directive name to origins.
+        """
+        merged: dict[str, list[str]] = {}
+        for plugin in self.enabled_plugins():
+            for directive, origins in self._safe(plugin, "get_csp_sources", {}).items():
+                existing = merged.setdefault(directive, [])
+                existing.extend(origin for origin in origins if origin not in existing)
+        return merged
+
+    def template_slots(self) -> dict[str, list[str]]:
+        """
+        Template fragments contributed to each page slot by enabled plugins, in plugin order.
+
+        Returns:
+            Mapping of slot name to template names.
+        """
+        merged: dict[str, list[str]] = {}
+        for plugin in self.enabled_plugins():
+            for slot, templates in self._safe(plugin, "get_template_slots", {}).items():
+                merged.setdefault(slot, []).extend(templates)
+        return merged
+
+    def _merge(self, method_name: str) -> dict:
+        """Merge one dict-valued contribution across enabled plugins; the first plugin to claim a key keeps it."""
+        merged: dict = {}
+        for plugin in self.enabled_plugins():
+            for key, value in self._safe(plugin, method_name, {}).items():
+                if key in merged:
+                    logger.warning("Plugin '%s' redeclares %s entry '%s'; keeping the first declaration", plugin.name, method_name, key)
+                    continue
+                merged[key] = value
+        return merged
 
     # Internals
 

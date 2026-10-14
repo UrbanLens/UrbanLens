@@ -21,13 +21,13 @@ import time
 from typing import TYPE_CHECKING, ParamSpec, TypeVar
 
 from urbanlens.UrbanLens.egress import (
-    BEAT_EGRESS,
     UNCLASSIFIED_CATEGORY,
     UNRESTRICTED_CATEGORIES,
     BeatEgress,
     EgressCategory,
     EgressDecision,
     background_egress_permitted,
+    beat_classification,
     decide,
     default_environment_share,
     full_egress,
@@ -66,7 +66,6 @@ class Unledgered:
 UNLEDGERED_SERVICES: Mapping[str, Unledgered] = {
     "email": Unledgered(EgressCategory.MESSAGING, "settings.EMAIL_DELIVERY_BACKEND: the console backend off production unless UL_EMAIL_SEND_OUTSIDE_PRODUCTION"),
     "unified_push": Unledgered(EgressCategory.MESSAGING, "services.notifications.push.send_push_to_devices: require_egress before each batch"),
-    "stripe": Unledgered(EgressCategory.PUBLIC_WRITE, "services.billing.stripe_client: is_configured and configure ask before any SDK call"),
     "google_oauth_refresh": Unledgered(EgressCategory.QUOTA, "the calendar and photos gateways ask for their own service before refreshing"),
     "google_oauth_connect": Unledgered(EgressCategory.QUOTA, "not held: a person connecting or disconnecting their own account"),
     "social_sign_in": Unledgered(EgressCategory.QUOTA, "not held: Google and Discord sign-in, inside social_core"),
@@ -182,6 +181,18 @@ def forget_categories() -> None:
     _known_categories.clear()
 
 
+def unledgered_services() -> Mapping[str, Unledgered]:
+    """
+    Every unledgered service: :data:`UNLEDGERED_SERVICES`, then each enabled plugin's.
+
+    Returns:
+        The merged mapping; this module's entry wins a key clash.
+    """
+    from urbanlens.dashboard.plugins import plugin_registry
+
+    return {**plugin_registry.unledgered_services(), **UNLEDGERED_SERVICES}
+
+
 def explicit_category(service: str) -> EgressCategory | None:
     """
     How ``service`` is classified, or None when nothing classifies it.
@@ -203,7 +214,7 @@ def explicit_category(service: str) -> EgressCategory | None:
     except Exception:
         logger.exception("Could not read plugin service defaults for %s; the core registry classifies it", service)
         defaults = SERVICE_REGISTRY.get(service)
-    unledgered = UNLEDGERED_SERVICES.get(service)
+    unledgered = unledgered_services().get(service)
     if defaults is not None and defaults.category is not None:
         category: EgressCategory | None = defaults.category
     else:
@@ -425,14 +436,16 @@ def external_background_task(entry: str) -> Callable[[Callable[P, R]], Callable[
         A decorator; apply it under the Celery task decorator.
 
     Raises:
-        ValueError: ``entry`` is not classified as external.
+        ValueError: When the task runs, ``entry`` is not classified as external.
     """
-    if BEAT_EGRESS.get(entry) is not BeatEgress.EXTERNAL:
-        raise ValueError(f"{entry!r} is not an external beat entry in BEAT_EGRESS")
 
     def decorate(func: Callable[P, R]) -> Callable[P, R | None]:
         @functools.wraps(func)
         def wrapper(*args: P.args, **kwargs: P.kwargs) -> R | None:
+            # Checked per call: a plugin's entries are classified only once the plugin is discovered, which
+            # is after the module that defines the task has been imported.
+            if beat_classification().get(entry) is not BeatEgress.EXTERNAL:
+                raise ValueError(f"{entry!r} is not an external beat entry in the beat classification")
             environment = current_environment()
             if not background_egress_permitted(entry, environment, background_tasks_allowlist()):
                 level = logging.INFO if _should_log_loudly(f"beat:{entry}") else logging.DEBUG
@@ -470,7 +483,7 @@ def log_egress_policy() -> None:
                 logger.warning("UL_ENVIRONMENT_SHARE_OVERRIDES names %r, which is not a classified service", service)
             elif category in UNRESTRICTED_CATEGORIES:
                 logger.warning("UL_ENVIRONMENT_SHARE_OVERRIDES names %r, a %s service no share applies to; its API-limits switch turns it off", service, category)
-        unknown = sorted(background_tasks_allowlist() - set(BEAT_EGRESS))
+        unknown = sorted(background_tasks_allowlist() - set(beat_classification()))
         if unknown:
             logger.warning("UL_BACKGROUND_TASKS_ALLOWLIST names %s, which no beat entry is called", ", ".join(unknown))
     except Exception:

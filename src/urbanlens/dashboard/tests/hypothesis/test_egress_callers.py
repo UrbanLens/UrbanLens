@@ -624,14 +624,14 @@ class StripeTests(SimpleTestCase):
 
         with (
             deployment("staging"),
-            mock.patch("urbanlens.UrbanLens.settings.app.settings.stripe_secret_key", "sk_test_x"),
+            mock.patch("urbanlens.dashboard.services.billing.config.billing_settings.stripe_secret_key", "sk_test_x"),
         ):
             self.assertFalse(stripe_client.is_configured())
             with self.assertRaises(ImproperlyConfigured):
                 stripe_client.configure()
         with (
             deployment("production"),
-            mock.patch("urbanlens.UrbanLens.settings.app.settings.stripe_secret_key", "sk_test_x"),
+            mock.patch("urbanlens.dashboard.services.billing.config.billing_settings.stripe_secret_key", "sk_test_x"),
         ):
             self.assertTrue(stripe_client.is_configured())
 
@@ -714,10 +714,17 @@ class BackgroundTaskGateTests(SimpleTestCase):
         configured.assert_not_called()
 
     def test_only_an_external_entry_can_be_gated(self) -> None:
-        from urbanlens.dashboard.services.core.egress import external_background_task
+        from urbanlens.dashboard.services.core.egress import GATED_BACKGROUND_TASKS, external_background_task
+
+        entry = "not-a-beat-entry-for-this-test"
+        self.addCleanup(GATED_BACKGROUND_TASKS.pop, entry, None)
+
+        @external_background_task(entry)
+        def sweep() -> None:
+            """Stands in for a task that is not classified as reaching outside."""
 
         with self.assertRaises(ValueError):
-            external_background_task("task-outbox-drain")
+            sweep()
 
 
 class OperatorPathsTests(SimpleTestCase):
