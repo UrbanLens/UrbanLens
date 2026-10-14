@@ -64,3 +64,6 @@ sample_data/Google Takeout.csv
 # Sphinx output
 docs/_build/
 docs/api/
+
+# Repowise local index: rebuilt per machine (docs/TOOLING.md)
+/.repowise/
