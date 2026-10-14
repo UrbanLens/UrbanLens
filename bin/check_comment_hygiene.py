@@ -605,7 +605,7 @@ def baseline_file(path: str) -> Path:
     """
     The baseline that records *path*: its plugin's own, so a plugin's directory can be left out of a tree.
     """
-    if path.startswith(PLUGINS):
+    if path.startswith(PLUGINS) and "/" in path.removeprefix(PLUGINS):
         return ROOT / PLUGINS / path.removeprefix(PLUGINS).split("/", 1)[0] / PLUGIN_BASELINE_NAME
     return BASELINE
 
