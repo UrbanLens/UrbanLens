@@ -24,10 +24,11 @@ from urbanlens.dashboard.plugins import plugin_available
 from urbanlens.dashboard.services.admin.site_admin import add_user_to_site_admin_group
 
 try:
-    from urbanlens.dashboard.models.billing import BillingSubscriptionStatus, RoleSubscription
+    from urbanlens.dashboard.models.billing import BillingSubscriptionStatus, RoleSubscription, set_pricing
 except ImportError:
     BillingSubscriptionStatus = None
     RoleSubscription = None
+    set_pricing = None
 
 _seed_vip_role = import_module("urbanlens.dashboard.migrations.0020_seed_vip_subscription_role").seed_vip_role
 
@@ -148,8 +149,7 @@ class PaidSubscriptionFeatureGrantTests(TestCase):
         self.assertNotIn(self.role, active_subscription_roles(self.user))
 
     def test_canceled_subscription_with_unexpired_banked_access_still_grants_the_feature(self) -> None:
-        self.role.pay_what_you_want = True
-        self.role.save()
+        set_pricing(self.role, pay_what_you_want=True)
         baker.make(
             RoleSubscription,
             user=self.user,
@@ -162,8 +162,7 @@ class PaidSubscriptionFeatureGrantTests(TestCase):
         self.assertIn(self.role, active_subscription_roles(self.user))
 
     def test_canceled_subscription_with_expired_banked_access_does_not_grant_the_feature(self) -> None:
-        self.role.pay_what_you_want = True
-        self.role.save()
+        set_pricing(self.role, pay_what_you_want=True)
         baker.make(
             RoleSubscription,
             user=self.user,

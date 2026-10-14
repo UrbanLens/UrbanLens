@@ -190,12 +190,14 @@ class AdvancePwywUsageLedgersTaskTests(TestCase):
         from django.contrib.auth.models import User
         from model_bakery import baker
 
-        from urbanlens.dashboard.models.billing import RoleSubscription
+        from urbanlens.dashboard.models.billing import RoleSubscription, set_pricing
         from urbanlens.dashboard.models.subscriptions import SubscriptionRole
         from urbanlens.dashboard.plugins.builtin.billing import advance_pwyw_usage_ledgers
 
-        pwyw_role = baker.make(SubscriptionRole, pay_what_you_want=True)
-        fixed_role = baker.make(SubscriptionRole, pay_what_you_want=False, monthly_price_cents=500)
+        pwyw_role = baker.make(SubscriptionRole)
+        set_pricing(pwyw_role, pay_what_you_want=True)
+        fixed_role = baker.make(SubscriptionRole)
+        set_pricing(fixed_role, pay_what_you_want=False, monthly_price_cents=500)
         user = baker.make(User)
         pwyw_sub = baker.make(RoleSubscription, user=user, role=pwyw_role)
         baker.make(RoleSubscription, user=user, role=fixed_role)
@@ -213,11 +215,12 @@ class AdvancePwywUsageLedgersTaskTests(TestCase):
         from django.contrib.auth.models import User
         from model_bakery import baker
 
-        from urbanlens.dashboard.models.billing import RoleSubscription
+        from urbanlens.dashboard.models.billing import RoleSubscription, set_pricing
         from urbanlens.dashboard.models.subscriptions import SubscriptionRole
         from urbanlens.dashboard.plugins.builtin.billing import advance_pwyw_usage_ledgers
 
-        pwyw_role = baker.make(SubscriptionRole, pay_what_you_want=True)
+        pwyw_role = baker.make(SubscriptionRole)
+        set_pricing(pwyw_role, pay_what_you_want=True)
         failing_sub = baker.make(RoleSubscription, user=baker.make(User), role=pwyw_role)
         ok_sub = baker.make(RoleSubscription, user=baker.make(User), role=pwyw_role)
 
@@ -241,11 +244,12 @@ class AdvancePwywUsageLedgersTaskTests(TestCase):
         from django.utils import timezone
         from model_bakery import baker
 
-        from urbanlens.dashboard.models.billing import BillingSubscriptionStatus, RoleSubscription
+        from urbanlens.dashboard.models.billing import BillingSubscriptionStatus, RoleSubscription, set_pricing
         from urbanlens.dashboard.models.subscriptions import SubscriptionRole
         from urbanlens.dashboard.plugins.builtin.billing import advance_pwyw_usage_ledgers
 
-        role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_minimum_cents=500)
+        role = baker.make(SubscriptionRole)
+        set_pricing(role, pay_what_you_want=True, pwyw_minimum_cents=500)
         sub = baker.make(
             RoleSubscription,
             user=baker.make(User),

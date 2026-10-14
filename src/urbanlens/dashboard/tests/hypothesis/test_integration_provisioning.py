@@ -471,7 +471,10 @@ class SubscriberProvisioningTests(OffProductionMixin, TestCase):
 
         role = SubscriptionRole.objects.get(slug=SUBSCRIBER_ROLE_SLUG)
         self.assertEqual(role.feature_set, {SiteFeature.PROPERTY_OWNERS.value})
-        self.assertFalse(role.is_purchasable)
+        from urbanlens.dashboard.plugins import plugin_available
+
+        if plugin_available("billing"):
+            self.assertFalse(role.pricing.is_purchasable)
 
     def test_an_edited_role_is_reset(self):
         SubscriptionRole.objects.create(slug=SUBSCRIBER_ROLE_SLUG, name="edited", features="ai")

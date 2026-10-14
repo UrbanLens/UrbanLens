@@ -3,13 +3,10 @@
 from __future__ import annotations
 
 from datetime import timedelta
-from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.models import AnonymousUser, User
-from django.core.exceptions import ValidationError
-from django.core.validators import MinValueValidator
-from django.db.models import CASCADE, SET_NULL, BooleanField, CharField, DateTimeField, ForeignKey, IntegerField, Q, TextChoices, UniqueConstraint
+from django.db.models import CASCADE, SET_NULL, CharField, DateTimeField, ForeignKey, IntegerField, Q, TextChoices, UniqueConstraint
 from django.utils import timezone
 from django.utils.text import slugify
 
@@ -98,36 +95,6 @@ class SubscriptionRole(abstract.DashboardModel):
         help_text="Max user-triggered emails per 30 days for this role. Blank uses the site default; 0 means unlimited.",
     )
 
-    # --- Paid subscriptions ---
-
-    monthly_price_cents = IntegerField(
-        null=True,
-        blank=True,
-        validators=[MinValueValidator(0)],
-        help_text="Fixed monthly price in cents, e.g. 500 for $5.00. Blank means not offered at a fixed price.",
-    )
-    pay_what_you_want = BooleanField(
-        default=False,
-        help_text="Let users choose their own monthly pledge instead of (or as well as) the fixed price above.",
-    )
-    pwyw_dynamic_threshold = BooleanField(
-        default=False,
-        help_text="Requires pay_what_you_want. Grants this role only in months the user's pledge meets or exceeds "
-        "the site's current cost-per-user (services.admin.cost_tracking.cost_per_user), recalculated at each "
-        "successful charge - not a fixed minimum.",
-    )
-    pwyw_minimum_cents = IntegerField(
-        null=True,
-        blank=True,
-        validators=[MinValueValidator(0)],
-        help_text="Static minimum pledge (cents) required to hold this role when pay_what_you_want is on and pwyw_dynamic_threshold is off. Blank or 0 means any pledge grants it.",
-    )
-    stripe_product_id = CharField(
-        max_length=255,
-        blank=True,
-        help_text="Stripe Product id for this role, created lazily on first checkout. Prices are generated inline per checkout/pledge instead of being pre-created, so editing monthly_price_cents needs no Stripe sync.",
-    )
-
     objects = SubscriptionRoleManager()
 
     class Meta(abstract.DashboardModel.Meta):
@@ -164,37 +131,6 @@ class SubscriptionRole(abstract.DashboardModel):
 
     def grants(self, feature: SiteFeature | str) -> bool:
         return str(feature) in self.feature_set
-
-    def clean(self) -> None:
-        super().clean()
-        errors: dict[str, str] = {}
-        if self.pwyw_dynamic_threshold and not self.pay_what_you_want:
-            errors["pwyw_dynamic_threshold"] = "Requires pay_what_you_want to be enabled."
-        if self.pwyw_minimum_cents and not self.pay_what_you_want:
-            errors["pwyw_minimum_cents"] = "Requires pay_what_you_want to be enabled."
-        if self.pwyw_dynamic_threshold and self.pwyw_minimum_cents:
-            errors["pwyw_minimum_cents"] = "Cannot be set together with pwyw_dynamic_threshold - the dynamic cost-per-user figure is used instead."
-        if errors:
-            raise ValidationError(errors)
-
-    @property
-    def monthly_price_dollars(self) -> Decimal | None:
-        """The fixed monthly price in dollars, or None when not offered at a fixed price."""
-        if self.monthly_price_cents is None:
-            return None
-        return Decimal(self.monthly_price_cents) / 100
-
-    @property
-    def pwyw_minimum_dollars(self) -> Decimal | None:
-        """The static PWYW minimum in dollars, or None when unset/not applicable."""
-        if not self.pwyw_minimum_cents:
-            return None
-        return Decimal(self.pwyw_minimum_cents) / 100
-
-    @property
-    def is_purchasable(self) -> bool:
-        """Whether users can pay for this role at all (fixed price or pay-what-you-want)."""
-        return self.monthly_price_cents is not None or self.pay_what_you_want
 
     def __str__(self) -> str:
         return self.name

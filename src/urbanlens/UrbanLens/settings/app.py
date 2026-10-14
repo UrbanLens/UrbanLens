@@ -36,7 +36,8 @@ MIN_FIELD_ENCRYPTION_KEY_ALPHABET = 16
 
 
 def _encryption_key_weakness(key: str) -> str | None:
-    """Describe why a key is too weak, if it is.
+    """
+    Describe why a key is too weak, if it is.
 
     Args:
         key: The candidate key.
@@ -648,7 +649,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         description=(
             "Per-service shares that replace UL_ENVIRONMENT_SHARE for the named services, as "
             "'nominatim=0.02,google_geocoding=0.01'. The way to try a provider from development or staging. For "
-            "messaging (sms, whatsapp, unified_push) and public writes (wayback_save, google_calendar, stripe) any "
+            "messaging (sms, whatsapp, unified_push) and public writes (wayback_save, google_calendar, and any plugin's paid checkout) any "
             "share above 0 opts the service in off production, and 0 turns it off on production. The same for hosted "
             "AI, which development and local refuse: name an AI feature (trivia_generation, assistant, link_extraction, "
             "document_pin_import, ...) or a provider (ai_cloudflare, ai_openai, ai_anthropic) to try it there. Logged "
@@ -866,8 +867,6 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     twilio_auth_token: str | None = Field(default=None, description="The Twilio auth token")
     twilio_sms_from_number: str | None = Field(default=None, description="The Twilio phone number SMS notifications are sent from (E.164 format)")
     twilio_whatsapp_from_number: str | None = Field(default=None, description="The Twilio-approved WhatsApp sender number (E.164 format, without the 'whatsapp:' prefix)")
-    stripe_secret_key: str | None = Field(default=None, description="The Stripe secret API key (sk_...), for paid subscription checkout/billing-portal/webhook calls")
-    stripe_webhook_secret: str | None = Field(default=None, description="The Stripe webhook signing secret (whsec_...), for verifying incoming /billing/webhooks/stripe/ requests")
 
     # Note: DATABASES is built directly in
     # settings/base.py from UL_DB_* environment variables
@@ -937,7 +936,8 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     @field_validator("environment_share_overrides", mode="before")
     @classmethod
     def _parse_share_overrides(cls, value: Any) -> dict[str, float]:
-        """Parse ``UL_ENVIRONMENT_SHARE_OVERRIDES`` (``service=share,...``).
+        """
+        Parse ``UL_ENVIRONMENT_SHARE_OVERRIDES`` (``service=share,...``).
 
         Args:
             value: The raw value pydantic read.
@@ -958,7 +958,8 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     @field_validator("environment_name", mode="before")
     @classmethod
     def _resolve_environment_name(cls, value: Any) -> str:
-        """Parse ``UL_ENVIRONMENT`` with the same resolver the Django settings use.
+        """
+        Parse ``UL_ENVIRONMENT`` with the same resolver the Django settings use.
 
         Args:
             value: The raw value pydantic read.
@@ -971,7 +972,8 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     @field_validator("external_api_write_rate", "external_api_burst_rate", "external_api_read_rate", mode="after")
     @classmethod
     def _require_throttle_rate(cls, value: str) -> str:
-        """Refuse a rate DRF would only reject on the first throttled request.
+        """
+        Refuse a rate DRF would only reject on the first throttled request.
 
         Args:
             value: The configured rate.
@@ -989,7 +991,8 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     @field_validator("field_encryption_key", mode="after")
     @classmethod
     def _reject_weak_encryption_keys(cls, value: str | None) -> str | None:
-        """Refuse an active key weak enough for offline brute force.
+        """
+        Refuse an active key weak enough for offline brute force.
 
         Args:
             value: The configured active key, if any.
@@ -1008,7 +1011,8 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     @field_validator("field_encryption_key_fallbacks", mode="after")
     @classmethod
     def _warn_about_weak_fallback_keys(cls, value: list[str]) -> list[str]:
-        """Warn (not fail) on weak retired keys so rotation can still run.
+        """
+        Warn (not fail) on weak retired keys so rotation can still run.
 
         Args:
             value: The configured retired keys.
@@ -1102,7 +1106,8 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         """
 
     def select_environment(self, new_environment_name: EnvironmentTypes | None = None) -> BaseEnvironment:
-        """Select the environment.
+        """
+        Select the environment.
 
         Args:
             new_environment_name: Environment to switch to, if any.

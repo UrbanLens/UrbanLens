@@ -282,7 +282,7 @@ class FixedPricePledgeTests(TestCase):
         from urbanlens.dashboard.models.billing import RoleSubscription
 
         subscription = baker.make(
-            RoleSubscription, user=self.user, role=role, pledged_amount_cents=role.monthly_price_cents
+            RoleSubscription, user=self.user, role=role, pledged_amount_cents=role.pricing.monthly_price_cents
         )
         with mock.patch("urbanlens.dashboard.controllers.billing.stripe_client.update_pledge") as update:
             response = self.client.post(
@@ -291,13 +291,21 @@ class FixedPricePledgeTests(TestCase):
         return response, update
 
     def test_a_fixed_price_subscription_cannot_be_repriced(self) -> None:
-        response, update = self._pledge(baker.make(SubscriptionRole, pay_what_you_want=False, monthly_price_cents=2000))
+        from urbanlens.dashboard.models.billing import set_pricing
+
+        role = baker.make(SubscriptionRole)
+        set_pricing(role, pay_what_you_want=False, monthly_price_cents=2000)
+        response, update = self._pledge(role)
 
         self.assertEqual(response.status_code, 400)
         update.assert_not_called()
 
     def test_a_pay_what_you_want_pledge_still_changes(self) -> None:
-        response, update = self._pledge(baker.make(SubscriptionRole, pay_what_you_want=True, monthly_price_cents=500))
+        from urbanlens.dashboard.models.billing import set_pricing
+
+        role = baker.make(SubscriptionRole)
+        set_pricing(role, pay_what_you_want=True, monthly_price_cents=500)
+        response, update = self._pledge(role)
 
         self.assertEqual(response.status_code, 200)
         update.assert_called_once()
