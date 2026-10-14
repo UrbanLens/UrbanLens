@@ -18,6 +18,7 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.plugins.points import NEARBY_PARK_PROVIDERS
 from urbanlens.dashboard.services.apis import request_upstreams
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.map.nearby_places import grid_cell, radius_bucket
@@ -48,6 +49,8 @@ class _PlacesCase(TestCase):
         baker.make(User)  # the first user is auto-promoted to site admin
         self.user = baker.make(User)
         self.client.force_login(self.user)
+        # Core's own behaviour: whatever park catalogue a plugin in this tree registers must not be called for real.
+        self.enterContext(NEARBY_PARK_PROVIDERS.overridden([]))
         self.release = threading.Event()
         self.addCleanup(self.release.set)
         for patcher in (

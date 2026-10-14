@@ -19,8 +19,9 @@ const dev = process.argv.includes("--dev");
 function compile(source: string, target: string): void {
     const result = sass.compile(source, { style: dev ? "expanded" : "compressed", sourceMap: dev, loadPaths: [CORE_SASS] });
     mkdirSync(dirname(target), { recursive: true });
-    writeFileSync(target, result.css);
-    if (dev && result.sourceMap) writeFileSync(`${target}.map`, JSON.stringify(result.sourceMap));
+    const mapped = dev && result.sourceMap;
+    writeFileSync(target, mapped ? `${result.css}\n/*# sourceMappingURL=${basename(target)}.map */\n` : result.css);
+    if (mapped) writeFileSync(`${target}.map`, JSON.stringify(result.sourceMap));
 }
 
 compile(join(CORE_SASS, "style.scss"), join(ROOT, "src/urbanlens/dashboard/frontend/static/dashboard/style.css"));

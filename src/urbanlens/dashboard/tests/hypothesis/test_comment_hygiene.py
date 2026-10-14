@@ -262,6 +262,7 @@ class BaselineTests(SimpleTestCase):
                 self.assertEqual(
                     checker.update_baseline(fixed, path, allow_increase=False, tracked=tracked, root=root), 0
                 )
+            self.assertEqual(json.loads(path.read_text())["comment-block"], {"kept.py": 1, "private/omitted.py": 5})
 
 
 class MainOnAPartialTreeTests(SimpleTestCase):

@@ -58,6 +58,7 @@ class WikipediaPanelLogTests(TestCase):
 
 class NearbyPlacesLogTests(TestCase):
     def test_a_places_search_logs_the_result_count_but_not_the_viewport(self) -> None:
+        from urbanlens.dashboard.plugins.points import NEARBY_PARK_PROVIDERS
         from urbanlens.UrbanLens.settings.app import settings as app_settings
 
         user = baker.make(User)
@@ -67,6 +68,7 @@ class NearbyPlacesLogTests(TestCase):
         self.client.force_login(user)
 
         with (
+            NEARBY_PARK_PROVIDERS.overridden([]),
             mock.patch("urbanlens.dashboard.models.subscriptions.user_has_feature", return_value=True),
             mock.patch.object(app_settings, "google_unrestricted_api_key", "test-key"),
             mock.patch(

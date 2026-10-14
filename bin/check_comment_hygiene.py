@@ -672,12 +672,15 @@ def update_baseline(
 
     The tree's own baseline is split: a plugin's files go to its own baseline file. Any other *path* takes everything.
     With *tracked*, totals are compared without the files *root* does not have, as ``main`` does, so the budget of an
-    omitted file cannot absorb an increase in a present one.
+    omitted file cannot absorb an increase in a present one. An omitted file's recorded counts are written back as they were.
     """
     split = path == BASELINE
     old = load_all_baselines() if split else load_baseline(path)
+    omitted: dict[str, dict[str, int]] = {rule: {} for rule in RULES}
     if tracked is not None:
-        old = measured_baseline(old, root, tracked)
+        measured = measured_baseline(old, root, tracked)
+        omitted = {rule: {file: n for file, n in old[rule].items() if file not in measured[rule]} for rule in RULES}
+        old = measured
     raised = [rule for rule in RULES if sum(current[rule].values()) > sum(old[rule].values())]
     if raised and not allow_increase and path.is_file():
         for rule in raised:
@@ -690,9 +693,9 @@ def update_baseline(
 
     targets: dict[Path, dict[str, dict[str, int]]] = {path: {rule: {} for rule in RULES}}
     for rule in RULES:
-        for file in {**old[rule], **current[rule]}:
+        for file in {**old[rule], **omitted[rule], **current[rule]}:
             targets.setdefault(home(file), {rule_: {} for rule_ in RULES})
-        for file, count in current[rule].items():
+        for file, count in {**omitted[rule], **current[rule]}.items():
             targets[home(file)][rule][file] = count
     for target, table in targets.items():
         if target != path and not any(table.values()):
