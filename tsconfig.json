@@ -17,5 +17,5 @@
         "resolveJsonModule": true,
         "forceConsistentCasingInFileNames": true
     },
-    "include": ["src/urbanlens/dashboard/frontend/ts/**/*.ts", "src/urbanlens/dashboard/frontend/browser/**/*.ts", "bin/*.ts"]
+    "include": ["src/urbanlens/dashboard/frontend/ts/**/*.ts", "src/urbanlens/dashboard/frontend/browser/**/*.ts", "src/urbanlens/plugins/*/frontend/ts/**/*.ts", "bin/*.ts"]
 }
