@@ -10,7 +10,9 @@ that a refused call wrote no ledger row failed once pytest-xdist happened to run
 
 from __future__ import annotations
 
+from concurrent.futures import Future, wait
 from typing import TYPE_CHECKING, Any, ClassVar
+from unittest import mock
 
 from django.db import DEFAULT_DB_ALIAS, connections
 
@@ -48,21 +50,38 @@ class DiscardsLedgerRowsFromOtherThreadsMixin:
     row committed while it ran.
 
     Mixed in before ``TestCase``. Only rows above each table's highest id at class setup are touched, and only once the
-    class's own transaction has rolled back, so nothing the migrations or another class committed is lost.
+    class's own transaction has rolled back, so nothing the migrations or another class committed is lost. A call a
+    view abandoned to the background is waited for first (up to a minute), because it writes its row when it finishes.
     """
 
     _ledger_high_water: ClassVar[dict[str, int]]
+    _pool_futures: ClassVar[list[Future[Any]]]
+    _pool_patch: ClassVar[Any]
 
     @classmethod
     def setUpClass(cls) -> None:
         tables = [model._meta.db_table for model in _ledger_models()]
         marks = _on_a_separate_connection([(f'SELECT coalesce(max(id), 0) FROM "{table}"', []) for table in tables])
         cls._ledger_high_water = dict(zip(tables, marks, strict=True))
+        from urbanlens.dashboard.services.core import timeout_utils
+
+        cls._pool_futures = []
+        submit = timeout_utils._EXECUTOR.submit
+
+        def tracked(*args: Any, **kwargs: Any) -> Future[Any]:
+            future = submit(*args, **kwargs)
+            cls._pool_futures.append(future)
+            return future
+
+        cls._pool_patch = mock.patch.object(timeout_utils._EXECUTOR, "submit", tracked)
+        cls._pool_patch.start()
         super().setUpClass()
 
     @classmethod
     def tearDownClass(cls) -> None:
         super().tearDownClass()
+        cls._pool_patch.stop()
+        wait(cls._pool_futures, timeout=60)
         _on_a_separate_connection(
             [(f'DELETE FROM "{table}" WHERE id > %s', [mark]) for table, mark in cls._ledger_high_water.items()]
         )
