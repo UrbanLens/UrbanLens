@@ -601,6 +601,13 @@ def counts(violations: list[Violation]) -> dict[str, dict[str, int]]:
     return {rule: dict(sorted(table[rule].items())) for rule in RULES}
 
 
+def _is_partial_export(root: Path) -> bool:
+    """
+    Whether *root* is a public export, which lacks .forgejo/ and the private files the baseline still records.
+    """
+    return not (root / ".forgejo").is_dir()
+
+
 def baseline_file(path: str) -> Path:
     """
     The baseline that records *path*: its plugin's own, so a plugin's directory can be left out of a tree.
@@ -681,7 +688,7 @@ def update_baseline(
         measured = measured_baseline(old, root, tracked)
         # Only a checkout without .forgejo/ is a partial export; in the whole repository a file that is gone was deleted
         # or renamed, and its entry should go with it.
-        partial = not (root / ".forgejo").is_dir()
+        partial = _is_partial_export(root)
         if partial:
             omitted = {rule: {file: n for file, n in old[rule].items() if file not in measured[rule]} for rule in RULES}
         old = measured
@@ -749,7 +756,10 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{rule}: {sum(current[rule].values())}")
         return 0
 
-    gained, lost = compare(current, measured_baseline(load_all_baselines(), ROOT, tracked), paths if args.files else None)
+    recorded = load_all_baselines()
+    if _is_partial_export(ROOT):
+        recorded = measured_baseline(recorded, ROOT, tracked)
+    gained, lost = compare(current, recorded, paths if args.files else None)
     for rule, path, now, recorded in gained:
         print(f"{path}: {rule}: {now} (baseline {recorded})")
         for violation in violations:
