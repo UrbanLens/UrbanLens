@@ -216,7 +216,7 @@ repos:
         stages: [manual]
 
   # CODEQL
-  # Manual-only, and automatic on every PR (.github/workflows/security.yml).
+  # Manual-only, and automatic on every PR (the forge-checks/codeql status).
   # Run it with: bun run codeql:gate   (or python bin/run_codeql.py --gate)
   - repo: local
     hooks:
