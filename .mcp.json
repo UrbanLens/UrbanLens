@@ -2,8 +2,9 @@
   "mcpServers": {
     "repowise": {
       "command": "repowise",
-      "args": ["mcp", "${CLAUDE_PROJECT_DIR:-.}", "--transport", "stdio"],
-      "env": { "REPOWISE_TELEMETRY_DISABLED": "1", "DO_NOT_TRACK": "1" }
+      "args": ["mcp", "${CLAUDE_PROJECT_DIR:-.}", "--transport", "stdio", "--tools", "lean"],
+      "env": { "REPOWISE_TELEMETRY_DISABLED": "1", "DO_NOT_TRACK": "1" },
+      "alwaysLoad": true
     }
   }
 }
