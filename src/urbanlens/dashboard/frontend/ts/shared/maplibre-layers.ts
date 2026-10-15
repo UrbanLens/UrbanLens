@@ -2,7 +2,7 @@
  * MapLibre-native implementation of the shared layers engine - the counterpart to
  * `map-layers.ts`'s Leaflet one, satisfying the same `MapLayersInstance` contract so
  * `MapLayers.create()` can hand a call site the right engine without the call site knowing which
- * one it built (`D12`'s dual-engine requirement; PL8 item 2). Both drive the same layers strip via
+ * one it built. Both drive the same layers strip via
  * `map-layers-panel.ts` and resolve tiles from the same `TILE_DEFS`, so a map draws the same
  * sources on either engine.
  *
@@ -14,7 +14,7 @@
  *    onto the map once the style is ready - where the Leaflet engine can read its state back off
  *    the map with `hasLayer()` at any time.
  * 2. **Layers are added once and toggled by visibility**, not added to and removed from the map -
- *    the shape REData's own `LayerToggleControl` uses (PL8 item 10).
+ *    the shape the catalogue service's own `LayerToggleControl` uses.
  */
 
 import { composeAttribution, type CreditSource } from "./esri-attribution";
@@ -402,7 +402,7 @@ export function createMaplibreMapLayers(map: MaplibreMap, options: MapLayersOpti
         // What is drawing the ground is what has to be credited, and a vector style is served by
         // this deployment rather than by the vendor whose raster layer it replaced.
         const vectorDef = vectorKind ? vectorStyleFor(vectorKind) : null;
-        // A vendor literal is only the fallback: where the REData catalogue registered the layer,
+        // A vendor literal is only the fallback: where the catalogue registered the layer,
         // what drew the bytes is this deployment's own source and that is what has to be credited.
         if (vectorDef) sources.push({ kind: "text", text: attributionAsText(vectorBaseCredit(vectorKind!, vectorDef)) });
         else if (base === "satellite") sources.push(rasterCreditFor("satellite", "© Esri"));

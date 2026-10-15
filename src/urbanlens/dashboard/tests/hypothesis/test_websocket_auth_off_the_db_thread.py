@@ -1,8 +1,8 @@
 """
 A WebSocket key check must not run a legacy key's PBKDF2 on the one thread every socket shares.
 
-N21 H40. ``database_sync_to_async`` is thread-sensitive by default, so every call to it in a daphne
-process runs in asgiref's single shared executor thread. A key issued before P146 still verifies
+``database_sync_to_async`` is thread-sensitive by default, so every call to it in a daphne
+process runs in asgiref's single shared executor thread. A key issued before keys were stored as one SHA-256 digest still verifies
 through ``check_password`` (~0.9s of PBKDF2) until its first use rewrites it, and one client
 reconnecting in a loop with such a key would otherwise queue every other socket's database work
 behind that hash. Current-format keys cost one SHA-256, but the path is the same for both, so the

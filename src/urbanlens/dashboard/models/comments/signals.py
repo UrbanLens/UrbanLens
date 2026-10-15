@@ -1,4 +1,4 @@
-"""Preserve reply thread context when a parent comment is deleted (UL-219)."""
+"""Preserve reply thread context when a parent comment is deleted."""
 
 from __future__ import annotations
 

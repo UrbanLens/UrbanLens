@@ -157,7 +157,7 @@ class SecurityHeadersMiddlewareTests(SimpleTestCase):
         self.assertEqual(response.headers.get("Cross-Origin-Resource-Policy"), settings.CROSS_ORIGIN_RESOURCE_POLICY)
 
     def test_cross_origin_resource_policy_is_not_the_maximally_strict_value(self) -> None:
-        """`same-origin` would also cut off REData and the staging/dev subdomains."""
+        """`same-origin` would also cut off partner services and the staging/dev subdomains."""
         self.assertEqual(settings.CROSS_ORIGIN_RESOURCE_POLICY, "same-site")
 
     def test_x_permitted_cross_domain_policies_reaches_the_response(self) -> None:
@@ -166,7 +166,7 @@ class SecurityHeadersMiddlewareTests(SimpleTestCase):
         self.assertEqual(response.headers.get("X-Permitted-Cross-Domain-Policies"), "none")
 
     def test_cross_origin_embedder_policy_is_sent_report_only(self) -> None:
-        """P56: enforcing it is a decision; observing what it would break is not."""
+        """Enforcing it is a decision; observing what it would break is not."""
         response = self.client.get("/health/")
 
         self.assertEqual(
@@ -177,7 +177,7 @@ class SecurityHeadersMiddlewareTests(SimpleTestCase):
     def test_cross_origin_embedder_policy_is_not_enforced(self) -> None:
         """
         The enforcing header would block every base-map tile: Leaflet requests
-        them without CORS, and none of the tile vendors img-src admits sends CORP (P56)."""
+        them without CORS, and none of the tile vendors img-src admits sends CORP."""
         response = self.client.get("/health/")
 
         self.assertIsNone(response.headers.get("Cross-Origin-Embedder-Policy"))

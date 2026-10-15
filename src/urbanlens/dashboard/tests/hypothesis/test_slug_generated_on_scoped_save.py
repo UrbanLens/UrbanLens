@@ -1,4 +1,4 @@
-"""A slug generated while saving a slugless row is persisted even when the save names its fields (P5)."""
+"""A slug generated while saving a slugless row is persisted even when the save names its fields."""
 
 from __future__ import annotations
 

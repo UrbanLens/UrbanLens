@@ -513,34 +513,6 @@ def tooltip_label(
 
 
 @register.simple_tag
-def assistant_enabled_flag(user) -> bool:
-    """
-    Whether the AI assistant's global surface (hotkey, floating button) should be wired up.
-
-    A template tag rather than a context processor: base.html is the only template that needs this, the
-    same way it's the only one that needs ``tooltip_attrs``/``subscription_role_choices`` above.
-
-    Args:
-        user: The viewer, or whatever the template resolved in its place.
-
-    Returns:
-        True when the assistant surface should be wired up for *user*.
-    """
-    if not getattr(user, "is_authenticated", False):
-        return False
-    from urbanlens.dashboard.models.profile.model import Profile
-    from urbanlens.dashboard.services.ai.access import assistant_available
-
-    # Reuses the profile the request already loaded, and hands assistant_available a profile whose cached
-    # user still has its permission cache; get_or_create selects again and returns one with neither.
-    try:
-        profile = user.profile
-    except Profile.DoesNotExist:
-        profile, _ = Profile.objects.get_or_create(user=user)
-    return assistant_available(profile)
-
-
-@register.simple_tag
 def wiki_built_year(wiki: Wiki) -> int | None:
     """
     The year a wiki's place was built, when a record or the community says (``services.pins.build_dates``).

@@ -36,7 +36,7 @@ test.describe("health probes", () => {
         const response = await request.get(publicRoutes.healthReady);
         const report = (await response.json()) as { connections: { used: number; max: number } | null; degraded: boolean };
 
-        // The number P104's postmortem needed: an 11-hour outage read 97 of 100
+        // The number an outage postmortem needed: an 11-hour outage read 97 of 100
         // connections in use, and the first anyone knew was the site being down.
         // `connections` is null only where pg_stat_activity is not readable, so a
         // deployment that reports it should keep reporting it.

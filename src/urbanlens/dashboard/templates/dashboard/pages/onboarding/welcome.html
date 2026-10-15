@@ -51,7 +51,9 @@
                         </span>
                         <span class="onboarding-card-title-row">
                             <span class="onboarding-card-title">{{ form.history_enabled.label }}</span>
-                            {% include "dashboard/partials/ui/_tooltip_help.html" with text="Turn these features off if you're concerned about someone siezing our servers to figure out where you've been. Nothing about where you've been or when gets recorded, so there's no visit history, route, or location trail tied to your account for anyone - including you later - to reconstruct. GPS data is stripped from photos you upload too, so they can't reveal it either. Your Maps and Sharing pages still work as usual - this only affects tracking." %}
+                            {% block onboarding_history_tooltip %}
+                            {% include "dashboard/partials/ui/_tooltip_help.html" with text="Turn these features off if you don't want a record of where you've been. With them off, nothing about where you've been or when gets recorded, so there's no visit history, route, or location trail tied to your account. Your Maps and Sharing pages still work as usual - this only affects tracking." %}
+                            {% endblock %}
                         </span>
                         <span class="onboarding-card-desc" id="{{ form.history_enabled.id_for_label }}_helptext">{{ form.history_enabled.help_text }}</span>
                         {% if form.history_enabled.errors %}
@@ -112,9 +114,9 @@
 
             <div class="onboarding-tos">
                 <p class="onboarding-tos-summary">
-                    The short version: UrbanLens is run by one person, not a company - please be reasonable. For legal reasons, I must tell you not to use the site to do anything illegal, including trespassing.
-                    Safety tools are <strong>best-effort</strong>, not a
-                    guarantee that anyone will see an alert or that help will arrive in time. What you do with the information you find here is your own decision and your own responsibility. Because of the site's focus on privacy, moderation is impossible. Please be kind to one another.
+                    {% block onboarding_tos_summary %}
+                    UrbanLens is open-source software, and the people who run this site set its terms. Please be reasonable, and don't use the site to do anything illegal, including trespassing. Read the terms below before you agree.
+                    {% endblock %}
                 </p>
                 <label class="onboarding-tos-agree">
                     {{ form.tos_agreed }}

@@ -1,4 +1,4 @@
-"""Building places follow the nesting REData reports, not a flat parcel list."""
+"""Building places follow the nesting a source reports, not a flat parcel list."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ class BuildingPlaceNestingTests(TestCase):
         self.parcel = _parcel()
 
     def _places(self, buildings: list[dict]) -> dict:
-        created = ensure_building_places(self.parcel, buildings, provider="redata")
+        created = ensure_building_places(self.parcel, buildings, provider="registry")
         return {buildings[index]["ref"]: place for index, place in created.items()}
 
     def test_a_wing_is_nested_under_its_enclosing_block(self) -> None:
@@ -61,7 +61,7 @@ class BuildingPlaceNestingTests(TestCase):
         """
         The bug this whole module exists to fix.
 
-        Before REData had described this footprint, the coordinate could only resolve to the parcel - that is
+        Before a source had described this footprint, the coordinate could only resolve to the parcel - that is
         how 124 pins on one campus each ended up claiming the whole property."""
         location = baker.make(Location, latitude=0.19 * _SCALE, longitude=0.19 * _SCALE)
         self.assertEqual(
@@ -88,7 +88,7 @@ class BuildingPlaceNestingTests(TestCase):
         self.assertEqual(places["block"].parent_id, self.parcel.pk)
 
     def test_children_are_created_even_when_listed_before_their_parent(self) -> None:
-        """The list order is REData's, and it does not promise parents come first."""
+        """The list order is the source's, and it does not promise parents come first."""
         places = self._places(
             [
                 {"ref": "wing", "name": "Wing", "parent_ref": "block", "geometry": _square(0.15, 0.15, 0.08)},
@@ -165,7 +165,7 @@ class DistinctRecordsStayDistinctTests(TestCase):
                 {"ref": "block", "name": "Block", "geometry": _square(0.10, 0.10, 0.40)},
                 {"ref": "wing", "name": "Wing", "geometry": _square(0.28, 0.28, 0.06)},
             ],
-            provider="redata",
+            provider="registry",
         )
 
         self.assertEqual(len(created), 2)
@@ -184,10 +184,10 @@ class DistinctRecordsStayDistinctTests(TestCase):
 
     def test_the_same_id_still_matches_itself(self) -> None:
         first = ensure_building_places(
-            self.parcel, [{"ref": "block", "name": "Block", "geometry": _square(0.10, 0.10, 0.40)}], provider="redata"
+            self.parcel, [{"ref": "block", "name": "Block", "geometry": _square(0.10, 0.10, 0.40)}], provider="registry"
         )
         second = ensure_building_places(
-            self.parcel, [{"ref": "block", "name": "Block", "geometry": _square(0.10, 0.10, 0.41)}], provider="redata"
+            self.parcel, [{"ref": "block", "name": "Block", "geometry": _square(0.10, 0.10, 0.41)}], provider="registry"
         )
 
         self.assertEqual(first[0].pk, second[0].pk)

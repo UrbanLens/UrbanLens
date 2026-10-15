@@ -1,12 +1,9 @@
 name: "UrbanLens CodeQL config"
 
-# Directories only. The Python extractor walks each `paths` entry as a
-# directory and crashes on Windows with NotADirectoryError if a file is listed.
-# `src` is too wide: this checkout keeps Postgres data, mypy caches and
-# Hypothesis examples under `src/pgsql`, `src/.mypy_cache`, `src/.hypothesis`.
+# Directories only: the Python extractor crashes on Windows if a file is listed. `src` is too wide (Postgres data and
+# tool caches live under it); bin/run_codeql.py adds every other tracked top-level `src/` directory when run locally.
 paths:
   - src/urbanlens
-  - src/urbanlens_ai
   - bin
   - .github
   - tests

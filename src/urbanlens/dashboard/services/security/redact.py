@@ -382,7 +382,7 @@ _KEY_NAME_SEGMENT = re.compile(r"[A-Za-z_-]+")
 def redact_cache_key(key: str) -> str:
     """
     Return a log-safe stand-in for a cache or lock key: its leading name segments, then a token for the rest.
-    A key names its subject after a fixed prefix - ``redata:context:<lat>,<lng>`` keys a lookup by the point it is
+    A key names its subject after a fixed prefix - ``context:<lat>,<lng>`` keys a lookup by the point it is
     about - so nothing past the prefix is logged in any form derived from it.
 
     Args:

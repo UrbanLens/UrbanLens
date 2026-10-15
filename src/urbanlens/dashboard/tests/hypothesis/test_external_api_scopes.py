@@ -8,6 +8,7 @@ from django.test import SimpleTestCase
 from urbanlens.dashboard.external_api.permissions import OAUTH2_ONLY_SCOPES, HasApiKeyScope
 from urbanlens.dashboard.external_api.throttling import TIER_READ, TIER_WRITE, request_tier
 from urbanlens.dashboard.models.account.model import ApiKeyScope, _default_api_key_scopes
+from urbanlens.dashboard.plugins.points import API_KEY_SCOPES
 
 #: The grant every API key has had since the feature shipped. Spelled out as
 #: literals rather than referencing ApiKeyScope members, so that renaming or
@@ -64,13 +65,15 @@ class ScopeVocabularyTests(SimpleTestCase):
     """ApiKeyScope is the single source of truth; settings must mirror it verbatim."""
 
     def test_settings_scopes_match_enum_exactly(self) -> None:
-        """Every value and label in OAUTH2_PROVIDER["SCOPES"] matches the enum."""
-        expected = {scope.value: scope.label for scope in ApiKeyScope}
+        """Every value and label in OAUTH2_PROVIDER["SCOPES"] matches the enum and the scopes plugins add."""
+        expected = {scope.value: scope.label for scope in ApiKeyScope} | dict(API_KEY_SCOPES.choices())
         self.assertEqual(settings.OAUTH2_PROVIDER["SCOPES"], expected)
 
     def test_no_extra_scopes_in_settings(self) -> None:
-        """Settings declares no scope the enum doesn't know about."""
-        self.assertEqual(set(settings.OAUTH2_PROVIDER["SCOPES"]), {scope.value for scope in ApiKeyScope})
+        """Settings declares no scope that neither the enum nor a plugin knows about."""
+        self.assertEqual(
+            set(settings.OAUTH2_PROVIDER["SCOPES"]), {scope.value for scope in ApiKeyScope} | API_KEY_SCOPES.values()
+        )
 
     def test_scope_values_are_domain_shaped(self) -> None:
         """Every scope is `<domain>:<action>` - the naming convention siblings rely on."""

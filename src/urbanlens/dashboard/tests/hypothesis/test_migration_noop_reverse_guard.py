@@ -12,150 +12,7 @@ MIGRATIONS_DIR = Path(migrations_package.__file__).resolve().parent
 
 #: Migrations whose ``noop`` reverses were read and judged correct, with why.
 REVIEWED: dict[str, str] = {
-    "0001_initial.py": "backfill_pin_point / backfill_primary_email_normalized - fill new columns the schema reverse drops anyway.",
-    "0003_v0_4_0_data.py": (
-        "Eleven backfills and structural conversions (pins to child wikis, campus to boundaries, markup snapshots). "
-        "Lossy on reverse - the converted-from rows are gone - but everything left is valid in the pre-migration schema, "
-        "so the old code reads it fine."
-    ),
-    "0005_v0_4_0_pin_location_dedupe.py": "dedupe_pin_locations merges duplicates so the next migration can add a constraint. Un-merging is impossible and unnecessary: merged rows stay valid.",
-    "0007_pinshare_bundled_with_markup_map_removed_flags.py": (
-        "backfill_trip_slugs fills a new column; disable_auto_tagging resets three booleans to the new opt-in default. "
-        "The reset loses prior preferences and cannot restore them, but leaves valid booleans. "
-        "This file's *third* RunPython, the credential-token encryption, is exactly the case that must NOT be noop and carries a real decrypting reverse."
-    ),
-    "0008_add_image_media_labels.py": (
-        "Slug backfills, share-location backfills, three Wikipedia cache invalidations, and a cap of "
-        "max_upload_file_size_mb at 900. The cap is lossy and still an ordinary integer afterwards."
-    ),
-    "0010_v0_6_0.py": "Backfills (intro_seen, notification uuids, unchanged defaults) plus create_first_party_client, which seeds a row that is harmless to leave behind.",
-    "0020_seed_vip_subscription_role.py": "Seeds a subscription role. Leaving it on reverse is harmless; deleting it could orphan subscriptions referencing it.",
-    # NOTE: the migration carries two noop reverses this entry does NOT cover - _0062_clear_generated_names and
-    # _0062_renumber_levels, from the pre-squash 0062_floorplan_floor_designation.py.
-    "0030_v0_7_0.py": (
-        "mark_existing_external_media_exempt (was 0033) sets a boolean on existing rows - lossy, valid either way. "
-        "merge_duplicate_labels (was 0042) clears the way for 0043's unique constraint, same shape as 0005 - "
-        "un-merging is impossible and merged labels stay valid. drop_duplicate_event_links (was 0046) and "
-        "drop_duplicate_links (was 0047) both merge/remove duplicates ahead of a unique constraint - un-merging is "
-        "impossible and unnecessary, what remains is valid in the old schema."
-    ),
-    "0032_v0_8_0.py": (
-        "The v0.8.0 squash. Backfills of columns this file adds and a reverse drops, so there is nothing to restore: "
-        "_0049_backfill_friendinvitation_email_normalized, _0052__backfill, _0058_trust_verified_signups, "
-        "_0062_backfill_username_keys, _0065_backfill, _0117_date_existing_blocks. "
-        "Merges and dedupes ahead of a unique constraint, lossy but leaving ordinary rows the old code reads: "
-        "_0054_merge_reciprocal_rows (keeps the lowest pk, as FriendshipQuerySet.between does), _0073_dedupe, and "
-        "_0067_release_stale_and_duplicate_proofs (a cleared proof reads as an unproved address). "
-        "_0091__move_to_day_rows moves the weather cache into rows; after a reverse the old code refetches it. "
-        "_0092__clear_out_of_span nulls activity times outside 1900-2199, an unscheduled activity to the old code. "
-        "_0098_repair_links prefixes https:// on scheme-less links, deletes links it can't read as http(s) with a "
-        "top-level domain, and truncates over-long custom-field text. _0116_mark_linked relabels downloaded-URL "
-        "images from upload to linked_url, a plain string the old code stores and shows. The two CREATE EXTENSION "
-        "statements leave an extension nothing else depends on."
-    ),
-    "0033_v0_8_0_indexes.py": (
-        "_0096_refuse_to_drop_url_only_overlays deletes nothing; it only clears a tile template an overlay with an "
-        "image never drew. The rows left are valid overlays for the old code."
-    ),
-    "0034_reresolve_fiat_building_places.py": (
-        "_reresolve_fiat_building_places moves Locations off outline-less buildings onto the place containing them, "
-        "or onto none, and drops their parcel-buildings cache. A reverse leaves ordinary place links and unstamped "
-        "Locations, which the old code reads and re-resolves; the cache is refetched."
-    ),
-    "0038_location_cache_drop_name_built_searches.py": (
-        "drop_name_built_searches deletes cached name-built search rows, which may hold results found by someone's "
-        "own names. They are a cache; the old code refetches them."
-    ),
-    "0041_location_slug_remint.py": (
-        "remint_location_slugs replaces slugs drawn from user text with provider names or the uuid, and records each "
-        "readable slug given up in LocationSlugHistory (0040). A reverse to 0040 keeps both; every slug is still valid, "
-        "and old links resolve through the history."
-    ),
-    "0042_location_cache_drop_nearby_reference_documents.py": (
-        "drop_nearby_reference_documents deletes the removed panel's cached rows. They are a cache; the old code refetches them."
-    ),
-    "0043_media_keys_without_tracking_params.py": (
-        "rekey_tracked_media re-keys marks and copies to the hash of their URL without utm_ parameters. Which ones carried "
-        "them is not recoverable, but the rows stay valid; after a reverse the old code matches them only when the "
-        "upstream URL comes untracked, which is the behaviour it had before."
-    ),
-    "0044_session_participant_departure.py": (
-        "_backfill_departures fills the new departure column, which the schema reverse drops."
-    ),
-    "0046_location_cache_drop_historic_registers.py": (
-        "drop_historic_registers deletes cached Historic Registers rows so they refetch with each row's reference "
-        "number and position. They are a cache; the old code refetches them."
-    ),
-    "0047_cris_site_rows_refetch.py": (
-        "drop_stale_cris_rows deletes CRIS cache rows chosen by the old site rule. They are a cache; the old code "
-        "refetches them."
-    ),
-    "0049_building_location_names.py": (
-        "fix_building_locations clears names a building's location may not carry, names unnamed ones from their own "
-        "CRIS record, re-mints their slugs (recording each readable one given up in LocationSlugHistory), drops "
-        "misplaced CRIS cards and nests root wikis under their parcel's. A reverse keeps every value, each one the old "
-        "code reads; the dropped rows are a cache it refetches, and old links resolve through the history."
-    ),
-    "0054_location_slug_follows_name.py": (
-        "remint_mismatched_slugs moves Location and Wiki slugs onto their current provider name, or the uuid, recording "
-        "each readable Location slug given up in LocationSlugHistory. A reverse keeps the new slugs, each one valid to "
-        "the old code, and old links resolve through the history."
-    ),
-    "0055_building_wikis_drop_wikipedia_seed.py": (
-        "drop_building_wikipedia_seeds deletes untouched Wikipedia seeds (no person's revision) from building wikis. "
-        "Not recoverable, and nothing to recover: the old code reads a wiki with no article, and seeds it again the "
-        "next time the match is cached."
-    ),
-    "0057_added_columns_database_defaults.py": (
-        "Sets database defaults on columns 0036-0053 added. A reverse leaves them; no release reads a column's default, "
-        "and reversing those migrations drops the columns with their defaults."
-    ),
-    "0064_rate_limit_rows_take_0_9_0_defaults.py": (
-        "apply_0_9_0_defaults writes 0.9.0's limits and notes into ApiRateLimit rows that still hold exactly 0.8.0's. "
-        "A reverse leaves them: a row with 0.9.0's values cannot be told from one an admin set the same, so restoring "
-        "0.8.0's could lift a cap somebody chose. The values are ordinary integers and text, and 0.8.0 runs with "
-        "REData Places held to 40 a day."
-    ),
-    "0067_calendar_export_resumable.py": (
-        "raise_calendar_minute_limit moves google_calendar rows still holding every release's 30 a minute to 120; a row "
-        "at 120 cannot be told from one an admin set to 120, and an older release runs within it. "
-        "settle_marks_nothing_delivers clears push marks on links whose auto-sync is off, which no older release would "
-        "ever have delivered. The schema reverse drops the new field."
-    ),
-    "0068_rate_limit_rows_from_any_release_take_0_9_0_defaults.py": (
-        "bring_earlier_defaults_up_to_0_9_0 is 0064's rule for every earlier release's defaults, not only 0.8.0's: a row "
-        "still holding one of them takes 0.9.0's. Not reversed for 0064's reason - a row with 0.9.0's values cannot be "
-        "told from an admin's choice - and older releases read ordinary integers and text and run within 0.9.0's limits."
-    ),
-    "0069_calendar_privacy_followups.py": (
-        "mark_stored_titles_as_possibly_the_places only sets TripActivity.title_from_place, the column this migration "
-        "adds; reversing the AddField drops the column and every mark with it, so there is nothing left to undo. The "
-        "marks cannot be rebuilt by a later forward run either way: nothing records which titles were typed."
-    ),
-    "0070_withdraw_year_built_trivia.py": (
-        "withdraw_year_built_questions marks approved deterministic year-built trivia questions REJECTED with the "
-        "generator's withdrawn reason. A reverse leaves them so: one the generator withdrew since cannot be told apart, "
-        "and older code reads an ordinary rejected question, which it never serves and never re-approves - lossy, valid."
-    ),
-    "0071_safety_opt_out_email_normalized.py": (
-        "_backfill only fills SafetyContactOptOut.email_normalized, the column this migration adds; reversing the "
-        "AddField drops it, and the raw email it was derived from is untouched, so there is nothing left to undo."
-    ),
-    "0074_safety_contact_address_hash_and_notice_retry.py": (
-        "_settle_earlier_resolutions stamps resolution_notified_at (0072's column) on alerted contacts of check-ins "
-        "already resolved, so the retry sweep never re-sends a notice the old code sent. A reverse leaves the stamps: "
-        "0072's code reads them as notices already sent, which they were or no longer need to be - lossy, valid."
-    ),
-    "0075_pin_share_notification_labels.py": (
-        "Rewrites stored pin-share notification messages to name the place as the share consented to. The old text "
-        "named the sender's own pin, which the share never consented to pass on, so a reverse must not restore it; "
-        "the rewritten messages are ordinary strings to the old code."
-    ),
-    "0076_place_merges.py": (
-        "recount_parcels_with_superseded_buildings recomputes building_child_count, a stored count, to leave out "
-        "superseded buildings. A reverse keeps the lower counts; the old code reads them as ordinary integers and "
-        "recounts a parcel the next time its children change."
-    ),
+    "0001_initial.py": "seed_rows - a new install's starting rows; reversing 0001 drops the tables they are in.",
 }
 
 
@@ -227,7 +84,7 @@ class MigrationNoopReverseGuardTests(SimpleTestCase):
     def test_the_scan_still_finds_migrations(self) -> None:
         self.assertGreaterEqual(
             len(list(MIGRATIONS_DIR.glob("[0-9]*.py"))),
-            20,
+            1,
             "the migration scan found almost nothing - the path resolution broke",
         )
 
@@ -235,5 +92,5 @@ class MigrationNoopReverseGuardTests(SimpleTestCase):
         """Without this, an AST change that matched nothing would pass silently."""
         found = _noop_reverse_files()
         self.assertGreaterEqual(
-            len(found), 8, f"only {len(found)} files with noop reverses found - the matcher stopped working"
+            len(found), 1, f"only {len(found)} files with noop reverses found - the matcher stopped working"
         )

@@ -22,7 +22,7 @@ HOOKS=(
     outage-not-cached
     versioned-writes
     signal-reachable
-    concealed-writes
+    projected-writes
     pin-not-published-to-wiki
     migration-graph
     static-url-literals

@@ -1,4 +1,4 @@
-"""Regression tests for the Import Pins dialog's video/AI feature gating."""
+"""Regression tests for the Import Pins dialog's video feature gating."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ _IMPORT_FORM_URL = reverse("pin.import.form")
 
 
 class ImportFormMediaGateTests(TestCase):
-    """The import dialog's file input accepts video/AI-parsed files only when entitled."""
+    """The import dialog's file input accepts video files only when entitled."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -38,17 +38,3 @@ class ImportFormMediaGateTests(TestCase):
         content = response.content.decode()
         self.assertIn('data-can-upload-videos="true"', content)
         self.assertIn(",video/*", content)
-
-    def test_ai_file_types_hidden_without_feature(self) -> None:
-        response = self.client.get(_IMPORT_FORM_URL)
-        content = response.content.decode()
-        self.assertNotIn(",.txt,.docx", content)
-
-    def test_ai_file_types_shown_with_feature(self) -> None:
-        settings_obj = SiteSettings.get_current()
-        SiteSettings.objects.filter(pk=settings_obj.pk).update(default_features=SiteFeature.AI)
-        self.user.profile.ai_enabled = True
-        self.user.profile.save(update_fields=["ai_enabled"])
-        response = self.client.get(_IMPORT_FORM_URL)
-        content = response.content.decode()
-        self.assertIn(",.txt,.docx", content)

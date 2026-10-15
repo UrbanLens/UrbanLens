@@ -33,8 +33,8 @@ REVIEWED: dict[tuple[str, str, str], str] = {
         "bulk_create",
     ): (
         "Seeding a new profile's default labels and their hierarchy. A new label carries no pins, so the "
-        "pin-cache receivers have nothing to touch; the REData taxonomy sync the receivers would queue is "
-        "queued once, via queue_label_definitions_sync, right after."
+        "pin-cache receivers have nothing to touch; plugins that follow labels hear about the batch once, "
+        "through points.LABELS_SEEDED, right after."
     ),
     (
         "dashboard/controllers/organize.py",
@@ -63,8 +63,8 @@ REVIEWED: dict[tuple[str, str, str], str] = {
         "Label",
         "bulk_create",
     ): (
-        "P123's label-scan fixture: tens of thousands of unattached tags. No pin carries them, so there is no map "
-        "cache to touch, and the REData taxonomy sync the receivers queue would push every synthetic tag to REData."
+        "A label-scan fixture: tens of thousands of unattached tags. No pin carries them, so there is no map "
+        "cache to touch, and the label receivers plugins attach would announce every synthetic tag to an external service."
     ),
     (
         "dashboard/services/integration_testing/population.py",
@@ -85,7 +85,7 @@ REVIEWED: dict[tuple[str, str, str], str] = {
         "dashboard/services/integration_testing/population.py",
         "Comment",
         "bulk_create",
-    ): "A synthetic capacity-test population (services/integration_testing/population.py), never a real account: comment receivers write reputation events and award achievements, which synthetic accounts must not accrue.",
+    ): "A synthetic capacity-test population (services/integration_testing/population.py), never a real account: comment receivers record contributions and award achievements, which synthetic accounts must not accrue.",
     (
         "dashboard/services/integration_testing/population.py",
         "TripMembership",

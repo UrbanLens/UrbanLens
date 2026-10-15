@@ -24,7 +24,7 @@ def skip_upstream_contribution(surface: str, *, detail: str = "") -> bool:
     Whether to skip sending UrbanLens's own data to ``surface`` for storage/training.
 
     Args:
-        surface: Human-readable name of what would have been written, e.g. ``"REData photo observations (POST /photos/)"``.
+        surface: Human-readable name of what would have been written, e.g. ``"photo relevance observations (POST /photos/)"``.
         detail: Optional extra context for the log line, e.g. how many records were held back.
 
     Returns:

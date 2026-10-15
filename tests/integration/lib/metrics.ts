@@ -1,7 +1,7 @@
 /**
  * Numbers a run produces - timings and counts - written as JSON lines so a run can be compared with
  * the last one and with `metrics-baseline.json`. `lib/metrics-reporter.ts` folds them at the end of
- * the run; `scripts/metrics-report.ts` compares. See docs/INTEGRATION_TESTS.md, "Metrics".
+ * the run; `scripts/metrics-report.ts` compares.
  */
 
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";

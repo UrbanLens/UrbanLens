@@ -2,41 +2,74 @@
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 import logging
-from typing import Any
+from typing import Any, ClassVar
 
-from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError, redata_configured
+from urbanlens.dashboard.services.core.gateway import ProviderUnavailableError
 from urbanlens.dashboard.services.security.redact import redact_text
 
 logger = logging.getLogger(__name__)
 
 
+class WebSearchProvider(ABC):
+    """
+    One source of web search results.
+
+    Attributes:
+        key: Short identifier, for logs.
+    """
+
+    key: ClassVar[str]
+
+    @abstractmethod
+    def available(self) -> bool:
+        """Whether this provider is configured to answer."""
+
+    @abstractmethod
+    def search_web(self, query: str, *, max_results: int = 10) -> list[dict[str, Any]]:
+        """
+        Search the web.
+
+        Args:
+            query: The search string.
+            max_results: Maximum number of results to request.
+
+        Returns:
+            Result dicts (``title``, ``link``, ``snippet``, ``date``, ``thumbnail``); empty when the provider rejected the query.
+
+        Raises:
+            ProviderUnavailableError: The provider could not be reached or every source behind it failed.
+        """
+
+
 def search_web(query: str, *, max_results: int = 10) -> list[dict[str, Any]]:
     """
-    Search the web via REData's ``/search/web/`` provider fallback chain.
-    There is no local fallback: an install with no REData configured simply has no web search results, which degrades to the "Web Search" pin panel's existing empty state (see ``PinController._web_search_response``) rather than raising.
+    Search the web through the first available provider.
+    There is no built-in provider: an install with none simply has no web search results, which degrades to the "Web Search" pin panel's existing empty state (see ``PinController._web_search_response``) rather than raising.
 
     Args:
         query: The search string.
         max_results: Maximum number of results to request.
 
     Returns:
-        Result dicts (``title``, ``link``, ``snippet``, ``date``, ``thumbnail``), or ``[]`` when REData is unconfigured or rejected the query.
+        Result dicts (``title``, ``link``, ``snippet``, ``date``, ``thumbnail``), or ``[]`` when no provider is available or it rejected the query.
 
     Raises:
-        LocationContextUnavailableError: REData could not be reached, or every provider it tried failed to answer; nothing was learned, so a caller must not cache it as "no results".
+        ProviderUnavailableError: The provider could not be reached, or every source it tried failed to answer; nothing was learned, so a caller must not cache it as "no results".
     """
-    if not redata_configured():
-        return []
-    from urbanlens.dashboard.services.apis.locations.redata_search_gateway import RedataSearchGateway
+    from urbanlens.dashboard.plugins.points import WEB_SEARCH_PROVIDERS
 
+    provider = next((candidate for candidate in WEB_SEARCH_PROVIDERS if candidate.available()), None)
+    if provider is None:
+        return []
     try:
-        return RedataSearchGateway().search_web(query, max_results=max_results)
-    except LocationContextUnavailableError as exc:
+        return provider.search_web(query, max_results=max_results)
+    except ProviderUnavailableError as exc:
         if exc.is_outage:
             raise
-        logger.warning("REData web search rejected %s: %s (reason=%s)", redact_text(query), type(exc).__name__, exc.reason)
+        logger.warning("%s web search rejected %s: %s (reason=%s)", provider.key, redact_text(query), type(exc).__name__, exc.reason)
         return []
 
 

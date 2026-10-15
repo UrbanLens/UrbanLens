@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Names that carry no search value when sent to external APIs (Google, Brave, AI, etc.).
+# Names that carry no search value when sent to external APIs (Google, Brave, etc.).
 # Matching is case-insensitive after stripping whitespace.
 _MEANINGLESS_NAME_PHRASES: frozenset[str] = frozenset(
     {
@@ -267,7 +267,7 @@ _WHITESPACE_RUN_PATTERN = re.compile(r"\s+")
 # Sources demoted to "fallback only": their candidates are dropped whenever any other source has a
 # meaningful candidate, and only considered when nothing else does.
 # Google Places names are frequently generic/noisy (parking lots, nearby businesses) compared to
-# purpose-built sources like Wikipedia or NPS.
+# purpose-built sources like Wikipedia.
 GOOGLE_PLACES_NAME_SOURCE = "google_places"
 FALLBACK_ONLY_NAME_SOURCES: frozenset[str] = frozenset({GOOGLE_PLACES_NAME_SOURCE})
 
@@ -465,12 +465,12 @@ def _gather_candidates(
     Returns:
         ``(admitted, rejected)``, each in arrival order.
     """
-    from urbanlens.dashboard.plugins.registry import plugin_registry
+    from urbanlens.dashboard.plugins.points import NAME_PROVIDERS
     from urbanlens.dashboard.services.locations.name_resolution import NameCandidate
     from urbanlens.dashboard.services.locations.name_tiers import NameTier, NamingScope, building_name_admissible, describes_scope, naming_scope, tier_for
 
     raw: list[tuple[str, Any]] = list(extra_candidates or [])
-    for provider in plugin_registry.name_providers():
+    for provider in NAME_PROVIDERS:
         try:
             raw.extend((provider.source, value) for value in provider.candidates(location))
         except Exception:
@@ -676,15 +676,16 @@ def _property_candidates(location: Location, wiki, candidates: Sequence[NameCand
     """
     from urbanlens.dashboard.models.aliases.model import AliasType
     from urbanlens.dashboard.services.locations.name_resolution import NameCandidate
-    from urbanlens.dashboard.services.locations.name_tiers import SOURCE_TIERS, NameTier, NamingScope, naming_scope
+    from urbanlens.dashboard.services.locations.name_tiers import NameTier, NamingScope, naming_scope, source_tiers
 
     if wiki is None or not getattr(wiki, "pk", None) or wiki.location_id == location.pk or naming_scope(location) != NamingScope.PARCEL:
         return []
     known = {(candidate.source, normalize_name_for_comparison(candidate.name)) for candidate in candidates}
     turned_away = {normalize_name_for_comparison(candidate.name) for candidate in rejected}
     extra: list[NameCandidate] = []
+    tiers_by_source = source_tiers()
     for name, source in wiki.aliases.filter(kind=AliasType.OFFICIAL).order_by("pk").values_list("name", "source"):
-        tier = SOURCE_TIERS.get(source)
+        tier = tiers_by_source.get(source)
         key = (source, normalize_name_for_comparison(name))
         if tier is None or tier > NameTier.SITE or key in known or key[1] in turned_away:
             continue

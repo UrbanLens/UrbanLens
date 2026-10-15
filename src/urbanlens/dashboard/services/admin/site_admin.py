@@ -7,6 +7,9 @@ from typing import TYPE_CHECKING
 
 from django.contrib.auth.models import Group
 
+from urbanlens.dashboard.services.auth.email_normalization import normalize_email
+from urbanlens.UrbanLens.settings.app import settings as app_settings
+
 if TYPE_CHECKING:
     from django.contrib.auth.models import User
 
@@ -55,7 +58,7 @@ def add_user_to_site_admin_group(user: User) -> None:
 
 def promote_first_user_if_needed(user: User) -> bool:
     """
-    Grant site admin to the first user created on a fresh site.
+    Grant site admin to the first user created on a fresh site, or to the account matching ``UL_BOOTSTRAP_ADMIN_EMAIL`` when that is set.
     Uses ``SiteSettings.bootstrap_admin_user`` as the authoritative record so concurrent sign-ups cannot both claim the role.
 
     Args:
@@ -77,11 +80,16 @@ def promote_first_user_if_needed(user: User) -> bool:
     if user.username.startswith((DEMO_USERNAME_PREFIX, INTEGRATION_USERNAME_PREFIX)):
         return False
 
+    # UL_BOOTSTRAP_ADMIN_EMAIL, when set, replaces the first-account rule: that address claims the slot whenever it is empty.
+    expected_email = app_settings.bootstrap_admin_email
+    if expected_email and normalize_email(user.email or "") != normalize_email(expected_email):
+        return False
+
     with transaction.atomic():
         settings = SiteSettings.objects.select_for_update().get_or_create(pk=1)[0]
         if settings.bootstrap_admin_user_id is not None:
             return False
-        if UserModel.objects.exclude(pk=user.pk).exists():
+        if not expected_email and UserModel.objects.exclude(pk=user.pk).exists():
             return False
 
         settings.bootstrap_admin_user = user

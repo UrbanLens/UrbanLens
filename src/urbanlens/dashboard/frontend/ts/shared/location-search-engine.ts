@@ -161,7 +161,7 @@ function sectionKey(label: string): string {
     return "suggestions";
 }
 
-// Browser-direct by design (D25): it keeps geocoding traffic off our servers. Don't proxy it or make autocomplete cache-only.
+// Browser-direct by design: it keeps geocoding traffic off our servers. Don't proxy it or make autocomplete cache-only.
 async function nominatimSearch(query: string, { limit = 5, viewbox = null as string | null } = {}): Promise<any[]> {
     const url =
         `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=${limit}&addressdetails=1`

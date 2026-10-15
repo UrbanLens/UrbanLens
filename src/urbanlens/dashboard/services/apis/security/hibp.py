@@ -14,7 +14,7 @@ from urbanlens.dashboard.services.core.gateway import Gateway
 logger = logging.getLogger(__name__)
 
 _API_URL = "https://api.pwnedpasswords.com"
-_USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; hello@urbanlens.org)"
+_USER_AGENT = "UrbanLens/1.0 (+https://github.com/UrbanLens/UrbanLens)"
 
 
 @dataclass(slots=True, kw_only=True)

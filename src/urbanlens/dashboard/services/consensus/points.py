@@ -222,7 +222,7 @@ def restore_wiki_edit_award(edit: WikiEdit) -> bool:
 def restore_consensus_points_for(edit_ids: list[int]) -> None:
     """
     Reinstate awards for edits whose revert was itself reverted.
-    The batch form, called directly rather than left to the signal for the same reason ``services.wiki.wiki_edits._restore_reputation_for`` is: the caller clears the flag with a queryset ``update()``, which emits no ``post_save``.
+    The batch form, called directly rather than left to the signal for the same reason the edit-restored event in ``services.wiki.wiki_edits`` is: the caller clears the flag with a queryset ``update()``, which emits no ``post_save``.
 
     Args:
         edit_ids: WikiEdit pks whose reverts have just been undone."""

@@ -6,9 +6,12 @@ account's?** Everything here is shaped by that being the question, rather than
 
 ```
 bin/run_perf_tests.sh --url http://localhost:21810 \
-    --provision-container urbanlens_development_main_app \
-    --db-container urbanlens_development_main_db --heavy-pins 20000
+    --provision-container "urbanlens_${UL_CONTAINER_NAME}_app" \
+    --db-container "urbanlens_${UL_CONTAINER_NAME}_db" --heavy-pins 20000
 ```
+
+Compose names the containers `urbanlens_<UL_CONTAINER_NAME>_<service>`. `UL_CONTAINER_NAME` is read from the shell or
+`.env`, falling back to `UL_ENVIRONMENT`, then `production`; see `bin/lib/compose_names.sh`.
 
 | file | what it is |
 |---|---|
@@ -31,8 +34,8 @@ table is a seeding step, not a scenario:
 
 ```
 bin/run_perf_tests.sh --url http://localhost:21810 \
-    --provision-container urbanlens_development_main_app \
-    --db-container urbanlens_development_main_db \
+    --provision-container "urbanlens_${UL_CONTAINER_NAME}_app" \
+    --db-container "urbanlens_${UL_CONTAINER_NAME}_db" \
     --heavy-pins 20000 --heavy-labels 50000
 ```
 
@@ -60,8 +63,8 @@ so a host is unavoidable, but which host is as immaterial to the cost as labels'
 
 ```
 bin/run_perf_tests.sh --url http://localhost:21810 \
-    --provision-container urbanlens_development_main_app \
-    --db-container urbanlens_development_main_db \
+    --provision-container "urbanlens_${UL_CONTAINER_NAME}_app" \
+    --db-container "urbanlens_${UL_CONTAINER_NAME}_db" \
     --heavy-pins 20000 --heavy-labels 50000 --heavy-search-relations 50000
 ```
 
@@ -112,42 +115,42 @@ the same harness: one user filtering cost the neighbour 4,431 ms on daphne and
 the harness honestly; it does not tell you what the deployment does.
 
 ```bash
-cd ../infrastructure
-python3 bin/dev_env.py create --name perf --branch <branch> \
-    --environment staging --metrics --no-redata
+UL_CONTAINER_NAME=perf UL_ENVIRONMENT=staging UL_APP_PORT=31000 COMPOSE_PROFILES=metrics \
+    docker compose up -d --build
 ```
 
-`--environment staging` sets `UL_ENVIRONMENT=staging`, which is the only axis the
-application branches on, so it gets gunicorn *and* is treated as a real
+`UL_ENVIRONMENT=staging` is the only axis the application branches on, so it gets gunicorn *and* is treated as a real
 deployment by anything reading that variable. Two consequences worth knowing
 before you run a load test on one:
 
 - Set **`UL_ENVIRONMENT_SHARE=0`** in its `.env`. Otherwise, as staging, the
   import phase spends a share of every quota'd and billed provider's budget for
-  real, thousands of times (ADR-0026). REData and AI stay reachable either way;
-  point `UL_REDATA_API_URL` at your own instance, or clear it, for a load run.
-- Set **`COMPOSE_PROFILES=metrics`** alongside `--metrics`, or the Celery
-  exporter is silently absent.
+  real, thousands of times. First-party data services stay reachable either way;
+  point them at your own instances, or clear them, for a load run.
+- Set **`COMPOSE_PROFILES=metrics`**, as above, or the Celery exporter is
+  silently absent.
 
-Containers are named `ul_<slug>_<service>`, so point the runner at
-`--provision-container ul_perf_app --db-container ul_perf_db`.
+`UL_CONTAINER_NAME` names the compose project (`urbanlens-perf`) and every
+container (`urbanlens_perf_<service>`), so point the runner at
+`--provision-container urbanlens_perf_app --db-container urbanlens_perf_db`.
+Pass the same variable to every later `docker compose` command, or use
+`-p urbanlens-perf`.
 
-**A `perf` environment already exists and is stopped**, not destroyed — its
-checkout, images and registry entry are intact, so it costs nothing while idle
-and starts in seconds:
+**A `perf` stack may already exist and be stopped**, not destroyed - its
+images and volumes are intact, so it costs nothing while idle and starts in
+seconds:
 
 ```bash
-cd /projects/environments/agents/perf/UrbanLens
-docker compose -p ul-perf -f docker-compose.yml -f docker-compose.agent.yml start
+cd /path/to/UrbanLens
+UL_CONTAINER_NAME=perf docker compose start
 ```
 
-Building it from scratch took three attempts and about half an hour, so prefer
-starting this one. Stop it the same way when you are done. Two things it needs
-that are easy to forget: the host wants the `development_main` stack stopped
-during a run (the load generator, the target and 19 unrelated containers do not
-fit comfortably together — see the operational note in the repo's own memory),
-and `docker compose restart app` leaves nginx resolving a stale upstream, so
-restart `nginx` alongside it or every request 502s.
+Building one from scratch is slow, so prefer starting an existing one. Stop it
+the same way when you are done. Two things are easy to forget: the host should
+run nothing else heavy during a run (the load generator, the target and
+unrelated containers do not fit comfortably together), and
+`docker compose restart app` leaves nginx resolving a stale upstream, so restart
+`nginx` alongside it or every request 502s.
 
 ## The capacity test asks a different question
 
@@ -156,8 +159,8 @@ how many people the deployment serves at once:
 
 ```bash
 bin/run_capacity_tests.sh --url http://localhost:31000 \
-    --provision-container ul_perf_app --db-container ul_perf_db \
-    --container-prefix ul_perf_ --nginx-container ul_perf_nginx --population 1000
+    --provision-container urbanlens_perf_app --db-container urbanlens_perf_db \
+    --container-prefix urbanlens_perf_ --nginx-container urbanlens_perf_nginx --population 1000
 ```
 
 | file | what it is |

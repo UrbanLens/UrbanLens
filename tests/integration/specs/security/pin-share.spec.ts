@@ -112,7 +112,7 @@ test.describe("pin -> pin share: the recipient never gets the sender's pin", () 
     });
 
     ifSharingPair()("a copy accepted later carries the site's facts as they stand at acceptance", async ({ sharerApi, shareeApi, sharerPage, shareePage }) => {
-        // Jess, 2026-10-02: a share is copied as of acceptance, to the degree the sender consented; the facts are consented.
+        // A share is copied as of acceptance, to the degree the sender consented; the facts are consented.
         // Its precondition (date_built travels at all) is asserted by "the accepted copy carries opted-in fields ...".
         const { pin, share } = await shareFreshPin(sharerApi, shareeApi, sharerPage, shareePage, "snap", { before: { date_built: "1901-02-03" } });
         await sharerApi.json("patch", `pins/${pin.slug}/`, { date_built: "1977-07-07" });

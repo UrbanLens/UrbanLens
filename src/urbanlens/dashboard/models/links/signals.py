@@ -13,7 +13,7 @@ def archive_pin_link(sender: type[PinLink], instance: PinLink, created: bool, **
     A confirmed import can create many PinLinks at once (one per link extracted from each
     pin's description) - ``enqueue_follow_on`` coalesces those into bounded chunks inside a
     bulk task's ``batching_follow_on_work()`` collector, same as it does for wiki creation,
-    category suggestion, and reputation scoring (P109)."""
+    category suggestion, and contribution scoring."""
     if not created or instance.wayback_url:
         return
     from urbanlens.dashboard.services.core.celery import follow_on_queue

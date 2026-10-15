@@ -66,12 +66,12 @@ class ForwardedHostPortIsTrustedTests(SimpleTestCase):
                     f"{variable} does not fall back to the port-less $host",
                 )
                 self.assertEqual(_forwards(variable, f"localhost:{PUBLISHED_PORT}"), f"localhost:{PUBLISHED_PORT}")
-                self.assertEqual(_forwards(variable, "10.2.0.244:21810"), "10.2.0.244:21810")
+                self.assertEqual(_forwards(variable, "10.0.0.244:21810"), "10.0.0.244:21810")
                 for spoofed in (
                     "localhost:1337",
                     f"localhost:{PUBLISHED_PORT}0",
                     f"localhost:1{PUBLISHED_PORT}",
-                    "urbanlens.org",
+                    "example.com",
                 ):
                     with self.subTest(host=spoofed):
                         self.assertEqual(_forwards(variable, spoofed), "$host")

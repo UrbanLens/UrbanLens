@@ -9,7 +9,7 @@ x-app-env-file: &app-env-file
     required: false
 x-app-env: &app-env
   WEB_CONCURRENCY: ${WEB_CONCURRENCY:-3}
-  # Each service logs in as ul_<UL_PROCESS_ROLE>; only db-setup is given the owner's credentials (R29).
+  # Each service logs in as ul_<UL_PROCESS_ROLE>; only db-setup is given the owner's credentials.
   UL_DB_NAME: ${UL_DB_NAME:-postgres}
   UL_DB_PASS: ${UL_DB_APP_PASS:-${UL_DB_PASS:-postgres}}
   UL_DB_HOST: ${UL_DB_HOST:-urbanlens_db}
@@ -22,12 +22,9 @@ x-app-env: &app-env
   UL_DISCORD_CLIENT_ID: ${UL_DISCORD_CLIENT_ID}
   UL_DISCORD_CLIENT_SECRET: ${UL_DISCORD_CLIENT_SECRET}
   UL_GOOGLE_UNRESTRICTED_API_KEY: ${UL_GOOGLE_UNRESTRICTED_API_KEY}
-  UL_GOOGLE_DOMAIN_RESTRICTED_API_KEY: ${UL_GOOGLE_DOMAIN_RESTRICTED_API_KEY}
   UL_GOOGLE_SEARCH_TENANT: ${UL_GOOGLE_SEARCH_TENANT}
   UL_GOOGLE_SEARCH_CX: ${UL_GOOGLE_SEARCH_CX:-${UL_GOOGLE_SEARCH_TENANT}}
   UL_OPENWEATHERMAP_API_KEY: ${UL_OPENWEATHERMAP_API_KEY}
-  UL_NPS_API_KEY: ${UL_NPS_API_KEY}
-  UL_SMITHSONIAN_API_KEY: ${UL_SMITHSONIAN_API_KEY}
   UL_DRAGONFLY_URL: ${UL_DRAGONFLY_URL:-redis://urbanlens_dragonfly:6379/0}
   UL_PROXY_CACHE_URL: ${UL_PROXY_CACHE_URL:-redis://urbanlens_tile_cache:6379/0}
   UL_CHANNEL_LAYER_URL: ${UL_CHANNEL_LAYER_URL:-redis://urbanlens_channel_layer:6379/0}
@@ -44,11 +41,6 @@ x-app-env: &app-env
   UL_METRICS_TOKEN: ${UL_METRICS_TOKEN:-}
   UL_METRICS_ALLOWED_CIDRS: ${UL_METRICS_ALLOWED_CIDRS:-}
   PROMETHEUS_MULTIPROC_DIR: /var/run/urbanlens/prometheus
-  UL_AI_INFERENCE_URL: ${UL_AI_INFERENCE_URL:-http://urbanlens_ai_inference:8002}
-  UL_AI_INFERENCE_TOKEN: ${UL_AI_INFERENCE_TOKEN}
-  UL_DIRECT_INFERENCE_POLICY: ${UL_DIRECT_INFERENCE_POLICY:-warn}
-  # The app gates the assistant on this (services/ai/access.py); unset, it hides an ai-worker that is running.
-  UL_AI_WORKER_ENABLED: ${UL_AI_WORKER_ENABLED:-true}
 x-sandbox-env: &sandbox-env
   UL_DB_USER: ul_sandbox
   UL_DB_NAME: ${UL_DB_NAME:-postgres}
@@ -99,29 +91,6 @@ x-sandbox-worker: &sandbox-worker
     options:
       max-size: "200k"
       max-file: "10"
-x-ai-env: &ai-env
-  UL_DB_USER: ul_ai
-  UL_DB_NAME: ${UL_DB_NAME:-postgres}
-  UL_DB_PASS: ${UL_DB_APP_PASS:-${UL_DB_PASS:-postgres}}
-  UL_DB_HOST: ${UL_DB_HOST:-urbanlens_db}
-  UL_DB_PORT: ${UL_DB_PORT:-5432}
-  UL_ENVIRONMENT: ${UL_ENVIRONMENT}
-  UL_SITE_URL: ${UL_SITE_URL:-}
-  UL_DRAGONFLY_URL: ${UL_DRAGONFLY_URL:-redis://urbanlens_dragonfly:6379/0}
-  UL_RABBITMQ_URL: ${UL_RABBITMQ_URL:-amqp://${UL_RABBITMQ_USER:-urbanlens}:${UL_RABBITMQ_PASS:-guest}@urbanlens_rabbitmq:5672/${UL_RABBITMQ_VHOST:-urbanlens}}
-  DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
-  UL_FIELD_ENCRYPTION_KEY: ${UL_FIELD_ENCRYPTION_KEY}
-  UL_FIELD_ENCRYPTION_KEY_FALLBACKS: ${UL_FIELD_ENCRYPTION_KEY_FALLBACKS}
-  UL_OPENWEATHERMAP_API_KEY: ${UL_OPENWEATHERMAP_API_KEY}
-  UL_AI_INFERENCE_URL: ${UL_AI_INFERENCE_URL:-http://urbanlens_ai_inference:8002}
-  UL_AI_INFERENCE_TOKEN: ${UL_AI_INFERENCE_TOKEN}
-  UL_AI_INFERENCE_TIMEOUT_SECONDS: ${UL_AI_INFERENCE_TIMEOUT_SECONDS:-90}
-  UL_AI_WORKER_ENABLED: "true"
-  HTTPS_PROXY: http://urbanlens_egress_proxy:8888
-  HTTP_PROXY: http://urbanlens_egress_proxy:8888
-  NO_PROXY: localhost,127.0.0.1,urbanlens_db,urbanlens_dragonfly,urbanlens_rabbitmq,urbanlens_ai_inference
-  UL_PROCESS_ROLE: ai
-  UL_UNTRUSTED_PARSE_POLICY: deny
 x-beat-env: &beat-env
   UL_DB_NAME: ${UL_DB_NAME:-postgres}
   UL_DB_PASS: ${UL_DB_APP_PASS:-${UL_DB_PASS:-postgres}}
@@ -140,6 +109,13 @@ x-beat-env: &beat-env
   UL_MEDIA_BASE_URL: ${UL_MEDIA_BASE_URL:-}
   UL_MEDIA_COOKIE_DOMAIN: ${UL_MEDIA_COOKIE_DOMAIN:-}
   UL_MEDIA_CSP: ${UL_MEDIA_CSP:-}
+  # Beat builds its schedule at import from these: which entries the environment runs, and which plugins contribute any.
+  # Non-secret only; a setting the schedule starts to depend on belongs here too.
+  UL_BACKGROUND_TASKS_ALLOWLIST: ${UL_BACKGROUND_TASKS_ALLOWLIST:-}
+  UL_ENVIRONMENT_SHARE: ${UL_ENVIRONMENT_SHARE:-}
+  UL_ENVIRONMENT_SHARE_OVERRIDES: ${UL_ENVIRONMENT_SHARE_OVERRIDES:-}
+  UL_DISABLED_PLUGINS: ${UL_DISABLED_PLUGINS:-}
+  UL_PLUGIN_MODULES: ${UL_PLUGIN_MODULES:-}
 name: urbanlens-${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}
 
 services:
@@ -174,7 +150,6 @@ services:
         aliases:
           - urbanlens_app
           - urbanlens-app
-      inference_network: {}
 
     env_file: *app-env-file
     environment:
@@ -281,9 +256,11 @@ services:
       - media_volume:/app/src/urbanlens/media
       - ./src/urbanlens/config/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./src/urbanlens/config/nginx/django.conf.template:/etc/nginx/templates/django.conf.template:ro
+      - ./src/urbanlens/config/nginx/10-trusted-proxies.sh:/docker-entrypoint.d/10-trusted-proxies.sh:ro
       - /dev/null:/etc/nginx/conf.d/default.conf:ro
     environment:
       UL_APP_PORT: ${UL_APP_PORT:-21800}
+      UL_TRUSTED_PROXY_CIDRS: ${UL_TRUSTED_PROXY_CIDRS:-}
     ports:
       - "${UL_APP_PORT:-21800}:8080"
     depends_on:
@@ -323,9 +300,11 @@ services:
       - media_volume:/app/src/urbanlens/media:ro
       - ./src/urbanlens/config/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./src/urbanlens/config/nginx/media.conf.template:/etc/nginx/templates/media.conf.template:ro
+      - ./src/urbanlens/config/nginx/10-trusted-proxies.sh:/docker-entrypoint.d/10-trusted-proxies.sh:ro
       - /dev/null:/etc/nginx/conf.d/default.conf:ro
     environment:
       MEDIA_FRAME_ANCESTORS: ${UL_SITE_URL:-'none'}
+      UL_TRUSTED_PROXY_CIDRS: ${UL_TRUSTED_PROXY_CIDRS:-}
     ports:
       - "${UL_MEDIA_PORT:-21801}:8080"
     depends_on:
@@ -365,12 +344,12 @@ services:
       - "-c"
       - "jit=off"
       # Where the time goes is not answerable after the fact without this, and it was reached for
-      # by hand on the perf deployment rather than configured (X27). Preloading costs a little
+      # by hand on the perf deployment rather than configured. Preloading costs a little
       # shared memory whether or not any database has run CREATE EXTENSION (migration 0032_v0_8_0).
       - "-c"
       - "shared_preload_libraries=pg_stat_statements"
       # Postgres's own default is off, and measuring its cost here was defeated by host noise.
-      # X27's planning figures need it, so a deployment doing that measurement turns it on.
+      # Planning-figure measurements need it, so a deployment doing that measurement turns it on.
       - "-c"
       - "pg_stat_statements.track_planning=${UL_DB_TRACK_PLANNING:-off}"
       # Stock is 128MB, which is smaller than the database. Sized against MEM_LIMIT__DB, not the host.
@@ -390,9 +369,6 @@ services:
         aliases:
           - urbanlens_db
       sandbox_network:
-        aliases:
-          - urbanlens_db
-      ai_network:
         aliases:
           - urbanlens_db
 
@@ -455,7 +431,7 @@ services:
     entrypoint: ["/docker-entrypoint.sh", "python", "-m", "celery"]
     # Only the interactive class. Everything whose size is set by how much one
     # account owns goes to celery-worker-bulk, so a library sweep cannot take a
-    # quarter of this pool while a safety escalation waits behind it - D13.
+    # quarter of this pool while a safety escalation waits behind it.
     command:
       [
         "-A",
@@ -482,7 +458,6 @@ services:
       - backups:/app/src/backups
     networks:
       - app_network
-      - inference_network
     env_file: *app-env-file
     environment:
       <<: *app-env
@@ -532,7 +507,6 @@ services:
       - backups:/app/src/backups
     networks:
       - app_network
-      - inference_network
     env_file: *app-env-file
     environment:
       <<: *app-env
@@ -753,9 +727,6 @@ services:
       sandbox_network:
         aliases:
           - urbanlens_dragonfly
-      ai_network:
-        aliases:
-          - urbanlens_dragonfly
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -790,9 +761,6 @@ services:
         aliases:
           - urbanlens_tile_cache
       sandbox_network:
-        aliases:
-          - urbanlens_tile_cache
-      ai_network:
         aliases:
           - urbanlens_tile_cache
     healthcheck:
@@ -843,11 +811,9 @@ services:
 
   rabbitmq:
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_rabbitmq
-    # 3.13, not 4.x: Celery/kombu's pyamqp transport declares its pidbox control
-    # queue transient and non-exclusive, a combination RabbitMQ 4.0 deprecated
-    # and now refuses outright (INTERNAL_ERROR 541) - crash-looping the worker.
-    # Verified against a real worker before pinning this.
-    image: rabbitmq:4.3-management-alpine
+    # 3.13, not 4.x: kombu declares the worker's pidbox queue transient and non-exclusive, which 4.x refuses
+    # (INTERNAL_ERROR 541), so the worker crash-loops (seen with kombu 5.6.2, celery 5.6.3). Renovate holds it below 4.
+    image: rabbitmq:3.13-management-alpine
     restart: unless-stopped
     environment:
       # A task's delivery is unacknowledged through its countdown (at most 6 h), its wait for a pool slot and its run
@@ -865,9 +831,6 @@ services:
       sandbox_network:
         aliases:
           - urbanlens_rabbitmq
-      ai_network:
-        aliases:
-          - urbanlens_rabbitmq
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
@@ -883,152 +846,6 @@ services:
     cpu_shares: ${CPU_SHARES__RABBITMQ:-1024}
     mem_limit: ${MEM_LIMIT__RABBITMQ:-${MEM_LIMIT:-1g}}
 
-  egress-proxy:
-    container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_egress_proxy
-    build:
-      context: ./src/urbanlens/config/egress
-    restart: unless-stopped
-    user: "tinyproxy:tinyproxy"
-    read_only: true
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    tmpfs:
-      - /var/run/tinyproxy:size=1m,mode=1777,noexec,nosuid,nodev
-    networks:
-      proxy_network:
-        aliases:
-          - urbanlens_egress_proxy
-      ai_egress_network: {}
-    healthcheck:
-      # Full request, not `nc -z`: bare connect logs ERROR each interval,
-      # hiding blocked provider calls. 403 is healthy - tinyproxy.stats
-      # stays unallowlisted so probe exercises parsing/policy w/o real egress.
-      test:
-        [
-          "CMD-SHELL",
-          "printf 'GET http://tinyproxy.stats/ HTTP/1.0\r\n\r\n' | nc 127.0.0.1 8888 | grep -q '^HTTP/'",
-        ]
-      interval: 30s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "200k"
-        max-file: "10"
-    cpus: ${CPU_LIMIT__EGRESS_PROXY:-0.25}
-    cpu_shares: ${CPU_SHARES__EGRESS_PROXY:-256}
-    mem_limit: ${MEM_LIMIT__EGRESS_PROXY:-128m}
-    pids_limit: 32
-  ai-inference:
-    container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_ai_inference
-    build:
-      <<: *app-build
-    restart: unless-stopped
-    entrypoint: ["/docker-entrypoint.sh", "gunicorn"]
-    command:
-      [
-        "urbanlens_ai.wsgi:application",
-        "--bind",
-        "0.0.0.0:8002",
-        "-k",
-        "gthread",
-        "--threads",
-        "8",
-        "-w",
-        "1",
-        "-t",
-        "120",
-        # This container is read_only, so gunicorn cannot create its control
-        # socket under $HOME and logs an Errno 30 every boot. Nothing drives
-        # this service through that socket, and refusing it outright suits a
-        # tier whose whole purpose is isolation better than a writable mount.
-        "--no-control-socket",
-      ]
-    user: "1001:1001"
-    read_only: true
-    tmpfs:
-      - /tmp:size=16m,mode=1777,noexec,nosuid,nodev
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    depends_on:
-      egress-proxy:
-        condition: service_healthy
-    networks:
-      inference_network:
-        aliases:
-          - urbanlens_ai_inference
-      proxy_network: {}
-    env_file:
-      - path: .env.ai
-        required: false
-    environment:
-      UL_AI_INFERENCE_TOKEN: ${UL_AI_INFERENCE_TOKEN}
-      UL_PROCESS_ROLE: inference
-      HTTPS_PROXY: http://urbanlens_egress_proxy:8888
-      HTTP_PROXY: http://urbanlens_egress_proxy:8888
-      NO_PROXY: localhost,127.0.0.1
-    healthcheck:
-      test:
-        ["CMD", "curl", "-f", "--noproxy", "*", "http://localhost:8002/health/"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 15s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "200k"
-        max-file: "10"
-    cpus: ${CPU_LIMIT__AI_INFERENCE:-0.5}
-    cpu_shares: ${CPU_SHARES__AI_INFERENCE:-512}
-    mem_limit: ${MEM_LIMIT__AI_INFERENCE:-512m}
-    pids_limit: 64
-  ai-worker:
-    <<: *sandbox-worker
-    container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_ai_worker
-    command:
-      [
-        "-A",
-        "urbanlens.UrbanLens",
-        "worker",
-        "--loglevel=warning",
-        "--pool=prefork",
-        "--concurrency=2",
-        "-Q",
-        "ai",
-        "--prefetch-multiplier=1",
-      ]
-    depends_on:
-      db-setup:
-        condition: service_completed_successfully
-      dragonfly:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-      egress-proxy:
-        condition: service_healthy
-      ai-inference:
-        condition: service_healthy
-      app:
-        condition: service_healthy
-    volumes:
-      - logs:/var/log/urbanlens
-    networks:
-      - ai_network
-      - inference_network
-      - proxy_network
-    environment:
-      <<: *ai-env
-    pids_limit: 128
-    cpus: ${CPU_LIMIT__AI_WORKER:-${CPU_LIMIT:-1}}
-    cpu_shares: ${CPU_SHARES__AI_WORKER:-128}
-    mem_limit: ${MEM_LIMIT__AI_WORKER:-${MEM_LIMIT:-1g}}
   test-runner:
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_test_runner
     profiles: ["test"]
@@ -1113,7 +930,7 @@ services:
   test-rabbitmq:
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_test_rabbitmq
     profiles: ["test"]
-    image: rabbitmq:4.3-management-alpine
+    image: rabbitmq:3.13-management-alpine
     network_mode: service:test-runner
     depends_on:
       - test-runner
@@ -1151,18 +968,3 @@ networks:
   sandbox_network:
     driver: bridge
     internal: true
-  ai_network:
-    driver: bridge
-    internal: true
-    enable_ipv6: false
-  inference_network:
-    driver: bridge
-    internal: true
-    enable_ipv6: false
-  proxy_network:
-    driver: bridge
-    internal: true
-    enable_ipv6: false
-  ai_egress_network:
-    driver: bridge
-    enable_ipv6: false

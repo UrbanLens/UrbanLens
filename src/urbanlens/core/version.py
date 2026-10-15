@@ -7,11 +7,8 @@ from functools import lru_cache
 from importlib.metadata import PackageNotFoundError, version as pkg_version
 import logging
 import os
-from pathlib import Path
 import shutil
-import signal
 import subprocess  # nosec B404
-import sys
 import tomllib
 
 from urbanlens.UrbanLens.settings.meta.app import DEFAULT_ROOT
@@ -21,8 +18,6 @@ logger = logging.getLogger(__name__)
 PROJECT_NAME = "UrbanLens"
 PYPROJECT_PATH = DEFAULT_ROOT.parent / "pyproject.toml"
 _GIT_CWD = DEFAULT_ROOT.parent
-MANAGE_PY = DEFAULT_ROOT / "urbanlens" / "manage.py"
-_DJANGO_CWD = DEFAULT_ROOT.parent
 _GIT_EXECUTABLE: str = shutil.which("git") or "git"
 
 
@@ -229,111 +224,6 @@ def _count_commits_ahead(base_commit: str, head_commit: str) -> int | None:
         return int(result.stdout.strip())
     except ValueError:
         return None
-
-
-def apply_pending_migrations() -> tuple[bool, str]:
-    """
-    Apply pending migrations; return (ok, message).
-
-    Returns:
-        ``(True, message)`` when migrations completed; otherwise ``(False, message)``.
-    """
-    logger.info("Applying pending migrations")
-    try:
-        result = subprocess.run(  # nosec B603
-            [sys.executable, str(MANAGE_PY), "migrate", "--noinput"],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=300,
-            cwd=_DJANGO_CWD,
-            env=os.environ.copy(),
-        )
-    except subprocess.TimeoutExpired:
-        logger.warning("django migrate timed out after git pull", exc_info=True)
-        return False, "Timed out while applying database migrations."
-    except OSError:
-        logger.warning("django migrate could not be started after git pull", exc_info=True)
-        return False, "Could not start database migrations on this server."
-
-    output = "\n".join(part.strip() for part in (result.stdout, result.stderr) if part.strip())
-    if result.returncode == 0:
-        return True, output or "Database migrations are up to date."
-
-    logger.warning("django migrate failed with exit code %s: %s", result.returncode, output)
-    return False, output or "Database migrations failed."
-
-
-def _parent_process_command() -> str:
-    """
-    Return the parent process command line, or empty string.
-
-    Returns:
-        Parent ``cmdline`` on Linux, or an empty string when unavailable.
-    """
-    try:
-        raw = Path(f"/proc/{os.getppid()}/cmdline").read_bytes()
-    except OSError:
-        return ""
-
-    return raw.replace(b"\x00", b" ").decode(errors="replace").strip()
-
-
-def trigger_development_app_reload() -> tuple[bool, str]:
-    """Reload the app server after a code update; return (ok, message)."""
-    logger.info("Attempting to reload the server...")
-    parent_cmd = _parent_process_command()
-    # SIGHUP only exists on Linux, where gunicorn runs.
-    sighup = getattr(signal, "SIGHUP", 1)
-    if "gunicorn" in parent_cmd:
-        try:
-            os.kill(os.getppid(), sighup)
-        except OSError:
-            logger.warning("could not signal gunicorn master to reload", exc_info=True)
-            return False, "Could not signal the application server to reload."
-        return True, "Application server reload requested."
-
-    reload_trigger = Path(__file__)
-    try:
-        os.utime(reload_trigger, None)
-    except OSError:
-        logger.warning("could not touch %s to trigger development reload", reload_trigger, exc_info=True)
-        return False, "Could not signal the development server to reload."
-
-    return True, "Development server reload requested."
-
-
-def pull_latest_git_code() -> tuple[bool, str]:
-    """
-    Pull current branch fast-forward-only; return (ok, message).
-
-    Returns:
-        ``(True, message)`` when git updated or was already current; otherwise
-        ``(False, message)`` with a safe, user-facing failure reason.
-    """
-    try:
-        result = subprocess.run(  # nosec B603
-            [_GIT_EXECUTABLE, "pull", "--ff-only"],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=120,
-            cwd=_GIT_CWD,
-            env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
-        )
-    except subprocess.TimeoutExpired:
-        logger.warning("git pull timed out", exc_info=True)
-        return False, "Timed out while pulling updates."
-    except OSError:
-        logger.warning("git pull could not be started", exc_info=True)
-        return False, "Could not start git pull on this server."
-
-    output = "\n".join(part.strip() for part in (result.stdout, result.stderr) if part.strip())
-    if result.returncode == 0:
-        return True, output or "Code is already up to date."
-
-    logger.warning("git pull failed with exit code %s: %s", result.returncode, output)
-    return False, output or "Git pull failed."
 
 
 def format_short_commit(commit: str | None, length: int = 7) -> str:

@@ -35,7 +35,7 @@ export const VIEWPORT_TILES = 24;
  * The layer a capacity run draws, and the zoom it draws it at. Both have to match whatever seeded
  * the cache.
  *
- * Not `street`: REData publishes that as vector (`D11`) and answers a tile-by-tile request for it
+ * Not `street`: the catalogue publishes that as vector and answers a tile-by-tile request for it
  * with 400 `vector_layer_not_served`, so nothing can fill that cache key from upstream any more. A
  * seeded run would not notice - `seed_basemap_tile_cache` writes placeholder bytes straight into
  * the cache, which is the point, so the layer is only a cache key there - but an unseeded or
@@ -312,7 +312,7 @@ export function viewportTiles(seed, count = VIEWPORT_TILES) {
 /**
  * Coordinates spread across the whole grid, for the pre-flight check.
  *
- * One coordinate does not establish that the cache is warm. X26 records a run where a single cell
+ * One coordinate does not establish that the cache is warm. A recorded run had a single cell
  * had been hand-seeded earlier while testing, so the one-tile guard passed and the other 1,020
  * were cold: 8,360 of 8,352 tile requests answered 503 and the report still rendered a full table
  * of plausible latencies. Both axes are walked with a stride coprime to *count*, so the sample is

@@ -7,7 +7,7 @@ import types
 from django.template.loader import render_to_string
 from django.utils.html import escape
 
-from urbanlens.core.tests.testcase import SimpleTestCase
+from urbanlens.core.tests.testcase import TestCase
 
 
 def _fake_location(**overrides: object) -> types.SimpleNamespace:
@@ -20,7 +20,7 @@ def _fake_location(**overrides: object) -> types.SimpleNamespace:
     return types.SimpleNamespace(**defaults)
 
 
-class WikiLocationConflictNoticeTests(SimpleTestCase):
+class WikiLocationConflictNoticeTests(TestCase):
     def _render(self, other_locations, user_pin=None):
         location = _fake_location(slug="current-place")
         return render_to_string(

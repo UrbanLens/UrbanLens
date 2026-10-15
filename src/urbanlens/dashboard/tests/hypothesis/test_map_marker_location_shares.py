@@ -1,5 +1,5 @@
 """
-P21: a markup map shares the places it marks, whether or not its sender has a pin there.
+A markup map shares the places it marks, whether or not its sender has a pin there.
 
 Matching only the sender's pins let anyone launder a place: receive it, never pin it, draw it on a map, send that.
 The chain ended there, where a typed coordinate in a message would have continued it.

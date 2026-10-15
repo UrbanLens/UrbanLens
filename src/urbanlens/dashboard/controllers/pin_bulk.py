@@ -323,7 +323,7 @@ class PinParentSearchView(LoginRequiredMixin, View):
 
 class PinBulkExportView(LoginRequiredMixin, View):
     """
-    Download selected pins as GeoJSON/KML/GPX/CSV (UL-377/UL-382, plain form POST).
+    Download selected pins as GeoJSON/KML/GPX/CSV (plain form POST).
 
     A plain (non-JSON) form POST, not fetch/JSON like the other bulk views - submitted via a throwaway
     <form target="_blank"> so the browser handles the file download itself from the Content-Disposition

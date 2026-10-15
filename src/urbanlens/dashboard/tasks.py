@@ -32,9 +32,6 @@ from celery.exceptions import SoftTimeLimitExceeded
 from channels.layers import get_channel_layer
 from django.utils import timezone
 
-from urbanlens.dashboard.services.ai.tasks import (  # noqa: F401 - celery's autodiscover_tasks() only imports <app>/tasks.py, so this is what registers the task on the worker
-    run_assistant_turn_task,
-)
 from urbanlens.dashboard.services.core.capacity import ALBUM_PHOTOS, CapacityExceededError, ensure_room
 from urbanlens.dashboard.services.core.celery import RetryNoticeError, update_task_progress
 from urbanlens.dashboard.services.core.egress import external_background_task
@@ -950,7 +947,7 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
     """
     Pre-warm LocationCache for a newly created Location.
 
-    Runs Wikipedia and NPS lookups so that the first time a user opens the pin detail page the data is
+    Runs the Wikipedia lookup and every contributed prefetcher so that the first time a user opens the pin detail page the data is
     already cached. Every lookup is driven by the Location's public data, never the pin's own name.
 
     Args:
@@ -966,6 +963,7 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.locations.naming import update_location_name_from_external_sources
+    from urbanlens.dashboard.services.locations.prefetch import run_prefetchers
 
     location = Location.objects.filter(pk=location_id).first()
     if not location:
@@ -992,18 +990,7 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
     if pin_id is not None:
         _seed_new_pin_from_cached_wikipedia(location, pin_id)
 
-    from urbanlens.dashboard.plugins.builtin.nps import NpsPanelSource
-    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
-
-    if redata_configured() and LocationCache.get_fresh(location, NpsPanelSource.cache_source, max_age=NpsPanelSource.cache_max_age) is None:
-        try:
-            from urbanlens.dashboard.services.apis.locations.redata_national_parks_gateway import RedataNationalParksGateway
-
-            park = RedataNationalParksGateway().find_nearest_park(lat, lng)
-            LocationCache.set(location, "nps", park or {}, query_key=f"{lat:.5f},{lng:.5f}")
-            logger.info("prefetch_location_external_data: cached NPS for location %s", location_id)
-        except Exception:
-            logger.exception("prefetch_location_external_data: NPS lookup failed for location %s", location_id)
+    run_prefetchers(location, lat, lng)
 
     if google_place_id and LocationCache.get_fresh(location, "google_places") is None:
         try:
@@ -1364,15 +1351,15 @@ def _scan_pending_upload(task, image: Image) -> bool:
         UploadStorageFailedError: Storage could not open or read the upload.
     """
     from urbanlens.dashboard.services.security.malware_scan import (
-        VIRUSTOTAL_ELIGIBLE_SOURCES,
         MalwareScanUnavailableError,
         malware_error_for_fetched_asset,
         malware_error_for_upload,
+        virustotal_eligible_sources,
     )
 
     try:
         with image.image.open("rb") as stored:
-            if image.source in VIRUSTOTAL_ELIGIBLE_SOURCES:
+            if image.source in virustotal_eligible_sources():
                 malware_error = malware_error_for_fetched_asset(stored, checksum=image.checksum)
             else:
                 malware_error = malware_error_for_upload(stored)
@@ -1609,7 +1596,7 @@ def process_image_upload(self, image_id: int, max_dimension: int | None = None) 
     if not strip_location:
         maybe_suggest_photo_visit(image)
 
-    # Keyword generation runs as its own task so a slow provider (AI vision, classifiers) never delays the
+    # Keyword generation runs as its own task so a slow provider never delays the
     # metadata/downscale pipeline above; it also deliberately runs after the downscale so providers read the
     # final file.
     if image.media_type == MediaKind.PHOTO:
@@ -1621,105 +1608,18 @@ def process_image_upload(self, image_id: int, max_dimension: int | None = None) 
         if image.profile is not None and image.profile.generate_photo_keywords:
             _enqueue(generate_image_keywords, image_id)
 
-        from urbanlens.dashboard.services.photos.redata_relevance import queue_photo_submission
+        from urbanlens.dashboard.plugins.points import PHOTO_LOCATED
 
-        queue_photo_submission(image)
+        PHOTO_LOCATED.fire(image)
 
     update_task_progress(self, current=1, total=1, message="Upload metadata processed")
     return True
 
 
-#: Seconds one REData extraction may take; it runs an AI model over a scanned form.
-_CRIS_EXTRACTION_TIMEOUT_SECONDS = 180
-
-
-@shared_task(queue=Queue.BULK, soft_time_limit=_CRIS_EXTRACTION_TIMEOUT_SECONDS * 4)
-def extract_cris_attachments(location_id: int, resource_uuid: str, attachment_ids: list[int]) -> int:
-    """
-    Ask REData to extract photos from CRIS documents, and merge them into the location's cached CRIS payload.
-
-    Args:
-        location_id: PK of the Location whose ``cris_building_usn`` cache lists the attachments.
-        resource_uuid: The CRIS resource the attachments belong to.
-        attachment_ids: The document attachments to extract.
-
-    Returns:
-        How many attachments gained extracted images.
-    """
-    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
-    from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
-
-    if not redata_configured():
-        return 0
-    gateway = RedataGateway()
-    merged = 0
-    for attachment_id in attachment_ids:
-        try:
-            result = gateway.extract_cultural_resource_attachment(resource_uuid, attachment_id, timeout=_CRIS_EXTRACTION_TIMEOUT_SECONDS)
-        except PropertyRecordsUnavailableError:
-            logger.debug("extract_cris_attachments: nothing extracted from attachment %s of %s", attachment_id, resource_uuid, exc_info=True)
-            continue
-        if images := result.get("extracted_images"):
-            merged += _merge_cris_extraction(location_id, resource_uuid, attachment_id, images)
-    return merged
-
-
-@shared_task(soft_time_limit=110, time_limit=130, queue=Queue.MAINTENANCE)
-def fill_cris_campus_details(location_id: int, attempt: int = 0) -> int:
-    """
-    Add to a campus's CRIS row the records its site pass left undetailed, queueing the next pass while any remain.
-
-    Args:
-        location_id: PK of the site's Location.
-        attempt: How many passes ran before this one.
-
-    Returns:
-        How many records were added.
-    """
-    from urbanlens.dashboard.models.location.model import Location
-    from urbanlens.dashboard.plugins.builtin.cris_buildings import CrisBuildingPanelSource
-    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
-    from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError
-
-    location = Location.objects.filter(pk=location_id).first()
-    if location is None or not redata_configured():
-        return 0
-    source = CrisBuildingPanelSource()
-    try:
-        filled, remaining = source.fill_campus_details(location)
-    except PropertyRecordsUnavailableError:
-        logger.info("fill_cris_campus_details: REData's lookup failed for location %s", location_id, exc_info=True)
-        filled, remaining = 0, 1
-    if remaining:
-        source.queue_campus_fill(location_id, attempt + 1)
-    return filled
-
-
-def _merge_cris_extraction(location_id: int, resource_uuid: str, attachment_id: int, images: list) -> int:
-    """Write one attachment's extracted images into the cached CRIS payload, returning 1 if it was there to update."""
-    from django.db import transaction
-
-    from urbanlens.dashboard.models.cache.location_cache import LocationCache
-
-    with transaction.atomic():
-        row = LocationCache.objects.select_for_update().filter(location_id=location_id, source="cris_building_usn").first()
-        if row is None:
-            return 0
-        data = dict(row.data or {})
-        merged = 0
-        for attachment in data.get("attachments") or []:
-            if attachment.get("resource_uuid") == resource_uuid and attachment.get("id") == attachment_id:
-                attachment["extracted_images"] = images
-                merged = 1
-        if merged:
-            LocationCache.objects.filter(pk=row.pk).update(data=data)
-    return merged
-
-
 @shared_task(queue=SANDBOX_QUEUE)
 def render_proxied_media(source_key: str, size: str, descriptor: dict[str, str]) -> bool:
     """
-    Decode one file an in-app REData proxy serves and keep the rendering (``services.media.proxied_renders``).
+    Decode one file an in-app proxy serves and keep the rendering (``services.media.proxied_renders``).
 
     Args:
         source_key: The proxy's cache key for the original file.
@@ -1915,7 +1815,7 @@ def generate_image_thumbnails(image_ids: list[int]) -> int:
                 break
             # Recorded, not only logged: the sweep resets its cursor and comes
             # round again, so without this a row whose bytes are gone is retried
-            # hourly forever (N22 H64). Written with `.update()` because the
+            # hourly forever. Written with `.update()` because the
             # in-memory row is mid-failure and must not be saved wholesale.
             Image.objects.filter(pk=image.pk).update(media_unreadable_at=timezone.now())
             logger.warning("Thumbnail generation failed for image %s: %s", image.pk, exc, exc_info=True)
@@ -2229,7 +2129,7 @@ def generate_image_marker_thumbnails(image_ids: list[int]) -> int:
                 break
             # Recorded, not only logged: the sweep resets its cursor and comes
             # round again, so without this a row whose bytes are gone is retried
-            # hourly forever (N22 H64). Written with `.update()` because the
+            # hourly forever. Written with `.update()` because the
             # in-memory row is mid-failure and must not be saved wholesale.
             Image.objects.filter(pk=image.pk).update(media_unreadable_at=timezone.now())
             logger.warning("Marker thumbnail generation failed for image %s: %s", image.pk, exc, exc_info=True)
@@ -2410,140 +2310,6 @@ def sweep_keyword_retries(limit: int | None = None) -> dict[str, int]:
         if not acquired:
             return {}
         return {str(outcome): count for outcome, count in keyword_retry.sweep(limit or keyword_retry.SWEEP_BATCH).items()}
-
-
-@shared_task(queue=Queue.BULK)
-def submit_redata_photos(image_ids: list[int]) -> bool:
-    """
-    Submit photo observations to REData and cache the confidence scores it returns.
-
-    Best-effort like every other REData call site (e.g. ``import_immich_photos``) - a REData outage is
-    logged and swallowed rather than retried, since a later submission (or the periodic photo itself
-    being re-saved) will pick it up.
-
-    Args:
-        image_ids: PKs of photos to submit - filtered to actual photos (not video/document rows) with a
-        resolved location.
-
-    Returns:
-        True when at least one photo was submitted.
-    """
-    from urbanlens.dashboard.models.images.model import Image, MediaKind
-    from urbanlens.dashboard.services.photos.redata_relevance import submit_photos
-
-    images = list(Image.objects.filter(pk__in=image_ids, media_type=MediaKind.PHOTO, location__isnull=False).select_related("location", "wiki"))
-    if not images:
-        return False
-    submit_photos(images)
-    return True
-
-
-@shared_task(queue=Queue.BULK)
-def submit_redata_photo_vote(image_id: int, profile_id: int, is_relevant: bool) -> bool:
-    """
-    Submit one relevance vote on a photo to REData.
-
-    Enqueued from ``services.photos.redata_relevance.queue_relevance_vote`` whenever a user marks a
-    materialized photo relevant or not relevant.
-
-    Args:
-        image_id: PK of the photo being voted on.
-        profile_id: PK of the voting profile.
-        is_relevant: True for a relevant vote, False for not-relevant.
-
-    Returns:
-        True when the vote was recorded (REData knew about this photo).
-    """
-    from django.utils import timezone
-
-    from urbanlens.dashboard.models.images.model import Image
-    from urbanlens.dashboard.services.apis.photos.redata_photos_gateway import RedataPhotosGateway
-    from urbanlens.dashboard.services.core.gateway import GatewayRequestError
-
-    image = Image.objects.filter(pk=image_id).first()
-    if image is None:
-        return False
-
-    vote = {"photo_id": str(image.uuid), "is_relevant": is_relevant, "voter_id": str(profile_id), "voted_at": timezone.now().isoformat()}
-    try:
-        response = RedataPhotosGateway().submit_votes([vote])
-    except GatewayRequestError as exc:
-        logger.warning("REData vote submission failed for image %s: %s", image_id, exc)
-        return False
-    return str(image.uuid) not in (response.get("unknown_photo_ids") or [])
-
-
-@shared_task(queue=Queue.MAINTENANCE)
-def sync_redata_label_definitions(profile_ids: list[int], definitions: list[dict]) -> bool:
-    """
-    Push tag/category label definitions into every listed profile's REData taxonomy.
-
-    Enqueued from ``services.labels.redata_suggestions.queue_label_definition_sync``/
-    ``queue_label_retirement`` whenever a tag/category label is created, edited, reparented, or retired.
-
-    Args:
-        profile_ids: PKs of profiles whose taxonomy should receive ``definitions`` (a global label maps
-        to every profile; an owned label maps to just its one...
-        definitions: Definition dicts built by ``services.labels.redata_suggestions._label_definition``.
-
-    Returns:
-        True when at least one profile was targeted.
-    """
-    from urbanlens.dashboard.services.labels.redata_suggestions import sync_label_definitions
-
-    if not profile_ids or not definitions:
-        return False
-    sync_label_definitions(profile_ids, definitions)
-    return True
-
-
-@shared_task(queue=Queue.BULK)
-def sync_redata_pin_assignment(pin_id: int) -> bool:
-    """
-    Push one pin's complete current tag/category label set to REData.
-
-    Enqueued from ``services.labels.redata_suggestions.queue_pin_assignment_sync``, itself called from
-    the ``Pin.labels`` ``m2m_changed`` signal - the single choke point that sees every pin-tagging call
-    site.
-
-    Args:
-        pin_id: PK of the pin whose label set changed.
-
-    Returns:
-        True when the pin was found and had an owning profile.
-    """
-    from urbanlens.dashboard.models.pin.model import Pin
-    from urbanlens.dashboard.services.labels.redata_suggestions import sync_pin_assignment
-
-    pin = Pin.objects.filter(pk=pin_id).select_related("profile", "location").first()
-    if pin is None or pin.profile_id is None:
-        return False
-    sync_pin_assignment(pin)
-    return True
-
-
-@shared_task(queue=Queue.BULK)
-def sync_redata_pin_assignments(pin_ids: list[int]) -> int:
-    """
-    Chunk-shaped sibling of :func:`sync_redata_pin_assignment`, for a bulk import's fan-out.
-
-    A label added to every pin in an import (a list category, a shared tag) fires the
-    ``Pin.labels`` ``m2m_changed`` signal once per pin - queued here instead of one broker task each.
-
-    Args:
-        pin_ids: PKs of the pins whose label sets changed.
-
-    Returns:
-        How many pins were found and synced.
-    """
-    synced = 0
-    for pin_id in pin_ids:
-        try:
-            if sync_redata_pin_assignment(pin_id):
-                synced += 1
-        except Exception:
-            logger.exception("sync_redata_pin_assignments: pin %s failed", pin_id)
-    return synced
 
 
 @shared_task(bind=True, max_retries=5, queue=SANDBOX_QUEUE)
@@ -2984,9 +2750,9 @@ def sweep_immich_library_locations(self, profile_id: int) -> dict[str, int]:
     return result
 
 
-#: How many consecutive whole-batch REData request failures (network error, non-200, unparseable body - see
+#: How many consecutive whole-batch resolver request failures (network error, non-200, unparseable body - see
 #: CidResolutionResult.request_failed) this task tolerates before giving up.
-_MAX_CONSECUTIVE_REDATA_FAILURES = 5
+_MAX_CONSECUTIVE_RESOLVER_FAILURES = 5
 
 #: How many consecutive retries may report the exact same pending cids with zero of them resolved before this
 #: task gives up on them. A batch still making real progress (even one cid resolved per round) never trips this,
@@ -3066,7 +2832,7 @@ def _place_resolved_pins(result, deferred_lists: list[dict], *, profile, auto_ta
         result: The ``CidResolutionResult`` for this round.
         deferred_lists: The lists being imported, in iter_confirmed_import_events's shape.
         profile: The importing profile.
-        auto_tag: Whether to enqueue AI category suggestion for newly-created pins.
+        auto_tag: Whether to enqueue category suggestion for newly-created pins.
 
     Returns:
         ``(created, exists, skipped)`` for this round only - each retry is a fresh task invocation, so
@@ -3083,9 +2849,9 @@ def _place_resolved_pins(result, deferred_lists: list[dict], *, profile, auto_ta
     from urbanlens.dashboard.services.security.redact import redact_text
 
     created_count = exists_count = skipped_count = 0
-    # Coalesces this round's per-pin follow-on work (wiki creation, category suggestion, reputation
+    # Coalesces this round's per-pin follow-on work (wiki creation, category suggestion, contribution
     # scoring) into bounded chunks rather than one broker task each - see confirmed_import.py's own
-    # collector for the fast (non-deferred) path this mirrors (P109).
+    # collector for the fast (non-deferred) path this mirrors.
     with batching_follow_on_work():
         for lst in deferred_lists:
             stem = (lst.get("stem") or "").strip()
@@ -3195,11 +2961,11 @@ def resolve_deferred_pin_locations(  # noqa: PLR0917 - a Celery task: safely_enq
     confirmed pin whose cid had neither an existing Location nor a cached
     Places lookup - see that method's docstring for why the preview's own
     lat/lng can't be trusted for these. Resolves every cid in one batch via
-    ``services.apis.locations.cid_resolution.resolve_cids`` (REData if
-    configured, else Google Places directly), places whatever resolves now,
+    ``services.apis.locations.cid_resolution.resolve_cids`` (the first available
+    CID resolver, else Google Places directly), places whatever resolves now,
     and retries later - with the resolved subset already placed and pruned
     from the retry args, so a retry never redoes finished work - if anything
-    is still pending on a rate limit or a REData outage. Reports a summary via
+    is still pending on a rate limit or a resolver outage. Reports a summary via
     NotificationLog once every cid is either placed or confirmed unresolvable.
 
     Retries stop at :data:`_DEFERRED_LOOKUP_DEADLINE`, or at :data:`_DEFERRED_MAX_RETRIES` for a batch the deadline
@@ -3210,11 +2976,11 @@ def resolve_deferred_pin_locations(  # noqa: PLR0917 - a Celery task: safely_enq
         deferred_lists: Same shape as iter_confirmed_import_events's
             confirmed_lists, restricted to pins needing a live cid lookup -
             shrinks on each retry to just what's still unresolved.
-        auto_tag: Whether to enqueue AI category suggestion for newly-created pins.
+        auto_tag: Whether to enqueue category suggestion for newly-created pins.
         original_total: Total pin count across the *first* call, before any retry narrowed
         deferred_lists - carried through retries purely so progress reporting...
-        consecutive_request_failures: How many retries in a row have hit a whole-batch REData request
-        failure with zero progress - see ``_MAX_CONSECUTIVE_REDATA_FAILURES``.
+        consecutive_request_failures: How many retries in a row have hit a whole-batch resolver request
+        failure with zero progress - see ``_MAX_CONSECUTIVE_RESOLVER_FAILURES``.
         consecutive_no_progress: How many retries in a row have come back with the exact same cids
         pending and none newly resolved - see...
 
@@ -3242,8 +3008,8 @@ def resolve_deferred_pin_locations(  # noqa: PLR0917 - a Celery task: safely_enq
         return empty
     pin_dict_by_cid = {pin["cid"]: pin for lst in deferred_lists for pin in lst.get("pins", [])}
     # A cid whose pin dict still carries the Google Maps URL it was parsed from (e.g. a Takeout CSV import) -
-    # passed through to REData, which resolves via a place's own URL faster and more reliably than the bare cid
-    # alone.
+    # passed through to the resolver, since one that resolves via a place's own URL is faster and more reliable than
+    # the bare cid alone.
     urls_by_cid = {cid: pin["maps_url"] for cid, pin in pin_dict_by_cid.items() if pin.get("maps_url")}
     total = original_total if original_total is not None else len(all_cids)
 
@@ -3252,7 +3018,7 @@ def resolve_deferred_pin_locations(  # noqa: PLR0917 - a Celery task: safely_enq
     result = resolve_cids(all_cids, urls_by_cid=urls_by_cid)
 
     if result.auth_failed:
-        logger.error("resolve_deferred_pin_locations: REData rejected the API key resolving %d cid(s) for profile %s - not retrying.", len(all_cids), profile_id)
+        logger.error("resolve_deferred_pin_locations: the %s resolver rejected the API key resolving %d cid(s) for profile %s - not retrying.", result.provider, len(all_cids), profile_id)
         for cid in all_cids:
             record_pin_import_failure(
                 profile, cid, name=pin_dict_by_cid[cid].get("name", ""), description=pin_dict_by_cid[cid].get("description", ""), maps_url=pin_dict_by_cid[cid].get("maps_url", "") or "", reason=PinImportFailureReason.LOOKUP_ERROR
@@ -3277,7 +3043,8 @@ def resolve_deferred_pin_locations(  # noqa: PLR0917 - a Celery task: safely_enq
     out_of_time = _deferred_deadline_passed(started_at) or self.request.retries >= _DEFERRED_MAX_RETRIES
     if out_of_time and consecutive_request_failures:
         logger.error(
-            "resolve_deferred_pin_locations: REData failed %d consecutive attempts resolving %d cid(s) for profile %s after %d retries - giving up.",
+            "resolve_deferred_pin_locations: the %s resolver failed %d consecutive attempts resolving %d cid(s) for profile %s after %d retries - giving up.",
+            result.provider,
             consecutive_request_failures,
             len(all_cids),
             profile_id,
@@ -3305,7 +3072,7 @@ def resolve_deferred_pin_locations(  # noqa: PLR0917 - a Celery task: safely_enq
     if result.pending:
         if result.request_failed:
             # Already tracked by consecutive_request_failures above - a failed request trivially leaves every
-            # cid pending, which isn't the "REData responded but nothing moved" case this counter targets.
+            # cid pending, which isn't the "resolver responded but nothing moved" case this counter targets.
             consecutive_no_progress = 0
         else:
             consecutive_no_progress = consecutive_no_progress + 1 if len(result.pending) == len(all_cids) else 0
@@ -3368,7 +3135,7 @@ def resolve_deferred_pin_locations(  # noqa: PLR0917 - a Celery task: safely_enq
             result.provider,
             countdown,
         )
-        # throw=False: still waiting on REData is the expected, routine case, not an error - raising here would
+        # throw=False: still waiting on the resolver is the expected, routine case, not an error - raising here would
         # go through Celery's task_retry signal (see UrbanLens/celery.py), which logs a WARNING + full traceback
         # on every single retry.
         self.retry(
@@ -3646,7 +3413,7 @@ def refresh_pin_web_search(self, pin_id: int) -> int:
         How many results the searches made here found; searches already cached are not made again.
     """
     from urbanlens.dashboard.models.pin import Pin
-    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
+    from urbanlens.dashboard.services.core.gateway import ProviderUnavailableError
     from urbanlens.dashboard.services.search.pin_web_search import annotate_results, cached_web_searches, pin_web_searches, store_web_search
     from urbanlens.dashboard.services.search.search import search_web
 
@@ -3661,7 +3428,7 @@ def refresh_pin_web_search(self, pin_id: int) -> int:
         update_task_progress(self, current=done, total=len(missing), message="Refreshing web search...")
         try:
             results = annotate_results(search_web(search.query))
-        except LocationContextUnavailableError as exc:
+        except ProviderUnavailableError as exc:
             logger.warning("refresh_pin_web_search: search unavailable for pin %s, leaving it to the page: %s", pin_id, exc)
             continue
         store_web_search(pin.location, search, results)
@@ -4213,7 +3980,7 @@ def prune_api_call_logs() -> int:
     return deleted
 
 
-#: See prune_api_call_logs: 12 months of cost-series history plus margin.
+#: See prune_api_call_logs: a year of usage history plus margin.
 _API_CALL_LOG_RETENTION_DAYS = 400
 
 
@@ -4432,36 +4199,13 @@ def broadcast_channel_group_messages(deliveries: list[tuple[str, dict[str, Any]]
     async_to_sync(send_all)()
 
 
-@shared_task(soft_time_limit=240, time_limit=270, queue=Queue.INTERACTIVE)
-def run_link_extraction(extraction_id: int) -> None:
-    """
-    Execute one queued AI link-extraction run (fetch, AI call, apply, notify).
-
-    No Celery autoretry: the run itself records every failure mode on the LinkExtraction row (and
-    notifies the user either way), and each attempt consumes a fetch plus AI tokens - retrying
-    automatically would silently multiply cost for a user-triggered, user-visible action they can simply
-    click again.
-
-    Args:
-        extraction_id: PK of the pending LinkExtraction row.
-    """
-    from urbanlens.dashboard.models.link_extraction.model import LinkExtraction
-    from urbanlens.dashboard.services.ai.link_extraction import run_extraction
-
-    extraction = LinkExtraction.objects.filter(pk=extraction_id).select_related("pin", "pin__location", "profile").first()
-    if extraction is None:
-        logger.info("run_link_extraction: extraction %s no longer exists", extraction_id)
-        return
-    run_extraction(extraction)
-
-
 @shared_task(soft_time_limit=180, time_limit=210, queue=Queue.INTERACTIVE)
 def classify_trivia_submission(question_id: int) -> None:
     """
     Classify one pending user-submitted Trivia question and record its verdict.
 
-    No Celery autoretry: each attempt consumes an AI call, and this is a background action with no user
-    waiting on it - if this task never runs (or the classifier can't reach AI right now), the question
+    No Celery autoretry: each attempt may call an external service, and this is a background action with no user
+    waiting on it - if this task never runs (or that service can't be reached right now), the question
     simply stays PENDING_REVIEW (silently excluded from rotation, see
     services.trivia.submission.classify_and_update), no different from any other transient Celery
     outage.
@@ -4477,58 +4221,6 @@ def classify_trivia_submission(question_id: int) -> None:
         logger.info("classify_trivia_submission: question %s no longer exists", question_id)
         return
     classify_and_update(question)
-
-
-@shared_task(queue=Queue.MAINTENANCE)
-@external_background_task("scheduled-trivia-generation")
-def run_scheduled_trivia_generation() -> dict:
-    """
-    Generate AI trivia questions for a bounded batch of not-yet-processed wikis.
-
-    Fired hourly by Celery beat, mirroring run_scheduled_enrichment's single-flight lock (a run that's
-    still going when the next hour ticks over is left alone rather than started twice).
-
-    Returns:
-        The sweep summary dict, or a skip marker when another run holds the single-flight lock.
-    """
-
-    from urbanlens.dashboard.services.trivia.generation import sweep_wikis_for_generation
-
-    lock_key = "trivia_generation_sweep_lock"
-    _lock_token = acquire_lock(lock_key, 3300)
-    if _lock_token is None:
-        logger.info("run_scheduled_trivia_generation: another sweep is still running; skipping")
-        return {"skipped": "already_running"}
-    try:
-        return sweep_wikis_for_generation()
-    finally:
-        release_lock(lock_key, _lock_token)
-
-
-@shared_task(queue=Queue.MAINTENANCE)
-@external_background_task("scheduled-trivia-wiki-incorporation")
-def run_scheduled_trivia_wiki_incorporation() -> dict:
-    """
-    Fold well-upvoted user-submitted Trivia questions into their location wikis.
-
-    Fired hourly by Celery beat, mirroring run_scheduled_trivia_generation's single-flight lock (a run
-    still going when the next hour ticks over is left alone rather than started twice).
-
-    Returns:
-        The sweep summary dict, or a skip marker when another run holds the single-flight lock.
-    """
-
-    from urbanlens.dashboard.services.trivia.wiki_incorporation import sweep_questions_for_wiki_incorporation
-
-    lock_key = "trivia_wiki_incorporation_sweep_lock"
-    _lock_token = acquire_lock(lock_key, 3300)
-    if _lock_token is None:
-        logger.info("run_scheduled_trivia_wiki_incorporation: another sweep is still running; skipping")
-        return {"skipped": "already_running"}
-    try:
-        return sweep_questions_for_wiki_incorporation()
-    finally:
-        release_lock(lock_key, _lock_token)
 
 
 #: Slugs a pin gets when it is created before anything knows what it is. Listed explicitly so the sweep below is
@@ -5088,144 +4780,6 @@ def backfill_achievement_range(achievement_id: int, start_pk: int, end_pk: int) 
     return evaluate_achievement_in_range(achievement, start_pk, end_pk)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
-def score_reputation_event(event_id: int) -> str:
-    """
-    Work out what one recorded contribution was worth.
-
-    Deferred because establishing how badly a target needed a contribution means querying that target's
-    state, which for photos can mean walking external gallery panels - by far the most expensive input
-    in the model, and exactly the cost this feature must not add to a page load.
-
-    Args:
-        event_id: PK of the ledger row to value.
-
-    Returns:
-        The stored value as a string, or a short status when nothing was.
-    """
-    from urbanlens.dashboard.models.reputation.model import ReputationEvent
-    from urbanlens.dashboard.services.reputation.scoring import recompute_total, score_event
-
-    event = ReputationEvent.objects.filter(pk=event_id).first()
-    if event is None:
-        logger.info("score_reputation_event: event %s no longer exists", event_id)
-        return "missing"
-    if event.value is not None:
-        # Already scored. acks_late means this task can be redelivered.
-        return "already_scored"
-
-    value = score_event(event)
-    recompute_total(event.profile_id)
-    return "unscorable" if value is None else str(value)
-
-
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
-def score_reputation_events(event_ids: list[int]) -> int:
-    """
-    Chunk-shaped sibling of :func:`score_reputation_event`, for a bulk import's fan-out.
-
-    ``_decay_multiplier`` is explicitly order-independent (see
-    ``services.reputation.scoring``), so scoring a chunk's events in any order is safe. Each
-    touched profile's total is rebuilt once for the whole chunk rather than once per event -
-    ``recompute_total`` fully rebuilds from the ledger every call, so recomputing it per event here
-    would repeat the same O(n) read for every other event belonging to that profile in the chunk.
-
-    Args:
-        event_ids: PKs of the ledger rows to value.
-
-    Returns:
-        How many events were scored (excludes already-scored and missing rows).
-    """
-    from urbanlens.dashboard.models.reputation.model import ReputationEvent
-    from urbanlens.dashboard.services.reputation.scoring import recompute_total, score_event
-
-    touched: set[int] = set()
-    scored = 0
-    for event in ReputationEvent.objects.filter(pk__in=event_ids, value__isnull=True):
-        try:
-            value = score_event(event)
-        except Exception:
-            logger.exception("score_reputation_events: event %s failed", event.pk)
-            continue
-        if value is not None:
-            scored += 1
-        touched.add(event.profile_id)
-
-    for profile_id in touched:
-        recompute_total(profile_id)
-    return scored
-
-
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
-def recompute_reputation_total(profile_id: int) -> str:
-    """
-    Rebuild one profile's cached reputation totals from the ledger.
-
-    Args:
-        profile_id: Whose totals to rebuild.
-
-    Returns:
-        The new total as a string.
-    """
-    from urbanlens.dashboard.services.reputation.scoring import recompute_total
-
-    return str(recompute_total(profile_id))
-
-
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
-def sweep_reputation(chunk_size: int = 500) -> int:
-    """
-    Drain unscored ledger rows and rebuild any totals known to be stale.
-
-    Dispatch only: rows are sliced into bounded ranges, in pk order, and each range is handled by its
-    own subtask, so a chunk that crashes costs its own range rather than the whole sweep.
-
-    Args:
-        chunk_size: Maximum rows per subtask.
-
-    Returns:
-        How many subtasks were dispatched.
-    """
-    from urbanlens.dashboard.models.reputation.model import ProfileReputation, ReputationEvent
-    from urbanlens.dashboard.services.core.celery import dispatch_pk_ranges, safely_enqueue_task
-
-    dispatched = dispatch_pk_ranges(ReputationEvent.objects.unscored(), sweep_reputation_range, chunk_size=chunk_size)
-
-    for profile_id in ProfileReputation.objects.stale().values_list("profile_id", flat=True):
-        if safely_enqueue_task(recompute_reputation_total, profile_id, durable=True) is not None:
-            dispatched += 1
-
-    return dispatched
-
-
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
-def sweep_reputation_range(start_pk: int, end_pk: int) -> int:
-    """
-    Score every unscored ledger row with ``start_pk <= pk <= end_pk``.
-
-    Args:
-        start_pk: First row in the range, inclusive.
-        end_pk: Last row in the range, inclusive.
-
-    Returns:
-        How many rows were scored.
-    """
-    from urbanlens.dashboard.models.reputation.model import ReputationEvent
-    from urbanlens.dashboard.services.reputation.scoring import recompute_total, score_event
-
-    rows = ReputationEvent.objects.unscored().filter(pk__gte=start_pk, pk__lte=end_pk)
-    touched: set[int] = set()
-    scored = 0
-    for event in rows:
-        if score_event(event) is not None:
-            scored += 1
-        touched.add(event.profile_id)
-
-    for profile_id in touched:
-        recompute_total(profile_id)
-    return scored
-
-
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def sweep_achievements(chunk_size: int = 1000) -> int:
     """
@@ -5273,112 +4827,6 @@ def sweep_achievements_range(start_pk: int, end_pk: int) -> int:
     return evaluate_profiles_in_range(start_pk, end_pk)
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
-@external_background_task("stripe-subscriptions-sync")
-def sync_stripe_subscriptions(self, starting_after: str | None = None, sweep_started_at: float | None = None) -> int:
-    """
-    Re-sync one page of Stripe subscriptions onto their RoleSubscription rows, then hand off the next page.
-
-    Webhooks (see controllers.billing_webhooks.StripeWebhookView) are the primary mechanism for keeping
-    RoleSubscription in sync - this is the nightly safety net for deliveries Stripe couldn't complete. Each page is
-    its own task, so a retry repeats one page rather than the whole sweep. After the last page,
-    ``reconcile_unlisted_stripe_subscriptions`` retrieves the live rows no page reached.
-
-    Args:
-        starting_after: The previous page's last subscription id; None starts a sweep.
-        sweep_started_at: Unix time the sweep started; None starts a sweep.
-
-    Returns:
-        How many rows this page applied.
-    """
-    import stripe
-
-    from urbanlens.dashboard.services.billing import stripe_client, sync
-    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
-
-    if not stripe_client.is_configured():
-        return 0
-    stripe_client.configure()
-    if sweep_started_at is None:
-        # Whole seconds, like the stamps the pages write, so a row this sweep applies never reads as older than it.
-        sweep_started_at = float(int(timezone.now().timestamp()))
-
-    try:
-        progress = sync.sync_page(starting_after)
-    except (stripe.APIConnectionError, stripe.RateLimitError, stripe.APIError) as exc:
-        raise self.retry(exc=exc) from exc
-
-    if progress.resume_after is not None:
-        safely_enqueue_task(sync_stripe_subscriptions, progress.resume_after, sweep_started_at)
-    else:
-        safely_enqueue_task(reconcile_unlisted_stripe_subscriptions, sweep_started_at, 0)
-    return progress.applied
-
-
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
-@external_background_task("stripe-subscriptions-sync")
-def reconcile_unlisted_stripe_subscriptions(sweep_started_at: float, after_pk: int, chunk_size: int = 100) -> int:
-    """
-    Retrieve one chunk of live RoleSubscription rows the Stripe listing did not reach, then hand off the next.
-
-    Args:
-        sweep_started_at: Unix time the sweep started.
-        after_pk: Resume after this primary key.
-        chunk_size: Rows per task.
-
-    Returns:
-        How many rows this chunk applied.
-    """
-    from datetime import UTC
-
-    from urbanlens.dashboard.services.billing import stripe_client, sync
-    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
-
-    if not stripe_client.is_configured():
-        return 0
-    stripe_client.configure()
-
-    progress = sync.reconcile_unlisted(datetime.fromtimestamp(sweep_started_at, tz=UTC), after_pk, chunk_size)
-    if progress.resume_after is not None:
-        safely_enqueue_task(reconcile_unlisted_stripe_subscriptions, sweep_started_at, progress.resume_after, chunk_size)
-    return progress.applied
-
-
-@shared_task(queue=Queue.MAINTENANCE)
-def advance_pwyw_usage_ledgers() -> int:
-    """
-    Advance every pay-what-you-want RoleSubscription's usage ledger.
-
-    invoice.payment_succeeded already ticks a subscription's ledger the moment a payment lands (see
-    services.billing.banking), but that's the only trigger while a subscription is actively billed - a
-    canceled subscription gets no further Stripe events at all, so this daily sweep is what keeps its
-    banked balance counting down (and eventually running out) once the money stops coming in.
-
-    Only ledgers that could move are visited (``RoleSubscriptionQuerySet.ledger_advance_due``); each is advanced under
-    its own row lock, so a re-run is harmless.
-
-    Returns:
-        How many pay-what-you-want subscriptions were checked.
-    """
-    from urbanlens.dashboard.models.billing import RoleSubscription
-    from urbanlens.dashboard.services.billing import banking
-
-    due = RoleSubscription.objects.ledger_advance_due(timezone.now()).select_related("role").order_by("pk")
-    count = 0
-    last_pk = 0
-    while chunk := list(due.filter(pk__gt=last_pk)[:500]):
-        last_pk = chunk[-1].pk
-        for role_subscription in chunk:
-            # This daily sweep is the only thing counting a canceled subscription's banked
-            # balance down, so one row failing must not freeze every other user's ledger.
-            try:
-                banking.advance_usage_ledger(role_subscription)
-                count += 1
-            except Exception:
-                logger.exception("advance_pwyw_usage_ledgers: failed to advance subscription %s", role_subscription.pk)
-    return count
-
-
 @shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def cache_media_item_into_album(album_id: int, profile_id: int, source: str, url: str, page_url: str = "", caption: str = "") -> int | None:
     """
@@ -5403,8 +4851,8 @@ def cache_media_item_into_album(album_id: int, profile_id: int, source: str, url
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.wiki.model import Wiki
     from urbanlens.dashboard.services.media.media_materialize import MaterializeError, materialize_media_item
+    from urbanlens.dashboard.services.media.media_relevance import announce_relevance_vote
     from urbanlens.dashboard.services.photos.albums import add_images_to_album, album_owner
-    from urbanlens.dashboard.services.photos.redata_relevance import queue_relevance_vote
 
     album = Album.objects.filter(pk=album_id).select_related("parent_pin", "parent_wiki").first()
     profile = Profile.objects.filter(pk=profile_id).first()
@@ -5453,7 +4901,7 @@ def cache_media_item_into_album(album_id: int, profile_id: int, source: str, url
         add_images_to_album(album, [image], profile)
     except CapacityExceededError as exc:
         logger.info("cache_media_item_into_album: album %s filled during the download; %s stays unfiled: %s", album_id, image.pk, exc)
-    queue_relevance_vote(image, profile, is_relevant=True)
+    announce_relevance_vote(image, profile, is_relevant=True)
     return image.pk
 
 
@@ -5518,7 +4966,7 @@ def fetch_recorded_weather_at(latitude: float, longitude: float, iso_days: list[
     Store the recorded weather for a set of days at a coordinate.
 
     Queued by the pages that show recorded weather - visit history and a trip's weather panel - which read
-    stored rows without fetching, so a slow REData never holds up their render.
+    stored rows without fetching, so a slow provider never holds up their render.
 
     Args:
         latitude: WGS-84 latitude, usually a weather cell's centre.
@@ -5582,28 +5030,6 @@ def run_scheduled_demo_account_purge() -> bool:
         return False
 
     call_command("purge_demo_accounts", execute=True)
-    return True
-
-
-@shared_task(queue=Queue.MAINTENANCE)
-@external_background_task("scheduled-redata-public-locations-sync")
-def run_scheduled_redata_public_locations_sync() -> bool:
-    """
-    Refresh the demo instance's location pool from REData. A no-op everywhere else.
-
-    Unconditionally scheduled, same reasoning as ``run_scheduled_demo_account_purge``.
-
-    Returns:
-        True when this ran (this is the demo instance), False otherwise.
-    """
-    from django.core.management import call_command
-
-    from urbanlens.UrbanLens.settings.app import settings as app_settings
-
-    if not app_settings.demo_mode:
-        return False
-
-    call_command("import_redata_public_locations")
     return True
 
 

@@ -19,7 +19,6 @@ from django.urls.resolvers import RoutePattern, URLResolver
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerSplitView
 
 from urbanlens.dashboard.external_api import (
-    urls_assistant,
     urls_connections,
     urls_custom_fields,
     urls_device_scans,
@@ -42,6 +41,7 @@ from urbanlens.dashboard.external_api import (
     views_messaging,
     views_wiki,
 )
+from urbanlens.dashboard.plugins.points import EXTERNAL_API_URLS
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -276,7 +276,6 @@ _CORE_URLPATTERNS: list[URLPattern] = [
 # Concatenation, not include(): see the module docstring for why the flat namespace is load-bearing.
 urlpatterns: list[URLPattern] = order_by_specificity(
     _CORE_URLPATTERNS
-    + urls_assistant.urlpatterns
     + urls_connections.urlpatterns
     + urls_custom_fields.urlpatterns
     + urls_device_scans.urlpatterns
@@ -295,4 +294,5 @@ urlpatterns: list[URLPattern] = order_by_specificity(
     + urls_trips.urlpatterns
     + urls_wiki_community.urlpatterns
     + urls_wiki_extra.urlpatterns
+    + EXTERNAL_API_URLS.items()
 )

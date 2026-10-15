@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 from urbanlens.dashboard.services.apis.request_upstreams import NationalParksUpstream, NearbyLandmarksUpstream, WikipediaNearbyUpstream
 from urbanlens.dashboard.services.core.request_upstream import Outcome, wait_all
@@ -133,12 +133,56 @@ def expand_state_codes(states: str) -> str:
 
 
 @dataclass(frozen=True, slots=True)
+class PlaceSourceStyle:
+    """
+    How the map shows a Places layer source that core does not know by name.
+
+    Attributes:
+        label: The source's name in a popup.
+        icon: The Material icon on its markers.
+        marker_class: The modifier class of ``search-result-marker-icon`` that colours them; its stylesheet is the plugin's.
+        fallback_url: Where a place with no URL of its own links.
+        link_label: The popup's one link to the source.
+        hidden_type: A place type the popup leaves out because the source says it already.
+    """
+
+    label: str
+    icon: str
+    marker_class: str
+    fallback_url: str = ""
+    link_label: str = ""
+    hidden_type: str = ""
+
+
+class NearbyParksProvider(Protocol):
+    """A catalogue of national parks that can be searched by position."""
+
+    def available(self) -> bool:
+        """Whether the catalogue can be asked at all."""
+        ...
+
+    def parks_near(self, latitude: float, longitude: float, *, limit: int) -> list[dict[str, Any]]:
+        """
+        The parks nearest a point, as markers of the Places layer.
+
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            limit: The most parks to return.
+
+        Returns:
+            Place dicts in the Places layer's marker shape; ``expand_state_codes`` spells out a ``states`` field.
+        """
+        ...
+
+
+@dataclass(frozen=True, slots=True)
 class NearbySources:
     """
     Which sources a caller wants.
 
     Attributes:
-        landmarks: Historical landmarks from REData or Google.
+        landmarks: Historical landmarks from the active places provider.
         parks: National parks.
         wikipedia: Geotagged Wikipedia articles.
     """
@@ -164,11 +208,11 @@ class NearbyPlaces:
     incomplete: list[str] = field(default_factory=list)
 
 
-def _landmarks(latitude: float, longitude: float, radius: int, api_key: str) -> list[dict[str, Any]]:
+def _landmarks(latitude: float, longitude: float, radius: int) -> list[dict[str, Any]]:
     from urbanlens.dashboard.services.apis.locations import places_resolution
 
     places: list[dict[str, Any]] = []
-    for result in places_resolution.search_nearby_landmarks(latitude, longitude, radius, ["historical_landmark"], api_key=api_key):
+    for result in places_resolution.search_nearby_landmarks(latitude, longitude, radius, ["historical_landmark"]):
         location = result.get("location") or {}
         place_lat, place_lng = location.get("latitude"), location.get("longitude")
         if place_lat is None or place_lng is None:
@@ -193,25 +237,15 @@ def _landmarks(latitude: float, longitude: float, radius: int, api_key: str) -> 
     return places
 
 
-def _parks(latitude: float, longitude: float) -> list[dict[str, Any]]:
-    from urbanlens.dashboard.services.apis.locations.redata_national_parks_gateway import RedataNationalParksGateway
+def _parks_providers() -> list[NearbyParksProvider]:
+    from urbanlens.dashboard.plugins.points import NEARBY_PARK_PROVIDERS
 
-    return [
-        {
-            "place_id": f"nps_{park.get('park_code', '')}",
-            "name": park.get("full_name", ""),
-            "lat": park.get("latitude"),
-            "lng": park.get("longitude"),
-            "source": "nps",
-            "description": park.get("description", ""),
-            "url": park.get("url", ""),
-            "types": ["national_park"],
-            "rating": None,
-            "vicinity": expand_state_codes(park.get("states", "")),
-            "icon": "",
-        }
-        for park in RedataNationalParksGateway().find_parks_near(latitude, longitude, limit=_PARKS_LIMIT)
-    ]
+    return [provider for provider in NEARBY_PARK_PROVIDERS if provider.available()]
+
+
+def _parks(latitude: float, longitude: float) -> list[dict[str, Any]]:
+    providers = _parks_providers()
+    return providers[0].parks_near(latitude, longitude, limit=_PARKS_LIMIT) if providers else []
 
 
 def _wikipedia(latitude: float, longitude: float) -> list[dict[str, Any]]:
@@ -235,21 +269,17 @@ def find_nearby_places(latitude: float, longitude: float, *, radius: int, source
     Returns:
         The combined places, and which sources did not answer.
     """
-    from urbanlens.UrbanLens.settings.app import settings
+    from urbanlens.dashboard.services.apis.locations import places_resolution
 
     cell_lat, cell_lng = grid_cell(latitude, longitude)
     cell = f"{cell_lat:.4f}:{cell_lng:.4f}"
-    redata_configured = bool(settings.redata_api_url and settings.redata_api_key)
-    api_key = settings.google_unrestricted_api_key or ""
 
     pending: list[tuple[str, Pending[list[dict[str, Any]]]]] = []
-    if sources.landmarks and (api_key or redata_configured):
-        from urbanlens.dashboard.services.apis.locations import places_resolution
-
+    if sources.landmarks and places_resolution.available():
         bucket = radius_bucket(radius)
         key = f"{places_resolution.active_provider()}:{cell}:{bucket}"
-        pending.append(("landmarks", NearbyLandmarksUpstream.start(lambda: _landmarks(cell_lat, cell_lng, bucket, api_key), key=key, ttl=ttl, caller=caller)))
-    if sources.parks and redata_configured:
+        pending.append(("landmarks", NearbyLandmarksUpstream.start(lambda: _landmarks(cell_lat, cell_lng, bucket), key=key, ttl=ttl, caller=caller)))
+    if sources.parks and _parks_providers():
         pending.append(("parks", NationalParksUpstream.start(lambda: _parks(cell_lat, cell_lng), key=cell, ttl=ttl, caller=caller)))
     if sources.wikipedia:
         pending.append(("wikipedia", WikipediaNearbyUpstream.start(lambda: _wikipedia(cell_lat, cell_lng), key=cell, ttl=ttl, caller=caller)))

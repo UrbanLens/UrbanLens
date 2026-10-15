@@ -1,6 +1,6 @@
 """
 Per-viewer visibility of a trip activity's location.
-Shared by the trip controllers (activities panel, map data) and anything else - like AI trip suggestions - that must never show a viewer a location their trip-mate chose not to reveal to them specifically."""
+Shared by the trip controllers (activities panel, map data) and anything else - like trip suggestions - that must never show a viewer a location their trip-mate chose not to reveal to them specifically."""
 
 from __future__ import annotations
 

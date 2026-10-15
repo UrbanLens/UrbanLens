@@ -1,4 +1,4 @@
-"""Changing a password ends every other way into the account that predates it (G3-35, G3-36)."""
+"""Changing a password ends every other way into the account that predates it."""
 
 from __future__ import annotations
 

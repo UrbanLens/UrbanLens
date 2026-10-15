@@ -6,8 +6,8 @@ It has to be a separate process rather than a thread in an existing one: the web
 event, and the Celery workers themselves cannot be scraped - ``media-worker`` and
 ``media-worker-batch`` run ``cap_drop: ALL`` on an isolated network specifically so they have no
 inbound surface.
-Serves on a port that is *not* published to the host: only the compose network reaches it, and Alloy
-joins that network to scrape.
+Serves on a port that is *not* published to the host: only the compose network reaches it, and the
+scraper joins that network to scrape.
 """
 
 from __future__ import annotations

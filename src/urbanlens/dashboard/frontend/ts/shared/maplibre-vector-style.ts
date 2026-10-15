@@ -1,6 +1,6 @@
 /**
  * Drawing a basemap this deployment serves as a MapLibre style document rather than as XYZ raster
- * tiles - the `D11` vector shape, and the half of `PL8` that `maplibre-layers.ts` did not have.
+ * tiles - the vector shape, and the half that `maplibre-layers.ts` did not have.
  *
  * The style is merged into the live map's style rather than handed to `setStyle()`. `setStyle()`
  * replaces the whole document, which would drop every source and layer the page had already added
@@ -121,7 +121,7 @@ function normaliseSprites(sprite: StyleSpecification["sprite"], styleUrl: string
  *
  * Deliberately shallow: every field below is read by this module, and a document that passes is
  * still validated properly by MapLibre itself when its sources and layers are added. The point is
- * to fail over to the raster fallback rather than throw, so a REData instance serving something
+ * to fail over to the raster fallback rather than throw, so a catalogue serving something
  * unexpected costs a deployment its vector layer and not its map.
  */
 export function isVectorStyleDocument(value: unknown): value is StyleSpecification {

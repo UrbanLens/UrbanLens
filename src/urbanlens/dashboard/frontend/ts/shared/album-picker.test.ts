@@ -1,5 +1,5 @@
 /**
- * The add-to-album picker loads its rows from the server every time it opens, rather than carrying them in the page (P171).
+ * The add-to-album picker loads its rows from the server every time it opens, rather than carrying them in the page.
  */
 
 import { afterEach, describe, expect, it } from "bun:test";

@@ -15,7 +15,6 @@ from django.urls import reverse
 from django.views import View
 
 from urbanlens.dashboard.forms.settings_form import (
-    AISettingsForm,
     CommunitySettingsForm,
     ContactSettingsForm,
     DirectMessageSettingsForm,
@@ -35,6 +34,7 @@ from urbanlens.dashboard.forms.settings_form import (
 from urbanlens.dashboard.models.profile.meta import VisibilityChoice
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has_feature
+from urbanlens.dashboard.plugins.points import PLACES_LAYER_SAVED
 from urbanlens.dashboard.services.apis.flickr.oauth import is_configured as flickr_is_configured
 from urbanlens.dashboard.services.auth.api_keys import active_api_key_count
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
@@ -152,7 +152,6 @@ class SettingsView(LoginRequiredMixin, View):
             "places_layer_form": PlacesLayerForm(instance=profile),
             "markup_defaults_form": MarkupDefaultsForm(instance=profile),
             "hotkey_form": HotkeySettingsForm(instance=profile),
-            "ai_form": AISettingsForm(instance=profile),
             "keyword_tagging_form": KeywordTaggingSettingsForm(instance=profile),
             "history_form": HistorySettingsForm(instance=profile),
             "community_form": CommunitySettingsForm(instance=profile),
@@ -187,7 +186,6 @@ class SettingsView(LoginRequiredMixin, View):
         places_layer_form = PlacesLayerForm(instance=profile)
         markup_defaults_form = MarkupDefaultsForm(instance=profile)
         hotkey_form = HotkeySettingsForm(instance=profile)
-        ai_form = AISettingsForm(instance=profile)
         keyword_tagging_form = KeywordTaggingSettingsForm(instance=profile)
         history_form = HistorySettingsForm(instance=profile)
         community_form = CommunitySettingsForm(instance=profile)
@@ -201,16 +199,9 @@ class SettingsView(LoginRequiredMixin, View):
                 places_layer_form = PlacesLayerForm(request.POST, instance=profile)
                 if places_layer_form.is_valid():
                     places_layer_form.save()
+                    PLACES_LAYER_SAVED.fire(profile, request.POST)
                     messages.success(request, "Places layer sources saved.")
                     return _settings_redirect("places-layer-settings-section")
-
-        elif section == "ai":
-            if user_has_feature(request.user, SiteFeature.AI):
-                ai_form = AISettingsForm(request.POST, instance=profile)
-                if ai_form.is_valid():
-                    ai_form.save()
-                    messages.success(request, "AI settings saved.")
-                    return _settings_redirect("ai-settings-section")
 
         elif section == "keyword_tagging":
             keyword_tagging_form = KeywordTaggingSettingsForm(request.POST, instance=profile)
@@ -357,7 +348,6 @@ class SettingsView(LoginRequiredMixin, View):
             "places_layer_form": places_layer_form,
             "markup_defaults_form": markup_defaults_form,
             "hotkey_form": hotkey_form,
-            "ai_form": ai_form,
             "keyword_tagging_form": keyword_tagging_form,
             "history_form": history_form,
             "community_form": community_form,
@@ -382,7 +372,6 @@ class SettingsView(LoginRequiredMixin, View):
                 places_layer_form,
                 markup_defaults_form,
                 hotkey_form,
-                ai_form,
                 keyword_tagging_form,
                 history_form,
                 community_form,

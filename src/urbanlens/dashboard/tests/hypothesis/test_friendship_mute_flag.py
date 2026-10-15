@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import importlib
-
 from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
 
 from hypothesis import HealthCheck, given, settings, strategies as st
-from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
+from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.profile.model import Profile
@@ -230,27 +228,6 @@ class MuteQuerySetTests(TestCase):
         """The whole point: muted rows stay inside ``is_friend()``."""
         pks = set(Friendship.objects.all().profile(self.actor).is_friend().values_list("pk", flat=True))
         self.assertEqual(pks, {self.muted_row.pk, self.loud_row.pk})
-
-
-class LegacyMutedRowRepairWiringTests(SimpleTestCase):
-    """
-    ``0010_v0_6_0``'s legacy ``status='Muted'`` repair, checked structurally.
-
-    Migration ``0057`` split ``muted`` into one column per side, so the callables now reference a column the
-    live schema no longer has and can only be executed against a real historical state."""
-
-    #: Imported by path: the module name starts with a digit.
-    migration = importlib.import_module("urbanlens.dashboard.migrations.0010_v0_6_0")
-
-    def test_both_directions_of_the_repair_are_wired(self) -> None:
-        operations = [
-            op
-            for op in self.migration.Migration.operations
-            if type(op).__name__ == "RunPython" and op.code is self.migration.restore_muted_friendships
-        ]
-
-        self.assertEqual(len(operations), 1)
-        self.assertIs(operations[0].reverse_code, self.migration.collapse_muted_flag_into_status)
 
 
 class MuteWebsiteButtonTests(TestCase):

@@ -7,9 +7,11 @@
 # Runs py-spy in a sidecar sharing the target's PID namespace, so the image never carries SYS_PTRACE.
 #
 # Usage:
-#   bin/perf/pyspy.sh urbanlens_development_main_app            # a live view
-#   bin/perf/pyspy.sh urbanlens_development_main_app dump       # one snapshot
-#   bin/perf/pyspy.sh urbanlens_development_main_app record 30 out.svg
+#   bin/perf/pyspy.sh "urbanlens_${UL_CONTAINER_NAME}_app"            # a live view
+#   bin/perf/pyspy.sh "urbanlens_${UL_CONTAINER_NAME}_app" dump       # one snapshot
+#   bin/perf/pyspy.sh "urbanlens_${UL_CONTAINER_NAME}_app" record 30 out.svg
+#
+# The container is required; compose names it urbanlens_<UL_CONTAINER_NAME>_app (see bin/lib/compose_names.sh).
 #
 # Attach fails at ptrace_scope 2+ regardless of capabilities.
 

@@ -93,7 +93,7 @@ class ImportConfirmedRefusesAnOversizePayloadTests(TestCase):
             response.status_code,
             400,
             f"the confirm step accepted {TEST_CAP + 1} pins against a cap of {TEST_CAP} "
-            "(status %s). MAX_PREVIEW_PINS is enforced on preview only - P96." % response.status_code,
+            "(status %s). MAX_PREVIEW_PINS is enforced on preview only." % response.status_code,
         )
 
     def test_nothing_is_created_when_the_payload_is_refused(self) -> None:
@@ -161,5 +161,5 @@ class ImportConfirmedDoesTheWorkOffTheRequestTests(TestCase):
             Pin.objects.filter(profile=self.user.profile).count(),
             0,
             "import_confirmed created pins on the request path; the import belongs in a task "
-            "(D11's bulk queue), so one user's 20,000-pin import cannot hold a worker.",
+            "(the bulk queue), so one user's 20,000-pin import cannot hold a worker.",
         )

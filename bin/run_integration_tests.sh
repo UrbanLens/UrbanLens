@@ -5,7 +5,7 @@
 # Wrapper pins the matching browser build, requires an explicit target, and needs provisioned accounts.
 #
 # Usage:
-#   bin/run_integration_tests.sh --url https://s1.dev.urbanlens.org
+#   bin/run_integration_tests.sh --url https://s1.dev.example.com
 #   bin/run_integration_tests.sh --url ... --project smoke
 #   bin/run_integration_tests.sh --url ... --project location   # sets UL_E2E_LOCATION_DATA=1
 #   bin/run_integration_tests.sh --url ... --project slow       # sets UL_E2E_SLOW=1
@@ -153,16 +153,17 @@ if [[ ${USE_DOCKER} -eq 1 ]]; then
 		PLAYWRIGHT_ARGS="$(printf '%q ' ${PROJECTS[@]+"${PROJECTS[@]}"} ${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"})"
 	fi
 
-	# Larger shm so Chromium tabs survive large pages; host networking so local targets resolve.
+	# Larger shm so Chromium tabs survive large pages; host networking so local targets resolve. The whole checkout is
+	# mounted so the suite finds plugins' integration entries and specs by the same relative path as on the host.
 	# Run as the caller so reports/ and node_modules/ stay writable by a later host run.
 	exec docker run --rm ${TTY_FLAGS[@]+"${TTY_FLAGS[@]}"} \
 		--user "$(id -u):$(id -g)" \
 		-e HOME=/tmp \
 		--ipc=host \
 		--network=host \
-		-v "${SUITE_DIR}:/suite" \
+		-v "${REPO_ROOT}:/repo" \
 		${UL_E2E_ACCOUNTS_FILE:+-v "${UL_E2E_ACCOUNTS_FILE}:${UL_E2E_ACCOUNTS_FILE}:ro"} \
-		-w /suite \
+		-w /repo/tests/integration \
 		"${ENV_FLAGS[@]}" \
 		"${IMAGE}" \
 		bash -lc "$(install_command) && npx playwright test ${PLAYWRIGHT_ARGS}"

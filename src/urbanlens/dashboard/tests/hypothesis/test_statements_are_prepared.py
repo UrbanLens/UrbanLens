@@ -1,7 +1,7 @@
 """
 Prepared statements, and the two settings that are both needed to get them.
 
-X27 measured planning at 77.3% of database time for the short SELECTs that are 96% of web
+Planning took 77.3% of database time for the short SELECTs that are 96% of web
 traffic - 0.306ms planning against 0.090ms execution per call - and pgbench replaying the four
 most-called queries at 1,306 tps simple against 3,298 tps prepared. Preparing them is the single
 largest database win available, and it is bought entirely in configuration.

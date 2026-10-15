@@ -51,7 +51,7 @@ class AbstractFieldRevision(Model):
             nothing here needs to query inside the value.
         is_null: Whether the write set the field to NULL. A separate flag
             because an empty string is a legitimate value for most CharFields
-            here, so conflating the two would resurrect a concealed value as
+            here, so conflating the two would resurrect a NULL as
             "" rather than None.
         (Ordering is by primary key. An explicit per-target sequence column was
         tried first and was a race: computing ``Max(sequence) + 1`` and then
@@ -116,7 +116,7 @@ class VersionedQuerySet(QuerySet):
         """
         Create in bulk, recording each new row's initial field state.
         A create is revision 1: the whole versioned field set is the state the row started in, with whatever source the context says made it.
-        Without this, a bulk-created row has no provenance at all, and every one of its fields resolves to a default for a concealed viewer - which reads as an empty wiki rather than the one that was actually created.
+        Without this, a bulk-created row has no provenance at all, and every one of its fields resolves to a default when read for a viewer - which reads as an empty wiki rather than the one that was actually created.
         """
         created = super().bulk_create(objs, *args, **kwargs)
 

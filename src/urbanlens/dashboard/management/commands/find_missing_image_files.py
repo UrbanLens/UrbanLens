@@ -1,7 +1,7 @@
 """
 List ``Image`` rows whose file columns name a file that is not in storage, and optionally regenerate derived copies.
 
-The reverse of P14, which is files no row names. A row naming a missing file is served as a broken image for as long
+The reverse of ``sweep_unnamed_pin_images``, which is files no row names. A row naming a missing file is served as a broken image for as long
 as it exists. ``--repair`` clears a photo's missing thumbnail, marker or analysis copy and queues its regeneration from
 the stored original; a row whose original is gone has nothing to regenerate from and is only reported.
 """

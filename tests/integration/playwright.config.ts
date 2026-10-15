@@ -77,6 +77,16 @@ const projects: Project[] = [
         use: { ...devices["Desktop Chrome"], ...signedIn },
     },
     {
+        // Specs a package plugin ships beside itself (src/urbanlens/plugins/<name>/integration/specs/*.playwright.mts), so a
+        // tree without the plugin has none of them. `.mts`, because a `.ts` there takes the repo root's package.json, which
+        // is not `"type": "module"`, and fails to import this suite's ESM lib/ under Node.
+        name: "plugins",
+        testDir: "../../src/urbanlens/plugins",
+        testMatch: /integration\/specs\/.*\.playwright\.mts$/,
+        dependencies: ["setup"],
+        use: { ...devices["Desktop Chrome"], ...signedIn },
+    },
+    {
         // Authorisation, isolation, CSRF, disclosure and input handling against
         // the real deployment. Depends on setup because several specs render
         // HTML as the signed-in user; API-only cases still authenticate with
@@ -92,7 +102,7 @@ if (env.runLocationData) {
     projects.push({
         // Live third-party location data for one real place. Registered only
         // when asked for: these wait minutes on background enrichment and spend
-        // real money at REData, county GIS and EPA ECHO.
+        // real money at the data providers the deployment is configured with.
         //
         // One worker, deliberately. The specs share a single pin on a single
         // property, and the application enforces one root pin per property per

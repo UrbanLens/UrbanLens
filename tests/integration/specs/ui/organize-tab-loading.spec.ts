@@ -1,5 +1,5 @@
 /**
- * The Organize page loads each deferred panel once, and a hidden section not at all until it is shown (P191).
+ * The Organize page loads each deferred panel once, and a hidden section not at all until it is shown.
  *
  * htmx counts a hidden element as revealed, so `hx-trigger="revealed"` loaded every hidden panel at once and the
  * prewarm chain loaded it again.

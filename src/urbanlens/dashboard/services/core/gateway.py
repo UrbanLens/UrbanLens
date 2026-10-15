@@ -128,9 +128,22 @@ class GatewayRequestError(RuntimeError):
         """
         Whether nothing was learned about what was asked, so the failure must not be cached as an empty answer.
 
-        True unless a subclass knows the upstream answered, as REData does when it reports "no record here".
+        True unless a subclass knows the upstream answered, as a service does when it reports "no record here".
         """
         return True
+
+
+class ProviderUnavailableError(GatewayRequestError):
+    """
+    A provider in a fallback chain could not answer, so the question went unasked or unanswered.
+
+    A chain may then try its next provider, or, where its first provider shields the others off production, stop.
+
+    Attributes:
+        reason: Why, as a short machine-readable code; ``"unavailable"`` unless a provider says more.
+    """
+
+    reason: str = "unavailable"
 
 
 def is_source_outage(exc: BaseException) -> bool:

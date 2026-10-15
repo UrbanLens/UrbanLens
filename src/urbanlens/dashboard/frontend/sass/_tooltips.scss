@@ -175,7 +175,7 @@
     }
 }
 
-// UL-280: the CSS-only bubble above is positioned `absolute` on the trigger, so any ancestor with `overflow.
+// The CSS-only bubble above is positioned `absolute` on the trigger, so any ancestor with `overflow.
 [data-tooltip]:not([data-tooltip-float='false']) {
     &::before,
     &::after {

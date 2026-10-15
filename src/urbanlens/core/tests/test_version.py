@@ -6,24 +6,21 @@ from importlib.metadata import PackageNotFoundError
 import importlib.util
 import json
 from pathlib import Path
-import subprocess
 import sys
 import tomllib
+import unittest
 from unittest import mock
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.core.version import (
     PYPROJECT_PATH,
     _git_fetch,
-    apply_pending_migrations,
     format_short_commit,
     get_app_version,
     get_current_git_branch,
     get_current_git_commit,
     get_git_update_status,
     get_upstream_git_commit,
-    pull_latest_git_code,
-    trigger_development_app_reload,
 )
 
 
@@ -195,130 +192,6 @@ class GitUpdateStatusTests(TestCase):
         self.assertEqual(status.upstream_commit, upstream)
 
 
-class TriggerDevelopmentAppReloadTests(TestCase):
-    """trigger_development_app_reload signals gunicorn or runserver appropriately."""
-
-    def test_gunicorn_parent_receives_sighup(self) -> None:
-        with (
-            mock.patch("urbanlens.core.version._parent_process_command", return_value="gunicorn: master"),
-            mock.patch("urbanlens.core.version.os.kill") as kill,
-        ):
-            ok, message = trigger_development_app_reload()
-
-        self.assertTrue(ok)
-        self.assertIn("reload", message.lower())
-        kill.assert_called_once()
-
-    def test_runserver_fallback_touches_imported_module(self) -> None:
-        with (
-            mock.patch("urbanlens.core.version._parent_process_command", return_value="python manage.py runserver"),
-            mock.patch("urbanlens.core.version.os.utime") as utime,
-        ):
-            ok, message = trigger_development_app_reload()
-
-        self.assertTrue(ok)
-        self.assertIn("reload", message.lower())
-        utime.assert_called_once()
-
-    def test_reload_failure_returns_false(self) -> None:
-        with (
-            mock.patch("urbanlens.core.version._parent_process_command", return_value="gunicorn: master"),
-            mock.patch("urbanlens.core.version.os.kill", side_effect=OSError("permission denied")),
-        ):
-            ok, message = trigger_development_app_reload()
-
-        self.assertFalse(ok)
-        self.assertIn("reload", message.lower())
-
-    def test_runserver_fallback_failure_returns_false(self) -> None:
-        with (
-            mock.patch("urbanlens.core.version._parent_process_command", return_value="python manage.py runserver"),
-            mock.patch("urbanlens.core.version.os.utime", side_effect=OSError("read-only filesystem")),
-        ):
-            ok, message = trigger_development_app_reload()
-
-        self.assertFalse(ok)
-        self.assertIn("reload", message.lower())
-
-
-class PullLatestGitCodeTests(TestCase):
-    """pull_latest_git_code wraps git pull safely for the admin endpoint."""
-
-    def test_success_returns_message(self) -> None:
-        completed = mock.Mock(returncode=0, stdout="Already up to date.\n", stderr="")
-        with mock.patch("urbanlens.core.version.subprocess.run", return_value=completed) as run:
-            ok, message = pull_latest_git_code()
-
-        self.assertTrue(ok)
-        self.assertEqual(message, "Already up to date.")
-        run.assert_called_once()
-        self.assertIn("GIT_TERMINAL_PROMPT", run.call_args.kwargs["env"])
-
-    def test_failure_returns_safe_message(self) -> None:
-        completed = mock.Mock(returncode=1, stdout="", stderr="fatal: Not possible to fast-forward")
-        with mock.patch("urbanlens.core.version.subprocess.run", return_value=completed):
-            ok, message = pull_latest_git_code()
-
-        self.assertFalse(ok)
-        self.assertIn("fast-forward", message)
-
-    def test_timeout_returns_safe_message(self) -> None:
-        with mock.patch(
-            "urbanlens.core.version.subprocess.run",
-            side_effect=subprocess.TimeoutExpired(cmd="git pull --ff-only", timeout=120),
-        ):
-            ok, message = pull_latest_git_code()
-
-        self.assertFalse(ok)
-        self.assertIn("Timed out", message)
-
-    def test_cannot_start_git_returns_safe_message(self) -> None:
-        with mock.patch("urbanlens.core.version.subprocess.run", side_effect=OSError("git not found")):
-            ok, message = pull_latest_git_code()
-
-        self.assertFalse(ok)
-        self.assertIn("Could not start", message)
-
-
-class ApplyPendingMigrationsTests(SimpleTestCase):
-    """apply_pending_migrations runs Django migrate after a code update."""
-
-    def test_success_returns_message(self) -> None:
-        completed = mock.Mock(returncode=0, stdout="Applying dashboard.0042... OK\n", stderr="")
-        with mock.patch("urbanlens.core.version.subprocess.run", return_value=completed) as run:
-            ok, message = apply_pending_migrations()
-
-        self.assertTrue(ok)
-        self.assertIn("Applying dashboard.0042", message)
-        self.assertIn("migrate", run.call_args.args[0])
-        self.assertIn("--noinput", run.call_args.args[0])
-
-    def test_failure_returns_output(self) -> None:
-        completed = mock.Mock(returncode=1, stdout="", stderr="django.db.utils.OperationalError")
-        with mock.patch("urbanlens.core.version.subprocess.run", return_value=completed):
-            ok, message = apply_pending_migrations()
-
-        self.assertFalse(ok)
-        self.assertIn("OperationalError", message)
-
-    def test_timeout_returns_safe_message(self) -> None:
-        with mock.patch(
-            "urbanlens.core.version.subprocess.run",
-            side_effect=subprocess.TimeoutExpired(cmd="manage.py migrate", timeout=300),
-        ):
-            ok, message = apply_pending_migrations()
-
-        self.assertFalse(ok)
-        self.assertIn("Timed out", message)
-
-    def test_cannot_start_returns_safe_message(self) -> None:
-        with mock.patch("urbanlens.core.version.subprocess.run", side_effect=OSError("python not found")):
-            ok, message = apply_pending_migrations()
-
-        self.assertFalse(ok)
-        self.assertIn("Could not start", message)
-
-
 class GitRevisionHelperTests(SimpleTestCase):
     """get_current_git_commit/get_upstream_git_commit resolve distinct revisions."""
 
@@ -352,6 +225,7 @@ class PreOneReleaseTests(SimpleTestCase):
 
     repo_root = PYPROJECT_PATH.parent
 
+    @unittest.skipUnless((PYPROJECT_PATH.parent / "bin" / "release.py").exists(), "this checkout has no release tool")
     def test_the_release_tool_keeps_breaking_changes_below_1_0(self) -> None:
         spec = importlib.util.spec_from_file_location("release", self.repo_root / "bin" / "release.py")
         assert spec is not None and spec.loader is not None

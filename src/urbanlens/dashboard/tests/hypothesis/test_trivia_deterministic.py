@@ -97,7 +97,7 @@ class BuildingCountQuestionTests(TestCase):
         self.assertEqual(len(questions), 1)
         self.assertEqual(questions[0].answer, str(BUILDING_COUNT_QUESTION_THRESHOLD))
 
-    def test_no_count_question_from_a_list_redata_answered_in_part(self) -> None:
+    def test_no_count_question_from_a_list_a_provider_answered_in_part(self) -> None:
         """The count of a floor is not the parcel's count, and a count question is never corrected once asked."""
         location = baker.make(Location)
         buildings = [

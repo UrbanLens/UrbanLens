@@ -10,8 +10,10 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
+from urbanlens.dashboard.plugins.drf import ExtensibleSerializer
 
-class ReactionCountSerializer(serializers.Serializer):
+
+class ReactionCountSerializer(ExtensibleSerializer):
     """One emoji's tally on a comment, from the requesting viewer's perspective."""
 
     #: How many profiles have reacted with this emoji, the caller included.
@@ -21,7 +23,7 @@ class ReactionCountSerializer(serializers.Serializer):
     reacted = serializers.BooleanField(read_only=True)
 
 
-class CommentReactionsSerializer(serializers.Serializer):
+class CommentReactionsSerializer(ExtensibleSerializer):
     """
     The body both reaction handlers return: the target's full, fresh summary.
 

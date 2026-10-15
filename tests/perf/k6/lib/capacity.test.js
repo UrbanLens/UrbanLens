@@ -336,7 +336,7 @@ describe("what a browser goes out for", () => {
 });
 
 describe("the pre-flight probe", () => {
-    /** One seeded cell passing for 1,024 is how X26's run measured 8,360 refusals as latency. */
+    /** One seeded cell passing for 1,024 is how a recorded run measured 8,360 refusals as latency. */
     test("samples many distinct cells, not one", () => {
         const probes = gridProbeTiles();
 

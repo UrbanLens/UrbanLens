@@ -14,6 +14,7 @@ import logging
 from rest_framework import serializers
 
 from urbanlens.dashboard.models.device_scan.model import DeviceType
+from urbanlens.dashboard.plugins.drf import ExtensibleSerializer
 from urbanlens.dashboard.services.device_scan.mac_address import InvalidMacAddressError, normalize_mac_address
 
 logger = logging.getLogger(__name__)
@@ -27,7 +28,7 @@ MAX_DEVICES_PER_UPLOAD = 200
 MAX_READINGS_PER_DEVICE = 500
 
 
-class DeviceSignalReadingInputSerializer(serializers.Serializer):
+class DeviceSignalReadingInputSerializer(ExtensibleSerializer):
     """One raw (coordinate, signal strength) sample along a scan route."""
 
     latitude = serializers.FloatField(min_value=-90, max_value=90)
@@ -36,7 +37,7 @@ class DeviceSignalReadingInputSerializer(serializers.Serializer):
     observed_at = serializers.DateTimeField()
 
 
-class DeviceScanEntryInputSerializer(serializers.Serializer):
+class DeviceScanEntryInputSerializer(ExtensibleSerializer):
     """
     One device's data within a scan upload.
 
@@ -69,7 +70,7 @@ class DeviceScanEntryInputSerializer(serializers.Serializer):
         return value
 
 
-class DeviceScanUploadSerializer(serializers.Serializer):
+class DeviceScanUploadSerializer(ExtensibleSerializer):
     """Validates one device-scan upload batch."""
 
     client_session_uuid = serializers.CharField(max_length=64, required=False, allow_blank=True, default="")
@@ -84,13 +85,13 @@ class DeviceScanUploadSerializer(serializers.Serializer):
         return value
 
 
-class DeviceScanUploadResponseSerializer(serializers.Serializer):
+class DeviceScanUploadResponseSerializer(ExtensibleSerializer):
     """Acknowledgment of an accepted upload - processing happens in the background."""
 
     upload_uuid = serializers.UUIDField(read_only=True)
 
 
-class NearbyDeviceMarkerDeviceSerializer(serializers.Serializer):
+class NearbyDeviceMarkerDeviceSerializer(ExtensibleSerializer):
     """The device identity portion of a nearby-marker entry."""
 
     mac_address = serializers.CharField(read_only=True)
@@ -98,7 +99,7 @@ class NearbyDeviceMarkerDeviceSerializer(serializers.Serializer):
     display_name = serializers.CharField(read_only=True)
 
 
-class NearbyDeviceMarkerSerializer(serializers.Serializer):
+class NearbyDeviceMarkerSerializer(ExtensibleSerializer):
     """
     One wiki device marker, as reported to the mobile app.
 
@@ -123,7 +124,7 @@ class NearbyDeviceMarkerSerializer(serializers.Serializer):
         return marker.centroid.x
 
 
-class NearbyDeviceMarkersQuerySerializer(serializers.Serializer):
+class NearbyDeviceMarkersQuerySerializer(ExtensibleSerializer):
     """Query params for ``GET device-scans/nearby/``."""
 
     latitude = serializers.FloatField(min_value=-90, max_value=90)
@@ -131,7 +132,7 @@ class NearbyDeviceMarkersQuerySerializer(serializers.Serializer):
     radius_meters = serializers.FloatField(required=False, default=500.0, min_value=1, max_value=50_000)
 
 
-class NearbyDeviceMarkersResponseSerializer(serializers.Serializer):
+class NearbyDeviceMarkersResponseSerializer(ExtensibleSerializer):
     """Wrapper response for the nearby-devices query."""
 
     markers = NearbyDeviceMarkerSerializer(many=True, read_only=True)

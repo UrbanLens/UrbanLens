@@ -16,6 +16,14 @@ from django.test import SimpleTestCase
 
 _TEMPLATES = Path(__file__).resolve().parents[2] / "templates"
 
+#: Core's templates alone: a plugin override extends the template it replaces, so the default engine's chain never ends.
+_CORE_ENGINE = Engine(
+    dirs=[str(_TEMPLATES)],
+    app_dirs=True,
+    builtins=["urbanlens.dashboard.templatetags.plugin_slots"],
+    libraries=Engine.get_default().libraries,
+)
+
 
 def _names() -> list[str]:
     return sorted(path.relative_to(_TEMPLATES).as_posix() for path in _TEMPLATES.rglob("*.html"))
@@ -26,12 +34,12 @@ def _blocks(nodelist: NodeList) -> list[BlockNode]:
 
 
 def _template_blocks(name: str) -> list[BlockNode]:
-    return _blocks(Engine.get_default().get_template(name).nodelist)
+    return _blocks(_CORE_ENGINE.get_template(name).nodelist)
 
 
 def _parent(name: str) -> str | None:
     """The template *name* extends by a literal name, if any."""
-    for node in Engine.get_default().get_template(name).nodelist.get_nodes_by_type(ExtendsNode):
+    for node in _CORE_ENGINE.get_template(name).nodelist.get_nodes_by_type(ExtendsNode):
         if not isinstance(node, ExtendsNode) or not isinstance(node.parent_name, FilterExpression):
             continue
         parent = node.parent_name.var

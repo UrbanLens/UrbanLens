@@ -19,17 +19,17 @@ from urbanlens.dashboard.services.apis.locations.wayback_machine import is_own_s
 from urbanlens.dashboard.tasks import archive_link_to_wayback
 
 _GATEWAY = "urbanlens.dashboard.services.apis.locations.wayback_machine.WaybackMachineGateway"
-_SAVED = "https://web.archive.org/web/20240101000000/https://example.com/"
+_SAVED = "https://web.archive.org/web/20240101000000/https://elsewhere.example.net/"
 
 
 class IsOwnSiteUrlTests(SimpleTestCase):
     """is_own_site_url() gates which links archive_link_to_wayback will submit."""
 
-    def test_matches_urbanlens_org_regardless_of_site_url(self) -> None:
-        self.assertTrue(is_own_site_url("https://urbanlens.org/dashboard/map/"))
+    def test_matches_project_domain_regardless_of_site_url(self) -> None:
+        self.assertTrue(is_own_site_url("https://example.com/dashboard/map/"))
 
-    def test_matches_urbanlens_org_subdomain(self) -> None:
-        self.assertTrue(is_own_site_url("https://staging.urbanlens.org/dashboard/map/"))
+    def test_matches_project_domain_subdomain(self) -> None:
+        self.assertTrue(is_own_site_url("https://staging.example.com/dashboard/map/"))
 
     @override_settings(SITE_URL="https://my-selfhost.example.com")
     def test_matches_configured_site_url_domain(self) -> None:
@@ -40,16 +40,16 @@ class IsOwnSiteUrlTests(SimpleTestCase):
         self.assertTrue(is_own_site_url("https://staging.my-selfhost.example.com/dashboard/map/"))
 
     @override_settings(SITE_URL="https://my-selfhost.example.com")
-    def test_self_hosted_deployment_still_excludes_urbanlens_org(self) -> None:
+    def test_self_hosted_deployment_still_excludes_project_domain(self) -> None:
         """A self-host runs under its own domain but must still never submit the canonical site's own URLs."""
-        self.assertTrue(is_own_site_url("https://urbanlens.org/dashboard/map/"))
+        self.assertTrue(is_own_site_url("https://example.com/dashboard/map/"))
 
     def test_unrelated_domain_is_not_excluded(self) -> None:
-        self.assertFalse(is_own_site_url("https://example.com/some-article"))
+        self.assertFalse(is_own_site_url("https://elsewhere.example.net/some-article"))
 
-    def test_domain_that_merely_contains_urbanlens_org_as_a_substring_is_not_excluded(self) -> None:
-        """ "noturbanlens.org" is a different registrable domain, not a subdomain."""
-        self.assertFalse(is_own_site_url("https://noturbanlens.org/"))
+    def test_domain_that_merely_contains_the_site_domain_as_a_substring_is_not_excluded(self) -> None:
+        """ "notexample.net" is a different registrable domain, not a subdomain."""
+        self.assertFalse(is_own_site_url("https://notexample.net/"))
 
     def test_empty_or_unparseable_url_is_not_excluded(self) -> None:
         self.assertFalse(is_own_site_url(""))
@@ -68,7 +68,7 @@ class ArchiveLinkToWaybackTests(TestCase):
 
     def test_link_that_already_has_a_wayback_url_is_skipped(self) -> None:
         link = baker.make(
-            PinLink, pin=self.pin, url="https://example.com", wayback_url="https://web.archive.org/existing"
+            PinLink, pin=self.pin, url="https://elsewhere.example.net", wayback_url="https://web.archive.org/existing"
         )
         with mock.patch(f"{_GATEWAY}.get_availability") as get_availability:
             result = archive_link_to_wayback("PinLink", link.pk)
@@ -76,7 +76,7 @@ class ArchiveLinkToWaybackTests(TestCase):
         get_availability.assert_not_called()
 
     def test_uses_existing_snapshot_when_available(self) -> None:
-        link = baker.make(PinLink, pin=self.pin, url="https://example.com", wayback_url="")
+        link = baker.make(PinLink, pin=self.pin, url="https://elsewhere.example.net", wayback_url="")
         with (
             mock.patch(
                 f"{_GATEWAY}.get_availability",
@@ -92,7 +92,7 @@ class ArchiveLinkToWaybackTests(TestCase):
 
     def test_a_snapshot_url_that_is_not_a_storable_link_is_dropped(self) -> None:
         """Wrapping a near-cap link in the archive prefix pushes it past the column; that must not fail the task."""
-        long_url = "https://example.com/" + "a" * 1970
+        long_url = "https://elsewhere.example.net/" + "a" * 1970
         link = baker.make(PinLink, pin=self.pin, url=long_url, wayback_url="")
         snapshot = f"https://web.archive.org/web/20230101000000/{long_url}"
         with mock.patch(
@@ -104,7 +104,7 @@ class ArchiveLinkToWaybackTests(TestCase):
         self.assertEqual(link.wayback_url, "")
 
     def test_saves_a_new_snapshot_when_none_exists(self) -> None:
-        link = baker.make(PinLink, pin=self.pin, url="https://example.com", wayback_url="")
+        link = baker.make(PinLink, pin=self.pin, url="https://elsewhere.example.net", wayback_url="")
         with (
             mock.patch(f"{_GATEWAY}.get_availability", return_value={"archived_snapshots": {}}),
             mock.patch(
@@ -118,7 +118,7 @@ class ArchiveLinkToWaybackTests(TestCase):
         self.assertEqual(link.wayback_url, "https://web.archive.org/fresh")
 
     def test_request_failure_is_swallowed_and_returns_false(self) -> None:
-        link = baker.make(PinLink, pin=self.pin, url="https://example.com", wayback_url="")
+        link = baker.make(PinLink, pin=self.pin, url="https://elsewhere.example.net", wayback_url="")
         with mock.patch(f"{_GATEWAY}.get_availability", side_effect=requests.RequestException("boom")):
             result = archive_link_to_wayback("PinLink", link.pk)
         self.assertFalse(result)
@@ -126,7 +126,7 @@ class ArchiveLinkToWaybackTests(TestCase):
         self.assertEqual(link.wayback_url, "")
 
     def test_own_site_link_is_never_submitted(self) -> None:
-        link = baker.make(PinLink, pin=self.pin, url="https://urbanlens.org/dashboard/map/pin/abc/", wayback_url="")
+        link = baker.make(PinLink, pin=self.pin, url="https://example.com/dashboard/map/pin/abc/", wayback_url="")
         with mock.patch(f"{_GATEWAY}.get_availability") as get_availability:
             result = archive_link_to_wayback("PinLink", link.pk)
         self.assertFalse(result)
@@ -135,7 +135,7 @@ class ArchiveLinkToWaybackTests(TestCase):
         self.assertEqual(link.wayback_url, "")
 
     def test_no_snapshot_found_and_save_also_fails_leaves_wayback_url_blank(self) -> None:
-        link = baker.make(PinLink, pin=self.pin, url="https://example.com", wayback_url="")
+        link = baker.make(PinLink, pin=self.pin, url="https://elsewhere.example.net", wayback_url="")
         with (
             mock.patch(f"{_GATEWAY}.get_availability", return_value={}),
             mock.patch(f"{_GATEWAY}.save_url", return_value={"archived_url": "", "status_code": 200}),
@@ -149,15 +149,15 @@ class ArchiveLinkToWaybackTests(TestCase):
 class OneUrlIsArchivedOnceTests(TestCase):
     """A URL linked from a pin and its wiki, or from many pins, is looked up at the Wayback Machine once."""
 
-    _SNAPSHOT = "https://web.archive.org/web/20240101000000/https://example.com/a"
+    _SNAPSHOT = "https://web.archive.org/web/20240101000000/https://elsewhere.example.net/a"
 
     def setUp(self) -> None:
         self.pin = baker.make(Pin, profile=baker.make("auth.User").profile)
         self.wiki = baker.make("dashboard.Wiki")
 
     def test_a_snapshot_another_link_holds_is_reused_without_asking(self) -> None:
-        baker.make(PinLink, pin=self.pin, url="https://example.com/a", wayback_url=self._SNAPSHOT)
-        waiting = baker.make(WikiLink, wiki=self.wiki, url="https://example.com/a", wayback_url="")
+        baker.make(PinLink, pin=self.pin, url="https://elsewhere.example.net/a", wayback_url=self._SNAPSHOT)
+        waiting = baker.make(WikiLink, wiki=self.wiki, url="https://elsewhere.example.net/a", wayback_url="")
 
         with mock.patch(f"{_GATEWAY}.get_availability") as get_availability, mock.patch(f"{_GATEWAY}.save_url") as save:
             self.assertTrue(archive_link_to_wayback("WikiLink", waiting.pk))
@@ -168,14 +168,16 @@ class OneUrlIsArchivedOnceTests(TestCase):
         self.assertEqual(waiting.wayback_url, self._SNAPSHOT)
 
     def test_a_snapshot_found_is_given_to_every_link_waiting_on_the_url(self) -> None:
-        first = baker.make(PinLink, pin=self.pin, url="https://example.com/a", wayback_url="")
+        first = baker.make(PinLink, pin=self.pin, url="https://elsewhere.example.net/a", wayback_url="")
         others = [
-            baker.make(WikiLink, wiki=self.wiki, url="https://example.com/a", wayback_url=""),
+            baker.make(WikiLink, wiki=self.wiki, url="https://elsewhere.example.net/a", wayback_url=""),
             baker.make(
-                PinLink, pin=baker.make(Pin, profile=baker.make("auth.User").profile), url="https://example.com/a"
+                PinLink,
+                pin=baker.make(Pin, profile=baker.make("auth.User").profile),
+                url="https://elsewhere.example.net/a",
             ),
         ]
-        unrelated = baker.make(PinLink, pin=self.pin, url="https://example.com/b", wayback_url="")
+        unrelated = baker.make(PinLink, pin=self.pin, url="https://elsewhere.example.net/b", wayback_url="")
         found = {"archived_snapshots": {"closest": {"url": self._SNAPSHOT}}}
 
         with mock.patch(f"{_GATEWAY}.get_availability", return_value=found) as get_availability:
@@ -192,8 +194,8 @@ class OneUrlIsArchivedOnceTests(TestCase):
 
     def test_a_link_whose_url_is_being_archived_is_left_to_that_task(self) -> None:
         """The task already asking gives its snapshot to this link too, so this one does not ask again."""
-        first = baker.make(PinLink, pin=self.pin, url="https://example.com/a", wayback_url="")
-        second = baker.make(WikiLink, wiki=self.wiki, url="https://example.com/a", wayback_url="")
+        first = baker.make(PinLink, pin=self.pin, url="https://elsewhere.example.net/a", wayback_url="")
+        second = baker.make(WikiLink, wiki=self.wiki, url="https://elsewhere.example.net/a", wayback_url="")
         asked: list[str] = []
 
         def availability_while_the_other_runs(url: str) -> dict:
@@ -204,13 +206,13 @@ class OneUrlIsArchivedOnceTests(TestCase):
         with mock.patch(f"{_GATEWAY}.get_availability", side_effect=availability_while_the_other_runs):
             self.assertTrue(archive_link_to_wayback("PinLink", first.pk))
 
-        self.assertEqual(asked, ["https://example.com/a"])
+        self.assertEqual(asked, ["https://elsewhere.example.net/a"])
         second.refresh_from_db()
         self.assertEqual(second.wayback_url, self._SNAPSHOT)
 
     def test_a_failed_lookup_frees_the_url_for_the_next_task_once_it_is_due(self) -> None:
-        first = baker.make(PinLink, pin=self.pin, url="https://example.com/a", wayback_url="")
-        second = baker.make(WikiLink, wiki=self.wiki, url="https://example.com/a", wayback_url="")
+        first = baker.make(PinLink, pin=self.pin, url="https://elsewhere.example.net/a", wayback_url="")
+        second = baker.make(WikiLink, wiki=self.wiki, url="https://elsewhere.example.net/a", wayback_url="")
         found = {"archived_snapshots": {"closest": {"url": self._SNAPSHOT}}}
         due = timezone.now() + timedelta(hours=2)
 
@@ -223,7 +225,7 @@ class OneUrlIsArchivedOnceTests(TestCase):
         """The lock only saves a duplicate lookup; a cache outage must not stop archiving, as it did not before it."""
         from redis.exceptions import ConnectionError as RedisConnectionError
 
-        link = baker.make(PinLink, pin=self.pin, url="https://example.com/a", wayback_url="")
+        link = baker.make(PinLink, pin=self.pin, url="https://elsewhere.example.net/a", wayback_url="")
         found = {"archived_snapshots": {"closest": {"url": self._SNAPSHOT}}}
 
         with (
@@ -238,10 +240,10 @@ class OneUrlIsArchivedOnceTests(TestCase):
     def test_each_pin_whose_link_gains_a_snapshot_is_marked_changed(self) -> None:
         """The external API's sync feed pages by ``Pin.updated``; a link's ``save`` used to move it through a signal."""
         other_pin = baker.make(Pin, profile=baker.make("auth.User").profile)
-        first = baker.make(PinLink, pin=self.pin, url="https://example.com/a", wayback_url="")
-        baker.make(PinLink, pin=other_pin, url="https://example.com/a", wayback_url="")
+        first = baker.make(PinLink, pin=self.pin, url="https://elsewhere.example.net/a", wayback_url="")
+        baker.make(PinLink, pin=other_pin, url="https://elsewhere.example.net/a", wayback_url="")
         untouched = baker.make(Pin, profile=self.pin.profile)
-        baker.make(PinLink, pin=untouched, url="https://example.com/b", wayback_url="")
+        baker.make(PinLink, pin=untouched, url="https://elsewhere.example.net/b", wayback_url="")
         stale = timezone.now() - timedelta(days=1)
         Pin.objects.filter(pk__in=[self.pin.pk, other_pin.pk, untouched.pk]).update(updated=stale)
         found = {"archived_snapshots": {"closest": {"url": self._SNAPSHOT}}}
@@ -270,9 +272,9 @@ class ShareLinksAreNotSentToTheArchiveTests(TestCase):
         "https://1drv.ms/f/s!AbCdEfGhIjKlMn",
         "https://www.icloud.com/sharedalbum/#B0AbCdEfGhIjKlMn",
         "https://bucket.s3.amazonaws.com/plan.pdf?X-Amz-Credential=AKIA&X-Amz-Signature=abc123",
-        "https://example.com/files/plan.pdf?token=abc123",
-        "https://photos.example.com/share/AbCdEfGhIjKlMnOpQrStUv",
-        "https://example.com/callback#access_token=abc123",
+        "https://elsewhere.example.net/files/plan.pdf?token=abc123",
+        "https://photos.elsewhere.example.net/share/AbCdEfGhIjKlMnOpQrStUv",
+        "https://elsewhere.example.net/callback#access_token=abc123",
     )
 
     def setUp(self) -> None:
@@ -297,7 +299,7 @@ class ShareLinksAreNotSentToTheArchiveTests(TestCase):
     def test_a_link_without_a_secret_is_still_archived(self) -> None:
         """Anti-vacuity: the refusal is for the secret, not for a query string or a file host's neighbour."""
         for url in (
-            "https://example.com/article?id=3&page=2",
+            "https://elsewhere.example.net/article?id=3&page=2",
             "https://www.google.com/maps/place/Hudson+River+State+Hospital/@41.73,-73.92,17z",
             "https://notdropbox.com/plans.pdf?dl=0",
             "https://www.reddit.com/r/urbanexploration/s/AbCdEfGh",
@@ -322,9 +324,9 @@ class ListSharedLinkSnapshotsTests(TestCase):
             PinLink, pin=pin, url="https://drive.google.com/file/d/1AbC/view", wayback_url=f"{_SAVED}drive"
         )
         shared_wiki = baker.make(
-            WikiLink, wiki=wiki, url="https://example.com/plan.pdf?token=abc", wayback_url=f"{_SAVED}token"
+            WikiLink, wiki=wiki, url="https://elsewhere.example.net/plan.pdf?token=abc", wayback_url=f"{_SAVED}token"
         )
-        baker.make(PinLink, pin=pin, url="https://example.com/article", wayback_url=f"{_SAVED}article")
+        baker.make(PinLink, pin=pin, url="https://elsewhere.example.net/article", wayback_url=f"{_SAVED}article")
         baker.make(PinLink, pin=pin, url="https://www.dropbox.com/s/AbCdEf/plan.pdf", wayback_url="")
         out = StringIO()
 

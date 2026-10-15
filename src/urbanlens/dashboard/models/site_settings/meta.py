@@ -6,14 +6,6 @@ from urbanlens.dashboard.models.abstract.choices import TextChoices
 from urbanlens.UrbanLens.environments.meta import EnvironmentTypes
 
 
-class AiProviderChoice(TextChoices):
-    """AI provider options for site-wide AI features."""
-
-    CLOUDFLARE = "cloudflare", "Cloudflare Workers AI"
-    OPENAI = "openai", "OpenAI"
-    ANTHROPIC = "anthropic", "Anthropic (Claude)"
-
-
 class EnvironmentOverrideChoice(TextChoices):
     """Site environment override - falls back to ``UL_ENVIRONMENT`` when DEFAULT."""
 
@@ -42,8 +34,3 @@ class EnvironmentOverrideChoice(TextChoices):
             cls.STAGING: EnvironmentTypes.STAGING,
         }
         return mapping.get(value)
-
-
-DEFAULT_OPENAI_MODEL = "gpt-5-nano"
-DEFAULT_CLOUDFLARE_MODEL = "@cf/mistral/mistral-7b-instruct-v0.1"
-DEFAULT_ANTHROPIC_MODEL = "claude-haiku-4-5"

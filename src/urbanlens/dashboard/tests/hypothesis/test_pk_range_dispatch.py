@@ -99,24 +99,3 @@ class RangedBackfillTests(TestCase):
             self.assertEqual(tasks.backfill_achievement(self.achievement.pk), 0)
 
         enqueue.assert_not_called()
-
-
-class ReputationSweepDispatchTests(TestCase):
-    def test_unscored_rows_are_dispatched_as_ranges_and_scored_rows_are_not(self) -> None:
-        from model_bakery import seq
-
-        from urbanlens.dashboard.models.reputation.model import ReputationEvent
-
-        profile = baker.make(User).profile
-        unscored = baker.make(
-            ReputationEvent, profile=profile, value=None, retracted=False, target_id=seq(1), _quantity=5
-        )
-        baker.make(ReputationEvent, profile=profile, value=1, retracted=False, target_id=seq(100), _quantity=2)
-
-        with patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
-            tasks.sweep_reputation(chunk_size=2)
-
-        ranges = [call.args[1:] for call in enqueue.call_args_list if call.args[0] is tasks.sweep_reputation_range]
-        self.assertEqual(len(ranges), 3)
-        covered = sorted(event.pk for event in unscored if any(first <= event.pk <= last for first, last in ranges))
-        self.assertEqual(covered, sorted(event.pk for event in unscored))

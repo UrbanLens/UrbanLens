@@ -244,7 +244,7 @@ class BasemapStyleOriginIsAllowedByThePolicyTests(SimpleTestCase):
     A self-hosted vector basemap is the one map layer the browser fetches itself.
 
     A raster layer is proxied, so the browser only ever talks to this origin and the policy needs
-    no exception. A vector layer is the opposite: REData publishes a ``style_url`` and the browser
+    no exception. A vector layer is the opposite: the catalogue publishes a ``style_url`` and the browser
     goes straight to it for the style, its glyphs, its sprite and the PMTiles archive. Refused by
     CSP, the map is blank with no network error a user could act on.
     """
@@ -319,7 +319,7 @@ class BasemapStyleOriginIsAllowedByThePolicyTests(SimpleTestCase):
         self.assertEqual(admitted, 1 if hosted_basemap_api_key() else 0)
 
     def test_no_style_origin_configured_changes_nothing(self) -> None:
-        """The default for every deployment today, hosted and self-hosted: REData offers only raster."""
+        """The default for every deployment today, hosted and self-hosted: the catalogue offers only raster."""
         from urbanlens.UrbanLens.settings.base import allow_basemap_style_origins
 
         directives: dict[str, list[str]] = {"connect-src": ["'self'"]}

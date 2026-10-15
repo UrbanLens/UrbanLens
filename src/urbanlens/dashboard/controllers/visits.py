@@ -78,7 +78,7 @@ def _visit_weather(visits: list[PinVisit]) -> dict[int, RecordedDay]:
     What the weather actually was on the day of each visit, from cache.
 
     **Reads only; never fetches.** This runs inside a page render, and a page render must not block on
-    an outbound call - a slow REData would hold up the whole visit list for a decorative line of text,
+    an outbound call - a slow upstream would hold up the whole visit list for a decorative line of text,
     behind a spinner or not.
 
     Args:

@@ -277,7 +277,7 @@ class MemoriesSharingMapsPageTests(_ShareChainTestCase):
 
 class SharingPagePaginationTests(_ShareChainTestCase):
     """
-    P69: the Sharing page rendered both halves of its toggle, unbounded.
+    The Sharing page rendered both halves of its toggle, unbounded.
 
     The two halves are a client-side toggle, so the received half was queried, grouped and rendered on every
     load for a panel nobody had opened - and neither half had a slice, so both grew with the account."""

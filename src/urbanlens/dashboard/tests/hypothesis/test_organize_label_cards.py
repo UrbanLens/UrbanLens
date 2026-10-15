@@ -1,4 +1,4 @@
-"""The Organize label cards: the data attributes the organize scripts read, and the per-label action rules (P66)."""
+"""The Organize label cards: the data attributes the organize scripts read, and the per-label action rules."""
 
 from __future__ import annotations
 

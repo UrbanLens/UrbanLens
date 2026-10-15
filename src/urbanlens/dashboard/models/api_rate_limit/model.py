@@ -15,7 +15,7 @@ class ApiRateLimit(abstract.DashboardModel):
     service = CharField(
         max_length=50,
         unique=True,
-        help_text="Internal service identifier (e.g. 'nps', 'google_places').",
+        help_text="Internal service identifier (e.g. 'nominatim', 'google_places').",
     )
     display_name = CharField(
         max_length=100,
@@ -63,7 +63,7 @@ class ApiRateLimit(abstract.DashboardModel):
     )
     usa_only = BooleanField(
         default=False,
-        help_text=("Skip API calls for coordinates outside the United States. Enable for USA-centric services (NPS, LoopNet, Library of Congress, etc.)."),
+        help_text=("Skip API calls for coordinates outside the United States. Enable for USA-centric services (e.g. national park or US-only archive APIs)."),
     )
     notes = TextField(
         blank=True,

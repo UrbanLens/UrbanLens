@@ -1,5 +1,5 @@
 /**
- * SpotGuessr (UL-391..UL-393) - gameplay, multiplayer lobby, and chat.
+ * SpotGuessr - gameplay, multiplayer lobby, and chat.
  */
 import { retryWhileCurrent } from "../shared/retry-while-current";
 import { getJson, postForm } from "../shared/session-request";
@@ -9,7 +9,7 @@ import { ChatComposer, toastRefusal } from "../shared/chat-composer";
 import { departureBadge, rankFinalScoreboard, type Departure } from "../shared/game-scoreboard";
 import { createGameShell, playEntrance, type GameShell } from "../shared/game-shell";
 import { openLiveSocket, type LiveSocketHandle } from "../shared/live-socket";
-import { createMapLayers, registerRedataLayers, tileLayer } from "../shared/map-layers";
+import { createMapLayers, registerCatalogueLayers, tileLayer } from "../shared/map-layers";
 import {
     avatarInitial,
     bonusSuffix,
@@ -26,9 +26,9 @@ declare const L: typeof import("leaflet");
 import type {} from "leaflet-draw";
 
 // Fired now rather than awaited at ensureAreaMap()/ensureGuessMap()'s first call: both maps are
-// created lazily, well after this module has finished loading, so this deployment's REData tile
+// created lazily, well after this module has finished loading, so this deployment's tile
 // catalogue fetch has almost always already resolved by then.
-void registerRedataLayers();
+void registerCatalogueLayers();
 
 /** The page's ``sg-urls`` island: every route, with sentinel ids for the client to substitute. */
 interface SpotguessrUrls {
@@ -1526,8 +1526,8 @@ function applyLastConfig(): void {
 
 function connectSessionSocket(): void {
     if (state.ws || state.sessionId === null) return;
-    // shared/live-socket.ts adds the heartbeat this socket needs to survive the
-    // Cloudflare tunnel's idle cutoff, and the reconnect it never had.
+    // shared/live-socket.ts adds the heartbeat this socket needs to survive
+    // a reverse proxy's idle cutoff, and the reconnect it never had.
     state.ws = openLiveSocket({
         path: `/ws/spotguessr/session/${state.sessionId}/`,
         onMessage: handleSocketMessage,

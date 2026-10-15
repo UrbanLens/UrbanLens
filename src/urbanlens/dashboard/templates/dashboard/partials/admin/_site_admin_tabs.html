@@ -1,4 +1,4 @@
-{% comment %}Home | Stats | Settings | Subscriptions | API Limits | Plugins | Achievements | Costs | Tag Mapping | Users | UI Components tab strip.{% endcomment %}
+{% comment %}Home | Stats | Settings | Subscriptions | API Limits | Plugins | Achievements | Tag Mapping | Users | UI Components tab strip, plus the tabs plugins add.{% endcomment %}
 <nav class="ul-subnav-tabs" aria-label="Site admin views">
     <a href="{% url 'site_admin_home' %}"
        class="ul-subnav-tab {% if active == 'home' %}is-active{% endif %}"
@@ -11,12 +11,6 @@
        {% if active == 'stats' %}aria-current="page"{% endif %}>
         <i class="material-symbols-outlined">bar_chart</i>
         <span>Stats</span>
-    </a>
-    <a href="{% url 'site_admin_models' %}"
-       class="ul-subnav-tab {% if active == 'models' %}is-active{% endif %}"
-       {% if active == 'models' %}aria-current="page"{% endif %}>
-        <i class="material-symbols-outlined">model_training</i>
-        <span>Models</span>
     </a>
     <a href="{% url 'site_admin_users' %}"
        class="ul-subnav-tab {% if active == 'users' %}is-active{% endif %}"
@@ -34,7 +28,7 @@
        class="ul-subnav-tab {% if active == 'subscriptions' %}is-active{% endif %}"
        {% if active == 'subscriptions' %}aria-current="page"{% endif %}>
         <i class="material-symbols-outlined">workspace_premium</i>
-        <span>Subscriptions</span>
+        <span>Access roles</span>
     </a>
     <a href="{% url 'site_admin_api_limits' %}"
        class="ul-subnav-tab {% if active == 'api_limits' %}is-active{% endif %}"
@@ -54,12 +48,7 @@
         <i class="material-symbols-outlined">trophy</i>
         <span>Achievements</span>
     </a>
-    <a href="{% url 'site_admin_costs' %}"
-       class="ul-subnav-tab {% if active == 'costs' %}is-active{% endif %}"
-       {% if active == 'costs' %}aria-current="page"{% endif %}>
-        <i class="material-symbols-outlined">payments</i>
-        <span>Costs</span>
-    </a>
+    {% plugin_slot "site_admin.tabs" %}
     <a href="{% url 'site_admin_external_tags' %}"
        class="ul-subnav-tab {% if active == 'external_tags' %}is-active{% endif %}"
        {% if active == 'external_tags' %}aria-current="page"{% endif %}>

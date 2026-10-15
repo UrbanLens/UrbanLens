@@ -66,7 +66,7 @@ PUBLIC_SUFFIXES = frozenset(
 
 def media_origin() -> str:
     """
-    The configured media origin, e.g. ``https://media.urbanlens.org``.
+    The configured media origin, e.g. ``https://media.example.com``.
 
     Returns:
         The origin with no trailing slash, or an empty string when uploads are served from the app's own hostname (the default, and what local development runs)."""
@@ -105,7 +105,7 @@ def shared_suffix(media_host: str, app_host: str) -> str:
         app_host: Hostname of the app origin.
 
     Returns:
-        The shared suffix, e.g. ``"urbanlens.org"`` - which may be a public suffix, or a single label, or empty."""
+        The shared suffix, e.g. ``"example.com"`` - which may be a public suffix, or a single label, or empty."""
     shared: list[str] = []
     for media_label, app_label in zip(reversed(media_host.lower().split(".")), reversed(app_host.lower().split(".")), strict=False):
         if media_label != app_label:

@@ -17,15 +17,11 @@ from django.test import SimpleTestCase, override_settings
 from kombu.transport import virtual
 
 from urbanlens.dashboard.checks import check_celery_failures_cannot_requeue_forever
+from urbanlens.dashboard.plugins import points
 
-#: Tasks allowed to run with ``acks_late`` off, and why. Everything else inherits
-#: ``CELERY_TASK_ACKS_LATE``; an entry here is a task that would rather be lost
-#: than repeated, which is a per-task judgement rather than a default.
-ACKS_LATE_EXEMPT = {
-    # A turn that dies mid-loop must not be redelivered and re-spend a provider
-    # call for a bubble the caller has already timed out on.
-    "urbanlens.dashboard.services.ai.tasks.run_assistant_turn_task",
-}
+#: Tasks allowed to run with ``acks_late`` off, as the plugins that own them declare. Everything else inherits
+#: ``CELERY_TASK_ACKS_LATE``.
+ACKS_LATE_EXEMPT = frozenset(points.ACKS_LATE_EXEMPT.items())
 
 #: A floor on the discovered task count. The registry assertions are all "no task
 #: does X", which an empty registry satisfies trivially - Celery discovers tasks

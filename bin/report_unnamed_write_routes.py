@@ -9,7 +9,7 @@ are not classified; their count is reported separately.
 
 Needs the URLconf, so it runs where GeoDjango imports, inside the test runner after a sync::
 
-    docker exec -w /app urbanlens_development_main_test_runner /app/.venv/bin/python bin/report_unnamed_write_routes.py
+    docker exec -w /app "urbanlens_${UL_CONTAINER_NAME}_test_runner" /app/.venv/bin/python bin/report_unnamed_write_routes.py
 """
 
 from __future__ import annotations

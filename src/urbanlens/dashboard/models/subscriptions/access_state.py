@@ -30,6 +30,7 @@ from urbanlens.core.versioned_cache import VersionedCache
 
 if TYPE_CHECKING:
     from django.contrib.auth.base_user import AbstractBaseUser
+    from django.db.models import Model
 
 #: The permission that makes an account a site admin, which grants every feature.
 SITE_ADMIN_PERMISSION = "dashboard.view_site_admin"
@@ -185,11 +186,18 @@ def connect_invalidation() -> None:
     from django.contrib.auth.models import Group, Permission
     from django.db.models.signals import m2m_changed, post_delete, post_save
 
-    from urbanlens.dashboard.models.billing import RoleSubscription
     from urbanlens.dashboard.models.site_settings.model import SiteSettings
     from urbanlens.dashboard.models.subscriptions.model import SubscriptionRole, UserSubscription
+    from urbanlens.dashboard.plugins.points import ACCESS_STATE_SENDERS
 
-    rows = (SiteSettings, UserSubscription, RoleSubscription, SubscriptionRole, Group, Permission)
+    rows: tuple[type[Model], ...] = (
+        SiteSettings,
+        UserSubscription,
+        SubscriptionRole,
+        Group,
+        Permission,
+        *ACCESS_STATE_SENDERS.apply([]),
+    )
     for sender in rows:
         post_save.connect(forget, sender=sender, dispatch_uid=f"access_state_forget_{sender.__name__}_save")
         post_delete.connect(forget, sender=sender, dispatch_uid=f"access_state_forget_{sender.__name__}_delete")

@@ -1,4 +1,4 @@
-"""Tests for services.spotguessr.chat - session-scoped live text chat (UL-392)."""
+"""Tests for services.spotguessr.chat - session-scoped live text chat."""
 
 from __future__ import annotations
 

@@ -16,6 +16,7 @@ from urbanlens.dashboard.models.notifications.meta import (
     Importance,
     NotificationType,
     Status,
+    notification_type_choices,
 )
 from urbanlens.dashboard.models.notifications.queryset import NotificationManager
 from urbanlens.dashboard.services.security.redact import redact_text
@@ -36,7 +37,7 @@ class NotificationLog(abstract.FrontendDashboardModel):
 
     status = models.CharField(max_length=17, choices=Status.choices, default=Status.UNREAD)
     importance = models.CharField(max_length=17, choices=Importance.choices, default=Importance.LOWEST)
-    notification_type = models.CharField(max_length=30, choices=NotificationType.choices, default=NotificationType.INFO)
+    notification_type = models.CharField(max_length=30, choices=notification_type_choices, default=NotificationType.INFO)
     title = models.CharField(max_length=255, blank=True)
     message = models.CharField(max_length=50000, blank=True)
     url = models.CharField(max_length=500, blank=True)

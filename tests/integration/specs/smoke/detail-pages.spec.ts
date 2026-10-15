@@ -280,12 +280,6 @@ test.describe("other pages", () => {
         await expectMissing(page, `${pinDetail(MISSING_SLUG)}floorplan/`);
     });
 
-    test("the AI link analysis page renders", async ({ page, playwright }) => {
-        await open(page, "/dashboard/ai/extractions/");
-        await expect(heroTitle(page)).toContainText("AI Link Analysis");
-        await expectSignInRequired(playwright, "/dashboard/ai/extractions/");
-    });
-
     test("the pin import help page renders", async ({ page }) => {
         await open(page, "/dashboard/help/import-pins/");
         await expect(page.locator("h1")).toContainText("Import pins into UrbanLens");

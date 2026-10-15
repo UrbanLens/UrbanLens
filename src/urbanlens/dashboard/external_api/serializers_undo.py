@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
+from urbanlens.dashboard.plugins.drf import ExtensibleSerializer
 
-class UndoEntrySerializer(serializers.Serializer):
+
+class UndoEntrySerializer(ExtensibleSerializer):
     """One recently deleted item the caller may still restore."""
 
     uuid = serializers.UUIDField(read_only=True)
@@ -15,7 +17,7 @@ class UndoEntrySerializer(serializers.Serializer):
     expires_at = serializers.DateTimeField(read_only=True)
 
 
-class UndoHistorySerializer(serializers.Serializer):
+class UndoHistorySerializer(ExtensibleSerializer):
     """
     The undo feed, as the endpoint actually returns it.
 

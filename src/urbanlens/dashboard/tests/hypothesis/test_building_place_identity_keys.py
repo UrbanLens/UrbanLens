@@ -29,22 +29,22 @@ class BuildingPlaceIdentityTests(TestCase):
 
     def test_the_same_building_number_on_two_parcels_is_two_places(self) -> None:
         first = ensure_building_places(
-            _parcel(0.0), [{"name": "Building 9", "building_number": "9"}], provider="redata"
+            _parcel(0.0), [{"name": "Building 9", "building_number": "9"}], provider="registry"
         )
         second = ensure_building_places(
-            _parcel(5.0), [{"name": "Building 9", "building_number": "9"}], provider="redata"
+            _parcel(5.0), [{"name": "Building 9", "building_number": "9"}], provider="registry"
         )
 
         self.assertNotEqual(first[0].pk, second[0].pk)
 
     def test_the_same_building_number_on_one_parcel_is_one_place(self) -> None:
         parcel = _parcel(0.0)
-        first = ensure_building_places(parcel, [{"name": "Building 9", "building_number": "9"}], provider="redata")
-        again = ensure_building_places(parcel, [{"name": "Building 9", "building_number": "9"}], provider="redata")
+        first = ensure_building_places(parcel, [{"name": "Building 9", "building_number": "9"}], provider="registry")
+        again = ensure_building_places(parcel, [{"name": "Building 9", "building_number": "9"}], provider="registry")
 
         self.assertEqual(first[0].pk, again[0].pk)
 
-    def test_footprintless_osm_buildings_each_get_a_place_keyed_like_redatas_osm_refs(self) -> None:
+    def test_footprintless_osm_buildings_each_get_a_place_keyed_like_a_reconciled_osm_ref(self) -> None:
         records = [
             {
                 "name": "",
@@ -58,29 +58,31 @@ class BuildingPlaceIdentityTests(TestCase):
             for index in range(8)
         ]
 
-        places = ensure_building_places(_parcel(0.0), records, provider="redata")
+        places = ensure_building_places(_parcel(0.0), records, provider="registry")
 
         self.assertEqual(len({place.pk for place in places.values()}), 8)
         self.assertEqual(places[0].provider_key, "osm:way/100")
 
-    def test_redata_later_naming_the_same_osm_building_finds_its_place(self) -> None:
+    def test_a_reconciled_record_later_naming_the_same_osm_building_finds_its_place(self) -> None:
         parcel = _parcel(0.0)
         from_osm = ensure_building_places(
-            parcel, [{"osm_id": 7, "osm_type": "way", "source": "osm"}], provider="redata"
+            parcel, [{"osm_id": 7, "osm_type": "way", "source": "osm"}], provider="registry"
         )
-        from_redata = ensure_building_places(parcel, [{"ref": "osm:way/7", "name": "Kirkbride"}], provider="redata")
+        from_reconciled = ensure_building_places(
+            parcel, [{"ref": "osm:way/7", "name": "Kirkbride"}], provider="registry"
+        )
 
-        self.assertEqual(from_osm[0].pk, from_redata[0].pk)
+        self.assertEqual(from_osm[0].pk, from_reconciled[0].pk)
 
     def test_a_place_filed_under_the_bare_number_is_adopted_not_forked(self) -> None:
         from urbanlens.dashboard.models.place.model import Place, PlaceRelation
         from urbanlens.dashboard.services.places import lineage
 
         parcel = _parcel(0.0)
-        legacy = Place.objects.create(kind=PlaceKind.BUILDING, provider="redata", provider_key="9", name="Building 9")
+        legacy = Place.objects.create(kind=PlaceKind.BUILDING, provider="registry", provider_key="9", name="Building 9")
         lineage.set_parent(legacy, parcel, PlaceRelation.PART_OF)
 
-        places = ensure_building_places(parcel, [{"name": "Building 9", "building_number": "9"}], provider="redata")
+        places = ensure_building_places(parcel, [{"name": "Building 9", "building_number": "9"}], provider="registry")
 
         self.assertEqual(places[0].pk, legacy.pk)
         legacy.refresh_from_db()

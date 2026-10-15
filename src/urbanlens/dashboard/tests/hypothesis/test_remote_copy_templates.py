@@ -1,4 +1,4 @@
-"""Panels that show a provider's picture name this site's copy of it, never the provider (P165)."""
+"""Panels that show a provider's picture name this site's copy of it, never the provider."""
 
 from __future__ import annotations
 
@@ -40,9 +40,7 @@ class PanelTemplateTests(TestCase):
     def test_no_panel_names_the_provider(self) -> None:
         asset = {"id": "1", "thumbnail_url": _REMOTE, "already_imported": False}
         cases = {
-            "partials/pins/pin_yelp.html": {"business": {"name": "Diner", "image_url": _REMOTE}},
             "partials/pins/pin_usgs_topo.html": {"maps": [{"title": "Quad", "previewGraphicURL": _REMOTE}]},
-            "partials/pins/pin_nps.html": {"park": {"full_name": "Park", "images": [{"url": _REMOTE}]}},
             "partials/pins/pin_nominatim.html": {"place": {"name": "Mill", "image": _REMOTE}},
             "partials/search/_panel.html": {
                 "query": "mill",

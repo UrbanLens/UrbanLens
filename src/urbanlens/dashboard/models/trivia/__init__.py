@@ -2,7 +2,6 @@ from urbanlens.dashboard.models.trivia.model import (
     PlayerTriviaRating,
     TriviaAnswer,
     TriviaAnswerMatchKind,
-    TriviaGenerationAttempt,
     TriviaPreference,
     TriviaQuestion,
     TriviaQuestionRating,

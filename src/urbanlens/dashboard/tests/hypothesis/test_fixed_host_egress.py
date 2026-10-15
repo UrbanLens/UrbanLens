@@ -16,6 +16,7 @@ import requests
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations.wayback_machine import WaybackMachineGateway
+from urbanlens.dashboard.services.core.user_agent import USER_AGENT
 from urbanlens.dashboard.services.notifications.notifications import _send_gotify
 from urbanlens.dashboard.services.profile.avatar import AvatarService
 from urbanlens.dashboard.services.security.url_safety import _PINS
@@ -161,6 +162,12 @@ class SocialLinkProbeTests(SimpleTestCase):
 
         self.assertEqual(get.call_count, 1)
         self.assertIs(get.call_args.kwargs.get("allow_redirects"), False)
+
+    def test_the_probe_identifies_the_site_not_a_browser(self) -> None:
+        with _resolving(), mock.patch(self.GET, return_value=_body(b"", status=200)) as get:
+            self._probe("https://instagram.com/someone")
+
+        self.assertEqual(get.call_args.kwargs["headers"]["User-Agent"], USER_AGENT)
 
     def test_a_missing_profile_still_warns(self) -> None:
         with _resolving(), mock.patch(self.GET, return_value=_body(b"", status=404)):

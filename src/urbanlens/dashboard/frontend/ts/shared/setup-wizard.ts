@@ -4,7 +4,7 @@
  */
 
 import { getCsrfToken } from "./csrf";
-import { fetchJson, HttpError } from "./fetch-json";
+import { fetchJson } from "./fetch-json";
 import { saveAvatar, saveProfileField, showSavedAvatar, USERNAME_PATTERN, USERNAME_RULE, usernameAvailability, avatarSavedText, type AvatarChoice } from "./profile-field";
 
 const TOTAL_STEPS = 5;
@@ -17,11 +17,6 @@ const SAVED_BADGE_MS = 2200;
 const COLOR_OK = "#43a047";
 const COLOR_BAD = "#e53935";
 const COLOR_PENDING = "#9aa0a6";
-
-/** Whether *title* is the reserved name, however it is spaced or cased. */
-export function isReservedTitle(title: string): boolean {
-    return title.toLowerCase().replace(/[^a-z]+/g, "") === "urbanlens";
-}
 
 function byId(id: string): HTMLElement | null {
     return document.getElementById(id);
@@ -40,10 +35,6 @@ export class SetupWizard {
         return this.root.dataset;
     }
 
-    private get official(): boolean {
-        return this.cfg.official === "true";
-    }
-
     private titleInput(): HTMLInputElement | null {
         const el = byId("app-title-input");
         return el instanceof HTMLInputElement ? el : null;
@@ -53,7 +44,6 @@ export class SetupWizard {
         this.root.addEventListener("click", (event) => this.onClick(event));
         const title = this.titleInput();
         if (title) {
-            this.validateTitle(title.value);
             title.addEventListener("input", () => this.onTitleInput(title));
         }
         const username = byId("setup-username-input");
@@ -81,14 +71,6 @@ export class SetupWizard {
             this.goToStep(Number(goto.dataset.setupGoto));
             return;
         }
-        const suggestion = target?.closest<HTMLElement>(".setup-title-suggestion-btn");
-        const title = this.titleInput();
-        if (suggestion && title) {
-            title.value = suggestion.dataset.title ?? "";
-            title.dispatchEvent(new Event("input", { bubbles: true }));
-            title.focus();
-            return;
-        }
         const gravatar = target?.closest<HTMLElement>("#setup-avatar-gravatar-btn");
         if (gravatar) {
             void this.chooseAvatar({ kind: "gravatar", previewUrl: gravatar.dataset.gravatarUrl });
@@ -109,7 +91,6 @@ export class SetupWizard {
                 title.focus();
                 return;
             }
-            if (!this.validateTitle(value)) return;
         }
         this.step = n;
         this.root.querySelectorAll<HTMLElement>(".setup-step").forEach((el) => el.classList.toggle("setup-step--active", Number(el.dataset.step) === n));
@@ -128,38 +109,12 @@ export class SetupWizard {
 
     // -- Site title
 
-    private showTitleNotice(message: string): void {
-        const text = byId("title-reserved-message");
-        if (text) text.textContent = message;
-        const notice = byId("title-reserved-notice");
-        if (notice) notice.hidden = false;
-        this.titleInput()?.setAttribute("aria-invalid", "true");
-    }
-
-    private hideTitleNotice(): void {
-        const notice = byId("title-reserved-notice");
-        if (notice) notice.hidden = true;
-        this.titleInput()?.removeAttribute("aria-invalid");
-    }
-
-    /** Only the official site may call itself UrbanLens. */
-    private validateTitle(title: string): boolean {
-        const trimmed = title.trim();
-        if (!this.official && trimmed && isReservedTitle(trimmed)) {
-            this.showTitleNotice(this.cfg.titleNotice ?? "");
-            return false;
-        }
-        this.hideTitleNotice();
-        return true;
-    }
-
     private onTitleInput(input: HTMLInputElement): void {
-        const shown = input.value.trim() || (this.official ? "UrbanLens" : this.cfg.suggestedTitle ?? "");
+        const shown = input.value.trim() || "UrbanLens";
         for (const id of ["title-preview-value", "sidebar-title", "done-app-title"]) {
             const el = byId(id);
             if (el) el.textContent = shown;
         }
-        this.validateTitle(input.value);
         window.autosaveGuard?.markDirty();
         window.clearTimeout(this.titleTimer);
         this.titleTimer = window.setTimeout(() => void this.saveTitle(), TITLE_SAVE_DELAY_MS);
@@ -167,7 +122,7 @@ export class SetupWizard {
 
     private async saveTitle(): Promise<void> {
         const value = this.titleInput()?.value.trim() ?? "";
-        if (!value || !this.validateTitle(value)) return;
+        if (!value) return;
         const guard = window.autosaveGuard;
         guard?.saveStarted();
         try {
@@ -184,9 +139,8 @@ export class SetupWizard {
                 window.clearTimeout(this.savedTimer);
                 this.savedTimer = window.setTimeout(() => status.classList.remove("setup-save-status--visible"), SAVED_BADGE_MS);
             }
-        } catch (err) {
-            // The server refuses the reserved name the same way the page does, in its own words.
-            if (err instanceof HttpError && err.status === 400 && !this.official) this.showTitleNotice(err.message || (this.cfg.titleNotice ?? ""));
+        } catch {
+            // Not reported here: the next edit saves again.
         } finally {
             guard?.saveFinished();
         }

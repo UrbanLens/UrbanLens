@@ -35,26 +35,6 @@ interface RelevanceResponse {
     queued?: number;
 }
 
-const TAB_LABELS: Record<string, string> = {
-    smithsonian: "Smithsonian",
-    wikimedia: "Wikimedia",
-    wikipedia_media: "Wikipedia",
-    loc: "Library of Congress",
-    yelp: "Yelp",
-    google_images: "Google Images",
-    google_maps: "Google Maps",
-    searxng_images: "Web Images",
-    internet_archive: "Internet Archive",
-    digital_commonwealth: "Digital Commonwealth",
-    loopnet: "LoopNet",
-    cris_building: "NY Historic Preservation (CRIS)",
-    historical_maps: "Historical Maps",
-    redata_media: "Nearby Media",
-    redata_aerial: "Aerial & Drone",
-    redata_street_level: "Street-level",
-    redata_photo_pool: "Nearby Photos",
-};
-
 function section(): HTMLElement | null {
     return document.getElementById("media-gallery-section");
 }
@@ -132,12 +112,17 @@ export class PinMediaGallery {
         tabsEl.setAttribute("role", "tablist");
         tabsEl.setAttribute("aria-label", "Media view");
         const counts = new Map<string, number>();
+        // A tab is named by the provider's label the server put on its tiles.
+        const labels = new Map<string, string>();
         let notRelevant = 0;
         const items = mediaItems(g);
         for (const item of items) {
             const src = item.dataset.mediaSource;
             if (item.classList.contains("media-item--not-relevant")) notRelevant += 1;
-            else if (src && src !== "photos") counts.set(src, (counts.get(src) ?? 0) + 1);
+            else if (src && src !== "photos") {
+                counts.set(src, (counts.get(src) ?? 0) + 1);
+                if (!labels.has(src)) labels.set(src, item.dataset.mediaSourceLabel || src);
+            }
         }
         const badge = document.getElementById("media-count-badge");
         if (badge) {
@@ -157,7 +142,7 @@ export class PinMediaGallery {
         let html = tab(view === "all" && this.activeTab === "all", "all", "All", items.length);
         html += tab(view === "mine", "mine", "Mine");
         if (showSourceTabs) {
-            for (const src of sources) html += tab(view === "all" && this.activeTab === src, src, TAB_LABELS[src] ?? src, counts.get(src));
+            for (const src of sources) html += tab(view === "all" && this.activeTab === src, src, labels.get(src) ?? src, counts.get(src));
         }
         if (notRelevant) html += tab(view === "all" && this.activeTab === "not_relevant", "not_relevant", "Not Relevant", notRelevant);
         tabsEl.innerHTML = html;

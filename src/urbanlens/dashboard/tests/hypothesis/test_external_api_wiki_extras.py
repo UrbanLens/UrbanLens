@@ -1,4 +1,4 @@
-"""Tests for the wiki extras added in the P2 parity pass: boundary, cover photo, alias nickname toggle, ownership/sale history, and article-revision hard-delete."""
+"""Tests for the wiki extras: boundary, cover photo, alias nickname toggle, ownership/sale history, and article-revision hard-delete."""
 
 from __future__ import annotations
 

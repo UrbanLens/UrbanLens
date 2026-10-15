@@ -5,7 +5,7 @@ Every stored photo, and every copy made from one, carries none of the uploader's
 original when a rewrite came out larger. A photo whose only metadata was XMP, IPTC, a JPEG comment or PNG text -
 XMP can carry GPS - was stored and served exactly as uploaded, and GIF, BMP and animated images were never rewritten
 at all. A rewrite did not guarantee a clean file either: Pillow's JPEG and GIF writers copy the source's comment
-unless told otherwise, and its TIFF writer copies XMP and IPTC tags (P118).
+unless told otherwise, and its TIFF writer copies XMP and IPTC tags.
 
 Each fixture plants one metadata carrier holding a marker unique to it, so a failure names what leaked. The search
 covers the raw bytes, every zlib stream decompressed (PNG ``zTXt`` and compressed ``iTXt`` hide text from a plain byte

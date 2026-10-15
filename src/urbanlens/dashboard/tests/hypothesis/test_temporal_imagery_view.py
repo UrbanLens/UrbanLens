@@ -10,8 +10,8 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, grant_subscription
+from urbanlens.dashboard.plugins.points import TEMPORAL_FEATURE_PROVIDERS
 from urbanlens.dashboard.services.apis.locations.open_historical_map import OpenHistoricalMapGateway
-from urbanlens.UrbanLens.settings.app import settings
 
 _YEAR = 1950
 _GEOJSON = {
@@ -36,8 +36,8 @@ class TemporalImageryFeaturesPinScopedTests(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        # These cover the view over OHM's own answer; REData's is covered in test_redata_temporal_features.
-        self.enterContext(mock.patch.object(settings, "redata_api_url", None))
+        # These cover the view over OHM's own answer; a provider's is covered in test_temporal_feature_providers.
+        self.enterContext(TEMPORAL_FEATURE_PROVIDERS.overridden([]))
         # Absorb the fresh-test-db bootstrap admin promotion (see
         # test_panel_feature_gate.py's setUp for why the first user isn't a
         # safe subject).
@@ -92,8 +92,8 @@ class TemporalImageryFeaturesWikiScopedTests(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        # These cover the view over OHM's own answer; REData's is covered in test_redata_temporal_features.
-        self.enterContext(mock.patch.object(settings, "redata_api_url", None))
+        # These cover the view over OHM's own answer; a provider's is covered in test_temporal_feature_providers.
+        self.enterContext(TEMPORAL_FEATURE_PROVIDERS.overridden([]))
         baker.make(User)
         self.user = baker.make(User)
         self.client.force_login(self.user)

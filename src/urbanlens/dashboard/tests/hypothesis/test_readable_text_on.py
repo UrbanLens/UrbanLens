@@ -1,4 +1,4 @@
-"""The readable_text_on filter: chip text that reads on a user-chosen colour over the dark filter panel (P51)."""
+"""The readable_text_on filter: chip text that reads on a user-chosen colour over the dark filter panel."""
 
 from __future__ import annotations
 

@@ -1,7 +1,7 @@
 """
 Where a proxied tile lives in the cache, spelled once.
 
-Both tile proxies and the load-run seeder address the same bytes, and they addressed them by each
+The tile proxies and the load-run seeder address the same bytes, and they addressed them by each
 writing the same f-string. A seeder that drifts from a proxy is invisible - the map still draws,
 because a miss simply goes upstream - so it surfaces as a capacity run measuring the fetch path it
 was seeded to avoid, which is what happened when the bytes moved to their own store.
@@ -30,26 +30,12 @@ def basemap_tile_cache_key(layer: str, z: int, x: int, y: int) -> str:
     Returns:
         The cache key.
     """
+    from urbanlens.dashboard.services.map.basemap_catalogue import active_tile_catalogue
     from urbanlens.dashboard.services.map.basemap_vendors import vendor_for
 
     vendor = vendor_for(layer)
-    # `redata` for a layer this deployment does not fetch itself - its bytes cannot change vendor
-    # without REData's catalogue changing too.
-    tag = vendor.cache_tag if vendor else "redata"
+    # The catalogue's own tag for a layer this deployment does not fetch itself - its bytes cannot change vendor
+    # without the catalogue changing too.
+    catalogue = active_tile_catalogue()
+    tag = vendor.cache_tag if vendor else (catalogue.cache_tag if catalogue else "catalogue")
     return f"ul_basemap_tile_{layer}_{tag}_{z}_{x}_{y}"
-
-
-def historical_tile_cache_key(georeference_uuid: str, z: int, x: int, y: int) -> str:
-    """
-    Cache key for one warped historical-map overlay tile.
-
-    Args:
-        georeference_uuid: REData georeference whose pyramid the tile comes from.
-        z: Tile zoom level.
-        x: Tile column.
-        y: Tile row.
-
-    Returns:
-        The cache key.
-    """
-    return f"ul_histmap_tile_{georeference_uuid}_{z}_{x}_{y}"

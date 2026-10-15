@@ -1,5 +1,5 @@
 """
-A pin's child pins' aliases and labels, listed read-only on the parent's page while "child pin details" is on (P16).
+A pin's child pins' aliases and labels, listed read-only on the parent's page while "child pin details" is on.
 
 Editing stays on each child's own page; the parent only shows what its children carry, the way it already shows
 their notes, visits and photos.

@@ -1,4 +1,4 @@
-"""No credential sent in a URL reaches the log, whatever logs the URL (P203)."""
+"""No credential sent in a URL reaches the log, whatever logs the URL."""
 
 from __future__ import annotations
 

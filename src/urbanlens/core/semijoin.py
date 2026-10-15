@@ -5,8 +5,7 @@ A predicate written through a to-many path - ``aliases__name__icontains`` - comp
 Postgres is free to drive that join from whichever side its cost estimate likes. The far side is
 the whole site's copy of that table, so a plan that starts there makes one account's query cost
 proportional to every other account's data. That is a capacity defect rather than a latency one:
-adding users makes everyone slower. See UrbanLens#281 ("a global search read the whole site's rows") for
-what it still costs at capacity scale.
+adding users makes everyone slower.
 
 The mechanism lives here rather than in the one service that first needed it because the shape is
 not search-specific: any query bounded by "what this profile owns" and filtered through a relation

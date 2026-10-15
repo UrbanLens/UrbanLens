@@ -8,31 +8,6 @@ from urbanlens.dashboard.tasks import _API_CALL_LOG_RETENTION_DAYS
 #: The window ``check_rate_limit`` counts over for ``calls_per_30_days``.
 _RATE_LIMIT_WINDOW_DAYS = 30
 
-#: Trailing calendar months ``monthly_cost_series`` defaults to.
-_COST_SERIES_MONTHS = 12
-
-
-def _worst_case_cost_series_reach_days(months: int = _COST_SERIES_MONTHS) -> int:
-    """
-    Most days back the cost series can ever need, over any starting date.
-
-    The series covers ``months`` trailing *calendar* months, so the oldest row it reads is the 1st of the month
-    ``months - 1`` back - and "now" can sit at the end of the current month."""
-    import calendar
-    import datetime as dt
-
-    worst = 0
-    for year in (2023, 2024):  # includes a leap year
-        for month in range(1, 13):
-            as_of = dt.date(year, month, calendar.monthrange(year, month)[1])
-            oldest_year, oldest_month = divmod((year * 12 + month - 1) - (months - 1), 12)
-            oldest = dt.date(oldest_year, oldest_month + 1, 1)
-            worst = max(worst, (as_of - oldest).days)
-    return worst
-
-
-_COST_SERIES_DAYS = _worst_case_cost_series_reach_days()
-
 
 class ApiCallLogRetentionTests(SimpleTestCase):
     def test_retention_covers_the_rate_limit_window(self) -> None:
@@ -40,27 +15,6 @@ class ApiCallLogRetentionTests(SimpleTestCase):
             _API_CALL_LOG_RETENTION_DAYS,
             _RATE_LIMIT_WINDOW_DAYS,
             "pruning inside the rate-limit window makes calls_per_30_days under-count, silently allowing more calls than configured",
-        )
-
-    def test_retention_covers_the_cost_chart_window(self) -> None:
-        self.assertGreaterEqual(
-            _API_CALL_LOG_RETENTION_DAYS,
-            _COST_SERIES_DAYS,
-            "pruning inside the cost series window silently renders zeros for months whose rows were deleted",
-        )
-
-    def test_the_cost_series_default_has_not_moved(self) -> None:
-        """The bound above is derived from this default, so a change to it must land here."""
-        import inspect
-
-        from urbanlens.dashboard.services.admin import cost_tracking
-
-        default = inspect.signature(cost_tracking.monthly_cost_series).parameters["months"].default
-
-        self.assertEqual(
-            default,
-            _COST_SERIES_MONTHS,
-            "monthly_cost_series' month count changed - re-derive the retention bound above",
         )
 
     def test_the_rate_limiter_still_uses_a_30_day_window(self) -> None:

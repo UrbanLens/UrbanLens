@@ -458,18 +458,12 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
     markup_border_color = CharField(max_length=20, blank=True, default="")
     markup_border_opacity = IntegerField(default=100)
 
-    # AI feature preferences (only relevant when the user has an AI subscription).
-    ai_enabled = BooleanField(default=True, help_text="Allow AI features on your account.")
     # Auto-tagging is on for everyone who has the capability - the interesting
     # setting is turning it *off*, so this is phrased as the exception rather
     # than making every user opt in to something they were granted.
     disable_auto_tagging = BooleanField(default=False, help_text="Turn off automatic tagging of your pins. Individual labels can also be excluded on the Organize page.")
-    ai_label_tags = BooleanField(default=False, help_text="AI can automatically suggest and add tags when a pin is created.")
-    ai_label_categories = BooleanField(default=False, help_text="AI can automatically suggest and add categories when a pin is created.")
-    ai_label_statuses = BooleanField(default=False, help_text="AI can automatically suggest and add statuses when a pin is created.")
 
-    # Keyword-based auto-tagging preferences.
-    # Unlike the AI settings above, this matching is local pattern/substring matching (built-in
+    # Keyword-based auto-tagging preferences: local pattern/substring matching (built-in
     # CATEGORY_PATTERNS plus each Label's own `keywords` field) - no external API call and no
     # subscription required - so it defaults to on.
     keyword_tagging_enabled = BooleanField(default=True, help_text="Allow keyword-based auto-tagging on your account.")
@@ -478,9 +472,7 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
     keyword_label_statuses = BooleanField(default=True, help_text="Keyword matches can automatically add a status when a pin is created.")
 
     # Whether photo-keyword plugins run on this user's uploads to make their photos text-searchable.
-    # Applies to every enabled keywording strategy (embedded metadata tags, AI vision, classifiers);
-    # the AI-based providers additionally require the AI_PHOTO_PROCESSING subscription feature and
-    # the ai_enabled toggle above.
+    # Applies to every enabled keywording strategy; a provider may impose further requirements of its own.
     generate_photo_keywords = BooleanField(default=True, help_text="Automatically generate searchable keywords for photos you upload.")
 
     # Voluntary downscale cap (longest edge, px) for future photo uploads.
@@ -493,7 +485,6 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
 
     # Places layer source preferences (only relevant when the user has the PLACES feature).
     places_google_enabled = BooleanField(default=True, help_text="Show Google historical landmarks in the Places layer.")
-    places_nps_enabled = BooleanField(default=True, help_text="Show National Park Service locations in the Places layer.")
     places_wikipedia_enabled = BooleanField(default=True, help_text="Show Wikipedia-linked places in the Places layer.")
 
     # When off, wiki pages never render their cover-photo hero banner for this viewer, regardless of
@@ -503,9 +494,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
     show_wiki_cover_photos = BooleanField(default=True, help_text="Show the community-selected cover photo banner on wiki pages.")
 
     # Purely cosmetic opt-in - has no bearing on whether the user actually holds
-    # an active subscription (see is_supporter below), only on whether a badge
-    # is shown when they do.
-    show_supporter_badge = BooleanField(default=True, help_text="Show a small supporter badge next to your name when you have an active subscription.")
+    # a role (see holds_role below), only on whether a badge is shown when they do.
+    show_member_badge = BooleanField(default=True, help_text="Show a small member badge next to your name when you hold a role.")
 
     # Mirrors what already happens automatically for community wikis (see services.wiki.wiki_seed) -
     # when a Wikipedia article is confidently matched to one of your pins and it doesn't have an
@@ -593,9 +583,9 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
     )
 
     # Master switch for all external API calls made on your behalf (weather,
-    # geocoding, place data, AI, etc). Individual services also have their own
+    # geocoding, place data, etc). Individual services also have their own
     # toggles below/elsewhere that remain independently adjustable.
-    external_apis_enabled = BooleanField(default=True, help_text="Allow external services (weather, geocoding, place data, AI) to retrieve anonymized research data for you.")
+    external_apis_enabled = BooleanField(default=True, help_text="Allow external services (weather, geocoding, place data and more) to retrieve anonymized research data for you.")
 
     # Ordered list of enabled homepage widget keys (see services.home.home_widgets), e.g.
     # ["stats", "recent_photos", ...].
@@ -685,22 +675,22 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
         return self.guidance_level != GuidanceLevel.NONE
 
     @property
-    def is_supporter(self) -> bool:
-        """Whether this user currently holds an active subscription, paid or admin-granted."""
+    def holds_role(self) -> bool:
+        """Whether this user currently holds any active role, however it was granted."""
         from urbanlens.dashboard.models.subscriptions.model import active_subscription_roles
 
         return bool(active_subscription_roles(self.user))
 
     @property
-    def display_supporter_badge(self) -> bool:
+    def display_member_badge(self) -> bool:
         """
-        Whether the supporter badge should actually be rendered next to this profile's name.
+        Whether the member badge should actually be rendered next to this profile's name.
 
-        Requires both an active subscription and the user's own opt-in - the
-        two are independent so a badge never appears for a lapsed subscriber
-        just because they left the toggle on.
+        Requires both an active role and the user's own opt-in - the
+        two are independent so a badge never appears for someone whose role
+        lapsed just because they left the toggle on.
         """
-        return self.show_supporter_badge and self.is_supporter
+        return self.show_member_badge and self.holds_role
 
     def best_known_point(self) -> tuple[float, float] | None:
         """

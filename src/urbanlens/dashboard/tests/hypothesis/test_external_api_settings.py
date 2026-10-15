@@ -12,6 +12,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.profile.meta import SyncAliasesDirection, ThemeChoice, VisibilityChoice
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.plugins.points import SETTINGS_GROUPS
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.services.profile.profile_settings import (
     SETTINGS_FIELDS,
@@ -89,19 +90,24 @@ class SettingsReadTests(_SettingsApiTestCase):
         ):
             with self.subTest(key=key):
                 self.assertIn(key, payload)
-        self.assertIn("ai", payload["features"])
+        self.assertIsInstance(payload["features"], dict)
         self.assertIn("places", payload["features"])
 
     def test_get_leaks_nothing_outside_the_allowlist(self) -> None:
         """Profile carries location history and subscription linkage - none of it here."""
         payload = self.client.get(self.url, **_bearer(self.raw_key)).json()
-        allowed = set(SETTINGS_FIELDS) | {
-            "updated",
-            "effective_distance_units",
-            "features",
-            "allowed_image_dimensions",
-            "allowed_video_heights",
-        }
+        plugin_fields = {field for group in SETTINGS_GROUPS.items() for field in group.fields}
+        allowed = (
+            set(SETTINGS_FIELDS)
+            | plugin_fields
+            | {
+                "updated",
+                "effective_distance_units",
+                "features",
+                "allowed_image_dimensions",
+                "allowed_video_heights",
+            }
+        )
         self.assertEqual(set(payload) - allowed, set())
 
 
@@ -205,14 +211,6 @@ class SettingsCommunityGatingTests(_SettingsApiTestCase):
 class SettingsFeatureGatingTests(_SettingsApiTestCase):
     """A gated field submitted while its feature is off is a 400, not a silent drop."""
 
-    def test_ai_field_rejected_when_feature_is_off(self) -> None:
-        with mock.patch("urbanlens.dashboard.services.profile.profile_settings.user_has_feature", return_value=False):
-            response = self.client.patch(
-                self.url, {"ai_enabled": True}, content_type="application/json", **_bearer(self.raw_key)
-            )
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("ai_enabled", response.json()["fields"])
-
     def test_places_field_rejected_when_feature_is_off(self) -> None:
         with mock.patch("urbanlens.dashboard.services.profile.profile_settings.user_has_feature", return_value=False):
             response = self.client.patch(
@@ -227,7 +225,7 @@ class SettingsFeatureGatingTests(_SettingsApiTestCase):
         with mock.patch("urbanlens.dashboard.services.profile.profile_settings.user_has_feature", return_value=False):
             response = self.client.patch(
                 self.url,
-                {"ai_enabled": True, "theme_mode": ThemeChoice.LIGHT},
+                {"places_google_enabled": True, "theme_mode": ThemeChoice.LIGHT},
                 content_type="application/json",
                 **_bearer(self.raw_key),
             )

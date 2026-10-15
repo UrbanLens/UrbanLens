@@ -66,7 +66,7 @@ def web_search_query(pin: Pin, scope: SearchScope) -> str | None:
     """
     One search's query: the place's name as an exact phrase, then its town and state.
 
-    The engines behind REData's web search require every quoted phrase, and a page about a place rarely repeats its
+    The engines behind a web search provider require every quoted phrase, and a page about a place rarely repeats its
     street address or "Town ST" verbatim: HRSH's query with both found nothing. The town stays a phrase only for a
     name that is itself an address, which matches the same address in every other town.
 

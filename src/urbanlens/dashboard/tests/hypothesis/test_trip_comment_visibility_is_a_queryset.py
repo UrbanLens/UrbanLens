@@ -3,7 +3,7 @@
 
 The trip comment panel and the trip comment API both build the entire thread -
 every comment, every reply, every reaction - and never paginate it at all,
-because the three gates were answered in Python. That is H43 and H52, and it is
+because the three gates were answered in Python. It is
 the same defect the pin/wiki comment endpoints had: a gate that cannot be
 expressed as a queryset is a gate that stops anything above it from paging.
 

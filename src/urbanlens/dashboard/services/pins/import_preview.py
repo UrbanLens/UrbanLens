@@ -4,8 +4,8 @@ The import preview reads uploads in the sandbox worker, never in the web process
 Every format the preview accepts - archives, KML, GPX, shapefiles, Word documents - is an
 ``untrusted_parse`` operation, which refuses the web process under
 ``UL_UNTRUSTED_PARSE_POLICY=deny``. So the request stores the upload and returns, the sandbox worker
-parses it, and whatever needs the network afterwards - a CSV row only a lookup can place, AI
-extraction from a document, the admin's parse-failure notice - is finished on an interactive worker,
+parses it, and whatever needs the network afterwards - a CSV row only a lookup can place, extraction
+from a document, the admin's parse-failure notice - is finished on an interactive worker,
 only when there is some. The dialog polls for the result.
 """
 
@@ -269,7 +269,7 @@ def parse_import_preview(profile_id: int, job_id: str) -> bool:
 
 def finish_import_preview(profile_id: int, job_id: str) -> None:
     """
-    Finish what the sandbox could not: lookups, AI extraction, and the admin's parse-failure notice.
+    Finish what the sandbox could not: lookups, document extraction, and the admin's parse-failure notice.
 
     Releases the account's guard however it ends.
 
@@ -278,10 +278,9 @@ def finish_import_preview(profile_id: int, job_id: str) -> None:
         job_id: The preview :func:`parse_import_preview` handed off.
     """
     from urbanlens.dashboard.models.profile.model import Profile
-    from urbanlens.dashboard.services.ai.access import ai_refused_here
-    from urbanlens.dashboard.services.ai.document_import import UNAVAILABLE_HERE_WARNING, DocumentTooLargeError, ai_document_import_available, extract_pins_from_text
     from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway, _notify_pin_import_parse_failure
     from urbanlens.dashboard.services.core.task_limits import SOFT_TIME_LIMIT_ERRORS
+    from urbanlens.dashboard.services.import_formats.documents import DocumentTooLargeError, document_extractor_for
 
     status = ImportPreviewStatus(job_id)
     directory = job_dir(job_id)
@@ -303,30 +302,35 @@ def finish_import_preview(profile_id: int, job_id: str) -> None:
             _merge(lists, entry)
 
         warnings: list[str] = [_UNFINISHED] if unavailable else []
-        if ai_document_import_available(profile):
-            for document in parsed["documents"]:
-                if time.monotonic() >= deadline:
-                    if _UNFINISHED not in warnings:
-                        warnings.append(_UNFINISHED)
-                    break
-                too_large = f"Document too large: {document['name']}"
-                if document["too_large"]:
-                    warnings.append(too_large)
-                    continue
-                if not document["text"]:
-                    continue
-                try:
-                    found, warning = extract_pins_from_text(document["name"], document["text"], profile)
-                except DocumentTooLargeError:
-                    warnings.append(too_large)
-                    continue
-                if warning:
-                    warnings.append(warning)
-                if found:
-                    lists.append(found)
-        elif any(document["text"] for document in parsed["documents"]) and ai_refused_here("document_pin_import"):
-            # Said once, rather than leaving the uploader to wonder why their documents produced no pins.
-            warnings.append(UNAVAILABLE_HERE_WARNING)
+        for document in parsed["documents"]:
+            extractor = document_extractor_for(document["name"])
+            if extractor is None:
+                continue
+            if not extractor.available(profile):
+                # Said once, rather than leaving the uploader to wonder why their documents produced no pins.
+                notice = extractor.unavailable_warning(profile) if document["text"] else None
+                if notice and notice not in warnings:
+                    warnings.append(notice)
+                continue
+            if time.monotonic() >= deadline:
+                if _UNFINISHED not in warnings:
+                    warnings.append(_UNFINISHED)
+                break
+            too_large = f"Document too large: {document['name']}"
+            if document["too_large"]:
+                warnings.append(too_large)
+                continue
+            if not document["text"]:
+                continue
+            try:
+                found, warning = extractor.extract_pins(document["name"], document["text"], profile)
+            except DocumentTooLargeError:
+                warnings.append(too_large)
+                continue
+            if warning:
+                warnings.append(warning)
+            if found:
+                lists.append(found)
         _write_result(job_id, directory, lists, warnings, parsed.get("history") or {})
     except SOFT_TIME_LIMIT_ERRORS:
         status.write("error", 0, "Looking up these places took too long. Try a smaller upload.")
@@ -406,8 +410,8 @@ def discard_preview_history(job_id: str) -> None:
 
 
 def _read_uploads(profile: Profile, directory: str, names: list[str]) -> dict[str, Any]:
-    from urbanlens.dashboard.services.ai.document_import import MAX_DOCUMENT_BYTES, is_supported_document_filename, read_document_text
     from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
+    from urbanlens.dashboard.services.import_formats.documents import document_extractor_for
 
     uploads = os.path.join(directory, _UPLOADS)
     documents: list[dict[str, Any]] = []
@@ -415,12 +419,13 @@ def _read_uploads(profile: Profile, directory: str, names: list[str]) -> dict[st
     for index, name in enumerate(names):
         path = os.path.join(uploads, str(index))
         # Documents first: a .docx starts with ZIP magic bytes.
-        if not is_supported_document_filename(name):
+        extractor = document_extractor_for(name)
+        if extractor is None:
             others.append((name, path))
             continue
         with open(path, "rb") as handle:
             # One byte past the limit is enough for the reader to refuse the file as too large.
-            text, too_large = read_document_text(name, handle.read(MAX_DOCUMENT_BYTES + 1))
+            text, too_large = extractor.read_text(name, handle.read(extractor.max_bytes + 1))
         documents.append({"name": name, "text": text, "too_large": too_large})
 
     parse = GoogleMapsGateway().parse_for_preview(_uploaded_files(others, uploads), profile, scratch=uploads)

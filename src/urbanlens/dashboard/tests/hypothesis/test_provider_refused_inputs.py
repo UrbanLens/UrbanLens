@@ -403,11 +403,12 @@ class OpenHistoricalMapTests(TestCase):
 
     def test_features_for_a_refused_location_are_an_empty_collection(self) -> None:
         from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.plugins.points import TEMPORAL_FEATURE_PROVIDERS
         from urbanlens.dashboard.services.locations import temporal_imagery
 
         location = baker.make(Location, latitude=0, longitude=0)
         with (
-            mock.patch.object(temporal_imagery, "redata_configured", return_value=False),
+            TEMPORAL_FEATURE_PROVIDERS.overridden([]),
             mock.patch("requests.Session.request") as wire,
         ):
             self.assertEqual(
@@ -455,33 +456,34 @@ class RoutingTests(TestCase):
         self.assertIsNone(gateway.get_route([(41.7, -73.9), (math.nan, 1.0)]))
         session.get.assert_not_called()
 
-    def test_a_refused_waypoint_asks_neither_redata_nor_osrm(self) -> None:
+    def test_a_refused_waypoint_asks_no_provider(self) -> None:
+        from urbanlens.dashboard.plugins.points import ROUTE_PROVIDERS
         from urbanlens.dashboard.services.apis.locations import routing_resolution
 
         with (
-            mock.patch.object(routing_resolution, "redata_configured", return_value=True),
-            mock.patch("urbanlens.UrbanLens.settings.app.settings.redata_api_url", "https://redata.example.test"),
-            mock.patch("urbanlens.UrbanLens.settings.app.settings.redata_api_key", "test-key"),
+            ROUTE_PROVIDERS.overridden([routing_resolution.OsrmRouteProvider()]),
             mock.patch("requests.Session.request") as wire,
         ):
             self.assertIsNone(routing_resolution.get_route_between((0.0, 0.0), (41.7, -73.9)))
         wire.assert_not_called()
 
 
-GOOGLE_ONLY = mock.Mock(google_unrestricted_api_key="k", redata_api_url=None, redata_api_key=None)
+GOOGLE_ONLY = mock.Mock(google_unrestricted_api_key="k")
 
 
 class NullIslandCallerTests(TestCase):
     """Callers of a gateway that refuses (0, 0) answer "nothing here" rather than raise."""
 
     def test_the_google_name_resolver_finds_no_name_at_null_island(self) -> None:
+        from urbanlens.dashboard.plugins.points import PLACES_PROVIDERS
         from urbanlens.dashboard.services.apis.locations import places_resolution
 
         with (
+            PLACES_PROVIDERS.overridden([places_resolution.GooglePlacesProvider()]),
             mock.patch.object(places_resolution, "settings", GOOGLE_ONLY),
             mock.patch("requests.Session.request") as wire,
         ):
-            self.assertIsNone(places_resolution.resolve_name_from_nearby(0.0, 0.0, 50.0, api_key="k"))
+            self.assertIsNone(places_resolution.resolve_name_from_nearby(0.0, 0.0, 50.0))
         wire.assert_not_called()
 
     def test_the_country_backfill_skips_a_null_island_row_and_carries_on(self) -> None:

@@ -125,37 +125,6 @@ class MentionFilterAgreesWithTheTextScanTests(TestCase):
         self.assertEqual(visible, {"no mention at all"})
 
 
-class BackfillTests(TestCase):
-    """Comments written before the rows existed get them."""
-
-    def setUp(self) -> None:
-        super().setUp()
-        self.profile = baker.make(User).profile
-        self.location = Location.objects.create(latitude=40.0, longitude=-74.0)
-        self.pin = baker.make(Pin, profile=self.profile, location=self.location)
-
-    def test_the_migration_derives_rows_for_existing_comments(self) -> None:
-        from django.apps import apps
-
-        from urbanlens.dashboard.migrations import __name__ as migrations_package
-
-        # bulk_create skips save(), which is what a pre-migration row looks like.
-        Comment.objects.bulk_create(
-            [
-                Comment(pin=self.pin, profile=self.profile, text=f"see {mention(self.location.uuid)}"),
-                Comment(pin=self.pin, profile=self.profile, text="nothing here"),
-            ],
-        )
-        self.assertFalse(CommentLocationMention.objects.exists())
-
-        module = __import__(f"{migrations_package}.0032_v0_8_0", fromlist=["_0037_backfill"])
-        module._0037_backfill(apps, None)
-
-        self.assertEqual(
-            list(CommentLocationMention.objects.values_list("location_uuid", flat=True)), [self.location.uuid]
-        )
-
-
 class DerivationCoversEveryWritePathTests(TestCase):
     """
     Every path that stores comment text must leave the rows behind it.

@@ -60,8 +60,6 @@ def _parse_function(source: str) -> ast.FunctionDef:
 #: Values are read live off ``tasks`` so this can't drift from the constants.
 _LOCKED_BEAT_TASKS: dict[str, int] = {
     "scheduled-location-enrichment": 3300,
-    "scheduled-trivia-generation": 3300,
-    "scheduled-trivia-wiki-incorporation": 3300,
     "safety-checkin-due-reminders": tasks_module._CHECKIN_LOCK_TIMEOUT_SECONDS,
     "safety-checkin-final-warnings": tasks_module._CHECKIN_LOCK_TIMEOUT_SECONDS,
     "safety-checkin-escalation": tasks_module._CHECKIN_LOCK_TIMEOUT_SECONDS,

@@ -68,7 +68,7 @@ class TheChildLayerBuildsAGraphPerRowTests(_ChildPinsCase):
 
     @pytest.mark.xfail(
         strict=True,
-        reason="map_child_pins_json is still on the model path; D12 moves it to the projection",
+        reason="map_child_pins_json is still on the model path; it still has to move to the projection",
     )
     def test_one_more_child_pin_does_not_cost_a_model_graph(self) -> None:
         self.assert_endpoint_scaling(self.url)

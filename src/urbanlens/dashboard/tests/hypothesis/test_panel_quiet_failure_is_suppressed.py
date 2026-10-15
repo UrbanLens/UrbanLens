@@ -3,7 +3,7 @@ A panel fetch that returns without landing anything is a failure, not a reason t
 
 A source that hits an outage leaves its store empty on purpose, so the outage is not cached as "nothing here". It
 used to return normally, which released the single-flight marker without a skip key, so the page's next poll (every
-2s, 30 times per viewer) dispatched the same upstream call again. On 2026-09-23 the Web Images panel sent REData
+2s, 30 times per viewer) dispatched the same upstream call again. On 2026-09-23 the Web Images panel sent the data service
 the same failing search/web query dozens of times per page this way.
 """
 
@@ -14,6 +14,7 @@ from unittest import mock
 from django.core.cache import cache
 from model_bakery import baker
 
+from urbanlens.core.tests.panel_fakes import hold_panels, info_panel
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.location.model import Location
@@ -27,7 +28,7 @@ from urbanlens.dashboard.services.pins.external_data import (
     schedule_panel_fetch,
 )
 
-_SOURCE_KEY = "photon"
+_SOURCE_KEY = "quiet_probe"
 
 
 class QuietFailureTests(TestCase):
@@ -37,6 +38,7 @@ class QuietFailureTests(TestCase):
         self.pin = baker.make(
             Pin, profile=self.profile, location=baker.make(Location, latitude=41.73, longitude=-73.92)
         )
+        hold_panels(self, info_panel(_SOURCE_KEY))
         self.source = get_panel_source(_SOURCE_KEY)
 
     def _dispatches(self) -> mock.MagicMock:
@@ -73,8 +75,8 @@ class QuietFailureTests(TestCase):
         self.assertIsNone(cache.get(self.source.skip_key(self.pin)))
 
     def test_a_throttled_upstream_is_suppressed_for_as_long_as_it_asked(self) -> None:
-        """Not the half hour a disabled service gets: the breaker says exactly when REData reopens."""
-        throttled = UpstreamThrottledError("redata_places", retry_after=120)
+        """Not the half hour a disabled service gets: the breaker says exactly when the upstream reopens."""
+        throttled = UpstreamThrottledError("example_places", retry_after=120)
         with (
             mock.patch.object(type(self.source), "fetch", side_effect=throttled),
             mock.patch("urbanlens.dashboard.services.pins.external_data.cache.set", wraps=cache.set) as setter,
@@ -91,12 +93,13 @@ class RefusedInputTests(TestCase):
         super().setUp()
         self.profile = Profile.objects.get(user=baker.make("auth.User"))
         self.pin = baker.make(Pin, profile=self.profile, location=baker.make(Location, latitude=0, longitude=0))
+        hold_panels(self, info_panel(_SOURCE_KEY))
         self.source = get_panel_source(_SOURCE_KEY)
 
     def test_a_cache_backed_panel_stores_nothing_found_and_logs_no_traceback(self) -> None:
         from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError, InputRejection
 
-        refusal = ImpossibleInputError("photon", InputRejection.NULL_ISLAND, "(0, 0)")
+        refusal = ImpossibleInputError(_SOURCE_KEY, InputRejection.NULL_ISLAND, "(0, 0)")
         with (
             mock.patch.object(type(self.source), "fetch", side_effect=refusal),
             self.assertNoLogs("urbanlens.dashboard.services.pins.external_data", level="WARNING"),

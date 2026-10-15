@@ -117,7 +117,7 @@ class AnAdminChangeReachesTheChromeTests(_AccessStateCase):
     def assertSeesFeature(self, *, expected: bool, after: str) -> None:
         features, _ = self.cold(user_features)
         self.assertEqual(
-            SiteFeature.AI.value in features,
+            SiteFeature.ALPHA_FEATURES.value in features,
             expected,
             f"after {after} the viewer's feature set was {sorted(features)}, which is what they would see on "
             f"their next page load",
@@ -127,14 +127,14 @@ class AnAdminChangeReachesTheChromeTests(_AccessStateCase):
         self.assertSeesFeature(expected=False, after="no change")
         site = SiteSettings.get_current()
         with self.committed():
-            site.default_features = SiteFeature.AI.value
+            site.default_features = SiteFeature.ALPHA_FEATURES.value
             site.save()
         self.assertSeesFeature(expected=True, after="the site default gained it")
 
     def test_a_site_default_losing_a_feature_reaches_them_too(self) -> None:
         site = SiteSettings.get_current()
         with self.committed():
-            site.default_features = SiteFeature.AI.value
+            site.default_features = SiteFeature.ALPHA_FEATURES.value
             site.save()
         self.assertSeesFeature(expected=True, after="the site default granted it")
         with self.committed():
@@ -170,7 +170,7 @@ class AnAdminChangeReachesTheChromeTests(_AccessStateCase):
 
         request_cache.begin_scope()
         site = SiteSettings.get_current()
-        site.default_features = SiteFeature.AI.value
+        site.default_features = SiteFeature.ALPHA_FEATURES.value
         site.save()
         user = User.objects.get(pk=self.user.pk)
         with CaptureQueriesContext(connection) as captured:
@@ -181,7 +181,7 @@ class AnAdminChangeReachesTheChromeTests(_AccessStateCase):
             len(captured.captured_queries), 0, "the read was served from a cache the change has not reached"
         )
         self.assertIn(
-            SiteFeature.AI.value,
+            SiteFeature.ALPHA_FEATURES.value,
             sorted(features),
             "a request that granted a feature did not see it itself, so the admin who made the change is shown the "
             "state they just replaced",
@@ -207,4 +207,6 @@ class TheMeasurementIsRealTests(_AccessStateCase):
 
     def test_the_viewer_is_not_an_admin_to_start_with(self) -> None:
         features, _ = self.cold(user_features)
-        self.assertNotIn(SiteFeature.AI.value, features, "the viewer already had the feature the staleness tests grant")
+        self.assertNotIn(
+            SiteFeature.ALPHA_FEATURES.value, features, "the viewer already had the feature the staleness tests grant"
+        )

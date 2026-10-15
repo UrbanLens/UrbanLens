@@ -1,4 +1,4 @@
-"""Render-time cost of one more conversation in the DM sidebar (P69 - deliberately unpaginated, never measured)."""
+"""Render-time cost of one more conversation in the DM sidebar, deliberately unpaginated and never measured."""
 
 from __future__ import annotations
 

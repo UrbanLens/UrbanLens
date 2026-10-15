@@ -1,6 +1,6 @@
 """
 Trivia models - Glicko-2 ratings, question bank, sessions, rounds, answers, and votes.
-See "Trivia entry for the full spec this schema encodes: locations drawn only from a pool every session participant can access (mirrors SpotGuessr's eligibility rule), questions from three sources (user-submitted, AI-generated from wiki articles, deterministic from structured location data), a Glicko-2 player-skill/question-difficulty pairing (mirrors ``models.spotguessr``'s player/location pairing), and upvote/downvote/report voting with a small passive "shown, no reaction" default.
+See "Trivia entry for the full spec this schema encodes: locations drawn only from a pool every session participant can access (mirrors SpotGuessr's eligibility rule), questions from user submissions and deterministic templates over structured location data (plus any source a plugin adds), a Glicko-2 player-skill/question-difficulty pairing (mirrors ``models.spotguessr``'s player/location pairing), and upvote/downvote/report voting with a small passive "shown, no reaction" default.
 """
 
 from __future__ import annotations
@@ -42,18 +42,24 @@ from urbanlens.dashboard.models.trivia.queryset import (
 
 
 class TriviaQuestionSource(abstract.TextChoices):
-    """Where a TriviaQuestion came from."""
+    """Where a TriviaQuestion came from, as core knows it. Plugins add sources through ``TRIVIA_QUESTION_SOURCES``."""
 
     USER_SUBMITTED = "user_submitted", "User Submitted"
-    AI_GENERATED = "ai_generated", "AI Generated"
     DETERMINISTIC = "deterministic", "Deterministic"
+
+
+def question_source_choices() -> list[tuple[str, str]]:
+    """Core's sources and those plugins contribute. Read lazily, since plugins are set up after models load."""
+    from urbanlens.dashboard.plugins.points import TRIVIA_QUESTION_SOURCES
+
+    return [*TriviaQuestionSource.choices, *TRIVIA_QUESTION_SOURCES.choices()]
 
 
 class TriviaQuestionStatus(abstract.TextChoices):
     """
     Content-moderation lifecycle of a TriviaQuestion.
     Mirrors ``PinSuggestionStatus``'s shape.
-    Deterministic questions are created ``APPROVED`` directly - they're template-generated from structured data, not free text, so they carry none of the person/ bullying/in-group risk the classifier exists to catch (Phase 3 only classifies ``USER_SUBMITTED``/``AI_GENERATED`` questions).
+    Deterministic questions are created ``APPROVED`` directly - they're template-generated from structured data, not free text, so they carry none of the person/ bullying/in-group risk the classifier exists to catch (moderation only classifies ``USER_SUBMITTED`` questions).
     """
 
     PENDING_REVIEW = "pending_review", "Pending Review"
@@ -84,19 +90,15 @@ class TriviaQuestion(abstract.DashboardModel):
         dedupe_key: Non-empty only for ``DETERMINISTIC`` questions - lets the
             generator be idempotent per ``(location, dedupe_key)`` instead of
             re-creating the same question every time it's called.
-        wiki_incorporated_at: Set once an AI writing agent has folded this
-            question into the location's wiki article (Phase 4), so it's
-            never proposed a second time.
     """
 
     prompt = TextField()
     answer = CharField(max_length=255)
     answer_normalized = CharField(max_length=255, blank=True, db_index=True)
-    source = CharField(max_length=20, choices=TriviaQuestionSource.choices)
+    source = CharField(max_length=20, choices=question_source_choices)
     status = CharField(max_length=20, choices=TriviaQuestionStatus.choices, default=TriviaQuestionStatus.APPROVED)
     rejection_reason = CharField(max_length=255, null=True, blank=True)
     dedupe_key = CharField(max_length=100, blank=True, default="")
-    wiki_incorporated_at = DateTimeField(null=True, blank=True)
 
     location = ForeignKey(
         "dashboard.Location",
@@ -403,10 +405,16 @@ class TriviaRound(abstract.DashboardModel):
 
 
 class TriviaAnswerMatchKind(abstract.TextChoices):
-    """How an answer was judged correct/incorrect."""
+    """How an answer was judged correct, as core knows it. Plugins add kinds through ``TRIVIA_ANSWER_MATCH_KINDS``."""
 
     EXACT = "exact", "Exact Match"
-    AI = "ai", "AI Judged"
+
+
+def answer_match_kind_choices() -> list[tuple[str, str]]:
+    """Core's match kinds and those plugins contribute. Read lazily, since plugins are set up after models load."""
+    from urbanlens.dashboard.plugins.points import TRIVIA_ANSWER_MATCH_KINDS
+
+    return [*TriviaAnswerMatchKind.choices, *TRIVIA_ANSWER_MATCH_KINDS.choices()]
 
 
 class TriviaAnswer(abstract.DashboardModel):
@@ -420,7 +428,7 @@ class TriviaAnswer(abstract.DashboardModel):
 
     raw_answer = CharField(max_length=500)
     is_correct = BooleanField()
-    matched_via = CharField(max_length=10, choices=TriviaAnswerMatchKind.choices, default=TriviaAnswerMatchKind.EXACT)
+    matched_via = CharField(max_length=10, choices=answer_match_kind_choices, default=TriviaAnswerMatchKind.EXACT)
     points = PositiveIntegerField(default=0)
     answered_at = DateTimeField(auto_now_add=True)
 
@@ -519,27 +527,3 @@ class TriviaPreference(abstract.DashboardModel):
 
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_trivia_preferences"
-
-
-class TriviaGenerationAttempt(abstract.DashboardModel):
-    """
-    When the AI question sweep last mined a wiki, so it moves on instead of retrying the same ones.
-
-    Attributes:
-        attempted_at: When the sweep last sent this wiki's article for questions.
-        questions_created: How many questions that attempt kept.
-    """
-
-    wiki = OneToOneField("dashboard.Wiki", on_delete=CASCADE, related_name="trivia_generation_attempt")
-    attempted_at = DateTimeField()
-    questions_created = PositiveSmallIntegerField(default=0)
-
-    if TYPE_CHECKING:
-        wiki_id: int
-
-    def __str__(self) -> str:
-        return f"TriviaGenerationAttempt(wiki={self.wiki_id}, {self.attempted_at:%Y-%m-%d})"
-
-    class Meta(abstract.DashboardModel.Meta):
-        db_table = "dashboard_trivia_generation_attempts"
-        indexes = [Index(fields=["attempted_at"], name="idxdb_trivia_gen_attempted")]

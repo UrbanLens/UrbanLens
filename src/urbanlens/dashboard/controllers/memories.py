@@ -1037,7 +1037,7 @@ class MemoriesMapsView(LoginRequiredMixin, View):
         maps = (
             MarkupMap.objects.for_profile(profile)
             .select_related("shared_by__user")
-            # One Prefetch per call, which django-stubs can type (P85).
+            # One Prefetch per call, which django-stubs can type.
             .prefetch_related("items", "safety_checkins", "attached_safety_checkins")
             .prefetch_related(Prefetch("comments", queryset=Comment.objects.select_related("pin__location__wiki", "wiki__location")))
             .prefetch_related(Prefetch("trip_comments", queryset=TripComment.objects.select_related("trip")))

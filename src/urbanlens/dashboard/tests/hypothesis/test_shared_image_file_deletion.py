@@ -87,7 +87,7 @@ class SharedImageFileDeletionTests(TestCase):
 
 
 class AnalysisThumbnailDeletionTests(SharedImageFileDeletionTests):
-    """The sandbox's downscaled analysis copy belongs to one row and goes with it (P14)."""
+    """The sandbox's downscaled analysis copy belongs to one row and goes with it."""
 
     def setUp(self):
         super().setUp()

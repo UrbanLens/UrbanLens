@@ -16,7 +16,6 @@ from urbanlens.dashboard.models.pin_import_failures.model import PinImportFailur
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.apis.locations.cid_resolution import (
     PROVIDER_GOOGLE,
-    PROVIDER_REDATA,
     CidResolutionResult,
 )
 
@@ -40,7 +39,7 @@ class DeferredLookupRetryWindowTests(TestCase):
         ]
 
     def _run(self, **kwargs):
-        pending = CidResolutionResult(provider=PROVIDER_REDATA, pending=[111], request_failed=False)
+        pending = CidResolutionResult(provider="fake", pending=[111], request_failed=False)
         with (
             mock.patch("urbanlens.dashboard.services.apis.locations.cid_resolution.resolve_cids", return_value=pending),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
@@ -90,7 +89,7 @@ class DeferredLookupRetryWindowTests(TestCase):
         self.assertTrue(PinImportFailure.objects.filter(profile=self.profile, cid=111).exists())
 
     def test_the_window_covers_two_days_in_a_modest_number_of_attempts(self) -> None:
-        """The point of widening: two days of cover without hammering REData."""
+        """The point of widening: two days of cover without hammering the resolver."""
         total = 0.0
         attempts = 0
         while total < tasks._DEFERRED_LOOKUP_DEADLINE.total_seconds():
@@ -149,7 +148,7 @@ class DeferredLookupRetryBoundTests(TestCase):
         *,
         retries: int,
         request_failed: bool = False,
-        provider: str = PROVIDER_REDATA,
+        provider: str = "fake",
         lookup: CidResolutionResult | None = None,
     ):
         """
@@ -244,7 +243,7 @@ class DeferredLookupRetryBoundTests(TestCase):
         self.deferred_lists[0]["pins"].append(
             {"name": "Fort Getty", "lat": 41.49, "lng": -71.39, "description": "", "cid": 222}
         )
-        partial = CidResolutionResult(provider=PROVIDER_REDATA, resolved={111: (41.348754, -71.453896)}, pending=[222])
+        partial = CidResolutionResult(provider="fake", resolved={111: (41.348754, -71.453896)}, pending=[222])
 
         _resent, result = self._apply(retries=tasks.resolve_deferred_pin_locations.max_retries, lookup=partial)
 

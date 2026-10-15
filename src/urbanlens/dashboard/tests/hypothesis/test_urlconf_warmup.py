@@ -12,7 +12,7 @@ further 0.364s, built by normalising every pattern's regex (4,206 calls into
 `django/utils/regex_helper.normalize`). Warming only the import left the first
 `GET /` at 0.568s CPU against 0.005s warm; warming both takes it to 0.078s.
 
-This corrects N22 H63, which recorded the cost as the template's lazy
+This corrects an earlier audit note, which recorded the cost as the template's lazy
 `{% include %}` chain and concluded a fix would need a rendered request at
 boot. That was wrong - `cProfile` sorted by cumulative time attributed it to
 `rendered_content`, which is where the `{% url %}` sits, rather than to
@@ -113,7 +113,7 @@ class TheEntrypointsUseItTests(SimpleTestCase):
 
 
 class FreezingTheWarmHeapTests(SimpleTestCase):
-    """P207: run in a fresh interpreter, since a freeze here would keep the test process's heap out of collections."""
+    """Run in a fresh interpreter, since a freeze here would keep the test process's heap out of collections."""
 
     def test_a_frozen_heap_leaves_a_full_collection_little_to_walk(self) -> None:
         body = (

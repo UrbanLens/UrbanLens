@@ -1,5 +1,5 @@
 """
-P197: "Trip Updated" and "Community Wiki Updated" notify, a burst of changes folding into one notification.
+"Trip Updated" and "Community Wiki Updated" notify, a burst of changes folding into one notification.
 
 Both were settings with nothing behind them: switching them changed nothing, because nothing sent either type.
 """
@@ -41,8 +41,7 @@ from urbanlens.dashboard.services.wiki.articles import save_article
 from urbanlens.dashboard.services.wiki.wiki_aliases import create_wiki_alias
 from urbanlens.dashboard.services.wiki.wiki_edits import apply_wiki_edit
 from urbanlens.dashboard.tasks import announce_trip_change_task, announce_wiki_change_task
-
-_CONCEALMENT = "urbanlens.dashboard.services.wiki.concealment.concealment_active"
+from urbanlens.dashboard.tests.hypothesis.viewer_projection_helpers import PROJECTED_NAME, projecting
 
 
 def _profile(name: str) -> Profile:
@@ -329,13 +328,13 @@ class WikiUpdatedTests(TestCase):
         self.assertEqual(notification.fold_count, 2)
 
 
-class WikiUpdatedConcealmentTests(TestCase):
-    """A recipient under concealment hears only of what concealment would show them."""
+class WikiUpdatedProjectionTests(TestCase):
+    """A recipient is told of a wiki change only when their projection of the wiki shows it, and by the name it shows."""
 
     def setUp(self) -> None:
         super().setUp()
         self.enterContext(tasks_run_inline(announce_trip_change_task, announce_wiki_change_task))
-        baker.make(User)
+        baker.make(User)  # absorbs the bootstrap site-admin promotion
         self.alice = _profile("alice")
         self.bob = _profile("bob")
         self.location = baker.make(Location, latitude="41.7", longitude="-73.9")
@@ -343,28 +342,35 @@ class WikiUpdatedConcealmentTests(TestCase):
         for profile in (self.alice, self.bob):
             baker.make(Pin, profile=profile, location=self.location, parent_pin=None)
 
-    def _edit(self, **changes: str) -> None:
+    def _edit(self, projection_hides: list[int], **changes: str) -> None:
         with (
-            mock.patch(_CONCEALMENT, side_effect=lambda _wiki, viewer: viewer is not None and viewer.pk == self.bob.pk),
+            projecting(
+                lambda _wiki, viewer: viewer is not None and viewer.pk == self.bob.pk,
+                hidden_profile_ids=projection_hides,
+            ),
             self.captureOnCommitCallbacks(execute=True),
         ):
             apply_wiki_edit(self.wiki, self.alice, changes)
 
-    def test_an_edit_by_someone_concealment_hides_is_not_announced(self) -> None:
-        self._edit(description="Roof partly collapsed")
+    def test_an_edit_by_someone_the_projection_hides_is_not_announced(self) -> None:
+        self._edit([self.alice.pk], description="Roof partly collapsed")
 
         self.assertEqual(_notifications(self.bob, NotificationType.WIKI_UPDATED), [])
 
-    def test_an_edit_by_a_friend_is_announced(self) -> None:
-        Friendship.objects.create(from_profile=self.alice, to_profile=self.bob, status=FriendshipStatus.ACCEPTED)
+    def test_an_edit_the_projection_shows_is_announced_under_the_name_it_shows(self) -> None:
+        self._edit([], description="Roof partly collapsed")
 
-        self._edit(description="Roof partly collapsed")
+        [notification] = _notifications(self.bob, NotificationType.WIKI_UPDATED)
+        self.assertIn(PROJECTED_NAME, notification.title)
 
-        self.assertEqual(len(_notifications(self.bob, NotificationType.WIKI_UPDATED)), 1)
-
-    def test_an_edit_only_of_fields_concealment_always_blanks_is_not_announced(self) -> None:
-        Friendship.objects.create(from_profile=self.alice, to_profile=self.bob, status=FriendshipStatus.ACCEPTED)
-
-        self._edit(cameras="everywhere")
+    def test_an_edit_of_a_field_the_projection_never_shows_is_not_announced(self) -> None:
+        self._edit([], cameras="everywhere")
 
         self.assertEqual(_notifications(self.bob, NotificationType.WIKI_UPDATED), [])
+
+    def test_a_recipient_with_no_projection_hears_of_every_edit_under_the_stored_name(self) -> None:
+        with self.captureOnCommitCallbacks(execute=True):
+            apply_wiki_edit(self.wiki, self.alice, {"description": "Roof partly collapsed"})
+
+        [notification] = _notifications(self.bob, NotificationType.WIKI_UPDATED)
+        self.assertIn("Powerhouse", notification.title)

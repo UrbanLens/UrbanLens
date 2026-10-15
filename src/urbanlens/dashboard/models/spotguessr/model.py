@@ -4,7 +4,7 @@ SpotGuessr models - Glicko-2 ratings, game sessions, rounds, guesses, and chat.
 The rules this schema encodes:
 eligibility ("pinned by every joined participant"), point-vs-boundary
 distance scoring, the difficulty slider, the Glicko-2 player/location rating
-pairing, and the multiplayer lobby lifecycle (UL-392).
+pairing, and the multiplayer lobby lifecycle.
 """
 
 from __future__ import annotations
@@ -151,7 +151,7 @@ class LocationModeRating(Glicko2RatingFields, abstract.DashboardModel):
 class GameSession(abstract.DashboardModel):
     """
     One SpotGuessr playthrough: a mode, a config snapshot, a fixed round count.
-    Modeled as a proper many-participant session from Phase 1 (see ``GameSessionParticipant``) - every eligibility/scoring rule reads "all (joined) participants," not "the player," so multiplayer (UL-392) reuses these tables unchanged; only ``GameSessionParticipant.status`` and the ``LOBBY`` status were added.
+    Modeled as a proper many-participant session from Phase 1 (see ``GameSessionParticipant``) - every eligibility/scoring rule reads "all (joined) participants," not "the player," so multiplayer reuses these tables unchanged; only ``GameSessionParticipant.status`` and the ``LOBBY`` status were added.
 
     Attributes:
         mode: Which game mode this session plays.
@@ -450,7 +450,7 @@ class GamePhotoFeedback(abstract.DashboardModel):
 
 class GameSessionChatMessage(abstract.DashboardModel):
     """
-    One chat message in a multiplayer session's live text chat (UL-392).
+    One chat message in a multiplayer session's live text chat.
     Plain text, no E2EE - unlike DirectMessage/GroupMessage, session chat is ephemeral match banter between participants already visible to each other on the scoreboard, not a private conversation, so the ciphertext/key-exchange machinery those models carry buys nothing here.
     """
 

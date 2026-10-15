@@ -126,7 +126,7 @@ test.describe("basemap tiles the browser has already fetched", () => {
             async (path) => (await fetch(path, { headers: { Accept: "image/*" } })).headers.get("Cache-Control"),
             first[0]!.name,
         );
-        // `private` on purpose (D27, `_keep_for` in controllers/basemap_tiles.py): the endpoint is
+        // `private` on purpose (see `_keep_for` in controllers/basemap_tiles.py): the endpoint is
         // behind a login, and a shared cache's hits would say which coordinates somebody looked at.
         // The browser's own cache is the one this spec is about.
         expect(directives).toContain("private");

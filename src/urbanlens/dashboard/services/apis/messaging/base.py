@@ -80,7 +80,7 @@ class TwilioGateway(Gateway):
             response = self.session.post(url, data=data, auth=(account_sid, auth_token), timeout=30)
             response.raise_for_status()
         except EnvironmentRefusedError:
-            # Texts are production's alone (D26); the refusal is logged where it was made.
+            # Texts are production's alone; the refusal is logged where it was made.
             return False
         except requests.RequestException:
             logger.exception("Failed to send %s message via Twilio", type(self).service_key)

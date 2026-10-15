@@ -32,7 +32,7 @@ class Expectation:
 
     name: str
     check: Callable[[Session], tuple[bool, str]]
-    #: A problem id when this is known to fail today, else empty.
+    #: A short name for the known problem this check fails on today, else empty.
     known: str = ""
 
 
@@ -153,8 +153,8 @@ SCENARIOS: dict[str, list[Expectation]] = {
         Expectation("readiness answers", _health_answers),
         # Deliberately the bbox path: the cached one answers without a
         # connection, so it reports a pass for something it never exercised.
-        Expectation("uncached pins answer or refuse cleanly", _uncached_pins_answer, known="P104"),
-        Expectation("no traceback leaked", _no_traceback_leaked, known="P104"),
+        Expectation("uncached pins answer or refuse cleanly", _uncached_pins_answer, known="connection pool exhaustion"),
+        Expectation("no traceback leaked", _no_traceback_leaked, known="connection pool exhaustion"),
     ],
     "cpu-saturation": [
         Expectation("readiness answers", _health_answers),
@@ -234,7 +234,7 @@ def sign_in(base_url: str, manifest: Path, role: str) -> Session:
         if error.code != 302:
             # A finding rather than a crash: signing in is a thing that can break while the infrastructure is
             # broken.
-            raise SystemExit(f"Sign-in as {account['username']} was refused with HTTP {error.code}. If a cache outage is injected, that is P105.") from error
+            raise SystemExit(f"Sign-in as {account['username']} was refused with HTTP {error.code}. If a cache outage is injected, that is the known sign-in-under-outage problem.") from error
 
     if "sessionid" not in session.cookies:
         raise SystemExit(f"Sign-in as {account['username']} redirected but left no session cookie.")
@@ -272,7 +272,7 @@ def main(argv: list[str] | None = None) -> int:
             "Where to keep the signed-in cookies. Written on first use and reused after, so the "
             "session is established BEFORE the failure is injected - which is the premise every "
             "scenario is written against. Signing in during a cache outage tests the sign-in path "
-            "instead, which is P105 and a different question."
+            "instead, which is the known sign-in-under-outage problem and a different question."
         ),
     )
     args = parser.parse_args(argv)

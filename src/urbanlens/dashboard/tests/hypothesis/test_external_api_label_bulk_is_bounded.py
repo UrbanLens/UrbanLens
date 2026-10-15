@@ -1,8 +1,8 @@
 """
 The external label bulk edit caps the labels but not the parents.
 
-N21 H33, and the external twin of H26 - which was capped at the internal door
-in an earlier batch, leaving this one open. `LabelBulkEditSerializer` gives
+The external twin of the internal door, which was capped
+in an earlier batch, leaves this one open. `LabelBulkEditSerializer` gives
 `uuids` a `max_length=500`, and gives `add_parent_uuids` and `add_child_uuids`
 no ceiling at all. The work is the product of the two: for every label, for
 every proposed parent, `would_create_cycle` walks the label graph in the

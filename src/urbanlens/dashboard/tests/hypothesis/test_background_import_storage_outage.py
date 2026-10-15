@@ -1,5 +1,5 @@
 """
-A background photo import waits out an object store that refuses a write, then imports the rest (P220).
+A background photo import waits out an object store that refuses a write, then imports the rest.
 
 The Immich, Flickr, Flickr album and Google Photos imports, and an export archive's photos and overlay images, stored
 one file at a time and caught only a refused reservation. A Garage 503 or timeout on one photo failed the whole task

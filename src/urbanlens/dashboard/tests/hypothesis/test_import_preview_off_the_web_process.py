@@ -3,7 +3,7 @@ The import preview must not parse an upload in the web process.
 
 The preview accepts archives, KML, GPX, shapefiles and Word documents, and each of those parsers is
 decorated with ``untrusted_parse``. Under ``UL_UNTRUSTED_PARSE_POLICY=deny`` a web process that reaches
-one raises, which is why the preview is what keeps that policy at ``warn`` (P2).
+one raises, which is why the preview is what keeps that policy at ``warn``.
 
 Each test here runs the request as the web process and the parse as the sandbox, both under
 ``deny``, so a parser reached from the wrong side raises rather than passing quietly.
@@ -22,16 +22,17 @@ from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.plugins.points import DOCUMENT_EXTRACTORS
 from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
 from urbanlens.dashboard.services.core import single_flight
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDisabledError
+from urbanlens.dashboard.services.import_formats.documents import DocumentExtractor
 from urbanlens.dashboard.services.pins import import_preview
 from urbanlens.dashboard.tasks import finish_import_preview_task
 
 ENQUEUE = "urbanlens.dashboard.services.core.celery.safely_enqueue_task"
 NOTIFY = "urbanlens.dashboard.services.apis.locations.google.maps._notify_pin_import_parse_failure"
-DOCUMENTS = "urbanlens.dashboard.services.ai.document_import"
 
 KML = """<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
@@ -50,6 +51,29 @@ TAKEOUT_CSV = (
     "Somewhere,,https://www.google.com/maps/place/Somewhere+Nice,\n"
     'Elsewhere,,"https://www.google.com/maps/search/40.7128,-74.0060",\n'
 )
+
+
+class _NotesExtractor(DocumentExtractor):
+    """Reads ``.txt`` as UTF-8 and finds the same pin in every document."""
+
+    extensions = frozenset({"txt"})
+    max_bytes = 1024
+
+    def __init__(self, found: dict) -> None:
+        self.found = found
+        self.extracted = mock.Mock(return_value=(found, None))
+
+    def read_text(self, filename: str, data: bytes) -> tuple[str | None, bool]:
+        return data.decode(), False
+
+    def available(self, profile) -> bool:
+        return True
+
+    def unavailable_warning(self, profile) -> str | None:
+        return None
+
+    def extract_pins(self, filename: str, text: str, profile) -> tuple[dict | None, str | None]:
+        return self.extracted(filename, text, profile)
 
 
 class PreviewParsesOutsideTheWebProcessTests(TestCase):
@@ -154,20 +178,18 @@ class PreviewParsesOutsideTheWebProcessTests(TestCase):
         self.assertEqual(self._state(job)["status"], "error")
 
     def test_a_document_is_read_in_the_sandbox_and_extracted_by_the_networked_half(self) -> None:
-        job = self._upload("notes.txt", b"The old mill on Route 9.")
-
-        self._parse_in_sandbox(job)
         found = {
             "stem": "notes",
             "pins": [{"name": "Old mill", "lat": 41.0, "lng": -73.0, "description": "", "cid": None}],
         }
-        with (
-            mock.patch(f"{DOCUMENTS}.ai_document_import_available", return_value=True),
-            mock.patch(f"{DOCUMENTS}.extract_pins_from_text", return_value=(found, None)) as extract,
-        ):
+        extractor = _NotesExtractor(found)
+        with DOCUMENT_EXTRACTORS.overridden([extractor]):
+            job = self._upload("notes.txt", b"The old mill on Route 9.")
+            self._parse_in_sandbox(job)
+            extractor.extracted.assert_not_called()
             import_preview.finish_import_preview(self.profile.pk, job["job_id"])
 
-        extract.assert_called_once_with("notes.txt", "The old mill on Route 9.", self.profile)
+        extractor.extracted.assert_called_once_with("notes.txt", "The old mill on Route 9.", self.profile)
         state = self._state(job)
         self.assertEqual(state["status"], "done", state)
         self.assertEqual(state["result"]["lists"], [found])

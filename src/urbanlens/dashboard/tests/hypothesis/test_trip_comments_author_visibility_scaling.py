@@ -1,7 +1,7 @@
 """
 The trip comment tree re-asks "may I see this author" once per comment.
 
-The trip half of N21 H43/H52. `visible_comment_tree`, which the pin and wiki
+The trip half of two audit findings. `visible_comment_tree`, which the pin and wiki
 panels use, builds a `can_view` dict keyed by author precisely because - in its
 own words - "each call runs up to 3 extra query pairs, which is redundant when
 one author appears several times in a thread".

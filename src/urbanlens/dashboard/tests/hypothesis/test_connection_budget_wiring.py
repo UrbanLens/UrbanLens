@@ -245,7 +245,7 @@ class TheMetricsExporterIsGatedTests(SimpleTestCase):
             ["metrics"],
             "celery-metrics exits when UL_METRICS_ENABLED is off and restarts unless-stopped, so "
             "without a profile `docker compose up` starts it into a permanent crash loop - which is "
-            "what happened on staging for 2,578 restarts (N15)",
+            "what happened on staging for 2,578 restarts",
         )
 
     def test_it_still_restarts_when_it_is_deployed(self) -> None:
@@ -311,7 +311,7 @@ class TheRequestPathOutweighsBackgroundWorkTests(SimpleTestCase):
     FOREGROUND = ("app", "app-ws", "db")
 
     #: Background work: progress-tracked, and nobody is watching a spinner for it.
-    BACKGROUND = ("media-worker", "media-worker-batch", "celery-metrics", "ai-worker")
+    BACKGROUND = ("media-worker", "media-worker-batch", "celery-metrics")
 
     def _weights(self) -> dict[str, int]:
         """Each service's default cpu_shares, read out of its `${VAR:-N}` form."""

@@ -1,4 +1,4 @@
-"""Regression test: REData rejecting the API key must not retry forever."""
+"""Regression test: a resolver rejecting the API key must not retry forever."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard import tasks
 from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType
 from urbanlens.dashboard.models.notifications.model import NotificationLog
-from urbanlens.dashboard.services.apis.locations.cid_resolution import PROVIDER_REDATA, CidResolutionResult
+from urbanlens.dashboard.services.apis.locations.cid_resolution import CidResolutionResult
 
 
 class ResolveDeferredPinLocationsAuthFailureTests(TestCase):
@@ -32,7 +32,7 @@ class ResolveDeferredPinLocationsAuthFailureTests(TestCase):
         with (
             mock.patch(
                 "urbanlens.dashboard.services.apis.locations.cid_resolution.resolve_cids",
-                return_value=CidResolutionResult(provider=PROVIDER_REDATA, pending=[12345], auth_failed=True),
+                return_value=CidResolutionResult(provider="fake", pending=[12345], auth_failed=True),
             ),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
         ):

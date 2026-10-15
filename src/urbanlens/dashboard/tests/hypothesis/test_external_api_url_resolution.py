@@ -72,7 +72,7 @@ def _registered_routes() -> list[tuple[str, str, dict[str, str | int]]]:
     Read every external-API route straight out of the live urlconf.
 
     Reading the urlconf instead of hard-coding a list is what makes these tests cover routes that do not exist
-    yet: the fifteen agents adding endpoints to the ``urls_*.py`` domain modules get the shadowing check for
+    yet: whoever adds endpoints to the ``urls_*.py`` domain modules gets the shadowing check for
     free, without having to know this file exists.
 
     Returns:

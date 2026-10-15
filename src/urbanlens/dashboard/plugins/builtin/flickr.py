@@ -11,7 +11,7 @@ from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.UrbanLens.egress import EgressCategory
 
 if TYPE_CHECKING:
-    from urbanlens.dashboard.services.pins.external_data import PanelSource
+    from urbanlens.dashboard.plugins.base import PluginContext
 
 
 class FlickrPlugin(UrbanLensPlugin):
@@ -27,31 +27,27 @@ class FlickrPlugin(UrbanLensPlugin):
     author: ClassVar[str] = "UrbanLens"
     order: ClassVar[int] = 41
 
-    def get_service_defaults(self) -> dict[str, ServiceDefaults]:
-        """
-        Rate-limit defaults for the Flickr API.
-
-        Returns:
-            Defaults for the ``flickr`` service key.
-        """
-        return {
-            "flickr": ServiceDefaults(
-                display_name="Flickr API",
-                category=EgressCategory.QUOTA,
-                calls_per_minute=30,
-                calls_per_day=3000,
-                notes="Free API; Flickr's own per-key quota is generous, this mainly guards against runaway loops.",
-            ),
-        }
-
-    def get_panel_sources(self) -> list[PanelSource]:
-        """
-        Contribute the public Flickr search Media gallery provider.
-        Uses the full-text ``flickr.photos.search`` API when a Flickr API key is configured, or falls back to Flickr's keyless public tags feed otherwise (weaker recall - see ``services.apis.flickr.search``'s module docstring)."""
-        from urbanlens.dashboard.services.apis.flickr.oauth import is_configured
+    def setup(self, plugin: PluginContext) -> None:
+        """Rate-limit defaults for the Flickr API, and the public Flickr search Media gallery provider."""
+        from urbanlens.dashboard.plugins.points import PANEL_SOURCES, SERVICE_DEFAULTS
+        from urbanlens.dashboard.services.apis.flickr import oauth
         from urbanlens.dashboard.services.apis.flickr.search import FlickrFeedSearchGateway, FlickrMediaPanelSource, FlickrSearchGateway
 
-        def _gateway_factory() -> FlickrSearchGateway | FlickrFeedSearchGateway:
-            return FlickrSearchGateway() if is_configured() else FlickrFeedSearchGateway()
+        plugin.register_all(
+            SERVICE_DEFAULTS,
+            {
+                "flickr": ServiceDefaults(
+                    display_name="Flickr API",
+                    category=EgressCategory.QUOTA,
+                    calls_per_minute=30,
+                    calls_per_day=3000,
+                    notes="Free API; Flickr's own per-key quota is generous, this mainly guards against runaway loops.",
+                ),
+            },
+        )
 
-        return [FlickrMediaPanelSource("flickr", FlickrSearchGateway.service_key, _gateway_factory)]
+        # Full-text search with an API key; otherwise Flickr's keyless public tags feed, which has weaker recall.
+        def _gateway_factory() -> FlickrSearchGateway | FlickrFeedSearchGateway:
+            return FlickrSearchGateway() if oauth.is_configured() else FlickrFeedSearchGateway()
+
+        plugin.extend(PANEL_SOURCES, [FlickrMediaPanelSource("flickr", FlickrSearchGateway.service_key, _gateway_factory)])

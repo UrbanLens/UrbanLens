@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import shutil
 import tempfile
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.db import IntegrityError
@@ -19,6 +19,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
 from urbanlens.dashboard.services.import_export import import_data
+from urbanlens.dashboard.tests.hypothesis.overlay_source_fake import fake_sheet_source, fake_sheet_template
 
 _CORNERS = [[40.002, -74.002], [40.002, -74.000], [40.000, -74.000], [40.000, -74.002]]
 _PUBLIC_DNS_RESULT = [(2, 1, 6, "", ("93.184.216.34", 0))]
@@ -100,13 +101,12 @@ class AnImportedOverlayUrlTests(_ImportCase):
 
 
 class AnImportedTileOverlayTests(_ImportCase):
-    def test_a_historical_tile_overlay_survives_the_round_trip(self) -> None:
-        from urbanlens.dashboard.services.map.image_overlays import historical_tile_template
-
-        template = historical_tile_template("5b0e8a4c-2d1f-4a57-9c3e-1f2a3b4c5d6e")
-        import_data.MapAnnotationsImport()._import_overlay(
-            self._row(tile_url_template=template, locked=True), self.ctx, 1
-        )
+    def test_a_recognised_sheet_overlay_survives_the_round_trip(self) -> None:
+        template = fake_sheet_template("5b0e8a4c-2d1f-4a57-9c3e-1f2a3b4c5d6e")
+        with fake_sheet_source():
+            import_data.MapAnnotationsImport()._import_overlay(
+                self._row(tile_url_template=template, locked=True), self.ctx, 1
+            )
 
         overlay = MapImageOverlay.objects.for_pin(self.pin).get()
         self.assertEqual(overlay.tile_url_template, template)
@@ -169,34 +169,3 @@ class TheOverlayModelTests(TestCase):
         overlay.set_corners(_CORNERS)
         with self.assertRaises(IntegrityError):
             overlay.save()
-
-
-class UrlOnlyOverlayMigrationTests(TestCase):
-    """Migration 0033_v0_8_0_indexes never deletes an overlay: a pasted image is downloaded, not dropped."""
-
-    @staticmethod
-    def _migrate(registry) -> None:
-        import importlib
-
-        module = importlib.import_module("urbanlens.dashboard.migrations.0033_v0_8_0_indexes")
-        module._0096_refuse_to_drop_url_only_overlays(registry, None)
-
-    def test_it_deletes_nothing_when_every_overlay_has_a_source(self) -> None:
-        from django.apps import apps
-
-        from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
-
-        before = MapImageOverlay.objects.count()
-        self._migrate(apps)
-        self.assertEqual(MapImageOverlay.objects.count(), before)
-
-    def test_it_stops_rather_than_delete_an_overlay_without_a_source(self) -> None:
-        """The current schema can't hold such a row, so the historical model is stood in for."""
-        overlays = MagicMock()
-        overlays.objects.filter.return_value.values_list.return_value = [7]
-        registry = MagicMock()
-        registry.get_model.return_value = overlays
-
-        with self.assertRaises(RuntimeError):
-            self._migrate(registry)
-        overlays.objects.filter.return_value.delete.assert_not_called()

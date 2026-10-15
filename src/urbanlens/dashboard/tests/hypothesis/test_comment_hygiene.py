@@ -4,12 +4,16 @@
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
+import io
 import json
 import pathlib
+import subprocess
 import sys
 import tempfile
 import textwrap
+from unittest import mock
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 
@@ -90,12 +94,7 @@ class CommentDensityTests(SimpleTestCase):
 
 class HistoryReferenceTests(SimpleTestCase):
     def test_each_kind_of_history_is_flagged(self) -> None:
-        maintainer = "J" + "ess"
         cases = {
-            f"Per {maintainer}, keep it.": "names the maintainer",
-            "C" + "laude wrote this.": "names a coding agent",
-            "The previous agent left this half done.": "refers to agent work",
-            "See the handoff note for why.": "refers to agent work",
             "Restored in PR #111.": "cites a pull request or commit",
             "It used to read the whole table.": "narrates a change",
             "Before the fix, this leaked.": "narrates a change",
@@ -114,10 +113,8 @@ class HistoryReferenceTests(SimpleTestCase):
     def test_near_misses_are_not_flagged(self) -> None:
         for text in (
             "The key used to sign the token.",
-            "Sent with a descriptive User-Agent; a bare urllib agent is refused.",
-            "AI gateway backed by Anthropic's " + "C" + "laude models.",
-            "An X-Accel hand-off, or a FileResponse.",
-            'See UrbanLens#286 ("articles name provider images").',
+            "The gateway is backed by a hosted provider's models.",
+            'See other-project#286 ("articles name provider images").',
             "Since API version 2025-03-31 it lives elsewhere.",
             "Accepts ``2026-01-01`` or `2026-01-01T00:00`.",
             "A 2019-05-01 survey.",
@@ -135,7 +132,7 @@ class HistoryReferenceTests(SimpleTestCase):
         with tempfile.TemporaryDirectory() as tmp:
             (pathlib.Path(tmp) / "docs" / "internal").mkdir(parents=True)
             (pathlib.Path(tmp) / "docs" / "internal" / "PROBLEMS.md").write_text(
-                "| former id | issue |\n|---|---|\n| P7 | #266 |\n| T3 | #300 |\n"
+                "| former id | issue |\n|---|---|\n| P7 | issue-266 |\n| T3 | issue-300 |\n"
             )
             self.assertEqual(checker.open_tracker_ids(pathlib.Path(tmp)), frozenset({"P7", "T3"}))
 
@@ -216,6 +213,18 @@ class BaselineTests(SimpleTestCase):
         self.assertEqual(gained, [("comment-block", "a.py", 3, 2)])
         self.assertEqual(lost, [("comment-block", "b.py", 0, 1)])
 
+    def test_a_baseline_entry_for_a_file_the_tree_omits_is_neither_a_regression_nor_a_fix(self) -> None:
+        empty = {rule: {} for rule in checker.RULES}
+        baseline = {**empty, "comment-block": {"kept.py": 2, "missing.py": 1, "private/omitted.py": 1}}
+        current = {**empty, "comment-block": {"kept.py": 2}}
+        self.assertEqual(len(checker.compare(current, baseline, None)[1]), 2)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            (root / "kept.py").write_text("x = 1\n", encoding="utf-8")
+            measured = checker.measured_baseline(baseline, root, ["kept.py", "missing.py"])
+        self.assertEqual(measured["comment-block"], {"kept.py": 2})
+        self.assertEqual(checker.compare(current, measured, None), ([], []))
+
     def test_checking_named_files_ignores_the_rest_of_the_baseline(self) -> None:
         empty = {rule: {} for rule in checker.RULES}
         baseline = {**empty, "comment-block": {"a.py": 2, "b.py": 1}}
@@ -233,6 +242,75 @@ class BaselineTests(SimpleTestCase):
             moved = {**empty, "comment-block": {"c.py": 1}}
             self.assertEqual(checker.update_baseline(moved, path, allow_increase=False), 0)
             self.assertEqual(json.loads(path.read_text())["comment-block"], {"c.py": 1})
+
+    def test_update_does_not_let_an_omitted_files_budget_absorb_an_increase(self) -> None:
+        empty = {rule: {} for rule in checker.RULES}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            (root / "kept.py").write_text("x = 1\n", encoding="utf-8")
+            path = root / "baseline.json"
+            path.write_text(json.dumps({**empty, "comment-block": {"kept.py": 1, "private/omitted.py": 5}}))
+            raised = {**empty, "comment-block": {"kept.py": 3}}
+            tracked = ["kept.py", "private/omitted.py"]
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(
+                    checker.update_baseline(raised, path, allow_increase=False, tracked=tracked, root=root), 1
+                )
+            self.assertEqual(json.loads(path.read_text())["comment-block"], {"kept.py": 1, "private/omitted.py": 5})
+            fixed = {**empty, "comment-block": {"kept.py": 1}}
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(
+                    checker.update_baseline(fixed, path, allow_increase=False, tracked=tracked, root=root), 0
+                )
+            self.assertEqual(json.loads(path.read_text())["comment-block"], {"kept.py": 1, "private/omitted.py": 5})
+
+    def test_update_in_the_whole_repository_drops_a_deleted_files_entry(self) -> None:
+        empty = {rule: {} for rule in checker.RULES}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            (root / ".forgejo").mkdir()
+            (root / "kept.py").write_text("x = 1\n", encoding="utf-8")
+            path = root / "baseline.json"
+            path.write_text(json.dumps({**empty, "comment-block": {"kept.py": 1, "gone.py": 5}}))
+            current = {**empty, "comment-block": {"kept.py": 1}}
+            with contextlib.redirect_stdout(io.StringIO()):
+                checker.update_baseline(current, path, allow_increase=False, tracked=["kept.py"], root=root)
+            self.assertEqual(json.loads(path.read_text())["comment-block"], {"kept.py": 1})
+
+
+class MainOnAPartialTreeTests(SimpleTestCase):
+    def _run(self, baseline: dict[str, dict[str, int]], files: dict[str, str]) -> tuple[int, str]:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            for name, text in files.items():
+                (root / name).parent.mkdir(parents=True, exist_ok=True)
+                (root / name).write_text(text, encoding="utf-8")
+            baseline_path = root / "bin" / "comment_hygiene_baseline.json"
+            baseline_path.parent.mkdir(parents=True, exist_ok=True)
+            baseline_path.write_text(json.dumps(baseline))
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            subprocess.run(["git", "-C", str(root), "add", "-A"], check=True)
+            out = io.StringIO()
+            with (
+                mock.patch.object(checker, "ROOT", root),
+                mock.patch.object(checker, "BASELINE", baseline_path),
+                contextlib.redirect_stdout(out),
+            ):
+                return checker.main([]), out.getvalue()
+
+    def test_a_baseline_naming_an_omitted_file_passes(self) -> None:
+        empty = {rule: {} for rule in checker.RULES}
+        baseline = {**empty, "comment-block": {"private/omitted.py": 3}}
+        rc, _ = self._run(baseline, {"a.py": "x = 1\n"})
+        self.assertEqual(rc, 0)
+
+    def test_the_lock_in_hint_names_only_the_baseline_that_changed(self) -> None:
+        empty = {rule: {} for rule in checker.RULES}
+        baseline = {**empty, "comment-block": {"a.py": 2}}
+        rc, output = self._run(baseline, {"a.py": "x = 1\n"})
+        self.assertEqual(rc, 1)
+        self.assertIn("git add bin/comment_hygiene_baseline.json", output)
+        self.assertNotIn("plugins", output)
 
 
 class SelfTests(SimpleTestCase):

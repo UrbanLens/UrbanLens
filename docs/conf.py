@@ -20,8 +20,8 @@ if TYPE_CHECKING:
     from sphinx.application import Sphinx
 
 project = "UrbanLens"
-copyright = "2023, Jess Mann"  # noqa: A001
-author = "Jess Mann"
+copyright = "2023, UrbanLens"  # noqa: A001
+author = "UrbanLens"
 
 extensions = [
     "autoapi.extension",
@@ -43,8 +43,8 @@ napoleon_numpy_docstring = False
 napoleon_use_ivar = True
 
 suppress_warnings = [
-    # A name a module re-exports from another (``inference_client`` re-exports ``urbanlens_ai.schema``) is one
-    # autoapi cannot follow. Python resolves it and mypy checks it, so the warning says nothing about the code.
+    # A name a module re-exports from another is one autoapi cannot follow. Python resolves it and mypy checks it,
+    # so the warning says nothing about the code.
     "autoapi.python_import_resolution",
     # An annotation naming the builtin ``type`` matches every attribute called ``type`` in the reference, and the
     # Python domain warns that the target is ambiguous. Nothing here documents the builtin, so no link is right.

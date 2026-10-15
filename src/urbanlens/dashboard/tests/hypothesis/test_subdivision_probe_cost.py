@@ -3,17 +3,15 @@ Correcting an oversized parcel must not cost one provider-chain run per location
 
 A legacy parcel outline for Hudson River State Hospital covered 102.9 km² and held 99 locations.
 Re-resolving it read the shrink to 0.47 km² as a subdivision, then ran the full chain for every
-other location in the domain - 228 REData lookups in an hour without finishing the first parcel.
+other location in the domain - 228 provider lookups in an hour without finishing the first parcel.
 """
 
 from __future__ import annotations
 
-from io import StringIO
 import math
 from unittest import mock
 
 from django.contrib.gis.geos import MultiPolygon, Polygon
-from django.core.management import call_command
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
@@ -48,7 +46,7 @@ class SubdivisionProbeCostTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
         _Chain.calls = 0
-        # Large but plausible: a county-sized outline is never probed at all (P148).
+        # Large but plausible: a county-sized outline is never probed at all.
         self.oversized = baker.make(
             Place, kind=PlaceKind.PARCEL, geometry=_box(WEST, SOUTH, 0.03), area_sqm=8_300_000.0
         )
@@ -86,13 +84,6 @@ class SubdivisionProbeCostTests(TestCase):
 
         split.assert_called_once()
         self.assertEqual(len(split.call_args.args[1]), 2, "the second parcel's locations must still yield a successor")
-
-    def test_the_repair_command_does_not_probe_for_subdivisions(self) -> None:
-        """It re-homes everything the old outline captured itself, so a split probe is pure cost."""
-        with mock.patch(_CHAIN, _Chain):
-            call_command("repair_place_boundaries", "--all", stdout=StringIO(), stderr=StringIO())
-
-        self.assertEqual(_Chain.calls, 1, "the repair ran the chain for more than the one coordinate it re-resolves")
 
 
 class ScatteredSubdivisionProbeCapTests(TestCase):

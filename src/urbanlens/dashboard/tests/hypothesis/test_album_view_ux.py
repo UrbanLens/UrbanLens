@@ -175,7 +175,7 @@ class AlbumPanelSectionsTests(TestCase):
     def test_a_loose_tile_does_not_take_the_gallery_tile_s_id(self) -> None:
         """
         The pin and wiki pages render the gallery beside this panel, and a shared id sends one grid's lookups
-        to the other grid's tile (P121)."""
+        to the other grid's tile."""
         image = baker.make_recipe("dashboard.image", pin=self.pin, profile=self.pin.profile)
 
         response = self.client.get(self.url)

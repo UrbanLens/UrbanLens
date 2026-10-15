@@ -12,6 +12,7 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from urbanlens.dashboard.models.custom_fields.model import CustomField, CustomFieldEntity, CustomFieldType
+from urbanlens.dashboard.plugins.drf import ExtensibleSerializer
 from urbanlens.dashboard.services.core.numbers import DB_SMALLINT_MAX
 
 #: Field types creatable through the external API. REFERENCE is excluded: a reference value points at another
@@ -59,7 +60,7 @@ def normalize_select_options(raw_options: list[str]) -> tuple[list[str], str | N
     return deduped, None
 
 
-class CustomFieldDefinitionSerializer(serializers.Serializer):
+class CustomFieldDefinitionSerializer(ExtensibleSerializer):
     """One of the caller's custom field definitions."""
 
     id = serializers.IntegerField(read_only=True)
@@ -74,7 +75,7 @@ class CustomFieldDefinitionSerializer(serializers.Serializer):
         return field.select_choices
 
 
-class CustomFieldDefinitionWriteSerializer(serializers.Serializer):
+class CustomFieldDefinitionWriteSerializer(ExtensibleSerializer):
     """
     A custom field definition submitted for create or partial update.
 
@@ -104,7 +105,7 @@ class CustomFieldDefinitionWriteSerializer(serializers.Serializer):
         return attrs
 
 
-class CustomFieldValueWriteSerializer(serializers.Serializer):
+class CustomFieldValueWriteSerializer(ExtensibleSerializer):
     """
     A value submitted for one custom field on a target object.
 

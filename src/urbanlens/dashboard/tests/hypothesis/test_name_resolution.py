@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
-
 from model_bakery import baker
 
 from hypothesis import given, settings as hyp_settings, strategies as st
@@ -11,10 +9,12 @@ from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
+from urbanlens.dashboard.plugins.points import NAME_PROVIDERS
 from urbanlens.dashboard.services.locations.name_resolution import (
     NameCandidate,
     NameProvider,
     RuleBasedNameResolver,
+    child_pin_preferred_sources,
     default_name_resolver,
 )
 from urbanlens.dashboard.services.locations.name_tiers import NameTier
@@ -35,8 +35,8 @@ def _location(**kwargs) -> Location:
 class _StaticProvider(NameProvider):
     """Name provider returning a fixed candidate list, for pipeline tests."""
 
-    def __init__(self, source: str, names: list) -> None:
-        super().__init__(source=source)
+    def __init__(self, source: str, names: list, **declared) -> None:
+        super().__init__(source=source, **declared)
         self._names = list(names)
 
     def candidates(self, location) -> list:
@@ -52,10 +52,7 @@ class _BrokenProvider(NameProvider):
 
 def _patch_providers(*providers: NameProvider):
     """Replace the plugin registry's name providers for the duration of a test."""
-    return patch(
-        "urbanlens.dashboard.plugins.registry.PluginRegistry.name_providers",
-        return_value=list(providers),
-    )
+    return NAME_PROVIDERS.overridden(list(providers))
 
 
 # -- Address-derived quality gate --------------------------------------------------
@@ -238,17 +235,17 @@ class RuleBasedNameResolverOverrideSourceTests(SimpleTestCase):
         candidates = [
             NameCandidate(name="Agreed Name", source="wikipedia"),
             NameCandidate(name="AGREED-name!", source="nps"),
-            NameCandidate(name="REData Name", source="redata_building"),
+            NameCandidate(name="Record Name", source="building_record"),
         ]
-        resolver = RuleBasedNameResolver(["wikipedia", "nps"], override_sources=("redata_building",))
-        self.assertEqual(resolver.resolve(candidates, _location()).name, "REData Name")
+        resolver = RuleBasedNameResolver(["wikipedia", "nps"], override_sources=("building_record",))
+        self.assertEqual(resolver.resolve(candidates, _location()).name, "Record Name")
 
     def test_override_source_absent_falls_back_to_normal_ranking(self) -> None:
         candidates = [
             NameCandidate(name="Agreed Name", source="wikipedia"),
             NameCandidate(name="AGREED-name!", source="nps"),
         ]
-        resolver = RuleBasedNameResolver(["wikipedia", "nps"], override_sources=("redata_building",))
+        resolver = RuleBasedNameResolver(["wikipedia", "nps"], override_sources=("building_record",))
         self.assertEqual(resolver.resolve(candidates, _location()).name, "Agreed Name")
 
     def test_no_override_source_configured_is_a_no_op(self) -> None:
@@ -258,7 +255,13 @@ class RuleBasedNameResolverOverrideSourceTests(SimpleTestCase):
 
 
 class DefaultNameResolverChildPinOverrideTests(TestCase):
-    """default_name_resolver only activates the REData-building override for a child pin's location."""
+    """default_name_resolver only activates the building-record override for a child pin's location."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        context = NAME_PROVIDERS.overridden([_StaticProvider("building_record", [], child_pin_preference=0)])
+        context.__enter__()
+        self.addCleanup(context.__exit__, None, None, None)
 
     def _make_location_with_pin(self, *, parent_pin=None) -> Location:
         profile = baker.make("dashboard.Profile")
@@ -272,7 +275,7 @@ class DefaultNameResolverChildPinOverrideTests(TestCase):
         candidates = [
             NameCandidate(name="Agreed", source="wikipedia"),
             NameCandidate(name="AGREED!", source="nps"),
-            NameCandidate(name="REData", source="redata_building"),
+            NameCandidate(name="Record", source="building_record"),
         ]
         self.assertEqual(resolver.resolve(candidates, location).name, "Agreed")
 
@@ -285,26 +288,43 @@ class DefaultNameResolverChildPinOverrideTests(TestCase):
         candidates = [
             NameCandidate(name="Agreed", source="wikipedia"),
             NameCandidate(name="AGREED!", source="nps"),
-            NameCandidate(name="REData", source="redata_building"),
+            NameCandidate(name="Record", source="building_record"),
         ]
-        self.assertEqual(resolver.resolve(candidates, location).name, "REData")
+        self.assertEqual(resolver.resolve(candidates, location).name, "Record")
 
     def test_no_location_given_is_a_no_op(self) -> None:
         resolver = default_name_resolver()
         candidates = [
             NameCandidate(name="Agreed", source="wikipedia"),
             NameCandidate(name="AGREED!", source="nps"),
-            NameCandidate(name="REData", source="redata_building"),
+            NameCandidate(name="Record", source="building_record"),
         ]
         self.assertEqual(resolver.resolve(candidates, _location()).name, "Agreed")
 
     def test_unsaved_location_is_a_no_op(self) -> None:
         resolver = default_name_resolver(location=_location())
-        candidates = [NameCandidate(name="Only", source="redata_building")]
+        candidates = [NameCandidate(name="Only", source="building_record")]
         # An unsaved (no pk) location can't have any pins - override_sources
         # stays unset, so this still resolves via the normal ranking, not a
         # crash from querying an unsaved instance's `.pins`.
         self.assertEqual(resolver.resolve(candidates, _location()).name, "Only")
+
+
+class ChildPinPreferenceTests(SimpleTestCase):
+    """The providers, not core, say whose candidate names a child pin's location."""
+
+    def test_providers_that_ask_are_preferred_in_their_stated_order(self) -> None:
+        providers = [
+            _StaticProvider("later", [], child_pin_preference=2),
+            _StaticProvider("silent", []),
+            _StaticProvider("first", [], child_pin_preference=0),
+        ]
+        with NAME_PROVIDERS.overridden(providers):
+            self.assertEqual(child_pin_preferred_sources(), ("first", "later"))
+
+    def test_without_a_provider_that_asks_nothing_is_preferred(self) -> None:
+        with NAME_PROVIDERS.overridden([_StaticProvider("silent", [])]):
+            self.assertEqual(child_pin_preferred_sources(), ())
 
 
 class NameSourcePriorityListTests(SimpleTestCase):
@@ -355,7 +375,9 @@ class ExternalNameCandidatesTests(TestCase):
     def test_broken_provider_is_isolated(self) -> None:
         loc = baker.make(Location, latitude="41.120000", longitude="-73.120000")
         with (
-            _patch_providers(_BrokenProvider(source="broken"), _StaticProvider("nps", ["Park Name"])),
+            _patch_providers(
+                _BrokenProvider(source="broken"), _StaticProvider("nps", ["Park Name"], tier=NameTier.SITE)
+            ),
             self.assertLogs("urbanlens.dashboard.services.locations.naming", level="ERROR"),
         ):
             candidates = external_name_candidates_for_location(loc)

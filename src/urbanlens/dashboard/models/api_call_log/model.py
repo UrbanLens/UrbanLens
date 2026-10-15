@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from django.db.models import SET_NULL, BooleanField, CharField, DecimalField, ForeignKey, Index, IntegerField, PositiveIntegerField, PositiveSmallIntegerField, TextField
+from django.db.models import SET_NULL, BooleanField, CharField, ForeignKey, Index, IntegerField, PositiveIntegerField, PositiveSmallIntegerField, TextField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.api_call_log.queryset import ApiCallLogManager
@@ -49,22 +49,6 @@ class ApiCallLog(abstract.DashboardModel):
         blank=True,
         help_text="The upstream's HTTP status. Null when no response arrived (refused before sending, a network error) or the caller had none to record.",
     )
-    model = CharField(
-        max_length=200,
-        null=True,
-        blank=True,
-        help_text="The AI model that answered, as the provider names it (a Cloudflare '@cf/...' path, an OpenAI or Anthropic id, an Ollama tag). Null for every call that is not an AI call, and for an AI call refused before it was made.",
-    )
-    input_tokens = IntegerField(
-        null=True,
-        blank=True,
-        help_text="Prompt tokens, as the provider reported them. Null when it reported none (a classifier, some Cloudflare models) or the call is not an AI call.",
-    )
-    output_tokens = IntegerField(
-        null=True,
-        blank=True,
-        help_text="Completion tokens, as the provider reported them. Null when it reported none or the call is not an AI call.",
-    )
     was_rate_limited = BooleanField(
         default=False,
         help_text="True if this entry records a call that was blocked by rate limiting.",
@@ -85,14 +69,7 @@ class ApiCallLog(abstract.DashboardModel):
     calls = PositiveIntegerField(
         default=1,
         db_default=1,
-        help_text="How many calls this row stands for: 1, except for a service whose calls are tallied and rolled up once a minute (services.core.call_tally), where it is every call that minute with the same outcome. Its response_ms is their mean and its cost_estimate their total.",
-    )
-    cost_estimate = DecimalField(
-        max_digits=10,
-        decimal_places=6,
-        null=True,
-        blank=True,
-        help_text="Estimated USD cost of this call, from the service's ServiceDefaults.cost_per_call at call time. Null means no per-call cost is configured for this service (free, or not yet priced) - not necessarily that the call was free.",
+        help_text="How many calls this row stands for: 1, except for a service whose calls are tallied and rolled up once a minute (services.core.call_tally), where it is every call that minute with the same outcome. Its response_ms is their mean.",
     )
 
     objects = ApiCallLogManager()
@@ -121,10 +98,9 @@ class ApiCallLog(abstract.DashboardModel):
 
         Args:
             days: Entries older than this many days are deleted. The default
-                is safe for rate limiting but NOT for cost reporting - the
-                public costs page reconstructs 12 months of API spend from
-                these rows, so the scheduled caller
-                (``tasks.prune_api_call_logs``) passes 400.
+                is safe for rate limiting but not for reporting on usage over
+                a year, so the scheduled caller (``tasks.prune_api_call_logs``)
+                passes 400.
 
         Returns:
             Number of rows deleted.

@@ -1,4 +1,4 @@
-"""A browser-viewable rendering of a file an in-app REData proxy serves, kept so the file is downloaded and decoded once."""
+"""A browser-viewable rendering of a file an in-app media proxy serves, kept so the file is downloaded and decoded once."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ def proxied_media_render_path(instance: ProxiedMediaRender, filename: str) -> st
 
 class ProxiedMediaRender(abstract.DashboardModel):
     """
-    One size of one proxied file (a CRIS attachment, a LoopNet photo), as an image a browser can show.
+    One size of one proxied file (an archive attachment, a listing photo), as an image a browser can show.
 
     Rows exist only for renderings that succeeded; a file that cannot be rendered is remembered in the cache instead,
     so a later fix to the renderer gets another try.

@@ -14,7 +14,7 @@ import { toast } from "../shared/dialogs";
 import { e2eeUrlsFromDataset } from "../shared/e2ee-urls";
 import { HttpError, NetworkError, fetchResponse, fetchText } from "../shared/fetch-json";
 import { FormAutosave, type FormAutosaveOptions } from "../shared/form-autosave";
-import { DEFAULT_HOTKEYS, normalizeCombo } from "../shared/hotkeys";
+import { allHotkeyDefaults, normalizeCombo } from "../shared/hotkeys";
 import { installNotificationPrefs } from "../shared/notification-prefs";
 
 declare const L: typeof import("leaflet");
@@ -616,7 +616,7 @@ function bindHotkeys(autosave: FormAutosave): void {
         if (form) autosave.schedule(form, 0);
     };
 
-    for (const [actionId, def] of Object.entries(DEFAULT_HOTKEYS)) {
+    for (const [actionId, def] of Object.entries(allHotkeyDefaults())) {
         const current = (): string => overrides[actionId] || (def.keys[0] ?? "");
         const row = document.createElement("div");
         row.className = "settings-hotkey-row";

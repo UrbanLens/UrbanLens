@@ -2,7 +2,7 @@
 Searching your own pins must not read label rows belonging to accounts you cannot see.
 
 The pins provider matches ``labels__name`` through ``_semijoin``, which builds
-``Exists(Pin._base_manager.filter(condition, pk=OuterRef("pk")))``. Measured on the capacity population (X20),
+``Exists(Pin._base_manager.filter(condition, pk=OuterRef("pk")))``. Measured on the capacity population,
 the resulting plan walked all 62,354 labels on the site to answer one account's search.
 
 The mechanism, read off ``EXPLAIN (ANALYZE, FORMAT JSON)`` rather than inferred: the labels semi-join runs a

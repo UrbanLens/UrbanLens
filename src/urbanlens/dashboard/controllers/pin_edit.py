@@ -123,8 +123,6 @@ def _overview_context(pin: Pin) -> dict:
 
     linked_locations = linked_wiki_locations(pin, pin.profile)
 
-    from urbanlens.dashboard.services.ai.link_extraction import ai_extract_button_context
-
     return {
         "pin": pin,
         "client_version": _pin_version(pin),
@@ -133,7 +131,6 @@ def _overview_context(pin: Pin) -> dict:
         "color_choices": COLOR_CHOICES,
         "security_level_choices": SecurityLevel.choices,
         "linked_wiki_locations": linked_locations,
-        **ai_extract_button_context(pin.profile.user, pin.profile, pin),
         "pin_security_values": [
             ("fences", "Fences", pin.fences),
             ("alarms", "Alarms", pin.alarms),

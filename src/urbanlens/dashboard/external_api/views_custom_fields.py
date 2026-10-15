@@ -3,8 +3,7 @@ External-facing custom-field endpoints: definitions and their values.
 
 Definitions (``custom-fields/``) span every entity type the model supports
 (pins, photos, people, maps) since they are one shared ``CustomField`` row;
-this domain only exposes values for photos so far - see the module's phase
-notes in ``docs/EXTERNAL_API.md``. Every lookup is scoped to
+this domain only exposes values for photos so far. Every lookup is scoped to
 ``profile=request.user.profile`` (or ``profile__user=request.user`` for the
 target object), so another user's field or photo is indistinguishable from a
 nonexistent one, per the package-wide anti-enumeration convention.

@@ -11,7 +11,7 @@ from urbanlens.UrbanLens.egress import EgressCategory
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
-    from urbanlens.dashboard.services.pins.external_data import PanelSource
+    from urbanlens.dashboard.plugins.base import PluginContext
 
 #: Ceiling on how many scans one payload carries, matching the ``[:20]`` the HTML panel applies.
 #: TNM can return well over a hundred products for a heavily-surveyed quadrangle, and every one of
@@ -124,19 +124,29 @@ class UsgsPlugin(UrbanLensPlugin):
     description: ClassVar[str] = "Shows USGS Historical Topographic Map Collection maps near a pin on the Private Pin page. USA only."
     author: ClassVar[str] = "UrbanLens"
 
-    def get_service_defaults(self) -> dict[str, ServiceDefaults]:
-        """Rate-limit defaults for the USGS APIs."""
-        return {
-            "usgs": ServiceDefaults(
-                display_name="USGS EarthExplorer / TNM",
-                category=EgressCategory.QUOTA,
-                calls_per_minute=10,
-                calls_per_day=500,
-                usa_only=True,
-                notes="M2M requires an applicationToken from EarthExplorer account settings. TNM is fully public.",
-            ),
-        }
+    def setup(self, plugin: PluginContext) -> None:
+        """USGS rate-limit defaults and the USGS topo-map pin-detail panel."""
+        from urbanlens.dashboard.plugins.points import DATA_SOURCE_CREDITS, DataSourceCredit
 
-    def get_panel_sources(self) -> list[PanelSource]:
-        """Contribute the USGS topo-map pin-detail panel."""
-        return [UsgsTopoPanelSource()]
+        plugin.add(
+            DATA_SOURCE_CREDITS,
+            DataSourceCredit(name="USGS Historical Topo Maps", category="archives", url="https://ngmdb.usgs.gov/topoview/", note="Historical topographic map sheets near a pin, from the USGS Historical Topographic Map Collection."),
+        )
+
+        from urbanlens.dashboard.plugins.points import PANEL_SOURCES, SERVICE_DEFAULTS
+
+        plugin.register_all(
+            SERVICE_DEFAULTS,
+            {
+                "usgs": ServiceDefaults(
+                    display_name="USGS EarthExplorer / TNM",
+                    category=EgressCategory.QUOTA,
+                    calls_per_minute=10,
+                    calls_per_day=500,
+                    usa_only=True,
+                    notes="M2M requires an applicationToken from EarthExplorer account settings. TNM is fully public.",
+                ),
+            },
+        )
+
+        plugin.extend(PANEL_SOURCES, [UsgsTopoPanelSource()])

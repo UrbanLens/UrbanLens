@@ -4,7 +4,7 @@ Mirror one wiki alias onto every opted-in pin at that location.
 A location has one pin per person who saved it, so this walks a list whose
 length is set by how popular the place is - not by anything the person adding
 the alias owns. It used to run inside the committing request, which made one
-person's edit cost everyone else's latency (N21 H25); it now runs on the bulk
+person's edit cost everyone else's latency; it now runs on the bulk
 queue, and this module is the body the task calls.
 
 Iterated rather than materialised, and each row written with ``get_or_create``

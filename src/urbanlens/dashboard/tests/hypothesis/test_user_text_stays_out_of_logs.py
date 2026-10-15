@@ -7,16 +7,12 @@ Pin names name undisclosed sites (``services.security.redact.redact_text``), and
 from __future__ import annotations
 
 import logging
-from types import SimpleNamespace
 from unittest import mock
 
 from django.db import DatabaseError
-from urbanlens_ai.schema import InferenceResponse, TextBlock, Usage
 
-from urbanlens.core.tests.ai_guard import real_ai_chokepoint
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage
-from urbanlens.dashboard.services.ai.anthropic import AnthropicGateway
 from urbanlens.dashboard.services.global_search.engine import GlobalSearchEngine
 from urbanlens.dashboard.services.global_search.providers import SearchProvider
 from urbanlens.dashboard.services.messaging import dm_location_detection
@@ -32,34 +28,6 @@ def _text(records: list[logging.LogRecord]) -> str:
     """Every captured record as it would be written, traceback included."""
     formatter = logging.Formatter("%(message)s")
     return "\n".join(formatter.format(record) for record in records)
-
-
-class AnAnswerlessReplyTests(SimpleTestCase):
-    """A reply with no ``<ANSWER>`` tag is logged, and so used to be the prompt and the reply."""
-
-    def setUp(self) -> None:
-        self.enterContext(real_ai_chokepoint("urbanlens.dashboard.services.ai.gateway.LLMGateway.send_prompt"))
-        self.enterContext(mock.patch.object(AnthropicGateway, "calculate_tokens", return_value=10))
-        self.enterContext(
-            mock.patch("urbanlens.dashboard.services.ai.scanner.scan", return_value=SimpleNamespace(risk_score=0.0))
-        )
-
-    def test_neither_the_prompt_nor_the_reply_is_logged(self) -> None:
-        gateway = AnthropicGateway()
-        gateway._inference_client = mock.Mock()  # noqa: SLF001 - the seam the gateway's own tests use
-        gateway._inference_client.send.return_value = InferenceResponse(  # noqa: SLF001
-            content=[TextBlock(text=f"I think it is {_ANSWER_TEXT}.")],
-            stop_reason="end_turn",
-            usage=Usage(output_tokens=5),
-        )
-
-        with self.assertLogs("urbanlens", level="DEBUG") as captured:
-            self.assertIsNone(gateway.send_prompt(f"Suggest labels for my pin {_PIN_NAME}"))
-
-        logged = _text(captured.records)
-        self.assertIn("ANSWER", logged, "the missing answer was not logged at all")
-        self.assertNotIn(_PIN_NAME, logged)
-        self.assertNotIn(_ANSWER_TEXT, logged)
 
 
 class _FailingProvider(SearchProvider):

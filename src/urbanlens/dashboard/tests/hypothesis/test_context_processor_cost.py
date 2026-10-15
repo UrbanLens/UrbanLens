@@ -29,12 +29,13 @@ from urbanlens.dashboard.models.subscriptions.model import (
     SubscriptionRole,
     UserSubscription,
     grant_subscription,
+    site_feature_choices,
     user_features,
     user_has_feature,
 )
 
 FLAGS = (
-    "{{ can_use_ai_features }}{{ show_places_layer }}{{ can_use_web_search }}{{ can_upload_videos }}"
+    "{{ show_places_layer }}{{ can_use_web_search }}{{ can_upload_videos }}"
     "{{ can_upload_documents }}{{ show_games_nav }}{{ has_beta_features }}"
 )
 
@@ -101,7 +102,7 @@ class TheFeatureSetTests(TestCase):
         admin = User.objects.get(pk=baker.make(User, is_superuser=True, is_active=True).pk)
 
         self.assertEqual(set(user_features(member)), {"places"})
-        self.assertEqual(set(user_features(admin)), set(SiteFeature.values))
+        self.assertEqual(set(user_features(admin)), {value for value, _ in site_feature_choices()})
         self.assertEqual({feature for feature in SiteFeature.values if user_has_feature(member, feature)}, {"places"})
 
 

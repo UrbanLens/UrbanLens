@@ -1,5 +1,5 @@
 """
-Public-pin eligibility engine and vote handling (UL-58).
+Public-pin eligibility engine and vote handling.
 A location becomes a public-pin candidate only when EVERY criterion in :class:`PublicPinConfig` holds; the community then votes, and a passed vote makes the location public - suggested to every account (opt-out)."""
 
 from __future__ import annotations
@@ -343,17 +343,14 @@ def sync_public_pin_suggestions() -> int:
     return created
 
 
-def public_vote_context(location: Location, profile: Profile | None, *, conceal: bool = False) -> dict | None:
+def public_vote_context(location: Location, profile: Profile | None) -> dict | None:
     """
     Build the template context for the public-vote block on a wiki page.
     Returns None when nothing should render (no candidate, suspended, rejected, or the viewer can't vote) - ineligibility is never explained in the UI.
 
     Args:
         location: The place being rendered.
-        profile: The viewing profile.
-        conceal: When True, render nothing."""
-    if conceal:
-        return None
+        profile: The viewing profile."""
     candidate = PublicPinCandidate.objects.filter(location=location).first()
     if candidate is None:
         return None

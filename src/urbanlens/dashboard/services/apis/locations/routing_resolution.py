@@ -1,20 +1,61 @@
-"""Resolves route-between-waypoints calls to REData or direct OSRM, per call."""
+"""Resolves route-between-waypoints calls to the first routing provider that can answer, per call."""
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 import logging
-from typing import Any
+from typing import Any, ClassVar
 
-from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError, redata_configured
-from urbanlens.dashboard.services.apis.locations.redata_routing_gateway import RedataRoutingGateway
-from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError
+from urbanlens.dashboard.services.core.gateway import ProviderUnavailableError
 
 logger = logging.getLogger(__name__)
 
 
+class RouteProvider(ABC):
+    """One source of driving routes between two points."""
+
+    key: ClassVar[str]
+
+    @abstractmethod
+    def available(self) -> bool:
+        """Whether this provider is configured to answer."""
+
+    @abstractmethod
+    def get_route(self, origin: tuple[float, float], destination: tuple[float, float]) -> dict[str, Any] | None:
+        """
+        Route between two points.
+
+        Args:
+            origin: ``(latitude, longitude)`` of the starting point.
+            destination: ``(latitude, longitude)`` of the destination.
+
+        Returns:
+            ``{"distance_meters", "duration_seconds"}``, or None when no route connects the points.
+
+        Raises:
+            ProviderUnavailableError: The provider could not answer, so the next may be tried.
+        """
+
+
+class OsrmRouteProvider(RouteProvider):
+    """Direct OSRM."""
+
+    key: ClassVar[str] = "osrm"
+
+    def available(self) -> bool:
+        """Always: OSRM needs no key."""
+        return True
+
+    def get_route(self, origin: tuple[float, float], destination: tuple[float, float]) -> dict[str, Any] | None:
+        """See :meth:`OSRMGateway.get_route_between`."""
+        from urbanlens.dashboard.services.apis.routing.osrm import OSRMGateway
+
+        return OSRMGateway().get_route_between(origin, destination)
+
+
 def get_route_between(origin: tuple[float, float], destination: tuple[float, float]) -> dict[str, Any] | None:
     """
-    Route between two points, trying REData then direct OSRM.
+    Route between two points, trying each available provider in priority order.
 
     Args:
         origin: ``(latitude, longitude)`` of the starting point.
@@ -22,15 +63,13 @@ def get_route_between(origin: tuple[float, float], destination: tuple[float, flo
 
     Returns:
         ``{"distance_meters", "duration_seconds"}``, or None when no route connects the points (or every provider failed)."""
-    if redata_configured():
+    from urbanlens.dashboard.plugins.points import ROUTE_PROVIDERS
+
+    for provider in ROUTE_PROVIDERS:
+        if not provider.available():
+            continue
         try:
-            return RedataRoutingGateway().get_route([origin, destination], capability="as_given", profile="driving")
-        except ImpossibleInputError:
-            # OSRM would refuse the same point; no route is the settled answer.
-            return None
-        except LocationContextUnavailableError as exc:
-            logger.warning("REData routing failed, falling back to direct OSRM: %s", exc)
-
-    from urbanlens.dashboard.services.apis.routing.osrm import OSRMGateway
-
-    return OSRMGateway().get_route_between(origin, destination)
+            return provider.get_route(origin, destination)
+        except ProviderUnavailableError as exc:
+            logger.warning("%s routing failed, trying the next provider: %s", provider.key, exc)
+    return None

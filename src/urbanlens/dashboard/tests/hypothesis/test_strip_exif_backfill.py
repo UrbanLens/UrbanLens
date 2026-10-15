@@ -181,7 +181,7 @@ class StripExifBackfillTests(TestCase):
 
 
 class OtherStoredImagesBackfillTests(TestCase):
-    """Comment images, custom icons and avatars stored before uploads of them were re-encoded (P119)."""
+    """Comment images, custom icons and avatars stored before uploads of them were re-encoded."""
 
     def setUp(self) -> None:
         self._media_root = tempfile.mkdtemp(prefix="ul_other_backfill_")

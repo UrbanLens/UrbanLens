@@ -2,11 +2,11 @@
 Calls counted in the shared cache instead of written to the ledger one row each, and rolled up into it every minute.
 
 For a service whose ``ServiceDefaults.ledger`` is :attr:`~urbanlens.dashboard.services.core.rate_limiter.CallLedger.TALLIED`.
-It is held to the same ``ApiRateLimit`` row, the same environment share (D26) and the same refusals as any other
+It is held to the same ``ApiRateLimit`` row, the same environment share and the same refusals as any other
 service, but the check is a windowed counter in the default cache (``services.core.counters``) rather than a
 ``SELECT ... FOR UPDATE`` on that row and a ``COUNT`` of the ledger, and each call's outcome is added to a per-service
 tally there rather than inserted as a row. :func:`roll_up` (beat, every minute) turns the tally into ``ApiCallLog``
-rows that each stand for ``calls`` calls, so the API-limits page, the costs page and provider health keep reading
+rows that each stand for ``calls`` calls, so the API-limits page and provider health keep reading
 one ledger. The row's limits reach a call the same way: published to the cache by the roll-up and on every save of
 the row, so a call reads no row either. Nothing a call does, from admission to record, waits on the database.
 
@@ -46,7 +46,6 @@ from urbanlens.dashboard.services.core.counters import CounterUnavailableError, 
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
-    from decimal import Decimal
 
 logger = logging.getLogger(__name__)
 
@@ -398,18 +397,6 @@ def _flags(outcome: Tallied) -> dict[str, bool]:
     }
 
 
-def _cost(service: str, outcome: Tallied, success: bool, calls: int) -> Decimal | None:
-    """What *calls* calls cost, as the per-call ledger would have estimated them one at a time."""
-    from urbanlens.dashboard.services.core.rate_limiter import all_service_defaults
-
-    if outcome is not Tallied.MADE or not success:
-        return None
-    defaults = all_service_defaults().get(service)
-    if defaults is None or defaults.cost_per_call is None:
-        return None
-    return defaults.cost_per_call * calls
-
-
 @dataclass(slots=True)
 class _Group:
     calls: int = 0
@@ -450,7 +437,6 @@ def _rows(service: str, fields: Mapping[str, int]) -> list[tuple[Any, datetime]]
             success=success,
             status_code=status_code,
             response_ms=None if group.total_ms is None else round(group.total_ms / group.calls),
-            cost_estimate=_cost(service, outcome, success, group.calls),
             calls=group.calls,
             **_flags(outcome),
         )

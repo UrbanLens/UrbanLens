@@ -12,11 +12,21 @@ from typing import TYPE_CHECKING, Any
 
 from django.templatetags.static import static
 from django.urls import reverse
-from jinja2 import Environment
+from jinja2 import Environment, pass_context
 import jinjax
 
+from urbanlens.dashboard.templatetags.plugin_slots import render_slot
+
 if TYPE_CHECKING:
+    from django.utils.safestring import SafeString
     from jinja2 import BaseLoader
+    from jinja2.runtime import Context
+
+
+@pass_context
+def plugin_slot(context: Context, name: str) -> SafeString:
+    """Render every template plugins contribute to slot ``name``, as ``{% plugin_slot %}`` does on the Django engine."""
+    return render_slot(name, dict(context), context.get("request"))
 
 
 def environment(**options: Any) -> Environment:
@@ -34,7 +44,7 @@ def environment(**options: Any) -> Environment:
     # Django's backend defaults this on; forcing it keeps escaping independent of who builds the environment.
     options["autoescape"] = True
     env = Environment(**options)  # noqa: S701 - autoescape forced on the line above
-    env.globals.update(static=static, url=reverse)
+    env.globals.update(static=static, url=reverse, plugin_slot=plugin_slot)
     env.add_extension(jinjax.JinjaX)
 
     catalog = jinjax.Catalog(jinja_env=env)

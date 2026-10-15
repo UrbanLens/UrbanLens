@@ -14,7 +14,8 @@ _FALSE_VALUES = frozenset({"0", "false", "f", "no", "n", "off", ""})
 
 
 def env_bool(name: str, default: bool) -> bool:
-    """Read a boolean env var; use the default only when it is unset.
+    """
+    Read a boolean env var; use the default only when it is unset.
 
     A value that is not a recognised spelling refuses to start rather than silently becoming either answer: ``SESSION_COOKIE_SECURE=ture``
     read as False would ship insecure cookies, and read as the default would hide that the operator's setting was ignored.
@@ -46,7 +47,8 @@ PRODUCTION_ENVIRONMENT_NAMES = frozenset({"production"})
 
 
 def is_production_environment(name: str | None) -> bool:
-    """Return True only for a recognised production environment name.
+    """
+    Return True only for a recognised production environment name.
 
     Args:
         name: The environment name to classify, typically ``UL_ENVIRONMENT``.
@@ -60,7 +62,8 @@ def is_production_environment(name: str | None) -> bool:
 
 
 def running_under_pytest(argv: list[str] | None = None) -> bool:
-    """Whether this process is a pytest run, which is never a deployment whatever ``UL_ENVIRONMENT`` says.
+    """
+    Whether this process is a pytest run, which is never a deployment whatever ``UL_ENVIRONMENT`` says.
 
     Args:
         argv: Command line to classify; defaults to this process's own.
@@ -72,7 +75,8 @@ def running_under_pytest(argv: list[str] | None = None) -> bool:
 
 
 def deployment_settings_required(environment: str, argv: list[str] | None = None) -> bool:
-    """Whether a setting a deployment must provide has to be present rather than defaulted.
+    """
+    Whether a setting a deployment must provide has to be present rather than defaulted.
 
     Args:
         environment: The resolved ``UL_ENVIRONMENT``.
@@ -85,7 +89,8 @@ def deployment_settings_required(environment: str, argv: list[str] | None = None
 
 
 def require_deployment_setting(name: str, value: str | None, *, environment: str, fallback: str, reason: str, argv: list[str] | None = None) -> str:
-    """Return ``value``, or ``fallback`` where a missing deployment setting is harmless, or refuse to start.
+    """
+    Return ``value``, or ``fallback`` where a missing deployment setting is harmless, or refuse to start.
 
     Django system checks do not run under daphne, gunicorn or celery, so the refusal happens at import.
 
@@ -115,7 +120,8 @@ _LOOPBACK_HOSTS = frozenset({"localhost", "::1"})
 
 
 def is_loopback_host(host: str | None) -> bool:
-    """Whether ``host`` only ever names the machine it is read on.
+    """
+    Whether ``host`` only ever names the machine it is read on.
 
     Args:
         host: A hostname or IP literal, unbracketed.
@@ -128,7 +134,8 @@ def is_loopback_host(host: str | None) -> bool:
 
 
 def persistent_connection_seconds(default: int = 0, argv: list[str] | None = None) -> int:
-    """Read ``UL_DB_CONN_MAX_AGE``, refusing to keep connections a server cannot hand back.
+    """
+    Read ``UL_DB_CONN_MAX_AGE``, refusing to keep connections a server cannot hand back.
 
     A connection kept past the response is only reclaimed by the thread that opened it asking for
     one again. ``runserver`` gives each HTTP connection its own thread and drops it afterwards, so
@@ -156,12 +163,13 @@ def persistent_connection_seconds(default: int = 0, argv: list[str] | None = Non
 
 #: Executions of one statement on one connection before psycopg prepares it server-side. Django's
 #: own default is ``None`` - prepared statements off - so that a transaction-pooling proxy in front
-#: of Postgres keeps working. There is none here. See X27.
+#: of Postgres keeps working. There is none here.
 DEFAULT_PREPARE_THRESHOLD = 5
 
 
 def prepare_threshold(default: int | None = DEFAULT_PREPARE_THRESHOLD) -> int | None:
-    """Read ``UL_DB_PREPARE_THRESHOLD``, where blank or ``none`` means "never prepare".
+    """
+    Read ``UL_DB_PREPARE_THRESHOLD``, where blank or ``none`` means "never prepare".
 
     Args:
         default: Value to use when the variable is unset or unreadable.
@@ -189,7 +197,7 @@ def isolated_test_database_name() -> str | None:
     """
     Read ``UL_TEST_DB_NAME``, adding the ``test_`` prefix when it lacks one.
 
-    Chiron's disk cleanup drops only stale ``test_*`` databases, so a run under any other name would
+    Automated disk cleanup drops only stale ``test_*`` databases, so a run under any other name would
     leave its database behind for good.
     """
     name = (os.getenv("UL_TEST_DB_NAME") or "").strip()

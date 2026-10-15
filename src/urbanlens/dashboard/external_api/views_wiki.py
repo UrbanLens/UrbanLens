@@ -18,7 +18,6 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from django.contrib.gis.geos import GEOSException
 from django.db import IntegrityError, transaction
-from django.db.models import F
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from drf_spectacular.types import OpenApiTypes
@@ -91,7 +90,7 @@ from urbanlens.dashboard.services.wiki.articles import (
     revision_history_page,
     save_article_checked,
 )
-from urbanlens.dashboard.services.wiki.concealment import conceal_article, concealment_active, redact_edit_changes, visible_rows, writable_wiki
+from urbanlens.dashboard.services.wiki.viewer_projection import project_article, viewer_projection, visible_rows, writable_wiki
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 from urbanlens.dashboard.services.wiki.wiki_aliases import WikiAliasExistsError, WikiAliasNameError, create_wiki_alias, promote_wiki_alias_to_name
 from urbanlens.dashboard.services.wiki.wiki_detail import build_wiki_detail, masked_editor_name
@@ -228,7 +227,7 @@ class WikiDetailApiView(WikiApiView):
         # through unchanged and stringifies for the audit record.
 
         # The service mutates and saves what it is handed, and `resolve` may
-        # have handed back a concealed projection - see concealment.writable_wiki.
+        # have handed back a viewer's projection - see viewer_projection.writable_wiki.
         target = writable_wiki(wiki)
         try:
             with transaction.atomic():
@@ -252,15 +251,14 @@ class WikiHistoryView(PaginatedListMixin, WikiApiView):
     def get(self, request: Request, location_slug: str) -> Response:
         """Return one page of the wiki's edit history."""
         _location, wiki, profile = self.resolve(request, location_slug)
-        # Both halves of what the HTML history page does: the rows this viewer may see, and then the "from" side
-        # stripped - it carries the pre-edit value, which for the viewer's own edit is whatever a stranger
-        # wrote.
-        conceal = concealment_active(wiki, profile)
-        edits = visible_rows(wiki.edits.select_related("editor__user"), wiki, profile).order_by("-created", "-pk")
+        # Both halves of what the HTML history page does: the rows this viewer is shown, and each diff as they are
+        # shown it.
+        projection = viewer_projection(wiki, profile)
+        edits = projection.rows(wiki.edits.select_related("editor__user")).order_by("-created", "-pk")
         rows = [
             {
                 "id": edit.pk,
-                "changes": redact_edit_changes(edit.changes) if conceal else edit.changes,
+                "changes": projection.edit_changes(edit.changes),
                 "reverted": edit.reverted,
                 "editor": masked_editor_name(edit.editor, profile),
                 "created": edit.created.isoformat(),
@@ -284,7 +282,7 @@ class WikiRevertView(WikiApiView):
         location, wiki, profile = self.resolve(request, location_slug)
         # Scoped to this wiki *and* to this viewer: a bare id lookup would make WikiEdit ids enumerable across
         # every wiki in the database, and a wiki-only one would confirm the existence of - and let this account
-        # revert - an edit concealment decided it must not see.
+        # revert - an edit this account is not shown.
         target_edit = get_object_or_404(visible_rows(WikiEdit.objects.filter(wiki=wiki), wiki, profile), id=edit_id)
 
         if target_edit.reverted:
@@ -331,9 +329,7 @@ class WikiStatVoteApiView(WikiApiView):
 
     def _payload(self, wiki: Any, field: str, profile: Profile) -> dict[str, Any]:
         """Build the composite/own-vote response body for one stat field."""
-        from urbanlens.dashboard.services.wiki.concealment import concealment_active
-
-        composite = WikiStatVote.objects.composite(wiki, field, viewer_conceals=concealment_active(wiki, profile), viewer=profile)
+        composite = viewer_projection(wiki, profile).stat_composite(field)
         return {
             "rounded": composite.rounded,
             "exact": composite.exact,
@@ -451,7 +447,7 @@ class WikiAliasUseView(WikiApiView):
         # An alias *is* content, not just a handle.
         alias = get_object_or_404(visible_rows(WikiAlias.objects.filter(wiki=wiki), wiki, profile), id=alias_id)
 
-        # Renaming saves the wiki; `wiki` may be a concealed projection.
+        # Renaming saves the wiki; `wiki` may be a viewer's projection.
         target = writable_wiki(wiki)
         try:
             with transaction.atomic():
@@ -540,7 +536,7 @@ class WikiBoundaryApiView(WikiApiView):
         Build the boundary payload, mirroring ``controllers.boundary._wiki_boundary_payload``.
 
         Args:
-            wiki: The wiki whose boundaries to resolve - may be a concealed projection.
+            wiki: The wiki whose boundaries to resolve - may be a viewer's projection.
             pending: Whether provider generation is still running.
             refreshing: Whether a stale generated boundary is being refreshed.
             just_drawn: ``(boundary_type_value, polygon)`` for a boundary this same request just saved, or
@@ -813,7 +809,7 @@ class WikiGalleryView(PaginatedListMixin, WikiApiView):
         _location, wiki, profile = self.resolve(request, location_slug)
         # visible_to applies the uploader's photo-visibility setting and the viewer's own photo filter - a wiki
         # being visible does not make every photo on it visible.
-        images = visible_rows(Image.objects.filter(wiki=wiki), wiki, profile).visible_to(profile).exclude(image="").order_by(F("redata_confidence").desc(nulls_last=True), "-created", "-pk")
+        images = visible_rows(Image.objects.filter(wiki=wiki), wiki, profile).visible_to(profile).exclude(image="").most_relevant_first()
         # The queryset is paginated, then rows are built for the page only.
         return self.paginated_response(images, GalleryImageSerializer, request, row_builder=_gallery_row)
 
@@ -830,8 +826,8 @@ class WikiArticleView(WikiApiView):
     def get(self, request: Request, location_slug: str) -> Response:
         """Return the wiki's article, body included."""
         _location, wiki, profile = self.resolve(request, location_slug)
-        # Concealed the same way the HTML tab is: the newest revision this viewer may see, or nothing.
-        article = conceal_article(get_article(wiki=wiki), wiki, profile)
+        # Projected the same way the HTML tab is: the newest revision this viewer is shown, or nothing.
+        article = project_article(get_article(wiki=wiki), wiki, profile)
         if article is None:
             raise Http404
         return Response(

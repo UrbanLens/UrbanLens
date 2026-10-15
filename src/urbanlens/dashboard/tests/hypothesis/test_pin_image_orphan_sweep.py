@@ -1,4 +1,4 @@
-"""Files under ``pin_images/`` that no Image row names are found, reported, and removed only when asked (P14)."""
+"""Files under ``pin_images/`` that no Image row names are found, reported, and removed only when asked."""
 
 from __future__ import annotations
 

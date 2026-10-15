@@ -7,7 +7,7 @@ the existence oracle ``services.comments.comments`` is built to deny.
 
 Agreeing used to mean applying the ``@loc`` gate in Python, which meant pulling
 the full text of every comment carrying a mention on every pin and wiki page
-load (N21 H18). Anyone who could comment set what every later viewer of that
+load. Anyone who could comment set what every later viewer of that
 page paid, so the badge was given a ceiling and rendered a floor with a ``+``
 above it - safe in the direction that matters, but an approximation.
 

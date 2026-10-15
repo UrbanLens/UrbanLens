@@ -91,7 +91,6 @@ def _prepare_profile(user: User, *, bio: str, expires_at: Any) -> Profile:
     profile = Profile.objects.get(user=user)
     profile.bio = bio
     profile.external_apis_enabled = False
-    profile.ai_enabled = False
     profile.profile_setup_complete = True
     profile.welcome_onboarding_complete = True
     profile.tos_accepted_at = timezone.now()
@@ -235,22 +234,22 @@ def ensure_location_pool() -> tuple[list[Location], str]:
 
     Returns:
         ``(locations, note)`` - the Locations to pin (possibly empty) and a human-readable account of where they came from or why there are none."""
-    from urbanlens.dashboard.services.demo.locations import import_location_entries, merge_into_manifest, redata_demo_locations
+    from urbanlens.dashboard.services.demo.locations import demo_location_entries, import_location_entries, merge_into_manifest
 
     existing = pool_locations()
     if existing:
         return existing, f"{len(existing)} location(s) already in the manifest"
 
-    entries = redata_demo_locations()
+    entries, catalog = demo_location_entries()
     if not entries:
-        return [], "REData's public-locations catalog returned nothing (unconfigured, unreachable, or not deployed there yet) - seeded with no catalog pins"
+        return [], "no public-locations catalog returned anything (none configured, unreachable, or not deployed yet) - seeded with no catalog pins"
 
     import_location_entries(entries)
     # Best-effort: writes only when UL_DEMO_LOCATIONS_FILE names a path, so the
     # rows are resolved directly below rather than read back through it.
     merge_into_manifest(entries)
     locations = _locations_for_entries(entries)
-    return locations, f"imported {len(locations)} of {len(entries)} location(s) from REData's public-locations catalog"
+    return locations, f"imported {len(locations)} of {len(entries)} location(s) from {catalog}'s public-locations catalog"
 
 
 def _locations_for_entries(entries: list[dict[str, Any]]) -> list[Location]:
@@ -319,7 +318,7 @@ def seed_landmark_pin(profile: Profile, landmark: dict[str, str] | None = None) 
 def seed_dev_environment(*, username: str = "demo", password: str, ttl_hours: int = 24 * 365) -> dict[str, Any]:
     """
     Seed one ephemeral dev environment with an account somebody can log into.
-    A freshly created environment (the `infrastructure` repo's ``bin/dev_env.py``) has an empty database, so every page it serves is an empty state and nothing about the product can be seen without first building an account and content by hand.
+    A freshly created environment (a local dev-environment helper) has an empty database, so every page it serves is an empty state and nothing about the product can be seen without first building an account and content by hand.
 
     Args:
         username: Login account name.

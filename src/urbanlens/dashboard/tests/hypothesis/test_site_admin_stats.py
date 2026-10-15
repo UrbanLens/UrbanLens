@@ -27,8 +27,6 @@ from urbanlens.dashboard.controllers.site_admin import (
     _app_uptime,
     _monthly_series,
 )
-from urbanlens.dashboard.models.site_settings import SiteSettings
-from urbanlens.dashboard.models.site_settings.meta import EnvironmentOverrideChoice
 from urbanlens.dashboard.services.admin.media_usage import directory_size_mb
 from urbanlens.dashboard.services.admin.site_admin import add_user_to_site_admin_group
 
@@ -228,7 +226,7 @@ class SiteAdminStatsViewContextTests(TestCase):
         self.assertIsInstance(ctx["total_users"], int)
 
     def test_there_is_no_top_locations_table(self) -> None:
-        """Jess, 2026-09-30: it has always been empty, and is removed rather than filled."""
+        """It has always been empty, and is removed rather than filled."""
         response = self.client.get(reverse("site_admin_stats_kpi"))
         self.assertNotIn("top_locations", response.context)
         self.assertNotContains(response, "Most Pinned Locations")
@@ -369,86 +367,3 @@ class SiteAdminHomeViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["unhealthy_services"], 1)
         self.assertEqual(response.context["total_services"], 2)
-
-
-class SiteAdminPullLatestCodeViewTests(TestCase):
-    """Code pulling is available only for site admins in development."""
-
-    def setUp(self) -> None:
-        super().setUp()
-        self.user: User = baker.make(User)
-        add_user_to_site_admin_group(self.user)
-        self.client = Client()
-        self.client.force_login(self.user)
-
-    def test_non_development_environment_returns_graceful_json_error(self) -> None:
-        site_settings = SiteSettings.get_current()
-        site_settings.environment_override = EnvironmentOverrideChoice.PRODUCTION
-        site_settings.save(update_fields=["environment_override"])
-
-        response = self.client.post(reverse("site_admin_pull_latest_code"))
-
-        self.assertEqual(response.status_code, 403)
-        self.assertFalse(response.json()["ok"])
-
-    def test_development_environment_pulls_and_reports_success(self) -> None:
-        site_settings = SiteSettings.get_current()
-        site_settings.environment_override = EnvironmentOverrideChoice.DEVELOPMENT
-        site_settings.save(update_fields=["environment_override"])
-
-        with (
-            mock.patch("urbanlens.core.version.get_current_git_commit", side_effect=["abc", "def"]),
-            mock.patch("urbanlens.core.version.pull_latest_git_code", return_value=(True, "Updated")) as pull,
-            mock.patch("urbanlens.core.version.apply_pending_migrations", return_value=(True, "Migrated")) as migrate,
-            mock.patch(
-                "urbanlens.core.version.trigger_development_app_reload",
-                return_value=(True, "Reloading"),
-            ) as reload_app,
-        ):
-            response = self.client.post(reverse("site_admin_pull_latest_code"))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.json()["ok"])
-        self.assertTrue(response.json()["changed"])
-        self.assertEqual(response.json()["migration_details"], "Migrated")
-        self.assertEqual(response.json()["reload_details"], "Reloading")
-        pull.assert_called_once_with()
-        migrate.assert_called_once_with()
-        reload_app.assert_called_once_with()
-
-    def test_development_environment_does_not_migrate_or_reload_without_code_change(self) -> None:
-        site_settings = SiteSettings.get_current()
-        site_settings.environment_override = EnvironmentOverrideChoice.DEVELOPMENT
-        site_settings.save(update_fields=["environment_override"])
-
-        with (
-            mock.patch("urbanlens.core.version.get_current_git_commit", side_effect=["abc", "abc"]),
-            mock.patch("urbanlens.core.version.pull_latest_git_code", return_value=(True, "Already up to date")),
-            mock.patch("urbanlens.core.version.apply_pending_migrations") as migrate,
-            mock.patch("urbanlens.core.version.trigger_development_app_reload") as reload_app,
-        ):
-            response = self.client.post(reverse("site_admin_pull_latest_code"))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.json()["ok"])
-        self.assertFalse(response.json()["changed"])
-        migrate.assert_not_called()
-        reload_app.assert_not_called()
-
-    def test_development_environment_reports_migration_failure(self) -> None:
-        site_settings = SiteSettings.get_current()
-        site_settings.environment_override = EnvironmentOverrideChoice.DEVELOPMENT
-        site_settings.save(update_fields=["environment_override"])
-
-        with (
-            mock.patch("urbanlens.core.version.get_current_git_commit", side_effect=["abc", "def"]),
-            mock.patch("urbanlens.core.version.pull_latest_git_code", return_value=(True, "Updated")),
-            mock.patch("urbanlens.core.version.apply_pending_migrations", return_value=(False, "Migration failed")),
-            mock.patch("urbanlens.core.version.trigger_development_app_reload") as reload_app,
-        ):
-            response = self.client.post(reverse("site_admin_pull_latest_code"))
-
-        self.assertEqual(response.status_code, 500)
-        self.assertFalse(response.json()["ok"])
-        self.assertEqual(response.json()["message"], "Migration failed")
-        reload_app.assert_not_called()

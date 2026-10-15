@@ -8,12 +8,13 @@ from unittest.mock import patch
 
 from django.test import SimpleTestCase, override_settings
 
+from urbanlens.dashboard.plugins.points import DATABASE_ROLES, LOCKED_DOWN_PROCESS_ROLES
+from urbanlens.dashboard.services.core.database_roles import DatabaseRole
 from urbanlens.dashboard.services.sandbox import (
     ProcessRole,
     Queue,
     UnsandboxedParseError,
     UntrustedParsePolicy,
-    ai_queue,
     allow_untrusted_parse,
     check_untrusted_parse,
     current_policy,
@@ -30,7 +31,7 @@ EXPECTED_SANDBOX_TASKS_BY_CONSTANT = {
         "generate_image_thumbnails",
         "generate_image_marker_thumbnails",
         # Here, not on the default queue with the keywording task that consumes it: that task holds
-        # REData/OAuth/DB credentials and has full egress, so the decode must not happen in it.
+        # provider/OAuth/DB credentials and has full egress, so the decode must not happen in it.
         "generate_image_analysis_thumbnails",
         "render_proxied_media",
         "render_remote_image_copy",
@@ -146,19 +147,21 @@ class UntrustedParseGuardTests(SimpleTestCase):
         with self.assertRaises(UnsandboxedParseError):
             check_untrusted_parse("image.decode")
 
+    @override_settings(UL_PROCESS_ROLE="a-tier-a-plugin-deploys")
+    def test_a_role_a_plugin_names_is_recognised(self) -> None:
+        with LOCKED_DOWN_PROCESS_ROLES.overridden(["a-tier-a-plugin-deploys"]):
+            self.assertEqual(current_role(), "a-tier-a-plugin-deploys")
+            self.assertIs(current_policy(), UntrustedParsePolicy.DENY)
+
+    @override_settings(UL_PROCESS_ROLE="another-tier-a-plugin-deploys")
+    def test_a_role_a_plugin_gives_a_database_login_is_recognised(self) -> None:
+        with DATABASE_ROLES.overridden([DatabaseRole("another-tier-a-plugin-deploys", 1, 60)]):
+            self.assertEqual(current_role(), "another-tier-a-plugin-deploys")
+
     @override_settings(UL_UNTRUSTED_PARSE_POLICY="nonsense")
     def test_unknown_policy_falls_back_to_warn(self) -> None:
         self.assertIs(current_policy(), UntrustedParsePolicy.WARN)
         with self.assertLogs("urbanlens.dashboard.services.sandbox.guard", level="WARNING"):
-            check_untrusted_parse("image.decode")
-
-    @override_settings(UL_PROCESS_ROLE="ai", UL_UNTRUSTED_PARSE_POLICY="allow")
-    def test_ai_role_is_denied_even_when_the_env_var_says_allow(self) -> None:
-        # ai-worker's own compose env sets UL_UNTRUSTED_PARSE_POLICY: deny
-        # literally, but the tool loop dispatches on model output, so this is
-        # a second rail that doesn't depend on that var being set correctly.
-        self.assertIs(current_policy(), UntrustedParsePolicy.DENY)
-        with self.assertRaises(UnsandboxedParseError):
             check_untrusted_parse("image.decode")
 
 
@@ -255,15 +258,6 @@ class DecoratedParserTests(SimpleTestCase):
             with self.subTest(parser=name), self.assertRaises(UnsandboxedParseError):
                 call()
 
-    def test_document_text_extraction_is_guarded(self) -> None:
-        # The decorator sits on extract_text, not on extract_pins_from_document
-        # around it: the parse can move to the sandbox, the AI call it feeds
-        # cannot (no keys, no route out).
-        from urbanlens.dashboard.services.ai.document_import import extract_text
-
-        with self.assertRaises(UnsandboxedParseError):
-            extract_text("notes.docx", b"")
-
     def test_an_exemption_is_what_lets_the_exif_backfill_command_run(self) -> None:
         from urbanlens.dashboard.services.media.images import downscale_stored_image
 
@@ -346,34 +340,3 @@ class SandboxQueueRoutingTests(SimpleTestCase):
         from urbanlens.dashboard import tasks
 
         self.assertEqual(tasks.SANDBOX_QUEUE, Queue.DEFAULT)
-
-
-class AiQueueRoutingTests(SimpleTestCase):
-    """
-    ``ai_queue()`` always resolves to :attr:`Queue.AI` - no DEFAULT fallback.
-
-    Unlike ``sandbox_queue()``, whether the assistant is reachable at all is decided earlier by
-    ``assistant_available()`` (which checks ``UL_AI_WORKER_ENABLED``); a task should never be enqueued in the
-    first place if nothing drains this queue, so the resolver itself has nothing to degrade."""
-
-    @override_settings(UL_AI_WORKER_ENABLED=True)
-    def test_resolves_to_ai_when_a_worker_is_deployed(self) -> None:
-        self.assertEqual(ai_queue(), Queue.AI)
-
-    @override_settings(UL_AI_WORKER_ENABLED=False)
-    def test_still_resolves_to_ai_without_a_worker_deployed(self) -> None:
-        # No fallback to Queue.DEFAULT - the regular worker holds
-        # REData/OAuth credentials the tool loop must never run alongside.
-        self.assertEqual(ai_queue(), Queue.AI)
-
-    def test_declared_queue_reaches_apply_async(self) -> None:
-        from celery import Celery, shared_task
-
-        @shared_task(name="urbanlens.tests.ai_queue_probe", queue=Queue.AI)
-        def probe() -> None:
-            """A task declaring the ai queue the same way run_assistant_turn_task does."""
-
-        with patch.object(Celery, "send_task") as send_task:
-            probe.apply_async()
-
-        self.assertEqual(send_task.call_args.kwargs.get("queue"), Queue.AI)

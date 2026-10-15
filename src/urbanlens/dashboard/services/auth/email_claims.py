@@ -1,5 +1,5 @@
 """
-Signing up with, or changing to, an email address without revealing whether another account holds it (P147).
+Signing up with, or changing to, an email address without revealing whether another account holds it.
 
 Whatever the address, the person submitting it sees the same result. What differs is the email that goes to the
 address: a new one gets a link to confirm it, one that already has an account gets a notice instead, so only

@@ -1,7 +1,7 @@
 """
 The Flickr picker can hold a worker for seven and a half minutes.
 
-N21 H36. The "visits" mode issues one Flickr search per visit date, because
+The "visits" mode issues one Flickr search per visit date, because
 Flickr's `min_taken_date`/`max_taken_date` take a single range rather than a set
 of days. `MAX_VISIT_DATES` is 15 and the per-call `_REQUEST_TIMEOUT` is 30
 seconds, so the *inner* timeouts bound each call and nothing bounds their sum:

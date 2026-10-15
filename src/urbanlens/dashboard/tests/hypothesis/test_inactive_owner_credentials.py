@@ -12,7 +12,6 @@ from __future__ import annotations
 import base64
 from datetime import timedelta
 import hashlib
-from unittest import mock
 
 from asgiref.sync import async_to_sync
 from channels.testing import WebsocketCommunicator
@@ -35,8 +34,6 @@ from urbanlens.core.tests.testcase import TestCase, TransactionTestCase
 from urbanlens.dashboard.consumers import UserNotificationConsumer, _credential_is_still_valid
 from urbanlens.dashboard.controllers.media_auth import CredentialOrSessionMediaMixin
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
-from urbanlens.dashboard.models.billing import RoleSubscription
-from urbanlens.dashboard.models.subscriptions import SubscriptionRole
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.websocket_auth import ApiKeyAuthMiddleware
 
@@ -267,33 +264,3 @@ class SocketTests(TransactionTestCase):
 
         self.assertFalse(_credential_is_still_valid(self.access))
         self.assertFalse(_credential_is_still_valid(self.api_key))
-
-
-class FixedPricePledgeTests(TestCase):
-    def setUp(self) -> None:
-        super().setUp()
-        baker.make(User)
-        self.user = baker.make(User)
-        self.client.force_login(self.user)
-
-    def _pledge(self, role: SubscriptionRole):
-        subscription = baker.make(
-            RoleSubscription, user=self.user, role=role, pledged_amount_cents=role.monthly_price_cents
-        )
-        with mock.patch("urbanlens.dashboard.controllers.billing.stripe_client.update_pledge") as update:
-            response = self.client.post(
-                reverse("settings.billing.pledge", args=[subscription.pk]), {"amount_dollars": "0.50"}
-            )
-        return response, update
-
-    def test_a_fixed_price_subscription_cannot_be_repriced(self) -> None:
-        response, update = self._pledge(baker.make(SubscriptionRole, pay_what_you_want=False, monthly_price_cents=2000))
-
-        self.assertEqual(response.status_code, 400)
-        update.assert_not_called()
-
-    def test_a_pay_what_you_want_pledge_still_changes(self) -> None:
-        response, update = self._pledge(baker.make(SubscriptionRole, pay_what_you_want=True, monthly_price_cents=500))
-
-        self.assertEqual(response.status_code, 200)
-        update.assert_called_once()

@@ -2,7 +2,7 @@
 The Organize page's label rows, a page at a time.
 
 Pages are keyed on the last row's sort key rather than an offset, so a label created or deleted between two
-page loads - REData's sync adds global tags in the background - neither repeats a row nor skips one.
+page loads - a plugin's sync adds global tags in the background - neither repeats a row nor skips one.
 """
 
 from __future__ import annotations

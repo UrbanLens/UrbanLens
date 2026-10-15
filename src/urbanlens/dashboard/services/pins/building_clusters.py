@@ -1,7 +1,7 @@
 """
 One marker per physical building, from a parcel's building records.
 
-REData reports buildings it could not reconcile as separate records - an ``overlap_refs`` pair, two points a
+A source may report buildings it could not reconcile as separate records - an ``overlap_refs`` pair, two points a
 few metres apart - and the Overpass fallback reconciles nothing. A marker per record would put two pins on
 one structure, so records that describe the same building on the ground are grouped here, and every consumer
 (auto-nest, the restructure dialog, the "Buildings on this Property" panel, the wiki mirror) places and
@@ -148,13 +148,13 @@ class BuildingCluster:
 
     @property
     def refs(self) -> set[str]:
-        """Every member's REData ``ref``."""
+        """Every member's ``ref``."""
         return {ref for member in self.members if (ref := str(member.get("ref") or "").strip())}
 
     @property
     def keys(self) -> set[str]:
-        """Every member's place key: its REData ``stable_ref``, else its ``ref``."""
-        from urbanlens.dashboard.services.places.overture_refs import building_key
+        """Every member's place key: its ``stable_ref``, else its ``ref``."""
+        from urbanlens.dashboard.services.places.building_records import building_key
 
         return {key for member in self.members if (key := building_key(member))}
 
@@ -230,7 +230,7 @@ def _same_building(building: dict[str, Any], footprint: GEOSGeometry | None, poi
     if cluster.distance_to(*point) < site_scope.BUILDING_MATCH_METERS + _ROUNDING_SLACK_METERS:
         return True
 
-    # A point left inside a sibling's footprint is not grouped: REData merges that pair itself unless both
+    # A point left inside a sibling's footprint is not grouped: a source that reconciles records merges that pair itself unless both
     # come from one source, which it treats as two buildings.
     representative_footprint = cluster.footprint
     if representative_footprint is None or footprint is None:
@@ -260,8 +260,8 @@ def cluster_buildings(buildings: Sequence[dict[str, Any]], boundary: GEOSGeometr
     """
     Group building records into one cluster per physical building, parents before their children.
 
-    Records are only ever grouped with siblings - REData's ``parent_ref`` nesting is a verified "these are
-    different buildings", so a wing never merges into the block it is part of. Siblings join when REData
+    Records are only ever grouped with siblings - a record's ``parent_ref`` nesting is a verified "these are
+    different buildings", so a wing never merges into the block it is part of. Siblings join when a source
     reports them as overlapping, when their footprints mostly coincide, or when their markers would stand
     within ``BUILDING_MATCH_METERS`` of each other.
 

@@ -7,14 +7,14 @@ import { fetchResponse, fetchText, sendForText, sendJson } from "../shared/fetch
 import { toast, confirmAction, htmxProcess } from "../shared/dialogs";
 import type { CustomLayerToggle } from "../shared/map-layers";
 import { createMapImageOverlays, wireManageOverlaysDialog, type MapOverlayEntry } from "../shared/map-image-overlays";
-import { createMapLayers, MAP_MAX_ZOOM, MAP_MIN_ZOOM, registerRedataLayers, setAttribution, tileLayer } from "../shared/map-layers";
+import { createMapLayers, MAP_MAX_ZOOM, MAP_MIN_ZOOM, registerCatalogueLayers, setAttribution, tileLayer } from "../shared/map-layers";
 import { bindMapContextMenu, showMapContextMenu, type ContextMenuItem } from "../shared/map-context-menu";
 import { bindAreaTooltip } from "../shared/map-tooltips";
 import { CHILD_DETAILS_EVENT, childDetailsChange, readChildDetails, withChildDetails } from "../shared/child-details";
 import { AdditiveSelectMemory, createPinClusterGroup, isAdditiveClick } from "../shared/map-clusters";
 import type { MarkupToolbar } from "../shared/markup-toolbar";
 import { createPhotoMarkerLayer, type PhotoMapItem } from "../shared/photo-map";
-import { createLandUseLayer, type LandUseLayer } from "../shared/land-use-layer";
+import { createFeatureLayer, type FeatureLayerConfig, parseFeatureLayers } from "../shared/feature-layer";
 import { type LightboxInput, lightboxItemFromTile, parsePhotoIds, PHOTO_IDS_TYPE, tileFromJson, writePhotoIds } from "../shared/photo-tile";
 import { createTemporalImagerySlider } from "../shared/temporal-imagery";
 import { installMediaLightboxOpener, observeMediaGalleryProcessing } from "../shared/media-lightbox";
@@ -22,10 +22,10 @@ import { type MediaDropItem, placeMediaItem } from "../shared/media-map-drop";
 
 installMediaLightboxOpener();
 
-// Fired now rather than awaited inside init(): starting this deployment's REData tile catalogue
+// Fired now rather than awaited inside init(): starting this deployment's tile catalogue
 // fetch as early as this module loads gives it a head start on the synchronous DOM/config
 // parsing init() does before it ever reaches createMapLayers().
-void registerRedataLayers();
+void registerCatalogueLayers();
 
 // See markup-engine.ts for why `L` is declared locally instead of imported.
 declare const L: typeof import("leaflet");
@@ -149,7 +149,7 @@ function readConfig(el: HTMLElement) {
         boundaryUrl: d.boundaryUrl || "",
         photoGalleryJsonUrl: d.photoGalleryJsonUrl || "",
         nearbyPinsJsonUrl: d.nearbyPinsJsonUrl || "",
-        landUseAreasJsonUrl: d.landUseAreasJsonUrl || "",
+        featureLayers: parseFeatureLayers(d.featureLayers),
         mediaRelevanceUrl: d.mediaRelevanceUrl || "",
         markupFillOpacity: d.markupFillOpacity ? Number.parseInt(d.markupFillOpacity, 10) : 87,
         markupBorderOpacity: d.markupBorderOpacity ? Number.parseInt(d.markupBorderOpacity, 10) : 100,
@@ -782,27 +782,26 @@ function init(): void {
         }
     }
 
-    // -- Land Use layer -----------------------------------------------------------
-    // Census Special Land Use Areas around the pin's parcel, via REData. Offered
-    // (and its button rendered) only where REData is configured and the pin is in
-    // the US - see services/map/land_use_areas.land_use_layer_offered.
+    // -- Plugin layers ------------------------------------------------------------
+    // Layers the server offers this pin (see services/map/pin_layers.py): each a button in
+    // the layers panel and a FeatureCollection endpoint, drawn when switched on.
     let baseAttribution = "";
-    const renderAttribution = (): void => setAttribution(baseAttribution + (landUseLayer?.isActive() ? " · Land use: U.S. Census Bureau" : ""));
-    const landUseLayer: LandUseLayer | null =
-        cfg.landUseAreasJsonUrl && document.querySelector('#detail-map-layers [data-map-layer="landuse"]')
-            ? createLandUseLayer(map, cfg.landUseAreasJsonUrl, (notice) => (notice.kind === "warning" ? toast.warning(notice.message) : toast.info(notice.message)))
-            : null;
-    const landUseToggles: Record<string, CustomLayerToggle> = landUseLayer
-        ? {
-              landuse: {
-                  isActive: landUseLayer.isActive,
-                  toggle: () => {
-                      landUseLayer.toggle();
-                      renderAttribution();
-                  },
-              },
-          }
-        : {};
+    const featureLayerToggles: Record<string, CustomLayerToggle> = {};
+    const renderAttribution = (): void => {
+        const credits = cfg.featureLayers.filter((layer) => featureLayerToggles[layer.key]?.isActive() && layer.attribution).map((layer) => layer.attribution);
+        setAttribution([baseAttribution, ...credits].filter(Boolean).join(" · "));
+    };
+    cfg.featureLayers.forEach((config: FeatureLayerConfig) => {
+        if (!document.querySelector(`#detail-map-layers [data-map-layer="${config.key}"]`)) return;
+        const layer = createFeatureLayer(map, config, (notice) => (notice.kind === "warning" ? toast.warning(notice.message) : toast.info(notice.message)));
+        featureLayerToggles[config.key] = {
+            isActive: layer.isActive,
+            toggle: () => {
+                layer.toggle();
+                renderAttribution();
+            },
+        };
+    });
 
     // Custom layers: user-created markup groupings (e.g. "Tunnels"), toggled
     // independently. One LayerGroup per CustomLayer, keyed by uuid for
@@ -852,7 +851,7 @@ function init(): void {
                 isActive: () => nearbyActive,
                 toggle: () => setNearbyActive(!nearbyActive),
             },
-            ...landUseToggles,
+            ...featureLayerToggles,
             ...customLayerToggles,
         },
     });

@@ -1,4 +1,4 @@
-"""``manage.py find_missing_image_files``: rows that name a stored file which is not there (P59)."""
+"""``manage.py find_missing_image_files``: rows that name a stored file which is not there."""
 
 from __future__ import annotations
 

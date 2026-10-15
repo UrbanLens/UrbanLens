@@ -136,7 +136,7 @@ class SafetyCheckinChatConsumerTests(TransactionTestCase):
         _run(self._heartbeat_ping_is_ignored())
 
     async def _heartbeat_ping_is_ignored(self):
-        # The client pings every 45s so Cloudflare's ~100s idle cutoff can't kill
+        # The client pings every 45s so a proxy's ~100s idle cutoff can't kill
         # the socket (ts/shared/live-socket.ts). It must not be answered, and it
         # must not be mistaken for a message: this consumer saves whatever it's
         # sent, and a chat log full of empty 45-second entries would be the result.

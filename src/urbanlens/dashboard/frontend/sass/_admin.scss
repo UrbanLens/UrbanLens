@@ -908,49 +908,6 @@ $subscription-grant-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px
     margin-bottom: 1.5rem;
 }
 
-// -- External API spend report (site-admin costs page) -----------------------
-
-.cost-api-spend-summary {
-    margin-bottom: .85rem;
-}
-
-.cost-api-spend-list {
-    display: flex;
-    flex-direction: column;
-    border: 1px solid var(--ul-border);
-    border-radius: $radius-sm;
-    overflow: hidden;
-}
-
-.cost-api-spend-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    padding: .65rem 1rem;
-    border-bottom: 1px solid var(--ul-border);
-    font-size: .88rem;
-
-    &:last-child {
-        border-bottom: none;
-    }
-
-    &:nth-child(even) {
-        background: var(--ul-grey-0);
-    }
-}
-
-.cost-api-spend-name {
-    font-weight: 600;
-    color: var(--ul-grey-8);
-}
-
-.cost-api-spend-value {
-    font-variant-numeric: tabular-nums;
-    font-weight: 700;
-    color: var(--ul-grey-7);
-}
-
 .stats-chart-card {
     margin-bottom: 0 !important;
 }
@@ -1686,57 +1643,6 @@ $users-list-cols: minmax(180px, 1.3fr) minmax(170px, 1.15fr) minmax(110px, .75fr
     }
 
 }
-// -- Suggestion model report (site-admin/models/) ---------------------------
-// Its own block rather than reused admin-table/admin-list names.
-.model-report {
-  padding: 1rem 1.25rem;
-  margin-bottom: 1rem;
-
-  h2 {
-    margin-top: 0;
-  }
-
-  h3 {
-    margin: 1rem 0 .35rem;
-    font-size: .95rem;
-  }
-}
-
-.model-report__empty {
-  padding: 1.5rem;
-  text-align: center;
-  color: var(--ul-grey-5);
-}
-
-.model-report__table {
-  border-collapse: collapse;
-  width: 100%;
-
-  th,
-  td {
-    padding: .4rem .6rem;
-    border-bottom: 1px solid var(--ul-border, rgb(128 128 128 / 25%));
-    text-align: left;
-    vertical-align: top;
-  }
-
-  th {
-    font-size: .8rem;
-    text-transform: uppercase;
-    letter-spacing: .04em;
-    color: var(--ul-grey-5);
-  }
-}
-
-.model-report__list {
-  margin: 0;
-  padding-left: 1.1rem;
-
-  li {
-    margin-bottom: .3rem;
-    font-size: .9rem;
-  }
-}
 
 .api-limits-capabilities {
   margin-top: 1.5rem;
@@ -1764,9 +1670,6 @@ $users-list-cols: minmax(180px, 1.3fr) minmax(170px, 1.15fr) minmax(110px, .75fr
     }
   }
 
-  .api-limits-capability-provider {
-    white-space: nowrap;
-  }
 }
 
 // -- External tag mapping admin ------------------------------------------------

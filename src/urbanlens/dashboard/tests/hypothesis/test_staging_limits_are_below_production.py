@@ -20,11 +20,19 @@ import re
 from urbanlens.core.tests.testcase import SimpleTestCase
 
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[5]
-_COMPOSE_PATH = _REPO_ROOT / "docker-compose.yml"
-_SAMPLE_PATH = _REPO_ROOT / "src" / "urbanlens" / "config" / "env" / "staging.sample.env"
+#: The compose file and each deployment overlay beside it; a tree without overlays reads the one file.
+_COMPOSE_PATHS = [
+    _REPO_ROOT / "docker-compose.yml",
+    *sorted(path for path in _REPO_ROOT.glob("docker-compose.*.yml") if path.name != "docker-compose.hot-reload.yml"),
+]
+#: Core's overrides, then those each plugin that deploys containers of its own ships.
+_SAMPLE_PATHS = [
+    _REPO_ROOT / "src" / "urbanlens" / "config" / "env" / "staging.sample.env",
+    *sorted((_REPO_ROOT / "src" / "urbanlens" / "plugins").glob("*/staging.sample.env")),
+]
 
 #: What the kernel gives a container whose `cpu_shares` is unset, which is what
-#: every production container on damballa currently is.
+#: every production container currently is.
 _UNSET_SHARES = 1024
 
 #: The test stack, which never runs beside production.
@@ -36,17 +44,18 @@ _NESTED_DEFAULT = re.compile(r"\$\{[A-Z_]+:-([^}]+)\}")
 
 def _compose_defaults() -> dict[str, str]:
     """
-    Every resource variable `docker-compose.yml` reads, with its default.
+    Every resource variable the compose files read, with its default.
 
     Returns:
         Variable name to default value, with the nested ``${CPU_LIMIT:-n}``
         spelling flattened to its inner default.
     """
     defaults: dict[str, str] = {}
-    for match in _VARIABLE.finditer(_COMPOSE_PATH.read_text(encoding="utf-8")):
-        name, raw = match.group(1), match.group(2).strip()
-        nested = _NESTED_DEFAULT.search(raw)
-        defaults.setdefault(name, nested.group(1) if nested else raw.rstrip("}"))
+    for path in _COMPOSE_PATHS:
+        for match in _VARIABLE.finditer(path.read_text(encoding="utf-8")):
+            name, raw = match.group(1), match.group(2).strip()
+            nested = _NESTED_DEFAULT.search(raw)
+            defaults.setdefault(name, nested.group(1) if nested else raw.rstrip("}"))
     return {name: value for name, value in defaults.items() if _EXEMPT not in name}
 
 
@@ -58,11 +67,12 @@ def _sample_values() -> dict[str, str]:
         Variable name to value.
     """
     values: dict[str, str] = {}
-    for raw in _SAMPLE_PATH.read_text(encoding="utf-8").splitlines():
-        line = raw.strip()
-        if line and not line.startswith("#"):
-            name, _, value = line.partition("=")
-            values[name] = value
+    for path in _SAMPLE_PATHS:
+        for raw in path.read_text(encoding="utf-8").splitlines():
+            line = raw.strip()
+            if line and not line.startswith("#"):
+                name, _, value = line.partition("=")
+                values[name] = value
     return values
 
 
@@ -95,14 +105,14 @@ class TheStagingSampleCoversTheFileTests(SimpleTestCase):
         missing = sorted(set(_compose_defaults()) - set(_sample_values()))
 
         self.assertEqual(
-            missing, [], f"docker-compose.yml reads {len(missing)} variable(s) staging does not set: {missing}"
+            missing, [], f"the compose files read {len(missing)} variable(s) staging does not set: {missing}"
         )
 
     def test_the_sample_sets_nothing_the_file_does_not_read(self) -> None:
         """A value nothing interpolates is a value somebody will trust."""
         unread = sorted(set(_sample_values()) - set(_compose_defaults()))
 
-        self.assertEqual(unread, [], f"the sample sets {unread}, which docker-compose.yml never reads")
+        self.assertEqual(unread, [], f"the sample sets {unread}, which no compose file reads")
 
 
 class StagingLosesToProductionTests(SimpleTestCase):

@@ -14,13 +14,7 @@
     {% endif %}
 
     <div class="tad-top-panel" data-top-panel="labels">
-        {% if membership_route == "pin" and redata_labels_enabled %}
-        <div class="tad-suggestions-slot" id="tad-suggestions-{{ obj_uuid }}"
-             hx-get="{% url 'label.pin_suggestions' pin_slug=obj_uuid %}"
-             hx-trigger="intersect once"
-             hx-swap="outerHTML">
-        </div>
-        {% endif %}
+        {% plugin_slot "labels.dialog_suggestions" %}
 
         <div class="tad-tabs" role="tablist">
             <button class="tad-tab tad-tab--active" data-tab="all" role="tab">All</button>

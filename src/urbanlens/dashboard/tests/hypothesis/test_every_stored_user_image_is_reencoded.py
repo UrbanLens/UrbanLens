@@ -1,5 +1,5 @@
 """
-Every stored user image, not only library photos, is re-encoded from its pixels (P119).
+Every stored user image, not only library photos, is re-encoded from its pixels.
 
 Comment and trip comment images, custom icons and avatars were stored as they came, so whatever metadata the file
 carried was served with it. The fixtures and the detector are the photo matrix's: each fixture plants a marker in one
@@ -66,7 +66,7 @@ def _stored_name(stored: FieldFile) -> str:
 
 class _Case(_MetadataCase):
     def _profile(self) -> Profile:
-        return User.objects.create(username=f"p119owner{next(_owners)}").profile
+        return User.objects.create(username=f"owner{next(_owners)}").profile
 
     def _hold(self, instance: Model, field: str, name: str, data: bytes) -> str:
         instance.save(update_fields=[hold_upload(instance, field, _upload(name, data))])

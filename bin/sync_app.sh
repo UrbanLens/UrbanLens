@@ -19,15 +19,18 @@
 #   bin/sync_app.sh --only             # sync just UL_APP_CONTAINER, not its siblings
 #
 # Environment:
-#   UL_APP_CONTAINER   app container name (default urbanlens_development_main_app)
+#   UL_APP_CONTAINER   app container name (default urbanlens_<UL_CONTAINER_NAME or UL_ENVIRONMENT>_app,
+#                      read from the shell or .env; see bin/lib/compose_names.sh)
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 # shellcheck source=bin/lib/container_sync.sh
 . bin/lib/container_sync.sh
+# shellcheck source=bin/lib/compose_names.sh
+. bin/lib/compose_names.sh
 
-CONTAINER="${UL_APP_CONTAINER:-urbanlens_development_main_app}"
+CONTAINER="$(ul_app_container_name "$(pwd)")"
 FRONTEND=0
 RESTART=0
 ONLY=0

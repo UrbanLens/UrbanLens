@@ -13,7 +13,7 @@ from datetime import timedelta
 import errno
 import json
 import socket
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 from unittest import mock
 
 from django.contrib.auth.models import User
@@ -22,6 +22,7 @@ from django.utils import timezone
 from model_bakery import baker
 import requests
 
+from urbanlens.core.tests.panel_fakes import hold_bundled_sources
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.api_call_log import ApiCallLog
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
@@ -29,7 +30,6 @@ from urbanlens.dashboard.models.google_place.model import GooglePlace
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.geo.geo_boundary import GeoBoundary
-from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 from urbanlens.UrbanLens.settings.app import settings as app_settings
 
 if TYPE_CHECKING:
@@ -43,8 +43,11 @@ _NO_UPSTREAM: dict[str, str] = {
 }
 
 #: Panel sources whose gate cannot pass for the fixture pin, and why.
-_GATED_OUT: dict[str, str] = {
-    "epa_echo_detail": "only for a pin whose Location already matched an ECHO facility",
+_GATED_OUT: dict[str, str] = {}
+
+#: Sources that, with only the public providers, settle without asking anything or are never run for every location.
+_NEEDS_A_PROVIDER: dict[str, str] = {
+    "parcel_buildings": "asks Overpass only inside a parcel boundary, which the fixture has none of, and the background cycle waits for a provider it may ask for every location",
 }
 
 #: Enrichment sources the batch would not pick the fixture Location for, and why.
@@ -135,13 +138,29 @@ def _written(before: set[tuple[str, str, str, str]], after: set[tuple[str, str, 
     return sorted(f"{source}[{audience[:8]}] = {data[:100]}" for source, audience, data, _updated in after - before)
 
 
-class _OutageFixture(RedataConfiguredMixin, TestCase):
-    """A New York site every registered source has something to ask about."""
+class _OutageFixture(TestCase):
+    """
+    A New York site every registered source has something to ask about.
+
+    A plugin runs the same sweeps over its own sources by subclassing, with its settings in place, and widening the
+    class attributes below to what it adds.
+    """
 
     maxDiff = None
+    #: Fewer registered sources than this means the registry did not load.
+    minimum_panel_sources = 5
+    minimum_enrichment_sources = 3
+    #: Exemptions a subclass widens, keyed by source and saying why.
+    gated_out: ClassVar[dict[str, str]] = {**_GATED_OUT, **_NEEDS_A_PROVIDER}
+    no_upstream: ClassVar[dict[str, str]] = _NO_UPSTREAM
+    not_a_candidate: ClassVar[dict[str, str]] = {**_NOT_A_CANDIDATE, **_NEEDS_A_PROVIDER}
+    #: Whether to sweep only the sources that ship with core.
+    bundled_sources_only: ClassVar[bool] = True
 
     def setUp(self) -> None:
         super().setUp()
+        if self.bundled_sources_only:
+            hold_bundled_sources(self)
         for attribute in ("azure_maps_subscription_key", "google_unrestricted_api_key"):
             patcher = mock.patch.object(app_settings, attribute, "test-key")
             patcher.start()
@@ -197,11 +216,13 @@ class PanelSourceOutageTests(_OutageFixture):
         )
 
         sources = [source for source in panel_sources().values() if isinstance(source, LocationCachePanelSource)]
-        self.assertGreater(len(sources), 30, "the registry did not load, so nothing below is being tested")
+        self.assertGreater(
+            len(sources), self.minimum_panel_sources, "the registry did not load, so nothing below is being tested"
+        )
         unexercised: dict[str, str] = {}
         leaked: dict[str, list] = {}
         for source in sources:
-            if source.key in _GATED_OUT:
+            if source.key in self.gated_out:
                 continue
             if not gate_allows(source, self.pin):
                 unexercised[source.key] = "gate refused the fixture pin"
@@ -220,7 +241,7 @@ class PanelSourceOutageTests(_OutageFixture):
             with upstream.cut():
                 self._run_as_the_worker_does(lambda source=source: run_panel_fetch(source.key, self.pin))
             after = _snapshot(self.location)
-            if upstream.attempts == 0 and source.key not in _NO_UPSTREAM:
+            if upstream.attempts == 0 and source.key not in self.no_upstream:
                 unexercised[source.key] = "asked no upstream"
             if before != after:
                 leaked[source.key] = _written(before, after)
@@ -257,8 +278,10 @@ class EnrichmentSourceOutageTests(_OutageFixture):
 
     def _candidates(self) -> list[EnrichmentSource]:
         sources = _enrichment_sources()
-        self.assertGreater(len(sources), 5, "the registry did not load, so nothing below is being tested")
-        return [source for source in sources if source.key not in _NOT_A_CANDIDATE]
+        self.assertGreater(
+            len(sources), self.minimum_enrichment_sources, "the registry did not load, so nothing below is being tested"
+        )
+        return [source for source in sources if source.key not in self.not_a_candidate]
 
     def _picks_the_fixture(self, source: EnrichmentSource) -> bool:
         return Location.objects.filter(source.missing_filter(), pk=self.location.pk).exists()
@@ -279,7 +302,7 @@ class EnrichmentSourceOutageTests(_OutageFixture):
             with upstream.cut():
                 self._run_as_the_worker_does(lambda source=source: source.enrich(self.location))
             after = _snapshot(self.location)
-            if upstream.attempts == 0 and source.key not in _NO_UPSTREAM:
+            if upstream.attempts == 0 and source.key not in self.no_upstream:
                 unexercised[source.key] = "asked no upstream"
             if before != after:
                 leaked[source.key] = _written(before, after)
@@ -314,4 +337,6 @@ class ExemptionTests(TestCase):
         from urbanlens.dashboard.services.pins.external_data import panel_sources
 
         registered = set(panel_sources()) | {source.key for source in _enrichment_sources()}
-        self.assertLessEqual(set(_GATED_OUT) | set(_NO_UPSTREAM) | set(_NOT_A_CANDIDATE), registered)
+        self.assertLessEqual(
+            set(_GATED_OUT) | set(_NO_UPSTREAM) | set(_NOT_A_CANDIDATE) | set(_NEEDS_A_PROVIDER), registered
+        )

@@ -1,4 +1,4 @@
-"""Regression coverage for UL-193's bulk-rating UI wiring."""
+"""Regression coverage for the bulk-rating UI wiring."""
 
 from __future__ import annotations
 

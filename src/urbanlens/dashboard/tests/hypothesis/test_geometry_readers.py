@@ -1,4 +1,4 @@
-"""The WKT and WKB readers an import uses: the same geometry GEOS reads, nothing nested past ``MAX_NESTING`` (P95)."""
+"""The WKT and WKB readers an import uses: the same geometry GEOS reads, nothing nested past ``MAX_NESTING``."""
 
 from __future__ import annotations
 

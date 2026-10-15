@@ -11,6 +11,7 @@ from rest_framework import serializers
 
 from urbanlens.dashboard.external_api.fields import IconField
 from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, KIND_CATEGORY, KIND_STATUS, KIND_TAG
+from urbanlens.dashboard.plugins.drf import ExtensibleSerializer
 from urbanlens.dashboard.services.core.numbers import DB_INTEGER_MAX, DB_INTEGER_MIN
 
 #: Kinds a bulk convert may target. People/media labels are a structurally separate hierarchy (see
@@ -19,7 +20,7 @@ from urbanlens.dashboard.services.core.numbers import DB_INTEGER_MAX, DB_INTEGER
 _CONVERTIBLE_KIND_CHOICES = [(KIND_TAG, "Tag"), (KIND_CATEGORY, "Category"), (KIND_STATUS, "Status")]
 
 
-class LabelReorderSerializer(serializers.Serializer):
+class LabelReorderSerializer(ExtensibleSerializer):
     """
     Validates a label priority-reorder request.
 
@@ -55,7 +56,7 @@ class LabelReorderSerializer(serializers.Serializer):
         return attrs
 
 
-class LabelReorderResponseSerializer(serializers.Serializer):
+class LabelReorderResponseSerializer(ExtensibleSerializer):
     """The outcome of a reorder request (schema-only)."""
 
     reordered = serializers.IntegerField(read_only=True)
@@ -65,7 +66,7 @@ class LabelReorderResponseSerializer(serializers.Serializer):
     skipped_global_uuids = serializers.ListField(child=serializers.UUIDField(), read_only=True)
 
 
-class _CeilingOnUuids(serializers.Serializer):
+class _CeilingOnUuids(ExtensibleSerializer):
     """
     Bounds ``uuids`` by ``LABEL_BULK_EDIT_MAX_IDS`` at validation time.
 
@@ -105,7 +106,7 @@ class LabelBulkDeleteSerializer(_CeilingOnUuids):
     uuids = serializers.ListField(child=serializers.UUIDField(), min_length=1)
 
 
-class LabelBulkDeleteResponseSerializer(serializers.Serializer):
+class LabelBulkDeleteResponseSerializer(ExtensibleSerializer):
     """The outcome of a bulk delete (schema-only)."""
 
     deleted = serializers.IntegerField(read_only=True)
@@ -163,7 +164,7 @@ class LabelBulkEditSerializer(_CeilingOnUuids):
         return attrs
 
 
-class LabelBulkEditResponseSerializer(serializers.Serializer):
+class LabelBulkEditResponseSerializer(ExtensibleSerializer):
     """The outcome of a bulk edit (schema-only)."""
 
     count = serializers.IntegerField(read_only=True)
@@ -182,7 +183,7 @@ class LabelBulkConvertSerializer(_CeilingOnUuids):
     target_kind = serializers.ChoiceField(choices=_CONVERTIBLE_KIND_CHOICES)
 
 
-class LabelBulkConvertResponseSerializer(serializers.Serializer):
+class LabelBulkConvertResponseSerializer(ExtensibleSerializer):
     """The outcome of a bulk convert (schema-only)."""
 
     converted = serializers.IntegerField(read_only=True)

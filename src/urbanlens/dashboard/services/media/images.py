@@ -1171,13 +1171,12 @@ def write_image_marker_thumbnail(image: Image, *, max_dimension: int = MARKER_TH
     return True
 
 
-#: Longest edge of the copy handed to vision models and the image classifier
+#: Longest edge of the copy handed to image-analysis providers
 #: (:func:`write_image_analysis_thumbnail`).
 ANALYSIS_THUMBNAIL_MAX_DIMENSION = 512
 
 #: JPEG rather than the WebP the two display thumbnails use, deliberately.
-#: Cloudflare Workers AI is the default vision provider and the only source of the image classifier,
-#: and it takes a bare byte array with no format negotiation or documented format list; JPEG is the
+#: Some analysis providers take a bare byte array with no format negotiation or documented format list; JPEG is the
 #: one encoding every provider accepts.
 _ANALYSIS_THUMBNAIL_QUALITY = 80
 
@@ -1455,14 +1454,14 @@ def image_associations(image: Image, viewer: Profile) -> dict[str, Any]:
 
     Args:
         image: The photo to describe.
-        viewer: The requesting profile - only used for wiki-album concealment.
+        viewer: The requesting profile - only used to decide whether a wiki is linked.
 
     Returns:
         ``{"pin": {"name", "url"} | None, "wiki": {"name", "url"} | None, "albums": [{"name", "url", "owner_label", "owner_name"}, ...]}``."""
     from django.urls import reverse
 
     from urbanlens.dashboard.models.images.model import MediaKind
-    from urbanlens.dashboard.services.photos.albums import _owner_conceal
+    from urbanlens.dashboard.services.wiki.viewer_projection import viewer_projection
 
     pin_info = None
     pin = image.pin
@@ -1471,7 +1470,7 @@ def image_associations(image: Image, viewer: Profile) -> dict[str, Any]:
 
     wiki_info = None
     wiki = image.wiki
-    if wiki is not None and wiki.location_id and not _owner_conceal(wiki, viewer):
+    if wiki is not None and wiki.location_id and viewer_projection(wiki, viewer).shows_wiki_link():
         wiki_info = {"name": wiki.name or "Untitled wiki", "url": reverse("location.wiki", args=[wiki.location.slug])}
 
     albums: list[dict[str, str]] = []
@@ -1488,7 +1487,7 @@ def image_associations(image: Image, viewer: Profile) -> dict[str, Any]:
                 },
             )
         elif album.parent_wiki is not None:
-            if not album.parent_wiki.location_id or _owner_conceal(album.parent_wiki, viewer):
+            if not album.parent_wiki.location_id or not viewer_projection(album.parent_wiki, viewer).shows_wiki_link():
                 continue
             albums.append(
                 {
@@ -1573,11 +1572,11 @@ def detach_image_from_wiki(image: Image, *, withdrawn_by_contributor: bool) -> N
     The wiki-side mirror of ``detach_image_from_pin``.
     """
     from urbanlens.dashboard.models.images.attachment import ImageAttachment
+    from urbanlens.dashboard.plugins.points import CONTRIBUTION_WITHDRAWN
     from urbanlens.dashboard.services.media.quota_rewards import revoke_community_quota_bonus
-    from urbanlens.dashboard.services.reputation.scoring import retract_events_for_target
 
     if withdrawn_by_contributor:
-        retract_events_for_target(image, reason="contribution_withdrawn")
+        CONTRIBUTION_WITHDRAWN.fire(image)
 
     if image.wiki_id is not None:
         ImageAttachment.objects.filter(image=image, wiki_id=image.wiki_id).delete()

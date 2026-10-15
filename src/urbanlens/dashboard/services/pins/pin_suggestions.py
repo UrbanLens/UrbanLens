@@ -699,7 +699,7 @@ def _apply_suggested_enrichment(pin: Pin, suggestion: PinSuggestion) -> None:
                 continue
             # A user who deleted this exact alias before must not have it silently recreated the
             # next time a suggestion for the same pin is accepted - matches every other
-            # auto-creation path (services.ai.link_extraction, services.locations.naming).
+            # auto-creation path (services.locations.naming).
             if PinAutoRemoval.objects.was_removed(pin=pin, kind=AutoRemovalKind.ALIAS, value=alias_name):
                 continue
             _alias, created = PinAlias.objects.resolve_or_create(pin, alias_name, defaults={"kind": AliasType.ALTERNATE, "source": "external_api"})

@@ -246,7 +246,7 @@ def authorize_remote_tile(profile: Profile, rel_path: str) -> bool:
 
 @media_authorizer("proxied_renders")
 def authorize_proxied_render(profile: Profile, rel_path: str) -> bool:
-    """Allow any authenticated user to fetch a kept rendering of a file the REData proxies serve to anyone."""
+    """Allow any authenticated user to fetch a kept rendering of a file the media proxies serve to anyone."""
     return True
 
 

@@ -2,7 +2,8 @@
 The ranked metric that chooses a place's automatic name, and which candidates may name or alias it.
 
 Every rule the naming pipeline applies to *which kind* of name wins lives here, so it can be read and
-tested in one place. The decision and its reasoning: ``docs/adr/0020-place-name-tiers.md``.
+tested in one place. A source priority alone could not tell a road from a campus, so a name's kind is ranked before
+its source, which keeps a road or address from naming a place.
 """
 
 from __future__ import annotations
@@ -40,16 +41,12 @@ class NamingScope(StrEnum):
     BUILDING = "building"
 
 
-#: Tier of each name source whose candidates are always the same kind of name.
-SOURCE_TIERS: dict[str, NameTier] = {
-    "historic_register": NameTier.HISTORIC_REGISTER,
+#: Tier of each public name source whose candidates are always the same kind of name. A plugin's provider declares its
+#: own (``NameProvider.tier``).
+_PUBLIC_SOURCE_TIERS: dict[str, NameTier] = {
     "wikipedia": NameTier.ENCYCLOPEDIA,
-    "nps": NameTier.SITE,
-    "cris": NameTier.BUILDING,
-    "redata_building": NameTier.BUILDING,
     "google_places": NameTier.POI,
     "azure_maps": NameTier.POI,
-    "epa_echo": NameTier.POI,
 }
 
 #: Sources whose tier depends on what the OpenStreetMap object under the point is.
@@ -119,6 +116,13 @@ def nominatim_tier(data: dict[str, Any]) -> NameTier:
     return NameTier.POI
 
 
+def source_tiers() -> dict[str, NameTier]:
+    """The tier of each name source whose candidates are always the same kind of name."""
+    from urbanlens.dashboard.plugins.points import NAME_PROVIDERS
+
+    return {**_PUBLIC_SOURCE_TIERS, **{provider.source: provider.tier for provider in NAME_PROVIDERS if provider.tier is not None}}
+
+
 def tier_for(source: str, location: Location | None) -> NameTier:
     """
     The tier of a name from ``source`` at this location.
@@ -133,7 +137,7 @@ def tier_for(source: str, location: Location | None) -> NameTier:
         cached = LocationCache.get_fresh(location, "nominatim") if location is not None and location.pk else None
         data = cached.data if cached is not None else None
         return nominatim_tier(data) if isinstance(data, dict) else DEFAULT_TIER
-    return SOURCE_TIERS.get(source, DEFAULT_TIER)
+    return source_tiers().get(source, DEFAULT_TIER)
 
 
 def rank_key(tier: NameTier, scope: NamingScope) -> tuple[int, int]:
@@ -225,51 +229,28 @@ def building_name_admissible(source: str, location: Location, scope: NamingScope
     """
     Whether a building's name may name, or alias, this location.
 
-    On a building's own page, when the name is the building's own: a CRIS record must stand on it. On a property's,
+    On a building's own page, when the name is the building's own: a source that can name a neighbour must stand on it. On a property's,
     only when the property is known to hold exactly one building and the named building is on it: without a parcel
     a building found within a search radius says nothing about this property, and on a campus one building's name
     is not the campus's.
 
     Args:
-        source: The building-tier source slug.
+        source: The building-tier source slug (``NameProvider.stands_on_location`` and ``stands_on_parcel`` decide).
         location: The location being named.
         scope: :func:`naming_scope` for the location, when the caller already has it.
 
     Returns:
         True when the name may be used.
     """
+    from urbanlens.dashboard.plugins.points import NAME_PROVIDERS
+
+    provider = next((provider for provider in NAME_PROVIDERS if provider.source == source), None)
     if (scope or naming_scope(location)) == NamingScope.BUILDING:
-        return source != "cris" or _cris_record_stands_on(location)
+        return provider is None or provider.stands_on_location(location)
     parcel = _parcel(location)
     if parcel is None or parcel.building_child_count != 1:
         return False
-    return _building_on_parcel(source, location, parcel)
-
-
-def _cris_record_stands_on(location: Location) -> bool:
-    """Whether the location's cached CRIS building record is the building's own, not a neighbour's."""
-    from urbanlens.dashboard.models.cache.location_cache import LocationCache
-    from urbanlens.dashboard.services.locations.national_register import stands_on
-
-    cached = LocationCache.get_fresh(location, "cris_building_usn")
-    data = cached.data if cached is not None and isinstance(cached.data, dict) else {}
-    return stands_on(location, data.get("source_latitude"), data.get("source_longitude"))
-
-
-def _building_on_parcel(source: str, location: Location, parcel: Place) -> bool:
-    """Whether the building ``source`` named is on ``parcel``; REData only names buildings on the parcel."""
-    if source != "cris":
-        return True
-    from django.contrib.gis.geos import Point
-
-    from urbanlens.dashboard.models.cache.location_cache import LocationCache
-
-    cached = LocationCache.get_fresh(location, "cris_building_usn")
-    data = cached.data if cached is not None and isinstance(cached.data, dict) else {}
-    latitude, longitude = data.get("source_latitude"), data.get("source_longitude")
-    if latitude is None or longitude is None or parcel.geometry is None:
-        return False
-    return bool(parcel.geometry.contains(Point(float(longitude), float(latitude), srid=4326)))
+    return provider is None or provider.stands_on_parcel(location, parcel)
 
 
 def aliasable(tier: NameTier) -> bool:

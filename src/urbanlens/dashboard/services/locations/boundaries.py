@@ -11,12 +11,8 @@ from django.contrib.gis.geos import MultiPolygon, Polygon
 from django.utils import timezone
 
 from urbanlens.dashboard.models.place.model import PlaceKind, is_plausible_area
+from urbanlens.dashboard.plugins.points import BOUNDARY_PROVIDERS
 from urbanlens.dashboard.services.apis.locations.base import BoundaryProvider, BoundaryProviderDeferredError
-from urbanlens.dashboard.services.apis.locations.boundaries.google_open_buildings import GoogleOpenBuildingsGateway
-from urbanlens.dashboard.services.apis.locations.boundaries.microsoft_buildings import MicrosoftBuildingFootprintsGateway
-from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
-from urbanlens.dashboard.services.apis.locations.boundaries.overture import OvertureProvider
-from urbanlens.dashboard.services.apis.locations.boundaries.redata import RedataBoundaryProvider
 from urbanlens.dashboard.services.core.gateway import is_source_outage
 from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError
 from urbanlens.dashboard.services.core.rate_limiter import EnvironmentRefusedError
@@ -49,16 +45,6 @@ def _plausible(kind: str, polygon: MultiPolygon | None, service_key: str | None)
         return polygon
     logger.warning("Boundary provider %s returned a %s of %.1f km²; discarded as implausible", service_key, kind, area / 1_000_000)
     return None
-
-
-#: Provider ``service_key`` → :class:`BoundarySource` value for the providers whose property geometry
-#: may serve as an official-boundary voting candidate.
-#: Building-footprint providers (Overture, Microsoft, Google) are absent on purpose: they never
-#: produce property boundaries, and the vote is over which *property* boundary should officially
-PROVIDER_BOUNDARY_SOURCES: dict[str, str] = {
-    "redata_boundary": "redata",
-    "overpass": "overpass",
-}
 
 
 @dataclass(slots=True)
@@ -99,15 +85,7 @@ class ResolvedBoundaries:
 class BoundaryProviderChain:
     """Resolve typed default boundaries by trying providers in order."""
 
-    providers: tuple[BoundaryProvider, ...] = field(
-        default_factory=lambda: (
-            RedataBoundaryProvider(),
-            OverpassGateway(),
-            OvertureProvider(),
-            MicrosoftBuildingFootprintsGateway(),
-            GoogleOpenBuildingsGateway(),
-        ),
-    )
+    providers: tuple[BoundaryProvider, ...] = field(default_factory=lambda: tuple(provider() for provider in BOUNDARY_PROVIDERS))
 
     def get_boundaries(self, latitude: float, longitude: float, *, name: str | None = None) -> ResolvedBoundaries:
         """
@@ -143,7 +121,7 @@ class BoundaryProviderChain:
                 # Counted where it was refused; this provider has nothing to add for the point.
                 continue
             except EnvironmentRefusedError:
-                # Not available in this environment (D26): skipped, never deferred, so no retry is scheduled for it.
+                # Not available in this environment: skipped, never deferred, so no retry is scheduled for it.
                 continue
             except SOFT_TIME_LIMIT_ERRORS:
                 # The task is being asked to wind down (Celery soft time limit) - this is not a
@@ -210,7 +188,7 @@ def generation_status(location: Location) -> tuple[bool, bool]:
     if location.place_resolved_at is None:
         return False, False
     # A stamped miss still draws the fallback circle. That is not a parcel, and a refusal
-    # recorded before the provider could answer (P145) must be asked again.
+    # recorded before the provider could answer must be asked again.
     if location.place_id is None:
         stale = timezone.now() - location.place_resolved_at > CIRCLE_RETRY_AFTER
         return True, stale

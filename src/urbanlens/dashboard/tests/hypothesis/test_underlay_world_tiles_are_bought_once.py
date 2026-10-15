@@ -21,9 +21,9 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.controllers import basemap_tiles
 from urbanlens.dashboard.services.map.basemap_vendors import VENDOR_TILES
+from urbanlens.dashboard.tests.hypothesis.tile_catalogue_fake import catalogue_on
 
 _GATEWAY = "urbanlens.dashboard.services.apis.locations.basemap_vendor_tiles_gateway.BasemapVendorTilesGateway"
-_CONFIGURED = "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured"
 
 #: The depth `UNDERLAY_MOSAIC_ZOOM` names on the client. The two have to agree or the long life is
 #: stamped on tiles nothing draws and withheld from the ones every map does.
@@ -65,7 +65,7 @@ class UnderlayTileLifetimeTests(TestCase):
 
     def _get(self, z: int, answer: tuple[int, bytes, str] = (200, b"PNGDATA", "image/png")):
         with (
-            mock.patch(_CONFIGURED, return_value=True),
+            catalogue_on(),
             mock.patch(f"{_GATEWAY}.download_tile", return_value=answer) as download,
         ):
             first = self.client.get(self._url(z))

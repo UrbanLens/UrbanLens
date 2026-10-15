@@ -90,7 +90,7 @@ class _BlockTestCase(TestCase):
 
 
 class BlockedPartyCannotClearTheBlockTests(_BlockTestCase):
-    """The P0: a blocked user must not be able to remove the block on them."""
+    """The critical case: a blocked user must not be able to remove the block on them."""
 
     def test_blocked_party_delete_is_404_and_leaves_the_row_alone(self) -> None:
         """``DELETE /friends/{blocker}/`` from the blocked party changes nothing."""

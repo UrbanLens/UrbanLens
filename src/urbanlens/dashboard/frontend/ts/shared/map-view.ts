@@ -6,7 +6,7 @@
  *
  * `map-layers.ts` already dual-engines the *basemap*; this is the rest of what a page does with a
  * map - camera, viewport, pointer geometry and events - so a call site can be written once and run
- * on either engine (`D12`'s dual-engine requirement, `PL8`). Leaflet stays a genuine second engine
+ * on either engine. Leaflet stays a genuine second engine
  * for the browsers without WebGL2, so neither implementation is a migration stopgap.
  *
  * The shapes here are deliberately plain: `{lat, lng}` objects and numbers rather than either

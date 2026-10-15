@@ -1,4 +1,4 @@
-"""An SSO sign-in cannot put an account on an address it has not proved, or that another account holds (G3-31)."""
+"""An SSO sign-in cannot put an account on an address it has not proved, or that another account holds."""
 
 from __future__ import annotations
 

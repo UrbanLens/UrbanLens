@@ -1,7 +1,7 @@
 """
 Undoing a bulk pin delete validates the batch one row at a time.
 
-N21 H58. Before recreating anything, `PinUndoHandler.restore` walks the payload
+Before recreating anything, `PinUndoHandler.restore` walks the payload
 checking that each pin's profile, location, wiki and labels still exist, and
 that a root pin's location has not been re-pinned in the meantime. Every one of
 those is a separate `.exists()`/`.count()` against a single id, so the pre-flight

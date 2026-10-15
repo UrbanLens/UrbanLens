@@ -1,4 +1,4 @@
-"""Raster basemap tiles, fetched from the vendor rather than through REData."""
+"""Raster basemap tiles, fetched from the vendor rather than through the tile catalogue."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from urbanlens.dashboard.services.map.basemap_vendors import vendor_for
 #: Sent because a bare urllib/requests agent is what free vendor CDNs refuse first. This site's
 #: blanket `Referrer-Policy: no-referrer` is not in play here - the fetch is server-side, so no
 #: Referer is involved and no viewer's coordinates travel with it.
-_USER_AGENT = "UrbanLens/1.0 (+https://urbanlens.org; basemap tile proxy)"
+_USER_AGENT = "UrbanLens/1.0 (+https://github.com/UrbanLens/UrbanLens; basemap tile proxy)"
 
 
 class BasemapVendorTilesGateway(Gateway):
@@ -49,7 +49,7 @@ class BasemapVendorTilesGateway(Gateway):
         Fetch one basemap tile from its vendor.
 
         Args:
-            layer: Layer id from REData's catalogue.
+            layer: Layer id from the tile catalogue.
             z: Tile zoom level.
             x: Tile column.
             y: Tile row.
@@ -58,7 +58,7 @@ class BasemapVendorTilesGateway(Gateway):
             ``(status_code, body, content_type)``.
 
         Raises:
-            ValueError: The layer has no vendor endpoint; the caller should use REData.
+            ValueError: The layer has no vendor endpoint; the caller should use the tile catalogue.
         """
         vendor = vendor_for(layer)
         if vendor is None:

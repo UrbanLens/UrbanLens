@@ -58,7 +58,7 @@ def building_footprint(building: dict[str, Any]) -> GEOSGeometry | None:
     The building's own footprint polygon, when its source published one.
 
     Args:
-        building: A cached building record (see ``plugins.builtin.parcel_buildings``).
+        building: A cached building record (see ``services.places.building_records``).
 
     Returns:
         The footprint as a GEOS geometry, or None when the record carries only a point (or nothing parseable - a malformed ``geometry`` is treated as "no footprint", never an error)."""
@@ -420,7 +420,7 @@ def building_wiki_name(cluster: BuildingCluster, container_name: str = "", reser
         container_name: The campus's name; used only when it is a real name.
         reserved: Further names the building may not take - what the campus is called, or about to be.
         years: Which years may date the building. A name is given by its own year alone; ``"any"`` is how names were
-            given before REData said what a year dates, and ``"none"`` how they are while no record dates the building,
+            given before a record said what its year dates, and ``"none"`` how they are while no record dates the building,
             both only for recognising a name given under other records.
 
     Returns:
@@ -573,9 +573,10 @@ class BuildingNester:
         a fact about that person - so this covers every record, not only the ones being pinned.
         """
         from urbanlens.dashboard.services.places import provisioning
+        from urbanlens.dashboard.services.places.building_records import preferred_place_namespace
 
         if self._places is None:
-            by_record = provisioning.ensure_building_places(self.parcel(), self.known, provider="redata")
+            by_record = provisioning.ensure_building_places(self.parcel(), self.known, provider=preferred_place_namespace())
             position = {id(record): index for index, record in enumerate(self.known)}
             self._places = {}
             for index, cluster in enumerate(self.clusters):
@@ -678,8 +679,8 @@ class BuildingNester:
                 # Usually the root wiki a building pin's own save queued before its child wiki existed.
                 return self._adopt(occupant, parent, cluster, campus, place), False
             wiki = Wiki.objects.create(
-                # created_by unset: mirrored from building data, not placed by anyone - which is what lets a
-                # concealed viewer keep seeing them.
+                # created_by unset: mirrored from building data, not placed by anyone - so it reads as
+                # automatic rather than as a person's contribution.
                 name=self._wiki_name(cluster, campus),
                 pin_type=PinType.BUILDING,
                 pin_type_is_user_provided=False,

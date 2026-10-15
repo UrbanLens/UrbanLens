@@ -197,11 +197,15 @@ class MetricComputationTests(AchievementTestsBase):
         """
         Attaching someone else's Yelp photo is not an upload.
 
-        The Yelp row carries a ``media_source_key`` because a real materialised row always does - that column,
+        The provider row carries a ``media_source_key`` because a real materialised row always does - that column,
         not ``source``, is what says the profile merely up-voted somebody else's photograph."""
         baker.make(Image, profile=self.profile, source=ImageSource.UPLOAD, _quantity=2)
         baker.make(
-            Image, profile=self.profile, source=ImageSource.YELP, media_source_key="yelp", media_item_key="0" * 40
+            Image,
+            profile=self.profile,
+            source=ImageSource.WIKIMEDIA,
+            media_source_key="wikimedia",
+            media_item_key="0" * 40,
         )
         self.assertEqual(get_metric("photos_uploaded").value_for(self.profile), 2)
 
@@ -461,9 +465,13 @@ class SignalIntegrationTests(AchievementTestsBase):
         )
 
     def test_external_photo_does_not_extend_the_upload_streak(self) -> None:
-        """Attaching a Yelp photo creates an Image, but is not an upload."""
+        """Attaching a provider photo creates an Image, but is not an upload."""
         baker.make(
-            Image, profile=self.profile, source=ImageSource.YELP, media_source_key="yelp", media_item_key="0" * 40
+            Image,
+            profile=self.profile,
+            source=ImageSource.WIKIMEDIA,
+            media_source_key="wikimedia",
+            media_item_key="0" * 40,
         )
         self.assertFalse(ProfileActivityDay.objects.filter(profile=self.profile, kind=ActivityKind.PHOTO).exists())
 

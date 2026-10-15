@@ -11,6 +11,7 @@ from djangofoundry.controllers import ListController
 
 from urbanlens.dashboard.models.profile import Profile
 from urbanlens.dashboard.services.core.request_body import posted_json_object
+from urbanlens.dashboard.services.credits import credited_categories
 from urbanlens.dashboard.services.home.home_widgets import effective_widget_layout, home_dashboard_context, save_widget_layout
 
 if TYPE_CHECKING:
@@ -30,7 +31,7 @@ class IndexController(ListController):
 
     def get_context_data(self, **kwargs):
         """
-        Add the page name the stylesheet keys off.
+        Add the page name the stylesheet keys off, and the data sources the integrations cards credit.
 
         Every rule in ``_homepage.scss`` is scoped under ``body.page-home``, and ``base.html`` sets that
         class from ``page_name`` - which this view never supplied, so the landing page rendered with none of
@@ -41,6 +42,7 @@ class IndexController(ListController):
         """
         context = super().get_context_data(**kwargs)
         context["page_name"] = "home"
+        context["credited_categories"] = credited_categories()
         return context
 
 

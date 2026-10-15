@@ -10,27 +10,27 @@ import { DEFAULT_PRODUCTION_HOSTS, isProductionHost } from "../../lib/production
 
 test.describe("production-write guard", () => {
     test("an exact production hostname is caught", () => {
-        expect(isProductionHost("urbanlens.org", ["urbanlens.org", "www.urbanlens.org"])).toBe(true);
+        expect(isProductionHost("example.com", ["example.com", "www.example.com"])).toBe(true);
     });
 
     test("a dev/staging host sharing production's domain suffix is not caught", () => {
-        expect(isProductionHost("s1.dev.urbanlens.org", ["urbanlens.org"])).toBe(false);
+        expect(isProductionHost("s1.dev.example.com", ["example.com"])).toBe(false);
     });
 
     test("a production host is not caught by an unrelated denylist entry", () => {
-        expect(isProductionHost("urbanlens.org", ["some-other-app.example"])).toBe(false);
+        expect(isProductionHost("example.com", ["some-other-app.example"])).toBe(false);
     });
 
     test("matching is case-insensitive", () => {
-        expect(isProductionHost("URBANLENS.ORG", ["urbanlens.org"])).toBe(true);
+        expect(isProductionHost("EXAMPLE.COM", ["example.com"])).toBe(true);
     });
 
     test("a fully-qualified hostname with its trailing dot is caught", () => {
-        expect(isProductionHost("urbanlens.org.", ["urbanlens.org"])).toBe(true);
+        expect(isProductionHost("example.com.", ["example.com"])).toBe(true);
     });
 
     test("an empty denylist catches nothing", () => {
-        expect(isProductionHost("urbanlens.org", [])).toBe(false);
+        expect(isProductionHost("example.com", [])).toBe(false);
     });
 
     test("every default production host is genuinely caught by its own list", () => {
@@ -40,8 +40,8 @@ test.describe("production-write guard", () => {
     });
 
     test("every hostname the production tunnel serves the web app on is refused by default", () => {
-        // infrastructure platform/cloudflare-tunnel/base/config.yml routes these to production web.
-        for (const host of ["urbanlens.org", "www.urbanlens.org"]) {
+        // The production tunnel routes these to the production web app.
+        for (const host of ["example.com", "www.example.com"]) {
             expect(isProductionHost(host, [...DEFAULT_PRODUCTION_HOSTS])).toBe(true);
         }
     });

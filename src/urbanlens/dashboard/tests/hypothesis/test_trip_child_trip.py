@@ -1,4 +1,4 @@
-"""Tests for UL-228: linking a "child trip" to a trip activity."""
+"""Tests for linking a "child trip" to a trip activity."""
 
 from __future__ import annotations
 

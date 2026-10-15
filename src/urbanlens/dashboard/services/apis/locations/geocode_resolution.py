@@ -1,19 +1,68 @@
-"""Resolves forward-geocoding (address -> coordinates) to REData or direct Nominatim."""
+"""Resolves forward-geocoding (address -> coordinates) to the first geocoder that can answer."""
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 import logging
+from typing import ClassVar
 
-from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError, redata_configured
-from urbanlens.dashboard.services.apis.locations.redata_geocode_gateway import RedataGeocodeGateway
+from urbanlens.dashboard.services.core.gateway import ProviderUnavailableError
 from urbanlens.dashboard.services.security.redact import redact_coordinate, redact_text
 
 logger = logging.getLogger(__name__)
 
 
+class GeocodeProvider(ABC):
+    """
+    One source of forward geocoding.
+
+    Attributes:
+        key: Short identifier, for logs.
+        shields_direct: Whether, off production, this provider failing should end the chain rather than fall through to
+            a provider that spends this deployment's own budget: a busy first-party service must not push its
+            load onto a public API from an address production shares.
+    """
+
+    key: ClassVar[str]
+    shields_direct: ClassVar[bool] = False
+
+    @abstractmethod
+    def available(self) -> bool:
+        """Whether this provider is configured to answer."""
+
+    @abstractmethod
+    def geocode(self, address: str) -> tuple[float | None, float | None]:
+        """
+        Resolve one address.
+
+        Args:
+            address: The address string to geocode.
+
+        Returns:
+            ``(latitude, longitude)``, or ``(None, None)`` when the address resolves to no place.
+
+        Raises:
+            ProviderUnavailableError: The provider could not answer, so the question went unasked.
+        """
+
+
+class NominatimGeocoder(GeocodeProvider):
+    """Direct OpenStreetMap Nominatim, held to its shared budget."""
+
+    key: ClassVar[str] = "nominatim"
+
+    def available(self) -> bool:
+        """Always: Nominatim needs no key."""
+        return True
+
+    def geocode(self, address: str) -> tuple[float | None, float | None]:
+        """See :func:`nominatim_geocode`."""
+        return nominatim_geocode(address)
+
+
 def geocode_address(address: str) -> tuple[float | None, float | None]:
     """
-    Resolve a free-text address to coordinates, trying REData then direct Nominatim.
+    Resolve a free-text address to coordinates, asking each available geocoder in priority order.
 
     Args:
         address: The address string to geocode.
@@ -22,29 +71,24 @@ def geocode_address(address: str) -> tuple[float | None, float | None]:
         A ``(latitude, longitude)`` tuple, or ``(None, None)`` when the address doesn't resolve to a place anywhere.
 
     Raises:
-        LocationContextUnavailableError: REData could not answer, off production, where the direct fallback is not
-            asked (D26): a busy REData must not push its load onto Nominatim from an address production shares.
+        ProviderUnavailableError: A shielding provider could not answer, off production, where the direct fallback is not
+            asked.
         RateLimitExceededError: The app-wide Nominatim budget refused the fallback call (see :func:`nominatim_geocode`).
         EnvironmentRefusedError: This environment does not call Nominatim (see :func:`nominatim_geocode`)."""
+    from urbanlens.dashboard.plugins.points import GEOCODERS
     from urbanlens.dashboard.services.core.egress import direct_fallback_permitted
 
-    if redata_configured():
+    for provider in GEOCODERS:
+        if not provider.available():
+            continue
         try:
-            envelope = RedataGeocodeGateway().geocode(address, limit=1)
-        except LocationContextUnavailableError as exc:
-            if not direct_fallback_permitted():
-                logger.info("REData geocode unavailable for an address lookup (%s); not falling back to direct Nominatim off production", exc.reason)
+            return provider.geocode(address)
+        except ProviderUnavailableError as exc:
+            if provider.shields_direct and not direct_fallback_permitted():
+                logger.info("%s geocode unavailable for an address lookup (%s); not falling back to a direct provider off production", provider.key, exc.reason)
                 raise
-            logger.warning("REData geocode failed for an address lookup, falling back to direct Nominatim: %s", exc.reason)
-        else:
-            if envelope.results:
-                result = envelope.results[0]
-                latitude, longitude = result.get("latitude"), result.get("longitude")
-                if latitude is not None and longitude is not None:
-                    return float(latitude), float(longitude)
-            return None, None
-
-    return nominatim_geocode(address)
+            logger.warning("%s geocode failed for an address lookup, trying the next provider: %s", provider.key, exc.reason)
+    return (None, None)
 
 
 def nominatim_geocode(address: str) -> tuple[float | None, float | None]:

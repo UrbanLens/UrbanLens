@@ -1,4 +1,4 @@
-"""Tests for the multiplayer-stall fixes (SpotGuessr audit finding #1)."""
+"""Tests for the multiplayer-stall fixes."""
 
 from __future__ import annotations
 
@@ -139,7 +139,7 @@ class ForceRevealRoundTests(TestCase):
 
 
 class LateGuessTests(TestCase):
-    """A revealed round shows where it was, so a guess sent after the reveal must not score (P29)."""
+    """A revealed round shows where it was, so a guess sent after the reveal must not score."""
 
     def assert_refused(self, session: GameSession, round_: GameRound, guest: Profile, location: Location) -> None:
         with self.assertRaises(RoundAlreadyRevealedError):

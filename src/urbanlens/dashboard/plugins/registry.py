@@ -1,307 +1,233 @@
 """
-Discovery and aggregation of UrbanLens plugins.
-A failure loading any one plugin is logged and skipped so a broken plugin never prevents startup."""
+The plugins this install found, and their lifecycle once Django is ready.
+
+:mod:`~urbanlens.dashboard.plugins.loader` finds plugins while settings load; :meth:`PluginRegistry.discover` (run
+from the dashboard app's ``ready()``) imports each one, resolves what it requires, and calls ``setup()`` on the
+active ones. A plugin that fails to import, instantiate or set up is logged and left inactive - one broken plugin
+never prevents startup - and whatever it contributed before failing is withdrawn.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+import enum
 import importlib
-from importlib.metadata import entry_points
 import inspect
 import logging
-import pkgutil
-from types import ModuleType
-from typing import TYPE_CHECKING
 
-from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.plugins.hooks import ACTION_PLUGINS_LOADED, hooks
-
-if TYPE_CHECKING:
-    from urbanlens.dashboard.services.apis.locations.base import SatelliteViewProvider, StreetViewProvider
-    from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
-    from urbanlens.dashboard.services.locations.enrichment import EnrichmentSource
-    from urbanlens.dashboard.services.locations.name_resolution import NameProvider
-    from urbanlens.dashboard.services.photos.photo_keywords import PhotoKeywordProvider
-    from urbanlens.dashboard.services.pins.external_data import PanelSource
+from urbanlens.dashboard.plugins.base import PluginContext, UrbanLensPlugin
+from urbanlens.dashboard.plugins.extensions import discard_contributions
+from urbanlens.dashboard.plugins.loader import PluginSource, find_plugin_sources
 
 logger = logging.getLogger(__name__)
 
-#: Entry-point group third-party packages use to expose plugins.
-ENTRY_POINT_GROUP = "urbanlens.plugins"
+
+class PluginState(enum.StrEnum):
+    """Where a discovered plugin stands."""
+
+    ACTIVE = "active"
+    DISABLED = "disabled"
+    MISSING_REQUIREMENT = "missing requirement"
+    FAILED = "failed"
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class PluginInfo:
     """
-    One discovered plugin and where it came from.
+    One discovered plugin.
 
     Attributes:
         plugin: The plugin instance.
-        source: Discovery source: ``"builtin"``, ``"settings"``, ``"entry-point"``, or ``"code"`` (registered programmatically).
-        module: Dotted path of the module the plugin class was defined in."""
+        source: Where it was found.
+        state: Whether it is active, and if not, why.
+        detail: Why a plugin is not active, for the admin UI.
+    """
 
     plugin: UrbanLensPlugin
-    source: str
-    module: str
+    source: PluginSource
+    state: PluginState = PluginState.ACTIVE
+    detail: str = ""
+
+    @property
+    def name(self) -> str:
+        """The plugin's name."""
+        return self.plugin.name
+
+    @property
+    def is_active(self) -> bool:
+        """Whether the plugin's contributions are in effect."""
+        return self.state is PluginState.ACTIVE
+
+    @property
+    def app_label(self) -> str | None:
+        """The Django app label of a package plugin, which is its name; None for a module plugin."""
+        return self.plugin.name if self.source.is_package else None
 
 
 class PluginRegistry:
-    """
-    Holds every discovered plugin and aggregates their contributions.
-    Aggregation methods only consult *enabled* plugins, ordered by ``(plugin.order, plugin.name)`` so contribution ordering (e.g. imagery carousel provider order) is deterministic and plugin-controlled."""
+    """Holds every discovered plugin. Ordered by ``(order, name)`` wherever plugins are listed."""
 
     def __init__(self) -> None:
-        """Initialize an empty, undiscovered registry."""
         self._plugins: dict[str, PluginInfo] = {}
         self._discovered = False
 
     def discover(self, *, force: bool = False) -> None:
         """
-        Load plugins from all discovery sources; idempotent.
+        Import, resolve and set up every plugin; idempotent unless ``force``.
+
         Runs inside ``AppConfig.ready()``, so nothing here may touch the database.
 
         Args:
-            force: Re-run discovery from scratch, discarding current state.
+            force: Withdraw every plugin contribution and run discovery again (for tests).
         """
         if self._discovered and not force:
             return
-        self._plugins.clear()
-        self._discovered = True
+        from urbanlens.UrbanLens.settings.app import settings
 
-        self._load_builtin()
-        self._load_settings_modules()
-        self._load_entry_points()
+        self._reset()
+        self._discovered = True
+        disabled = frozenset(settings.disabled_plugins)
+        for source in find_plugin_sources(settings.plugin_modules):
+            self._load(source, disabled=disabled)
+        self._resolve_requirements()
 
         for info in self.plugins():
-            try:
-                info.plugin.register(hooks)
-            except Exception:
-                logger.exception("Plugin '%s' register() failed", info.plugin.name)
-        hooks.do_action(ACTION_PLUGINS_LOADED, self)
-        logger.info("Discovered %d plugins: %s", len(self._plugins), ", ".join(sorted(self._plugins)))
+            if info.is_active:
+                self._setup(info)
 
-    def register(self, plugin: UrbanLensPlugin | type[UrbanLensPlugin], *, source: str = "code") -> UrbanLensPlugin | None:
+        from urbanlens.dashboard.plugins.points import PLUGINS_LOADED
+
+        PLUGINS_LOADED.fire(self)
+        active = [info.name for info in self.plugins() if info.is_active]
+        logger.info("Plugins: %d found, %d active (%s)", len(self._plugins), len(active), ", ".join(active))
+
+    def register(self, plugin: UrbanLensPlugin | type[UrbanLensPlugin], *, source: PluginSource | None = None) -> PluginInfo | None:
         """
-        Register one plugin instance or class.
-
-        Args:
-            plugin: The plugin (a class is instantiated with no arguments).
-            source: Discovery source label recorded for the admin UI.
+        Register and set up one plugin from code - chiefly for tests. Discovery registers everything else.
 
         Returns:
-            The registered instance, or None when the plugin was rejected (missing name, duplicate name, or failed instantiation).
+            Its record, or None when it was rejected (no name, a duplicate name, or it could not be instantiated).
         """
-        try:
-            instance = plugin() if isinstance(plugin, type) else plugin
-        except Exception:
-            logger.exception("Failed to instantiate plugin %r", plugin)
+        instance = self._instantiate(plugin)
+        if instance is None:
             return None
+        info = self._add(instance, source or PluginSource(name=instance.name, module=type(instance).__module__, origin="settings", is_package=False))
+        if info is not None and info.is_active:
+            self._setup(info)
+        return info
 
-        if not instance.name:
-            logger.warning("Ignoring plugin %r: it does not set a name", type(instance).__qualname__)
-            return None
-        if instance.name in self._plugins:
-            logger.warning(
-                "Ignoring duplicate plugin '%s' from %s: already registered from %s",
-                instance.name,
-                type(instance).__module__,
-                self._plugins[instance.name].module,
-            )
-            return None
+    def unregister(self, name: str) -> bool:
+        """
+        Remove one plugin and withdraw its contributions - chiefly for tests.
 
-        self._plugins[instance.name] = PluginInfo(plugin=instance, source=source, module=type(instance).__module__)
-        return instance
+        Returns:
+            True when it was registered.
+        """
+        info = self._plugins.pop(name, None)
+        if info is None:
+            return False
+        discard_contributions(owner=name)
+        return True
 
     def plugins(self) -> list[PluginInfo]:
-        """
-        Every discovered plugin, ordered by ``(order, name)``.
-
-        Returns:
-            All plugins regardless of enabled state (for the admin UI).
-        """
+        """Every discovered plugin, ordered by ``(order, name)``, whatever its state."""
         return sorted(self._plugins.values(), key=lambda info: (info.plugin.order, info.plugin.name))
 
+    def info(self, name: str) -> PluginInfo | None:
+        """The record of one plugin, or None when it was not found."""
+        return self._plugins.get(name)
+
     def get(self, name: str) -> UrbanLensPlugin | None:
-        """
-        Look up a plugin by name.
-
-        Args:
-            name: The plugin slug.
-
-        Returns:
-            The plugin instance, or None when not discovered.
-        """
+        """One discovered plugin, active or not, or None."""
         info = self._plugins.get(name)
         return info.plugin if info else None
 
-    def is_enabled(self, name: str) -> bool:
-        """
-        Whether a plugin is enabled for this install.
+    def is_active(self, name: str) -> bool:
+        """Whether a plugin was found and its contributions are in effect."""
+        info = self._plugins.get(name)
+        return info is not None and info.is_active
 
-        Args:
-            name: The plugin slug.
-
-        Returns:
-            True unless the name appears in the ``UL_DISABLED_PLUGINS`` setting.
-        """
-        from urbanlens.UrbanLens.settings.app import settings
-
-        return name not in settings.disabled_plugins
-
-    def enabled_plugins(self) -> list[UrbanLensPlugin]:
-        """
-        Enabled plugins, ordered by ``(order, name)``.
-
-        Returns:
-            Plugin instances whose contributions should be active.
-        """
-        return [info.plugin for info in self.plugins() if self.is_enabled(info.plugin.name)]
-
-    # Contribution aggregation
-
-    def service_defaults(self) -> dict[str, ServiceDefaults]:
-        """
-        Rate-limit defaults declared by enabled plugins.
-
-        Returns:
-            Merged mapping of service key to defaults."""
-        merged: dict[str, ServiceDefaults] = {}
-        for plugin in self.enabled_plugins():
-            for key, defaults in self._safe(plugin, "get_service_defaults", {}).items():
-                if key in merged:
-                    logger.warning("Plugin '%s' redeclares service defaults for '%s'; keeping the first declaration", plugin.name, key)
-                    continue
-                merged[key] = defaults
-        return merged
-
-    def panel_sources(self) -> list[PanelSource]:
-        """
-        Pin-detail panel sources contributed by enabled plugins.
-
-        Returns:
-            PanelSource instances in plugin order.
-        """
-        return self._collect("get_panel_sources")
-
-    def name_providers(self) -> list[NameProvider]:
-        """
-        Place-name candidate providers contributed by enabled plugins.
-
-        Returns:
-            NameProvider instances in plugin order, which is the arrival order the name resolver uses to break ties among unprioritized sources."""
-        return self._collect("get_name_providers")
-
-    def satellite_providers(self) -> list[SatelliteViewProvider]:
-        """
-        The satellite-imagery provider chain, in plugin order.
-
-        Returns:
-            Freshly built provider gateway instances.
-        """
-        return self._collect("get_satellite_providers")
-
-    def enrichment_sources(self) -> list[EnrichmentSource]:
-        """
-        Background-enrichment sources contributed by enabled plugins.
-
-        Returns:
-            EnrichmentSource instances in plugin order; the scheduled enrichment task runs them in this order each cycle."""
-        return self._collect("get_enrichment_sources")
-
-    def photo_keyword_providers(self) -> list[PhotoKeywordProvider]:
-        """
-        Photo keywording strategies contributed by enabled plugins.
-
-        Returns:
-            PhotoKeywordProvider instances in plugin order; each stores its own keywords per image, so ordering only affects run order."""
-        return self._collect("get_photo_keyword_providers")
-
-    def street_view_providers(self) -> list[StreetViewProvider]:
-        """
-        The street-level imagery provider chain, in plugin order.
-
-        Returns:
-            Freshly built provider gateway instances.
-        """
-        return self._collect("get_street_view_providers")
+    def active_plugins(self) -> list[UrbanLensPlugin]:
+        """Active plugins, ordered by ``(order, name)``."""
+        return [info.plugin for info in self.plugins() if info.is_active]
 
     # Internals
 
-    def _collect(self, method_name: str) -> list:
-        """Concatenate one list-valued contribution across enabled plugins."""
-        collected: list = []
-        for plugin in self.enabled_plugins():
-            collected.extend(self._safe(plugin, method_name, []))
-        return collected
+    def _load(self, source: PluginSource, *, disabled: frozenset[str]) -> None:
+        try:
+            module = importlib.import_module(source.plugin_module)
+        except Exception:
+            logger.exception("Could not import plugin %r from %s", source.name, source.plugin_module)
+            return
+        if source.attribute:
+            candidates = [getattr(module, source.attribute, None)]
+        else:
+            candidates = [value for value in vars(module).values() if inspect.isclass(value) and issubclass(value, UrbanLensPlugin) and value.__module__ == module.__name__ and value.name]
+        for candidate in candidates:
+            instance = self._instantiate(candidate)
+            if instance is None:
+                continue
+            if source.is_package and instance.name != source.name:
+                logger.error("Ignoring plugin %r in %s: a package plugin's name must be its package name (%r)", instance.name, source.module, source.name)
+                continue
+            info = self._add(instance, source)
+            if info is not None and instance.name in disabled:
+                info.state = PluginState.DISABLED
+                info.detail = "Listed in UL_DISABLED_PLUGINS"
 
     @staticmethod
-    def _safe(plugin: UrbanLensPlugin, method_name: str, fallback):
-        """Call one contribution method, logging (not raising) on failure."""
+    def _instantiate(plugin: object) -> UrbanLensPlugin | None:
         try:
-            return getattr(plugin, method_name)()
+            if isinstance(plugin, type) and issubclass(plugin, UrbanLensPlugin):
+                return plugin()
+            if isinstance(plugin, UrbanLensPlugin):
+                return plugin
         except Exception:
-            logger.exception("Plugin '%s' %s() failed", plugin.name, method_name)
-            return fallback
+            logger.exception("Could not instantiate plugin %r", plugin)
+            return None
+        logger.error("%r is not an UrbanLensPlugin class or instance", plugin)
+        return None
 
-    def _load_builtin(self) -> None:
-        """Import and scan every module in the bundled plugins package."""
-        from urbanlens.dashboard.plugins import builtin
+    def _add(self, instance: UrbanLensPlugin, source: PluginSource) -> PluginInfo | None:
+        if not instance.name:
+            logger.warning("Ignoring plugin %s: it sets no name", type(instance).__qualname__)
+            return None
+        if instance.name in self._plugins:
+            logger.warning("Ignoring plugin %r from %s: the name is already taken by %s", instance.name, source.module, self._plugins[instance.name].source.module)
+            return None
+        info = PluginInfo(plugin=instance, source=source)
+        self._plugins[instance.name] = info
+        return info
 
-        for module_info in pkgutil.iter_modules(builtin.__path__):
-            module_path = f"{builtin.__name__}.{module_info.name}"
-            try:
-                module = importlib.import_module(module_path)
-            except Exception:
-                logger.exception("Failed to import builtin plugin module '%s'", module_path)
-                continue
-            self._register_module(module, source="builtin")
+    def _resolve_requirements(self) -> None:
+        # A plugin left inactive can leave another inactive in turn, so repeat until nothing changes.
+        changed = True
+        while changed:
+            changed = False
+            for info in self._plugins.values():
+                if not info.is_active:
+                    continue
+                unmet = [name for name in info.plugin.requires if not self.is_active(name)]
+                if unmet:
+                    info.state = PluginState.MISSING_REQUIREMENT
+                    info.detail = "Requires " + ", ".join(unmet)
+                    changed = True
 
-    def _load_settings_modules(self) -> None:
-        """Import and scan the modules listed in the UL_PLUGIN_MODULES setting."""
-        from urbanlens.UrbanLens.settings.app import settings
-
-        for module_path in settings.plugin_modules:
-            try:
-                module = importlib.import_module(module_path)
-            except Exception:
-                logger.exception("Failed to import plugin module '%s' from UL_PLUGIN_MODULES", module_path)
-                continue
-            self._register_module(module, source="settings")
-
-    def _load_entry_points(self) -> None:
-        """Load plugins exposed via the ``urbanlens.plugins`` entry-point group."""
+    def _setup(self, info: PluginInfo) -> None:
         try:
-            eps = entry_points(group=ENTRY_POINT_GROUP)
+            info.plugin.setup(PluginContext(info.plugin))
         except Exception:
-            logger.exception("Failed to enumerate '%s' entry points", ENTRY_POINT_GROUP)
-            return
-
-        for ep in eps:
-            try:
-                loaded = ep.load()
-            except Exception:
-                logger.exception("Failed to load plugin entry point '%s'", ep.name)
-                continue
-            if isinstance(loaded, ModuleType):
-                self._register_module(loaded, source="entry-point")
-            elif isinstance(loaded, UrbanLensPlugin) or (isinstance(loaded, type) and issubclass(loaded, UrbanLensPlugin)):
-                self.register(loaded, source="entry-point")
-            else:
-                logger.warning("Plugin entry point '%s' resolved to %r, which is not a plugin class, instance, or module", ep.name, loaded)
-
-    def _register_module(self, module: ModuleType, *, source: str) -> None:
-        """
-        Register every concrete plugin class defined in a module.
-        Only classes *defined in* the module count - imported plugin classes are skipped so a module can reference another plugin without re-registering it."""
-        for attr in vars(module).values():
-            if inspect.isclass(attr) and issubclass(attr, UrbanLensPlugin) and attr.__module__ == module.__name__ and attr.name and not inspect.isabstract(attr):
-                self.register(attr, source=source)
+            logger.exception("Plugin %r setup() failed; withdrawing its contributions", info.name)
+            discard_contributions(owner=info.name)
+            info.state = PluginState.FAILED
+            info.detail = "setup() raised; see the log"
 
     def _reset(self) -> None:
-        """Discard all state so tests can re-run discovery in isolation."""
+        for name in self._plugins:
+            discard_contributions(owner=name)
         self._plugins.clear()
         self._discovered = False
 
 
-#: The application-wide plugin registry, populated in ``AppConfig.ready()``.
+#: The application-wide registry, populated in the dashboard app's ``ready()``.
 plugin_registry = PluginRegistry()

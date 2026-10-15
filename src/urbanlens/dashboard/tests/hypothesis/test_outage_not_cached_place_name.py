@@ -1,4 +1,4 @@
-"""A Google place-name lookup that couldn't reach Google stores nothing; one Google answered stores its answer (P214)."""
+"""A Google place-name lookup that couldn't reach Google stores nothing; one Google answered stores its answer."""
 
 from __future__ import annotations
 

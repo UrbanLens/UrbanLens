@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from unittest import mock
-
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from model_bakery import baker
@@ -15,6 +13,7 @@ from urbanlens.dashboard.services.wiki.articles import (
     latest_revision_id,
     save_article_checked,
 )
+from urbanlens.dashboard.tests.hypothesis.viewer_projection_helpers import projecting
 
 
 class ArticleConflictLockingTests(TestCase):
@@ -82,13 +81,8 @@ class ArticleConflictLockingTests(TestCase):
         )
 
 
-class ConcealedViewerConflictCheckTests(TestCase):
-    """
-    A concealed viewer's conflict check is scoped to what they were shown, not the true latest.
-
-    ``concealment_active`` is hardcoded False today (the reputation ledger it needs doesn't exist yet), so this
-    branch is currently dead in production - mocked here so a regression is caught before the day it starts
-    returning True, rather than after."""
+class ProjectedViewerConflictCheckTests(TestCase):
+    """A viewer whose projection narrows the revisions is checked against what they were shown, not the stored latest."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -97,27 +91,24 @@ class ConcealedViewerConflictCheckTests(TestCase):
         self.viewer = Profile.objects.get(user=baker.make("auth.User"))
         self.wiki = baker.make("dashboard.Wiki")
 
-    def test_a_revision_hidden_from_a_concealed_viewer_does_not_conflict_their_save(self) -> None:
-        """The viewer's base was the last thing *they* could see - a stranger's edit past that isn't a conflict."""
+    def _first_draft(self):
         article, first = save_article_checked(
-            editor=self.author,
-            content="First draft.",
-            edit_summary="",
-            base_revision_id=None,
-            wiki=self.wiki,
+            editor=self.author, content="First draft.", edit_summary="", base_revision_id=None, wiki=self.wiki
         )
         assert first is not None
+        return article, first
+
+    def test_a_revision_the_viewer_is_not_shown_does_not_conflict_their_save(self) -> None:
+        article, first = self._first_draft()
         save_article_checked(
             editor=self.stranger,
-            content="A stranger's edit, invisible to the viewer.",
+            content="Not shown to the viewer.",
             edit_summary="",
             base_revision_id=latest_revision_id(article),
             wiki=self.wiki,
         )
 
-        with mock.patch("urbanlens.dashboard.services.wiki.concealment.concealment_active", return_value=True):
-            # Without the concealment carve-out, this would incorrectly conflict against
-            # the stranger's revision, which this viewer was never shown.
+        with projecting(hidden_profile_ids=[self.stranger.pk]):
             _article, revision = save_article_checked(
                 editor=self.viewer,
                 content="The viewer's edit, based on what they saw.",
@@ -129,16 +120,8 @@ class ConcealedViewerConflictCheckTests(TestCase):
 
         self.assertIsNotNone(revision)
 
-    def test_a_visible_edit_still_conflicts_a_concealed_viewer(self) -> None:
-        """The carve-out narrows what conflicts for a concealed viewer - it doesn't disable the check."""
-        article, first = save_article_checked(
-            editor=self.author,
-            content="First draft.",
-            edit_summary="",
-            base_revision_id=None,
-            wiki=self.wiki,
-        )
-        assert first is not None
+    def test_a_revision_the_viewer_is_shown_still_conflicts(self) -> None:
+        article, first = self._first_draft()
         save_article_checked(
             editor=self.viewer,
             content="The viewer's own earlier edit.",
@@ -148,13 +131,30 @@ class ConcealedViewerConflictCheckTests(TestCase):
             wiki=self.wiki,
         )
 
-        with (
-            mock.patch("urbanlens.dashboard.services.wiki.concealment.concealment_active", return_value=True),
-            self.assertRaises(ArticleConflictError),
-        ):
+        with projecting(hidden_profile_ids=[self.stranger.pk]), self.assertRaises(ArticleConflictError):
             save_article_checked(
                 editor=self.viewer,
                 content="Based on stale info.",
+                edit_summary="",
+                base_revision_id=first.pk,
+                viewer=self.viewer,
+                wiki=self.wiki,
+            )
+
+    def test_with_no_projection_any_newer_revision_conflicts(self) -> None:
+        article, first = self._first_draft()
+        save_article_checked(
+            editor=self.stranger,
+            content="Newer.",
+            edit_summary="",
+            base_revision_id=latest_revision_id(article),
+            wiki=self.wiki,
+        )
+
+        with self.assertRaises(ArticleConflictError):
+            save_article_checked(
+                editor=self.viewer,
+                content="Stale.",
                 edit_summary="",
                 base_revision_id=first.pk,
                 viewer=self.viewer,

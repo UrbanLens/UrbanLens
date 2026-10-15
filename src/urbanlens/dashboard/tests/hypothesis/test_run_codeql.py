@@ -192,6 +192,29 @@ class RunCodeqlWrapperTests(SimpleTestCase):
         with self.assertRaises(ValueError):
             self._triaged([entry])
 
+    def test_a_plugins_triage_file_beside_it_counts_and_is_named_when_stale(self) -> None:
+        entry = {
+            "rule": "py/a",
+            "path": "src/urbanlens/plugins/x/a.py",
+            "fingerprint": "1:1",
+            "language": "python",
+            "reason": "x",
+        }
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            plugin_file = root / "src" / "urbanlens" / "plugins" / "x" / "codeql-triaged.json"
+            plugin_file.parent.mkdir(parents=True)
+            plugin_file.write_text(json.dumps([entry]), encoding="utf-8")
+            with (
+                patch.object(self.runner, "REPO_ROOT", root),
+                patch.object(self.runner, "TRIAGED_PATH", root / "missing.json"),
+            ):
+                triaged = self.runner.load_all_triaged()
+
+        stale = self.runner.stale_triaged(triaged, set(), languages=("python",))
+
+        self.assertEqual([(e["path"], e["source"]) for e in stale], [(entry["path"], plugin_file)])
+
     def test_no_triage_file_means_nothing_is_triaged(self) -> None:
         self.assertEqual(self.runner.load_triaged(Path("/nonexistent/triaged.json")), {})
 
@@ -215,3 +238,43 @@ class RunCodeqlWrapperTests(SimpleTestCase):
         value = "true" if flag else "false"
         text = f"primaryLanguage: python\nfinalised: {value}\n"
         self.assertEqual(self.runner._yaml_finalised(text), flag)
+
+
+class EffectiveConfigTests(SimpleTestCase):
+    """A source root only some checkouts carry is scanned without the checked-in config naming it."""
+
+    BASE = 'name: x\n\npaths:\n  - src/urbanlens\n  - bin\n\npaths-ignore:\n  - "**/docs/**"\n'
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls.runner = _load_runner()
+
+    def _effective(self, roots: list[str]) -> str:
+        with TemporaryDirectory() as tmp:
+            base = Path(tmp) / "base.yml"
+            base.write_text(self.BASE, encoding="utf-8")
+            return self.runner.effective_config(base, roots, Path(tmp) / "out" / "base.yml").read_text(encoding="utf-8")
+
+    def test_an_unlisted_root_joins_paths_not_paths_ignore(self) -> None:
+        text = self._effective(["src/extra", "src/urbanlens"])
+
+        self.assertEqual(
+            text,
+            'name: x\n\npaths:\n  - src/urbanlens\n  - bin\n  - src/extra\n\npaths-ignore:\n  - "**/docs/**"\n',
+        )
+
+    def test_listed_roots_leave_the_config_unchanged(self) -> None:
+        self.assertEqual(self._effective(["src/urbanlens"]), self.BASE)
+
+    def test_the_checked_in_configs_name_no_root_but_core(self) -> None:
+        for config in (self.runner.CI_CONFIG, self.runner.LOCAL_CONFIG):
+            listed = [
+                line.strip()[2:]
+                for line in config.read_text(encoding="utf-8").splitlines()
+                if line.startswith("  - src/")
+            ]
+            self.assertEqual(listed, ["src/urbanlens"], config.name)
+
+    def test_tracked_roots_include_core(self) -> None:
+        self.assertIn("src/urbanlens", self.runner._tracked_source_roots())

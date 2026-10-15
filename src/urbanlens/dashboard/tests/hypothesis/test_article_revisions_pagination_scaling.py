@@ -1,7 +1,7 @@
 """
 Revision history builds every revision, then paginates the list it built.
 
-N21 H46, and a second door the finding did not name. Both the pin-article and
+A second door, which the original audit did not name, has the same shape. Both the pin-article and
 the wiki-article revision endpoints do `list(article.revisions...)` and build a
 row dict per revision *before* handing the result to `paginated_response` - so
 the page-size limit bounds the response body and nothing else. Each row carries
@@ -163,14 +163,14 @@ class TheWindowRespectsTheCallersFilterTests(_RevisionCase):
     A revision the caller filtered out must not be what a delta measures against.
 
     The wiki door hands `revision_history_page` a queryset already narrowed by
-    `visible_rows`, so a concealed viewer pages through a history with holes in
+    `visible_rows`, so a viewer whose projection hides some revisions pages through a history with holes in
     it. The window is computed over that filtered queryset, which means a delta
     spans the gap - exactly what the list comprehension this replaced did, since
     it indexed into the already-filtered list.
 
-    Pinned directly rather than through a concealment fixture: the property is
+    Pinned directly rather than through a projection: the property is
     "the window sees what the caller passed", and passing a filtered queryset
-    states that without depending on what makes a viewer concealed.
+    states that without depending on what filtered it.
     """
 
     def test_a_filtered_out_revision_is_not_the_neighbour(self) -> None:

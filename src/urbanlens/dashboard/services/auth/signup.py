@@ -1,5 +1,5 @@
 """
-Account mail whose work depends on whether an address is registered: signup, resend and password reset (P147).
+Account mail whose work depends on whether an address is registered: signup, resend and password reset.
 
 The request only validates the form, then hands the rest to a task, so a registered address costs the submitter
 exactly what a new one does. Which email goes out is the only difference, and only the address's owner sees it.

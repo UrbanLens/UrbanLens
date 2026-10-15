@@ -134,7 +134,7 @@ class MetricsTokenGateTests(SimpleTestCase):
         self.assertEqual(self._get().status_code, 200)
 
 
-@override_settings(UL_METRICS_TOKEN="", UL_METRICS_ALLOWED_CIDRS="10.2.0.0/24", TRUSTED_PROXY_COUNT=1)
+@override_settings(UL_METRICS_TOKEN="", UL_METRICS_ALLOWED_CIDRS="10.0.0.0/24", TRUSTED_PROXY_COUNT=1)
 class MetricsNetworkGateTests(SimpleTestCase):
     """The allowlist admits the monitoring network and nothing else."""
 
@@ -150,7 +150,7 @@ class MetricsNetworkGateTests(SimpleTestCase):
 
     def test_address_inside_the_allowlist_is_served(self) -> None:
         # One proxy hop, so the rightmost XFF entry is the one nginx appended.
-        self.assertEqual(self._get("172.18.0.5", forwarded="10.2.0.9").status_code, 200)
+        self.assertEqual(self._get("172.18.0.5", forwarded="10.0.0.9").status_code, 200)
 
     def test_address_outside_the_allowlist_is_refused_as_404(self) -> None:
         response = self._get("172.18.0.5", forwarded="203.0.113.7")
@@ -160,30 +160,30 @@ class MetricsNetworkGateTests(SimpleTestCase):
         # The attacker controls everything left of what our own proxy appended.
         # Reading the leftmost entry - the naive implementation - would admit
         # this request; reading one hop from the right does not.
-        response = self._get("172.18.0.5", forwarded="10.2.0.9, 203.0.113.7")
+        response = self._get("172.18.0.5", forwarded="10.0.0.9, 203.0.113.7")
         self.assertEqual(response.status_code, 404)
 
     def test_missing_forwarded_chain_falls_back_to_the_socket_address(self) -> None:
         # A request that did not come through the proxy is judged on where it
         # actually came from, not on a header it may have invented.
         self.assertEqual(self._get("203.0.113.7").status_code, 404)
-        self.assertEqual(self._get("10.2.0.9").status_code, 200)
+        self.assertEqual(self._get("10.0.0.9").status_code, 200)
 
-    @override_settings(UL_METRICS_ALLOWED_CIDRS="10.2.0.0/24, , 127.0.0.1/32")
+    @override_settings(UL_METRICS_ALLOWED_CIDRS="10.0.0.0/24, , 127.0.0.1/32")
     def test_blank_and_multiple_entries_are_handled(self) -> None:
         self.assertEqual(self._get("172.18.0.5", forwarded="127.0.0.1").status_code, 200)
 
     @override_settings(UL_METRICS_ALLOWED_CIDRS="not-a-cidr")
     def test_an_unparseable_allowlist_refuses_everyone(self) -> None:
         # A typo must narrow what is reachable, never widen it.
-        self.assertEqual(self._get("10.2.0.9", forwarded="10.2.0.9").status_code, 404)
+        self.assertEqual(self._get("10.0.0.9", forwarded="10.0.0.9").status_code, 404)
 
-    @override_settings(UL_METRICS_TOKEN="tok", UL_METRICS_ALLOWED_CIDRS="10.2.0.0/24")
+    @override_settings(UL_METRICS_TOKEN="tok", UL_METRICS_ALLOWED_CIDRS="10.0.0.0/24")
     def test_both_gates_must_pass_when_both_are_configured(self) -> None:
-        self.assertEqual(self._get("10.2.0.9", forwarded="10.2.0.9").status_code, 401)
+        self.assertEqual(self._get("10.0.0.9", forwarded="10.0.0.9").status_code, 401)
         response = MetricsController.as_view()(
             self.factory.get(
-                "/metrics", REMOTE_ADDR="10.2.0.9", HTTP_X_FORWARDED_FOR="10.2.0.9", HTTP_AUTHORIZATION="Bearer tok"
+                "/metrics", REMOTE_ADDR="10.0.0.9", HTTP_X_FORWARDED_FOR="10.0.0.9", HTTP_AUTHORIZATION="Bearer tok"
             ),
         )
         self.assertEqual(response.status_code, 200)
@@ -212,7 +212,7 @@ class ClientIpHelperTests(SimpleTestCase):
 
     @override_settings(TRUSTED_PROXY_COUNT=0)
     def test_zero_hops_ignores_the_forwarded_header(self) -> None:
-        request = RequestFactory().get("/", REMOTE_ADDR="172.18.0.5", HTTP_X_FORWARDED_FOR="10.2.0.9")
+        request = RequestFactory().get("/", REMOTE_ADDR="172.18.0.5", HTTP_X_FORWARDED_FOR="10.0.0.9")
         self.assertEqual(client_ip(request), "172.18.0.5")
 
 
@@ -271,7 +271,7 @@ class MetricsStartupCheckTests(SimpleTestCase):
         self.assertEqual(check_metrics_endpoint_is_guarded(), [])
 
     @override_settings(
-        UL_METRICS_ENABLED=True, UL_METRICS_TOKEN="", UL_METRICS_ALLOWED_CIDRS="10.2.0.0/24", IS_PRODUCTION=True
+        UL_METRICS_ENABLED=True, UL_METRICS_TOKEN="", UL_METRICS_ALLOWED_CIDRS="10.0.0.0/24", IS_PRODUCTION=True
     )
     def test_an_allowlist_alone_satisfies_the_check(self) -> None:
         self.assertEqual(check_metrics_endpoint_is_guarded(), [])
@@ -301,7 +301,7 @@ class MetricsInstrumentationGateTests(SimpleTestCase):
     def test_only_scraped_roles_are_instrumented(self) -> None:
         # Every role that appears in docker-compose.yml, so a new one added
         # there has to be considered here rather than silently instrumented.
-        for role in ("websocket", "worker", "panels", "beat", "metrics", "sandbox", "inference", "ai"):
+        for role in ("websocket", "worker", "panels", "beat", "metrics", "sandbox"):
             with self.subTest(role=role):
                 self.assertFalse(
                     _metrics.instrumentation_wanted(metrics_enabled=True, process_role=role),
@@ -807,11 +807,11 @@ class MetricsAuthSharedGateTests(SimpleTestCase):
         self.assertFalse(token_ok("Basic tok"))
         self.assertFalse(token_ok(""))
 
-    @override_settings(UL_METRICS_TOKEN="", UL_METRICS_ALLOWED_CIDRS="10.2.0.0/24")
+    @override_settings(UL_METRICS_TOKEN="", UL_METRICS_ALLOWED_CIDRS="10.0.0.0/24")
     def test_network_gate(self) -> None:
         from urbanlens.dashboard.services.core.metrics_auth import network_ok
 
-        self.assertTrue(network_ok("10.2.0.9"))
+        self.assertTrue(network_ok("10.0.0.9"))
         self.assertFalse(network_ok("203.0.113.7"))
         self.assertFalse(network_ok("garbage"))
 
@@ -844,7 +844,7 @@ class MetricsScrapeTargetHostTests(SimpleTestCase):
     """The scrape target has to be a name Django will accept as a Host."""
 
     def test_app_has_a_hostname_legal_network_alias(self) -> None:
-        # Prometheus/Alloy derive Host from __address__; Django validates Host
+        # Prometheus derives Host from __address__; Django validates Host
         # against a regex excluding underscores before ALLOWED_HOSTS. Scraping
         # `urbanlens_app` returns 400 despite correct token and network.
         compose = yaml.safe_load((REPO_ROOT / "docker-compose.yml").read_text())

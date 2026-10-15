@@ -16,9 +16,7 @@ from urbanlens.UrbanLens.egress import EgressCategory
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
-    from urbanlens.dashboard.services.locations.enrichment import EnrichmentSource
-    from urbanlens.dashboard.services.locations.name_resolution import NameProvider
-    from urbanlens.dashboard.services.pins.external_data import PanelSource
+    from urbanlens.dashboard.plugins.base import PluginContext
 
 #: Cached keys that make the panel worth showing at all.
 #: A reverse-geocode that matched only an address (no name, no tags) tells a viewer nothing they
@@ -243,29 +241,47 @@ class NominatimPlugin(UrbanLensPlugin):
     description: ClassVar[str] = "Reverse-geocodes pins via Nominatim and shows OpenStreetMap place metadata on the Private Pin page."
     author: ClassVar[str] = "UrbanLens"
 
-    def get_service_defaults(self) -> dict[str, ServiceDefaults]:
-        """Rate-limit defaults for the Nominatim API."""
-        return {
-            "nominatim": ServiceDefaults(
-                display_name="Nominatim (OpenStreetMap)",
-                category=EgressCategory.QUOTA,
-                calls_per_minute=1,
-                calls_per_day=500,
-                notes="Free API. Hard limit: 1 req/second per OSM ToS.",
+    def setup(self, plugin: PluginContext) -> None:
+        """Nominatim rate-limit defaults, forward geocoding, the OpenStreetMap pin-detail panel, current and former OSM names, and background reverse-geocode caching."""
+        from urbanlens.dashboard.plugins.points import DATA_SOURCE_CREDITS, DataSourceCredit, MapAttribution
+
+        plugin.add(
+            DATA_SOURCE_CREDITS,
+            DataSourceCredit(
+                name="Nominatim",
+                category="open_map",
+                url="https://www.openstreetmap.org/copyright",
+                note="Community-maintained data used for the default street map and the Water & Rail overlay, including active and lifecycle-tagged historic railways, rail trails, waterways, and canals. Viewport geometry is queried through Overpass; reverse geocoding and address lookup use Nominatim.",
+                attribution=MapAttribution(icon="map", text="© OpenStreetMap contributors, available under the", terms_label="Open Database License (ODbL)", terms_url="https://opendatacommons.org/licenses/odbl/"),
             ),
-        }
+        )
 
-    def get_panel_sources(self) -> list[PanelSource]:
-        """Contribute the OpenStreetMap pin-detail panel."""
-        return [NominatimPanelSource()]
+        from urbanlens.dashboard.plugins.points import ENRICHMENT_SOURCES, GEOCODERS, NAME_PROVIDERS, PANEL_SOURCES, SERVICE_DEFAULTS
+        from urbanlens.dashboard.services.apis.locations.geocode_resolution import NominatimGeocoder
 
-    def get_name_providers(self) -> list[NameProvider]:
-        """Contribute the reverse-geocoded OSM place name, and its former name(s), as candidates."""
-        return [
-            LocationCacheNameProvider(source="nominatim", cache_source="nominatim", keys=("name",), verbose_name="OpenStreetMap"),
-            _SemicolonSplitNameProvider(source="nominatim_old_name", cache_source="nominatim", keys=("old_name",), verbose_name="OpenStreetMap"),
-        ]
+        plugin.register_all(
+            SERVICE_DEFAULTS,
+            {
+                "nominatim": ServiceDefaults(
+                    display_name="Nominatim (OpenStreetMap)",
+                    category=EgressCategory.QUOTA,
+                    calls_per_minute=1,
+                    calls_per_day=500,
+                    notes="Free API. Hard limit: 1 req/second per OSM ToS.",
+                ),
+            },
+        )
 
-    def get_enrichment_sources(self) -> list[EnrichmentSource]:
-        """Contribute the OSM reverse-geocode cache to scheduled background enrichment."""
-        return [NominatimEnrichmentSource()]
+        plugin.add(GEOCODERS, NominatimGeocoder(), priority=100)
+
+        plugin.extend(PANEL_SOURCES, [NominatimPanelSource()])
+
+        plugin.extend(
+            NAME_PROVIDERS,
+            [
+                LocationCacheNameProvider(source="nominatim", cache_source="nominatim", keys=("name",), verbose_name="OpenStreetMap"),
+                _SemicolonSplitNameProvider(source="nominatim_old_name", cache_source="nominatim", keys=("old_name",), verbose_name="OpenStreetMap"),
+            ],
+        )
+
+        plugin.extend(ENRICHMENT_SOURCES, [NominatimEnrichmentSource()])

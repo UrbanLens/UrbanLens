@@ -1,4 +1,4 @@
-"""Site admin > Subscriptions' grant list and revoke: every site admin manages every grant, nobody else any (P199)."""
+"""Site admin > Subscriptions' grant list and revoke: every site admin manages every grant, nobody else any."""
 
 from __future__ import annotations
 
@@ -153,7 +153,7 @@ class RevokeRequestShapeTests(_GrantFixture):
         self.assertEqual(self.grant.revoked_at, first)
 
     def test_a_revoke_is_logged_with_who_revoked(self) -> None:
-        with self.assertLogs("urbanlens.dashboard.controllers.site_admin", level="INFO") as logs:
+        with self.assertLogs("urbanlens.dashboard.controllers.site_admin_subscriptions", level="INFO") as logs:
             self._revoke(_client_for(self.admin_b))
 
         line = next(record for record in logs.records if "revoked" in record.getMessage())

@@ -1,4 +1,4 @@
-"""The direct-Nominatim geocode fallbacks go through NominatimGateway, not raw geopy."""
+"""The direct-Nominatim geocoders go through NominatimGateway, not raw geopy."""
 
 from __future__ import annotations
 
@@ -10,19 +10,16 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
+from urbanlens.dashboard.plugins.points import GEOCODERS
 from urbanlens.dashboard.services.apis.locations import geocode_resolution
+from urbanlens.dashboard.services.apis.locations.geocode_resolution import NominatimGeocoder
 
 _GATEWAY_PATH = "urbanlens.dashboard.services.apis.locations.nominatim.NominatimGateway"
 
 
-class GeocodeResolutionFallbackTests(SimpleTestCase):
+class GeocodeResolutionNominatimTests(SimpleTestCase):
     def _fallback(self, results: list[dict]) -> tuple:
-        with (
-            mock.patch(
-                "urbanlens.dashboard.services.apis.locations.geocode_resolution.redata_configured", return_value=False
-            ),
-            mock.patch(_GATEWAY_PATH) as gateway_cls,
-        ):
+        with GEOCODERS.overridden([NominatimGeocoder()]), mock.patch(_GATEWAY_PATH) as gateway_cls:
             gateway_cls.return_value.search.return_value = results
             coords = geocode_resolution.geocode_address("323 Beaver St, Ansonia CT")
         return coords, gateway_cls

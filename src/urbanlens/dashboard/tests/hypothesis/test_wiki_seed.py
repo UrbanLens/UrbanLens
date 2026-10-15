@@ -120,7 +120,7 @@ def test_infobox_markdown_malformed_pairs_are_ignored() -> None:
 
 class LeadImageMarkdownTests(TestCase):
     def test_the_lead_image_is_this_sites_copy(self) -> None:
-        """P165: an article must not make every reader's browser fetch from Wikimedia."""
+        """An article must not make every reader's browser fetch from Wikimedia."""
         from urbanlens.dashboard.models.remote_image_copy.model import RemoteImageCopy
         from urbanlens.dashboard.services.wiki.wiki_seed import _lead_image_markdown
 

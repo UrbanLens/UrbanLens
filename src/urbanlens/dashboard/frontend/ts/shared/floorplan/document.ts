@@ -166,7 +166,7 @@ export interface FloorplanDocument {
     valid_from: string | null;
     /**
      * Coordinate anchor for plan-local metres. Not `origin`: that key already
-     * carries provenance ("local" / "community" / "redata") and the save view
+     * carries provenance ("local" / "community" / a provider's) and the save view
      * merges it in over the document.
      */
     plan_origin: { lat: number; lng: number } | null;
@@ -182,6 +182,8 @@ export interface FloorplanDocument {
     version_token?: string;
     /** Server-supplied, read-only here. */
     origin?: string;
+    /** What the editor says of a read-only document from a provider; the server writes it. */
+    origin_banner?: string;
     versions?: VersionSummary[];
 }
 

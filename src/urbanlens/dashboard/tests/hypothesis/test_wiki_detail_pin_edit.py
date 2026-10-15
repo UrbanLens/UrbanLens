@@ -1,4 +1,4 @@
-"""Editing and moving a child wiki from its parent wiki's page (P37)."""
+"""Editing and moving a child wiki from its parent wiki's page."""
 
 from __future__ import annotations
 

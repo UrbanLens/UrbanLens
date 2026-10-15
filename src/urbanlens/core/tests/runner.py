@@ -14,7 +14,7 @@ from urbanlens.core.testing_network import (
     LocalhostOnlyNetwork,
     verify_external_network_blocked,
 )
-from urbanlens.core.tests.ai_guard import patched_ai_gateway
+from urbanlens.core.tests.plugin_guards import plugin_test_guards
 from urbanlens.core.tests.result import MessageResult
 
 
@@ -61,6 +61,8 @@ class QuietTestRunner(unittest.TextTestRunner):
 
 
 class TestRunner(DiscoverRunner):
+    _network_guard: LocalhostOnlyNetwork | None = None
+
     def setup_test_environment(self, **kwargs: Any) -> None:
         os.environ["DJANGO_TESTING"] = "1"
 
@@ -70,9 +72,9 @@ class TestRunner(DiscoverRunner):
         conf.settings.UNSAFE_ALLOW_HTTP = True
         conf.settings.SECURE_SSL_REDIRECT = False
 
-        # Same chokepoint list as conftest.py; this hook covers `manage.py test`.
-        self._ai_guard = patched_ai_gateway()
-        self._ai_guard.__enter__()
+        # Same guards as conftest.py; this hook covers `manage.py test`.
+        self._plugin_guards = plugin_test_guards()
+        self._plugin_guards.__enter__()
 
         if os.getenv("UL_ALLOW_TEST_INTERNET", "False").lower() not in {"true", "1", "yes"}:
             self._network_guard = LocalhostOnlyNetwork().start()
@@ -87,9 +89,9 @@ class TestRunner(DiscoverRunner):
         network_guard = getattr(self, "_network_guard", None)
         if network_guard:
             network_guard.stop()
-        ai_guard = getattr(self, "_ai_guard", None)
-        if ai_guard:
-            ai_guard.__exit__(None, None, None)
+        plugin_guards = getattr(self, "_plugin_guards", None)
+        if plugin_guards:
+            plugin_guards.__exit__(None, None, None)
         super().teardown_test_environment(**kwargs)
 
     def run_suite(self, suite, **kwargs):

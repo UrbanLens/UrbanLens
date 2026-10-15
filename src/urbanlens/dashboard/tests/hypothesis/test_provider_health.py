@@ -1,7 +1,7 @@
 """
 A provider that stops answering is noticed, backed off, probed and reported, without a person going looking.
 
-On 2026-10-05 the dev deployment's Cloudflare image classifier had failed 33 of its last 40 calls and REData was
+On 2026-10-05 the dev deployment's hosted image-analysis provider had failed 33 of its last 40 calls and a data service was
 answering 503 to a quarter of the calls made to it, and nothing had said so.
 """
 
@@ -411,15 +411,17 @@ class AlertTests(_GateTestCase):
             f"{_SERVICE} cleared after 2 days: called too rarely to judge any more.", self.notify.call_args.args[2]
         )
 
-    def test_redata_down_is_named_rather_than_counted(self) -> None:
+    def test_a_grouped_service_down_is_named_rather_than_counted(self) -> None:
         start = timezone.now() - timedelta(hours=2)
-        for service in ("redata_places", "redata_api", "redata_cid_lookup"):
+        group = provider_health.ProviderGroup(name="Google", prefix="google_")
+        for service in ("google_geocoding", "google_places", "google_maps"):
             _calls(service, 20, status=503, at=start - timedelta(minutes=5))
-        evaluate_provider_health(now=start)
+        with mock.patch.object(provider_health, "PROVIDER_GROUPS", [group]):
+            evaluate_provider_health(now=start)
 
-        evaluate_provider_health(now=start + timedelta(minutes=35))
+            evaluate_provider_health(now=start + timedelta(minutes=35))
 
-        self.assertIn("REData is failing", self.notify.call_args.args[1])
+        self.assertIn("Google is failing", self.notify.call_args.args[1])
 
     def test_a_failed_delivery_still_leaves_the_backoff_in_force(self) -> None:
         self.notify.side_effect = RuntimeError("smtp down")
@@ -473,7 +475,7 @@ class GateTests(_GateTestCase):
         _backed_off()
 
         with background_work():
-            _session("redata_places").get(_URL)
+            _session("google_places").get(_URL)
 
     def test_sdk_calls_are_refused_before_their_block_runs(self) -> None:
         _backed_off()

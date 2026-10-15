@@ -1,4 +1,4 @@
-"""Tests for UL-155: label ("badge") kind-change UX."""
+"""Tests for label ("badge") kind-change UX."""
 
 from __future__ import annotations
 

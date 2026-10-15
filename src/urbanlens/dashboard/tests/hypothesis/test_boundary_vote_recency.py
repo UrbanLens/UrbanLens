@@ -29,7 +29,7 @@ class BoundaryVoteRecencyTests(TestCase):
     def test_re_affirming_the_same_choice_moves_the_updated_timestamp(self) -> None:
         from django.contrib.gis.geos import MultiPolygon, Polygon
 
-        from urbanlens.dashboard.models.boundary.model import BoundarySource, BoundaryType
+        from urbanlens.dashboard.models.boundary.model import BoundaryType
         from urbanlens.dashboard.models.place.model import Place
 
         place = baker.make(Place)
@@ -41,7 +41,7 @@ class BoundaryVoteRecencyTests(TestCase):
             pin=None,
             wiki=None,
             profile=None,
-            source=BoundarySource.REDATA.value,
+            source="county",
             boundary_type=BoundaryType.PROPERTY,
             generated_polygon=MultiPolygon(Polygon(((0, 0), (0, 0.001), (0.001, 0.001), (0.001, 0), (0, 0)))),
         )

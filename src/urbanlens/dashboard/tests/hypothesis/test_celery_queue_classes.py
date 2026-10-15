@@ -1,7 +1,7 @@
 """
 One account's big job must not delay everyone's small ones.
 
-D13 measured it: 87 of 96 task definitions declared no queue, so all of them
+It was measured: 87 of 96 task definitions declared no queue, so all of them
 landed on `celery` and were drained by one worker at `--concurrency=4`. An Immich
 library sweep holds one of those four slots for the better part of an hour, and
 `escalate_overdue_checkins` - the task whose whole job is telling somebody that a
@@ -27,17 +27,16 @@ import pathlib
 from typing import Any
 
 from django.core.checks import Error
-import yaml
 
+from urbanlens.core.tests.compose import compose_document
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.checks import check_every_task_declares_a_queue
 from urbanlens.dashboard.services.sandbox.queues import Queue
 
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[5]
-_COMPOSE_PATH = _REPO_ROOT / "docker-compose.yml"
 
 #: Beat-driven, and interactive anyway: each one exists to tell a person that
-#: somebody is overdue. D13 calls this placement out as the one most worth a
+#: somebody is overdue. This placement is the one most worth a
 #: second opinion, which is why it is asserted rather than left to the table.
 _SAFETY_TASKS = (
     "urbanlens.dashboard.tasks.escalate_overdue_checkins",
@@ -46,7 +45,7 @@ _SAFETY_TASKS = (
 )
 
 #: A task whose cost is set by how much one account owns. Enough of the table to
-#: catch a wholesale reclassification; not the whole table, which lives in D13.
+#: catch a wholesale reclassification; not the whole table.
 _BULK_TASKS = (
     "urbanlens.dashboard.tasks.sweep_immich_library_locations",
     "urbanlens.dashboard.tasks.run_user_data_export",
@@ -84,7 +83,7 @@ def _compose_services() -> dict[str, Any]:
     Returns:
         The `services` mapping.
     """
-    return yaml.safe_load(_COMPOSE_PATH.read_text(encoding="utf-8"))["services"]
+    return compose_document()["services"]
 
 
 def _queues_of(service: dict[str, Any]) -> set[str]:
@@ -122,7 +121,6 @@ class TheRegistryIsRealTests(SimpleTestCase):
 
         self.assertGreater(len(tasks), 80, f"only {len(tasks)} tasks discovered; the registry is not populated")
         self.assertIn("urbanlens.dashboard.tasks.sweep_immich_library_locations", tasks)
-        self.assertIn("urbanlens.dashboard.services.ai.tasks.run_assistant_turn_task", tasks)
 
     def test_the_compose_file_really_declares_queues(self) -> None:
         self.assertIn(Queue.SANDBOX, _worker_queues(), "no -Q was parsed out of docker-compose.yml")
@@ -229,7 +227,7 @@ class SafetyOverridesTheBeatRuleTests(SimpleTestCase):
 
 class UpstreamWorkStaysOffTheInteractivePoolTests(SimpleTestCase):
     """
-    A new pin's wiki is created on the interactive pool; enriching it waits on Google, OSM and REData for up to
+    A new pin's wiki is created on the interactive pool; enriching it waits on Google, OSM and the first-party data services for up to
     four minutes. On one pool, four enrichments held every slot and new pins' wikis took over two minutes to appear
     (the integration suite, 2026-10-01)."""
 

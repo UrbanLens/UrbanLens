@@ -1,7 +1,7 @@
 /** Pure hostname-matching logic behind the production-write guard. */
 
 /** Hosts that are refused by default. These tests create, edit and delete real rows as a real account. */
-export const DEFAULT_PRODUCTION_HOSTS: readonly string[] = ["urbanlens.org", "www.urbanlens.org", "app.urbanlens.org"];
+export const DEFAULT_PRODUCTION_HOSTS: readonly string[] = ["example.com", "www.example.com", "app.example.com"];
 
 /**
  * Whether *hostname* is one this suite refuses to run against.
@@ -10,6 +10,6 @@ export const DEFAULT_PRODUCTION_HOSTS: readonly string[] = ["urbanlens.org", "ww
  * @param productionHosts - The denylist to check against (already lowercased, as `env.ts`'s `readList` produces).
  */
 export function isProductionHost(hostname: string, productionHosts: string[]): boolean {
-    // "urbanlens.org." is the same host, fully qualified, and resolves to the same place.
+    // "example.com." is the same host, fully qualified, and resolves to the same place.
     return productionHosts.includes(hostname.toLowerCase().replace(/\.+$/, ""));
 }

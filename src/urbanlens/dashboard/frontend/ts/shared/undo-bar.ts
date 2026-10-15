@@ -32,7 +32,7 @@ const COLLIDERS = [
     ".ul-bulk-bar.visible",
     ".page-footer",
     "#toast-container",
-    "#ul-assistant-fab",
+    "[data-undo-bar-avoid]",
     ".pin-actions-fab",
 ];
 

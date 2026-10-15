@@ -624,7 +624,7 @@ def save_article_checked(
         editor: The profile making the edit (None for system saves).
         content: The complete new Markdown source.
         edit_summary: Optional one-line description of the change.
-        viewer: Who is saving, when the conflict check must be asked about what they were shown rather than what is stored - a concealed viewer.
+        viewer: Who is saving, when the conflict check must be asked about what they were shown rather than what is stored.
         base_revision_id: The revision the editor started from, or None when they believe the article has no revisions yet.
         pin: Host pin (mutually exclusive with ``wiki``).
         wiki: Host wiki.
@@ -646,15 +646,16 @@ def save_article_checked(
             # being the current article even though the conflict check exists to prevent exactly
             Article.objects.select_for_update().filter(pk=article.pk).first()
         latest_id = latest_revision_id(article)
-        # A concealed viewer's editor was handed the newest revision *they* can see as its baseline,
-        # so comparing it against the live newest is a conflict they can never clear - a permanent
-        # 409 on an article that looks, to them, like nobody else has touched it.
+        # A viewer whose projection narrows the article's revisions was handed the newest revision *they* are shown as
+        # their editor's baseline, so comparing it against the stored newest is a conflict they can never clear - a
+        # permanent 409 on an article that looks, to them, like nobody else has touched it.
         # Ask the question they can actually answer: has anything changed that they were shown?
         if article is not None and viewer is not None and wiki is not None:
-            from urbanlens.dashboard.services.wiki.concealment import concealment_active, visible_rows
+            from urbanlens.dashboard.services.wiki.viewer_projection import viewer_projection
 
-            if concealment_active(wiki, viewer):
-                newest_visible = visible_rows(article.revisions.all(), wiki, viewer).order_by("-created", "-pk").first()
+            projection = viewer_projection(wiki, viewer)
+            if projection.active:
+                newest_visible = projection.newest_revision(article)
                 latest_id = newest_visible.pk if newest_visible is not None else None
         if latest_id is not None and latest_id != base_revision_id:
             raise ArticleConflictError(latest_id)
@@ -799,7 +800,7 @@ def revision_history_page(revisions: Any, viewer: Profile) -> tuple[Any, Callabl
 
     Args:
         revisions: The revision queryset, already scoped and filtered by the
-            caller - the wiki door applies concealment, the pin door does not,
+            caller - the wiki door narrows by the viewer's projection, the pin door does not,
             and the window must see exactly the rows the viewer will page
             through for the deltas to add up.
         viewer: The requesting profile, for editor-name masking.

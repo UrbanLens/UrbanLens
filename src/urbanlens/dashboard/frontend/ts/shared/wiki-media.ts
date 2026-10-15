@@ -10,26 +10,7 @@ import { toast } from "./dialogs";
 import { sendJson } from "./fetch-json";
 import { htmxDetail } from "./htmx-events";
 
-const TAB_LABELS: Record<string, string> = {
-    photos: "Photos",
-    smithsonian: "Smithsonian",
-    wikimedia: "Wikimedia",
-    wikipedia_media: "Wikipedia",
-    loc: "Library of Congress",
-    yelp: "Yelp",
-    google_images: "Google Images",
-    google_maps: "Google Maps",
-    searxng_images: "Web Images",
-    internet_archive: "Internet Archive",
-    digital_commonwealth: "Digital Commonwealth",
-    loopnet: "LoopNet",
-    cris_building: "NY Historic Preservation (CRIS)",
-    historical_maps: "Historical Maps",
-    redata_media: "Nearby Media",
-    redata_aerial: "Aerial & Drone",
-    redata_street_level: "Street-level",
-    redata_photo_pool: "Nearby Photos",
-};
+const PHOTOS_LABEL = "Photos";
 
 /** How long every provider gets to produce a tile before the section says it found nothing. */
 const EMPTY_AFTER_MS = 15000;
@@ -132,10 +113,14 @@ export class WikiMedia {
         const tabsEl = document.getElementById("wiki-media-tabs");
         if (!tabsEl) return;
         const counts = new Map<string, number>();
+        // A tab is named by the provider's label the server put on its tiles.
+        const labels = new Map<string, string>();
         const all = items();
         for (const item of all) {
             const source = item.dataset.mediaSource;
-            if (source) counts.set(source, (counts.get(source) ?? 0) + 1);
+            if (!source) continue;
+            counts.set(source, (counts.get(source) ?? 0) + 1);
+            if (!labels.has(source)) labels.set(source, source === "photos" ? PHOTOS_LABEL : item.dataset.mediaSourceLabel || source);
         }
         const badge = document.getElementById("wiki-media-count-badge");
         if (badge) {
@@ -153,7 +138,7 @@ export class WikiMedia {
         if (this.activeTab !== "all" && !counts.has(this.activeTab)) this.activeTab = "all";
         const buttons = [tabButton("all", "All", view === "all" && this.activeTab === "all", all.length), tabButton("manage", "Manage", view === "manage")];
         for (const source of Array.from(counts.keys()).sort()) {
-            buttons.push(tabButton(source, TAB_LABELS[source] ?? source, view === "all" && this.activeTab === source, counts.get(source)));
+            buttons.push(tabButton(source, labels.get(source) ?? source, view === "all" && this.activeTab === source, counts.get(source)));
         }
         tabsEl.replaceChildren(...buttons);
     }

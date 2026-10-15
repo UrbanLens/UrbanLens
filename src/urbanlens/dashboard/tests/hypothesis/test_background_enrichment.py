@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 import math
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from celery.exceptions import SoftTimeLimitExceeded
 from django.db.models import Q
@@ -21,7 +21,6 @@ from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.apis.locations.google.redata_places_gateway import RedataPlacesGateway
 from urbanlens.dashboard.services.core.gateway import GatewayRateLimitedError
 from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
 from urbanlens.dashboard.services.geo.geo_boundary import USA
@@ -37,7 +36,6 @@ from urbanlens.dashboard.services.locations.enrichment import (
     self_reported_skip,
     stagger_seconds,
 )
-from urbanlens.dashboard.tests.hypothesis.redata_helpers import BUDGET_REFUSALS, RedataConfiguredMixin
 from urbanlens.UrbanLens.environments.meta import EnvironmentTypes
 
 
@@ -499,34 +497,11 @@ class RunEnrichmentCycleTests(TestCase):
         # not retry candidates against a budget that won't refill mid-run.
         for index in range(3):
             baker.make(Pin, profile=_make_profile(), location=_make_location(lat=f"40.{index:06d}"))
-        source = _RecordingSource(fail_after=1, fail_with=GatewayRateLimitedError("REData budget exhausted"))
+        source = _RecordingSource(fail_after=1, fail_with=GatewayRateLimitedError("budget exhausted"))
         summary = self._run(source)
         self.assertEqual(len(source.enriched_pks), 1)
         self.assertEqual(summary["sources"]["recording"]["skipped"], "rate_limited")
         self.assertEqual(summary["sources"]["recording"]["enriched"], 1)
-
-    def test_redata_refusing_for_either_budget_stops_source_gracefully(self) -> None:
-        """REData's ``rate_limited`` (its own budget) and ``key_budget_exhausted`` (this key's share of it) both end the run."""
-        for index in range(3):
-            baker.make(Pin, profile=_make_profile(), location=_make_location(lat=f"40.{index:06d}"))
-        for error in BUDGET_REFUSALS:
-            with self.subTest(error):
-                refused = Mock(status_code=503, headers={}, text="")
-                refused.json.return_value = {"error": error, "message": "spent"}
-                session = Mock()
-                session.get.return_value = refused
-                gateway = RedataPlacesGateway(
-                    base_url="https://redata.example.test", api_key="test-key", session=session
-                )
-                with self.assertRaises(GatewayRateLimitedError) as raised:
-                    gateway.get_place("p1")
-
-                source = _RecordingSource(fail_after=1, fail_with=raised.exception)
-                summary = self._run(source)
-
-                self.assertEqual(len(source.enriched_pks), 1)
-                self.assertEqual(summary["sources"]["recording"]["skipped"], "rate_limited")
-                self.assertEqual(summary["sources"]["recording"]["enriched"], 1)
 
     def test_service_disabled_on_api_limits_page_skips_source(self) -> None:
         baker.make(Pin, profile=_make_profile(), location=_make_location())
@@ -579,99 +554,6 @@ class RunEnrichmentCycleTests(TestCase):
             summary = self._run(source)
         mock_refresh.assert_called_once_with({location.pk})
         self.assertEqual(summary["names_refreshed"], 1)
-
-
-class PlacePhotosStopAtTheFirstRefusalTests(RedataConfiguredMixin, TestCase):
-    """
-    The hourly cycle's place-photo backfill against a REData whose Places budget is spent.
-
-    Production (0.8.0) logged 31 ``places/search/nearby`` 503s in 13 h, in a burst at :12-:14 past every hour: the
-    cycle went on to the next location after Google's own 429 relayed by REData, and stopped only at REData's
-    ``rate_limited``. The budget is small and shared, so the first refusal ends the batch until the next cycle.
-    """
-
-    _NEARBY = "places/search/nearby/"
-
-    def setUp(self) -> None:
-        super().setUp()
-        for index in range(3):
-            baker.make(Pin, profile=_make_profile(), location=_make_location(lat=f"40.{index:06d}"))
-
-    def _run(self, refusal: Mock) -> tuple[dict, Mock]:
-        from django.core.cache import cache
-        import requests
-
-        from urbanlens.dashboard.services.apis.locations import places_resolution
-        from urbanlens.dashboard.services.photos.photo_enrichment import PlacePhotoEnrichmentSource
-        from urbanlens.dashboard.tests.hypothesis.redata_helpers import REDATA_TEST_KEY, REDATA_TEST_URL
-
-        cache.clear()
-
-        def gateway() -> RedataPlacesGateway:
-            # The gateway's own rate-limited session, breaker included, over a stubbed transport.
-            return RedataPlacesGateway(base_url=REDATA_TEST_URL, api_key=REDATA_TEST_KEY)
-
-        with (
-            patch(
-                "urbanlens.dashboard.services.locations.enrichment.enrichment_sources",
-                return_value=[PlacePhotoEnrichmentSource()],
-            ),
-            patch.object(SiteSettings, "get_effective_environment_type", return_value=EnvironmentTypes.PRODUCTION),
-            patch.object(places_resolution, "RedataPlacesGateway", side_effect=gateway),
-            patch.object(requests.Session, "request", return_value=refusal) as upstream,
-        ):
-            # The pause between locations outlasts the breaker's hold: Google named a shorter wait, or the
-            # per-minute limit was lowered, which lengthens the pause.
-            summary = run_enrichment_cycle(sleep=lambda _seconds: cache.clear())
-        return summary, upstream
-
-    @staticmethod
-    def _refusal(status: int, body: dict, headers: dict[str, str] | None = None) -> Mock:
-        response = Mock(status_code=status, headers=headers or {}, ok=False, text=str(body))
-        response.json.return_value = body
-        return response
-
-    def _nearby_calls(self, upstream: Mock) -> int:
-        return sum(1 for call in upstream.call_args_list if self._NEARBY in str(call.args[1]))
-
-    def test_googles_own_throttle_relayed_by_redata_ends_the_batch(self) -> None:
-        refusal = self._refusal(
-            503,
-            {
-                "error": "places_api_unavailable",
-                "message": "Places API (New) answered 429 for https://places.googleapis.com/v1/places:searchNearby.",
-            },
-        )
-
-        summary, upstream = self._run(refusal)
-
-        self.assertEqual(self._nearby_calls(upstream), 1)
-        self.assertEqual(summary["sources"]["place_photos"]["skipped"], "rate_limited")
-        self.assertFalse(
-            LocationCache.objects.filter(source="place_photo_backfill").exists(),
-            "nothing was learned about any location",
-        )
-
-    def test_every_budget_refusal_ends_the_batch(self) -> None:
-        refusals = [self._refusal(503, {"error": error, "message": "spent"}) for error in BUDGET_REFUSALS]
-        refusals.append(
-            self._refusal(
-                429, {"detail": "Request was throttled. Expected available in 30 seconds."}, {"Retry-After": "30"}
-            )
-        )
-        refusals.append(
-            self._refusal(
-                503,
-                {"error": "places_api_unavailable", "message": "Places API (New) answered 503."},
-                {"Retry-After": "20"},
-            )
-        )
-        for refusal in refusals:
-            with self.subTest(refusal.status_code, body=refusal.json.return_value):
-                summary, upstream = self._run(refusal)
-
-                self.assertEqual(self._nearby_calls(upstream), 1)
-                self.assertEqual(summary["sources"]["place_photos"]["skipped"], "rate_limited")
 
 
 class EnrichmentCycleProductionGateTests(TestCase):
@@ -734,7 +616,7 @@ class EnrichmentSourceRegistryTests(SimpleTestCase):
         self.assertIn("boundary", keys)
         self.assertIn("wikipedia", keys)
         self.assertIn("nominatim", keys)
-        self.assertIn("nps", keys)
+        self.assertIn("parcel_buildings", keys)
         self.assertIn("google_place_link", keys)
 
     def test_keys_are_unique(self) -> None:
@@ -745,7 +627,7 @@ class EnrichmentSourceRegistryTests(SimpleTestCase):
         """
         Docstring contract: 'deduplicated by key (first wins)'. Never exercised
         elsewhere since no real registered source collides today."""
-        from urbanlens.dashboard.plugins.registry import plugin_registry
+        from urbanlens.dashboard.plugins.points import ENRICHMENT_SOURCES
 
         class _DuplicateAddressSource(EnrichmentSource):
             key = "address"
@@ -757,7 +639,7 @@ class EnrichmentSourceRegistryTests(SimpleTestCase):
             def enrich(self, location) -> bool:
                 return True
 
-        with patch.object(plugin_registry, "enrichment_sources", return_value=[_DuplicateAddressSource()]):
+        with ENRICHMENT_SOURCES.overridden([_DuplicateAddressSource()]):
             sources = enrichment_sources()
         address_sources = [source for source in sources if source.key == "address"]
         self.assertEqual(len(address_sources), 1)

@@ -7,7 +7,7 @@
         <i class="material-symbols-outlined">error</i>
     </div>
     <h1 class="error-page__title">{% block error_title %}Something Went Wrong{% endblock %}</h1>
-    <p class="error-page__body">{% block error_body %}An unexpected error occurred on our end. We've been notified and are working on it - please try again in a moment.{% endblock %}</p>
+    <p class="error-page__body">{% block error_body %}An unexpected error occurred on our end. Please try again in a moment.{% endblock %}</p>
     <div class="error-page__actions">
         <a href="{% url 'home' %}" class="btn btn--primary btn--lg btn--submit">
             <i class="material-icons" style="font-size:1rem;vertical-align:middle">home</i>

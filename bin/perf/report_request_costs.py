@@ -113,7 +113,7 @@ def render(costs: dict[tuple[str, str], ViewCost], limit: int) -> str:
 def main(argv: list[str] | None = None) -> int:
     """Print the ranking."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("log", type=Path, help="The app's logs, e.g. `docker logs ul_perf_app > app.log 2>&1`.")
+    parser.add_argument("log", type=Path, help="The app's logs, e.g. `docker logs urbanlens_perf_app > app.log 2>&1`.")
     parser.add_argument("--limit", type=int, default=40, help="Rows to show (default: 40).")
     args = parser.parse_args(argv)
     costs = parse(args.log.read_text(encoding="utf-8", errors="replace").splitlines())

@@ -1,4 +1,4 @@
-"""The Consensus in-round photo upload endpoint's refusals and its success path (P37)."""
+"""The Consensus in-round photo upload endpoint's refusals and its success path."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Tests for GameSessionConsumer - real-time sync for multiplayer SpotGuessr sessions (UL-392)."""
+"""Tests for GameSessionConsumer - real-time sync for multiplayer SpotGuessr sessions."""
 
 from __future__ import annotations
 

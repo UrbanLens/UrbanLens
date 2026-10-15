@@ -1,7 +1,7 @@
 """
 The gate resolved the viewer's whole social graph before asking whether it mattered.
 
-H44's first cut. `visible_to` loaded the viewer's friends, pinned locations and
+`visible_to` loaded the viewer's friends, pinned locations and
 trip memberships up front - four queries - and only then evaluated the settings
 that decide which, if any, of the three the answer depends on. `ANYONE` needs
 none of them. `FRIENDS` needs one. `ANYTHING_IN_COMMON` stops at the first

@@ -3,8 +3,6 @@ import os
 import shutil
 import tempfile
 
-from pydantic_core import Url
-
 from urbanlens.UrbanLens.egress import email_delivery_backend
 from urbanlens.UrbanLens.settings import _metrics
 from urbanlens.UrbanLens.settings._gdal_local import local_gdal_overrides
@@ -14,7 +12,7 @@ from urbanlens.UrbanLens.settings.base import *  # noqa: F403
 TESTING = True
 
 # xdist workers hide pytest from argv, so base may have derived these for the container's UL_ENVIRONMENT. The egress
-# policy gives the suite production's terms (D26): the whole beat schedule, and mail that never defaults to SMTP.
+# policy gives the suite production's terms: the whole beat schedule, and mail that never defaults to SMTP.
 EGRESS_ENVIRONMENT = "testing"
 CELERY_BEAT_SCHEDULE = FULL_BEAT_SCHEDULE  # noqa: F405
 EMAIL_DELIVERY_BACKEND = email_delivery_backend(EGRESS_ENVIRONMENT, configured=os.getenv("UL_EMAIL_BACKEND"), send_outside_production=False)
@@ -60,15 +58,6 @@ _app_settings.clamav_enabled = False
 # Force None so a developer .env can't trigger live VirusTotal calls.
 _app_settings.virustotal_api_key = None
 
-# Guarantee tests never spend provider tokens, regardless of runner or local .env.
-# Placeholder (not None) so adapter construction still exercises the tested path.
-_app_settings.anthropic_api_key = "test-placeholder-not-a-key"
-_app_settings.openai_api_key = "test-placeholder-not-a-key"
-_app_settings.cloudflare_ai_api_key = "test-placeholder-not-a-key"
-# Policy-valid host with no real account; keeps test artifacts shippable. Url-typed to match production.
-_app_settings.cloudflare_worker_ai_endpoint = Url("https://api.cloudflare.com/client/v4/accounts/TESTACCOUNT/ai/run")
-# Never address a real ai-inference service; tests mock at the adapter.
-_app_settings.ai_inference_url = None
 
 # Throwaway MEDIA_ROOT per process (TestCase rolls back the DB, not the filesystem).
 _test_media_root = tempfile.mkdtemp(prefix="urbanlens-test-media-")
@@ -80,11 +69,6 @@ UL_UNTRUSTED_PARSE_POLICY = "allow"
 # No media-worker drains queues under pytest; default routing plus eager still runs where asked.
 UL_SANDBOX_ENABLED = False
 
-# Suite calls LocalInferenceClient directly with mocked adapters.
-UL_DIRECT_INFERENCE_POLICY = "allow"
-
-# Assistant turns run in-process under eager; boundary tests flip this off.
-UL_AI_WORKER_ENABLED = True
 
 # Pin metrics off for determinism; derived values undone explicitly due to import order.
 UL_METRICS_ENABLED = False

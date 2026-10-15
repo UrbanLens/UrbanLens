@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 
-import { isReservedTitle, SetupWizard } from "./setup-wizard";
+import { SetupWizard } from "./setup-wizard";
 
 interface Call {
     url: string;
@@ -14,10 +14,9 @@ let respond: (url: string) => Response = () => new Response(JSON.stringify({ ok:
 
 const settle = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
 
-function render(official = false): SetupWizard {
-    const config = official ? 'data-official="true"' : 'data-title-notice="Pick another name."';
+function render(): SetupWizard {
     document.body.innerHTML = `
-      <div class="setup-wizard" data-setup-url="/setup/" data-profile-url="/profile/field/" data-suggested-title="My Map" ${config}>
+      <div class="setup-wizard" data-setup-url="/setup/" data-profile-url="/profile/field/">
         <span id="sidebar-title">My Map</span>
         <ul>${[1, 2, 3, 4, 5].map((n) => `<li class="setup-stepper__item" data-step="${n}"><span class="step-num">${n}</span></li>`).join("")}</ul>
         <div id="setup-progress"></div>
@@ -29,10 +28,8 @@ function render(official = false): SetupWizard {
         <button type="button" id="setup-avatar-gravatar-btn">Gravatar</button>
         <button type="button" class="setup-avatar-emoji-btn" data-animal="owl" data-color="teal">Owl</button>
         <input id="app-title-input" value="">
-        <button type="button" class="setup-title-suggestion-btn" data-title="Rust Belt Atlas">Suggest</button>
         <span id="title-preview-value"></span>
         <strong id="done-app-title"></strong>
-        <div id="title-reserved-notice" hidden><p id="title-reserved-message"></p></div>
         <span id="title-save-status"></span>
       </div>`;
     const root = document.querySelector<HTMLElement>(".setup-wizard");
@@ -70,14 +67,6 @@ beforeEach(() => {
     respond = () => new Response(JSON.stringify({ ok: true }), { status: 200 });
 });
 
-describe("isReservedTitle", () => {
-    test("catches the name however it is spaced or cased", () => {
-        expect(isReservedTitle("Urban Lens")).toBe(true);
-        expect(isReservedTitle("urban-LENS!")).toBe(true);
-        expect(isReservedTitle("UrbanLens Rochester")).toBe(false);
-    });
-});
-
 describe("steps", () => {
     test("Next moves on, and a finished step shows a check that Back takes away", () => {
         render();
@@ -102,40 +91,16 @@ describe("steps", () => {
         expect(activeStep()).toBe("4");
     });
 
-    test("an unofficial site cannot pass the title step as UrbanLens", () => {
-        const wizard = render();
-        wizard.goToStep(3);
-        titleInput().value = "Urban Lens";
-        wizard.goToStep(4);
-        expect(activeStep()).toBe("3");
-        expect(document.getElementById("title-reserved-notice")?.hidden).toBe(false);
-        expect(document.getElementById("title-reserved-message")?.textContent).toBe("Pick another name.");
-    });
-
-    test("the official site may call itself UrbanLens", () => {
-        const wizard = render(true);
-        wizard.goToStep(3);
-        titleInput().value = "UrbanLens";
-        wizard.goToStep(4);
-        expect(activeStep()).toBe("4");
-    });
 });
 
 describe("title", () => {
     // Each test's pending save would otherwise fire into the next one's page.
     afterEach(() => settle(1000));
 
-    test("a suggestion fills the title and every preview of it", () => {
-        render();
-        document.querySelector<HTMLElement>(".setup-title-suggestion-btn")?.click();
-        expect(titleInput().value).toBe("Rust Belt Atlas");
-        for (const id of ["title-preview-value", "sidebar-title", "done-app-title"]) expect(document.getElementById(id)?.textContent).toBe("Rust Belt Atlas");
-    });
-
-    test("an emptied title previews the suggested one", () => {
+    test("an emptied title previews UrbanLens", () => {
         render();
         titleInput().dispatchEvent(new Event("input"));
-        expect(document.getElementById("sidebar-title")?.textContent).toBe("My Map");
+        expect(document.getElementById("sidebar-title")?.textContent).toBe("UrbanLens");
     });
 
     test("typing saves the title once, after a pause", async () => {
@@ -148,17 +113,6 @@ describe("title", () => {
         input.dispatchEvent(new Event("input"));
         await settle(1000);
         expect(calls).toEqual([{ url: "/setup/", method: "POST", body: "action=save_title&app_title=Rust+Belt" }]);
-    });
-
-    test("a title the server refuses shows the server's reason", async () => {
-        respond = () => new Response(JSON.stringify({ error: "That name is taken by the public site." }), { status: 400 });
-        render();
-        const input = titleInput();
-        input.value = "Rust Belt";
-        input.dispatchEvent(new Event("input"));
-        await settle(1000);
-        expect(document.getElementById("title-reserved-notice")?.hidden).toBe(false);
-        expect(document.getElementById("title-reserved-message")?.textContent).toBe("That name is taken by the public site.");
     });
 });
 

@@ -188,7 +188,7 @@ def send_push_to_devices(device_ids: list[int], payload: dict) -> int:
 
     Returns:
         Number of devices successfully delivered to; 0, recording nothing against the devices, where this environment
-        does not push (D26)."""
+        does not push."""
     try:
         require_egress(PUSH_SERVICE)
     except EnvironmentRefusedError:

@@ -1,6 +1,6 @@
 """
 Per-user relevance marks for the Private Pin page's Media gallery.
-The Media gallery (Wikimedia/Smithsonian/Yelp/Google Images/...) renders straight from each provider's live results (see ``services.pins.external_data``) rather than persisting an ``Image`` row per item, so "relevant"/"not relevant" can't hang off an FK to one.
+The Media gallery (Wikimedia/Yelp/Google Images/...) renders straight from each provider's live results (see ``services.pins.external_data``) rather than persisting an ``Image`` row per item, so "relevant"/"not relevant" can't hang off an FK to one.
 """
 
 from __future__ import annotations

@@ -4,17 +4,16 @@
 Gunicorn reads `gunicorn.conf.py` from the working directory whether or not
 `-c` names it, and the working directory is `/app` for every service built from
 this image. So the config written for the main Django app is also applied to
-`ai-inference`, which runs a different WSGI application (`urbanlens_ai`) with no
+any other service built from it that runs a different WSGI application with no
 Django, no ORM and no `DJANGO_SETTINGS_MODULE` - the isolation being the point
-of that service (docs/AI_PIPELINE.md).
+of such a service.
 
 Two consequences, both visible in staging's boot log:
 
 * `post_fork` used to apply psycogreen's **gevent** patch inside a **gthread**
   worker. It is inert there only because that service never opens a database
-  connection, which is a property of today's AI app rather than of the hook.
-  The guard therefore belongs on the worker class either way - and since X27
-  moved this deployment to psycopg3, which psycogreen cannot patch, what the
+  connection, which is a property of today's non-Django app rather than of the hook.
+  The guard therefore belongs on the worker class either way - and since this deployment moved to psycopg3, which psycogreen cannot patch, what the
   guard does under gevent is refuse rather than adapt.
 * `post_worker_init` calls `django.setup()` and logs a full
   `ImproperlyConfigured` traceback on every boot, for a service that correctly
@@ -128,7 +127,7 @@ class TheWarmUpSkipsProcessesItCannotWarmTests(SimpleTestCase):
         )
 
     def test_the_warmed_heap_is_frozen_after_the_warm_up(self) -> None:
-        """P207: a full collection walked the whole boot heap, about 190 ms holding the GIL for every thread."""
+        """A full collection walked the whole boot heap, about 190 ms holding the GIL for every thread."""
         worker = _worker()
         with mock.patch.dict(os.environ, {"DJANGO_SETTINGS_MODULE": "urbanlens.UrbanLens.settings"}):
             self.config.post_worker_init(worker)

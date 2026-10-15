@@ -11,17 +11,9 @@ from urbanlens.dashboard.models.images.model import Image, ImageSource
 #: derived, so the completeness test compares two independently-written lists.
 NOT_PERSONAL: dict[str, str] = {
     ImageSource.LINKED_URL: "bytes fetched because a page referred to them",
-    ImageSource.YELP: "somebody else's photograph, up-voted",
-    ImageSource.GOOGLE_IMAGES: "somebody else's photograph, up-voted",
     ImageSource.GOOGLE_MAPS: "provider imagery fetched for the place",
     ImageSource.WIKIMEDIA: "somebody else's photograph, up-voted",
     ImageSource.WIKIPEDIA_MEDIA: "somebody else's photograph, up-voted",
-    ImageSource.SMITHSONIAN: "archive holding",
-    ImageSource.LIBRARY_OF_CONGRESS: "archive holding",
-    ImageSource.INTERNET_ARCHIVE: "archive holding",
-    ImageSource.DIGITAL_COMMONWEALTH: "archive holding",
-    ImageSource.LOOPNET: "listing photography",
-    ImageSource.CRIS: "state survey photography",
     ImageSource.EXTERNAL_API: "candidate photo an external app submitted",
     ImageSource.GOOGLE_STREET_VIEW: "provider imagery fetched for the place",
     ImageSource.GOOGLE_SATELLITE: "provider imagery fetched for the place",
@@ -37,7 +29,7 @@ class PersonalLibraryCoverageTests(SimpleTestCase):
         self.assertEqual(
             classified,
             set(ImageSource.values),
-            "An ImageSource is not classified as personal or not. Decide: leaving a personal-library integration out shows a stranger's own photos to a concealed viewer, and it fails silently.",
+            "An ImageSource is not classified as personal or not. Decide: leaving a personal-library integration out shows a stranger's own photos to a viewer who should not see them, and it fails silently.",
         )
 
     def test_the_two_sets_do_not_overlap(self) -> None:

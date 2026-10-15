@@ -170,8 +170,9 @@ class EncryptedTextField(TextField):
     """
     A ``TextField`` whose value is encrypted at rest with Fernet.
 
-    Values are written under the active key and read under any key in :func:`encryption_keys`;
-    rotate via ``docs/DATA_ENCRYPTION.md``. An undecryptable value depends on ``fail_soft``:
+    Values are written under the active key and read under any key in :func:`encryption_keys`.
+    Rotate with ``manage.py rotate_field_encryption``: make the new key active and keep the old one in the fallbacks,
+    run it, then drop the old key. An undecryptable value depends on ``fail_soft``:
 
     - **Credentials** leave ``fail_soft`` off and raise: callers treat the connection as absent
       until the user reconnects, since the value is re-obtainable from the provider.

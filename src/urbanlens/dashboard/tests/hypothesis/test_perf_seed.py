@@ -314,7 +314,7 @@ class TheSeedHoldsTheMapCentreConstantTests(TestCase):
         self.assertAlmostEqual(stored[0], computed[0], places=4)
         self.assertAlmostEqual(stored[1], computed[1], places=4)
 
-    def test_it_can_be_left_unset_to_reproduce_p108(self) -> None:
+    def test_the_map_center_can_be_left_unset(self) -> None:
         report = seed_heavy_account(self.profile, pins=SEEDED, precompute_map_center=False)
 
         self.profile.refresh_from_db()

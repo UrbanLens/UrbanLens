@@ -104,7 +104,7 @@ class TheVendorsLifetimeIsTheCeilingTests(SimpleTestCase):
         self.assertEqual(_browser_ttl("satellite", 3600), 3600)
 
     def test_a_layer_no_vendor_table_names_keeps_this_deployments_lifetime(self) -> None:
-        self.assertEqual(_browser_ttl("some_redata_layer", 604800), 604800)
+        self.assertEqual(_browser_ttl("some_catalogue_layer", 604800), 604800)
 
     def test_at_least_a_day_where_the_vendor_allows_a_day(self) -> None:
         self.assertGreaterEqual(_browser_ttl("satellite", 604800), 86400)

@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 import logging
 from typing import TYPE_CHECKING, Any
 
-from urbanlens.dashboard.services.pins.external_data import GalleryMediaSource, cached_entries, gate_allows, get_panel_source, panel_visible_to, schedule_panel_fetch
+from urbanlens.dashboard.services.pins.external_data import GalleryMediaSource, cached_entries, gallery_sources, gate_allows, panel_visible_to, schedule_panel_fetch
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -17,27 +17,6 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
-
-#: The Media panel's external providers, in loader order; the Private Pin page renders its loaders from this.
-PIN_MEDIA_GALLERY_SOURCES: tuple[str, ...] = (
-    "smithsonian",
-    "wikimedia",
-    "wikipedia_media",
-    "loc",
-    "internet_archive",
-    "digital_commonwealth",
-    "yelp",
-    "google_images",
-    "searxng_images",
-    "google_maps",
-    "loopnet",
-    "cris_building",
-    "historical_maps",
-    "redata_media",
-    "redata_aerial",
-    "redata_street_level",
-    "redata_photo_pool",
-)
 
 #: Upper bound on one page of any Photos-tab grid.
 MAX_PAGE_SIZE = 100
@@ -105,13 +84,8 @@ class ExternalPhotoListing:
 
 
 def _visible_sources(pin: Pin, user: AbstractBaseUser | AnonymousUser) -> list[GalleryMediaSource]:
-    sources = []
-    for key in PIN_MEDIA_GALLERY_SOURCES:
-        panel = get_panel_source(key)
-        # Other members' photos are not public-source photos, and the tab's own are listed apart.
-        if isinstance(panel, GalleryMediaSource) and not panel.members_media and panel_visible_to(user, panel):
-            sources.append(panel)
-    return sources
+    # Other members' photos are not public-source photos, and the tab's own are listed apart.
+    return [panel for panel in gallery_sources() if not panel.members_media and panel_visible_to(user, panel)]
 
 
 def _own_copy_keys(pins: Sequence[Pin], profile: Profile, keys: set[str]) -> set[str]:
@@ -120,7 +94,7 @@ def _own_copy_keys(pins: Sequence[Pin], profile: Profile, keys: set[str]) -> set
 
     if not keys:
         return set()
-    rows = Image.objects.filter(pin__in=pins, profile=profile, media_item_key__in=keys, media_source_key__in=PIN_MEDIA_GALLERY_SOURCES).values_list("media_item_key", flat=True)
+    rows = Image.objects.filter(pin__in=pins, profile=profile, media_item_key__in=keys, media_source_key__in=[panel.key for panel in gallery_sources()]).values_list("media_item_key", flat=True)
     return {key for key in rows if key is not None}
 
 

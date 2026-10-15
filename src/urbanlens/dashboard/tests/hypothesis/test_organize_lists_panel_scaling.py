@@ -1,7 +1,7 @@
 """
 The Organize lists panel loads every pin on every list to print a count.
 
-N21 H29. `PinListsIndexView` runs `prefetch_related("items__pin")` and the
+`PinListsIndexView` runs `prefetch_related("items__pin")` and the
 template uses exactly one thing from it - `pin_list.pin_count`, which is
 `len(self.items.all())`. So every pin on every list the profile owns is fetched
 and built into a model instance to produce an integer the database can count

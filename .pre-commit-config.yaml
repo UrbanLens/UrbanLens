@@ -129,9 +129,9 @@ repos:
         pass_filenames: false
         always_run: true
         stages: [manual]
-      - id: concealed-writes
+      - id: projected-writes
         name: a wiki resolved for reading is never saved
-        entry: python3 bin/check_concealed_writes.py
+        entry: python3 bin/check_projected_writes.py
         language: system
         pass_filenames: false
         always_run: true
@@ -188,21 +188,21 @@ repos:
         stages: [manual]
       - id: doc-line-refs
         name: no documentation citation points past the end of its file
-        entry: python3 bin/check_doc_line_refs.py
+        entry: sh -c 'test ! -f bin/check_doc_line_refs.py || exec python3 bin/check_doc_line_refs.py "$@"' --
         language: system
         pass_filenames: false
         always_run: true
         stages: [manual]
       - id: docs-refs
         name: code never cites a docs/ path that does not exist
-        entry: python3 bin/check_docs_refs.py
+        entry: sh -c 'test ! -f bin/check_docs_refs.py || exec python3 bin/check_docs_refs.py "$@"' --
         language: system
         pass_filenames: false
         always_run: true
         stages: [manual]
       - id: docs-index
-        name: docs/adr/ and the docs index follow their numbering rules
-        entry: python3 bin/check_docs_index.py
+        name: decision records and the docs index follow their numbering rules
+        entry: sh -c 'test ! -f bin/check_docs_index.py || exec python3 bin/check_docs_index.py "$@"' --
         language: system
         pass_filenames: false
         always_run: true

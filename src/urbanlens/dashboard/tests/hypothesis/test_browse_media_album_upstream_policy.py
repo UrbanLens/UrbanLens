@@ -1,5 +1,5 @@
 """
-Historical-map browse, the REData media proxies and Flickr album lookup run under the request-path policy.
+The media proxies and Flickr album lookup run under the request-path policy.
 """
 
 from __future__ import annotations
@@ -7,25 +7,19 @@ from __future__ import annotations
 import threading
 import time
 from unittest import mock
-import uuid as uuid_module
 
 from django.contrib.auth.models import User
+from django.http import HttpRequest, HttpResponse
+from django.test import RequestFactory
 from django.urls import reverse
+from django.views import View
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
+from urbanlens.dashboard.controllers.proxied_media import ProxiedMediaMixin
 from urbanlens.dashboard.services.apis import request_upstreams
 from urbanlens.dashboard.services.apis.flickr.public import FlickrAlbum, FlickrPublicGateway
-from urbanlens.dashboard.services.core.gateway import GatewayRequestError
-from urbanlens.dashboard.services.security.throttle import Rate
-from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
-_MAPS_GATEWAY = "urbanlens.dashboard.services.apis.locations.redata_historical_maps_gateway.RedataHistoricalMapsGateway"
-_MAPS_CONFIGURED = "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured"
-_LOOPNET_DOWNLOAD = (
-    "urbanlens.dashboard.services.apis.property_records.redata_gateway.RedataGateway.download_listing_photo"
-)
 _ALBUM_URL = "https://www.flickr.com/photos/12345678@N00/albums/72177720000000001"
 
 
@@ -52,85 +46,36 @@ class _Case(TestCase):
         return (b"late", "image/jpeg")
 
 
-class HistoricalMapBrowseTests(_Case):
-    upstreams = (request_upstreams.HistoricalMapsBrowseUpstream,)
+class _FakeProxyView(ProxiedMediaMixin, View):
+    """A proxy over a download the test controls."""
+
+    download = staticmethod(lambda: (b"photo", "image/jpeg"))
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        return self.serve_media(request, "ul_fake_proxy_1", type(self).download)
+
+
+class ProxiedMediaSlotTests(_Case):
+    upstreams = (request_upstreams.ProxiedMediaUpstream,)
 
     def setUp(self) -> None:
         super().setUp()
-        self.user = baker.make(User)
-        self.client.force_login(self.user)
-        location = baker.make("dashboard.Location", latitude=42.355, longitude=-71.055)
-        self.pin = baker.make_recipe("dashboard.pin", profile=self.user.profile, location=location)
-        self.url = reverse("pin.overlays.historical", args=[self.pin.slug])
-        self.georeference_uuid = str(uuid_module.uuid4())
-        for patcher in (mock.patch(_MAPS_CONFIGURED, return_value=True),):
-            patcher.start()
-            self.addCleanup(patcher.stop)
+        self.factory = RequestFactory()
+        self.view = _FakeProxyView.as_view()
 
-    def test_adding_a_sheet_reuses_the_list_the_browse_fetched(self) -> None:
-        with mock.patch(_MAPS_GATEWAY) as gateway_cls:
-            gateway_cls.return_value.get_maps_covering.return_value = [_match(self.georeference_uuid)]
-            self.client.get(self.url)
-            self.client.post(self.url, data={"georeference_uuid": self.georeference_uuid})
-
-        self.assertEqual(gateway_cls.return_value.get_maps_covering.call_count, 1)
-        self.assertTrue(MapImageOverlay.objects.filter(parent_pin=self.pin).exists())
-
-    def test_an_outage_is_shown_and_not_cached(self) -> None:
-        from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
-
-        with mock.patch(_MAPS_GATEWAY) as gateway_cls:
-            gateway_cls.return_value.get_maps_covering.side_effect = [
-                LocationContextUnavailableError("source_error", "down"),
-                [_match(self.georeference_uuid)],
-            ]
-            failed = self.client.get(self.url).content.decode()
-            recovered = self.client.get(self.url).content.decode()
-
-        self.assertIn("temporarily unavailable", failed)
-        self.assertIn(self.georeference_uuid, recovered)
-
-    def test_a_hanging_redata_costs_the_request_only_the_deadline(self) -> None:
-        started = time.monotonic()
-        with (
-            mock.patch.object(request_upstreams.HistoricalMapsBrowseUpstream, "deadline", 0.2),
-            mock.patch(_MAPS_GATEWAY) as gateway_cls,
-        ):
-            gateway_cls.return_value.get_maps_covering.side_effect = self._hang
-            body = self.client.get(self.url).content.decode()
-
-        self.assertIn("temporarily unavailable", body)
-        self.assertLess(time.monotonic() - started, 3)
-
-    def test_one_account_is_throttled(self) -> None:
-        with (
-            mock.patch.object(request_upstreams.HistoricalMapsBrowseUpstream, "rate", Rate(limit=1, window_seconds=60)),
-            mock.patch(_MAPS_GATEWAY) as gateway_cls,
-        ):
-            gateway_cls.return_value.get_maps_covering.side_effect = GatewayRequestError("down")
-            self.client.get(self.url)
-            body = self.client.get(self.url).content.decode()
-
-        self.assertIn("Too many historical map searches", body)
-        self.assertEqual(gateway_cls.return_value.get_maps_covering.call_count, 1)
-
-
-class RedataMediaSlotTests(RedataConfiguredMixin, _Case):
-    upstreams = (request_upstreams.RedataMediaUpstream,)
-
-    def setUp(self) -> None:
-        super().setUp()
-        self.url = reverse("pin.loopnet.photo", kwargs={"listing_uuid": "abc", "photo_id": 1})
+    def _get(self) -> HttpResponse:
+        return self.view(self.factory.get("/proxy/"))
 
     def test_with_every_slot_taken_the_proxy_answers_503_without_downloading(self) -> None:
-        semaphore = request_upstreams.RedataMediaUpstream.semaphore()
+        semaphore = request_upstreams.ProxiedMediaUpstream.semaphore()
         taken = 0
         while semaphore.acquire(blocking=False):
             taken += 1
         self.addCleanup(lambda: [semaphore.release() for _ in range(taken)])
+        download = mock.Mock()
 
-        with mock.patch(_LOOPNET_DOWNLOAD) as download:
-            response = self.client.get(self.url)
+        with mock.patch.object(_FakeProxyView, "download", staticmethod(download)):
+            response = self._get()
 
         self.assertEqual(response.status_code, 503)
         self.assertIn("Retry-After", response)
@@ -139,19 +84,17 @@ class RedataMediaSlotTests(RedataConfiguredMixin, _Case):
     def test_a_download_that_outlives_the_request_is_still_cached(self) -> None:
         from urbanlens.dashboard.services.core import bounded_cache
 
+        download = mock.Mock(side_effect=self._hang)
         with (
-            mock.patch.object(request_upstreams.RedataMediaUpstream, "deadline", 0.2),
-            mock.patch(_LOOPNET_DOWNLOAD, side_effect=self._hang) as download,
+            mock.patch.object(request_upstreams.ProxiedMediaUpstream, "deadline", 0.2),
+            mock.patch.object(_FakeProxyView, "download", staticmethod(download)),
         ):
-            timed_out = self.client.get(self.url)
+            timed_out = self._get()
             self.release.set()
             deadline = time.monotonic() + 5
-            while (
-                bounded_cache.get_or_none("ul_loopnet_photo_abc_1", label="test") is None
-                and time.monotonic() < deadline
-            ):
+            while bounded_cache.get_or_none("ul_fake_proxy_1", label="test") is None and time.monotonic() < deadline:
                 time.sleep(0.02)
-            response = self.client.get(self.url)
+            response = self._get()
 
         self.assertEqual(timed_out.status_code, 503)
         self.assertEqual((response.status_code, bytes(response.content)), (200, b"late"))
@@ -160,10 +103,24 @@ class RedataMediaSlotTests(RedataConfiguredMixin, _Case):
     def test_an_unexpected_upstream_failure_is_a_502_not_a_500(self) -> None:
         import requests
 
-        with mock.patch(_LOOPNET_DOWNLOAD, side_effect=requests.ConnectionError("down")):
-            response = self.client.get(self.url)
+        with mock.patch.object(
+            _FakeProxyView, "download", staticmethod(mock.Mock(side_effect=requests.ConnectionError("down")))
+        ):
+            response = self._get()
 
         self.assertEqual(response.status_code, 502)
+
+    def test_an_error_the_view_names_unavailable_is_a_404(self) -> None:
+        class GoneError(Exception):
+            pass
+
+        class Gated(_FakeProxyView):
+            unavailable_errors = (GoneError,)
+
+        with mock.patch.object(Gated, "download", staticmethod(mock.Mock(side_effect=GoneError("no such file")))):
+            response = Gated.as_view()(self.factory.get("/proxy/"))
+
+        self.assertEqual(response.status_code, 404)
 
 
 class FlickrAlbumLookupTests(_Case):

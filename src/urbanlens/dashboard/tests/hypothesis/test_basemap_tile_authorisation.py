@@ -2,7 +2,7 @@
 Who can fetch a basemap tile, now that the answer is cached rather than asked every time.
 
 ``BasemapTileView`` remembers, against the session key, that a session was signed in - so a
-viewport costs one such check instead of thirty (``P125``). That is a gate, so the interesting
+viewport costs one such check instead of thirty. That is a gate, so the interesting
 tests are the ones that try to get a tile without being entitled to one, and the ones that check
 the remembered answer cannot be spent on anything else.
 
@@ -31,12 +31,11 @@ from urbanlens.dashboard.controllers import basemap_tiles
 from urbanlens.dashboard.services.map.basemap_catalogue import CATALOGUE_CACHE_KEY
 from urbanlens.dashboard.services.map.tile_authorisation import TILE_AUTH_TTL, tile_auth_key
 from urbanlens.dashboard.services.map.tile_cache_keys import basemap_tile_cache_key
-from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
+from urbanlens.dashboard.tests.hypothesis.tile_catalogue_fake import FakeCatalogueMixin, catalogue_on
 
 if TYPE_CHECKING:
     from django.test import Client
 
-_CONFIGURED = "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured"
 
 TILE_BYTES = b"x" * 128
 
@@ -45,7 +44,7 @@ TILE_BYTES = b"x" * 128
 # Dragonfly URL is configured - which a worktree with no `.env` is not - and on plain `db` every
 # request pays a `django_session` read. Pinned so the budget is measured on the deployed engine.
 @override_settings(SESSION_ENGINE="django.contrib.sessions.backends.cached_db")
-class TileAuthorisationTests(RedataConfiguredMixin, TestCase):
+class TileAuthorisationTests(FakeCatalogueMixin, TestCase):
     """The gate, probed from the outside."""
 
     def setUp(self) -> None:
@@ -64,7 +63,7 @@ class TileAuthorisationTests(RedataConfiguredMixin, TestCase):
         return reverse("map.basemap_tiles", kwargs={"layer": "street", "z": 12, "x": 1204, "y": 1539})
 
     def _fetch(self, client: Client) -> int:
-        with mock.patch(_CONFIGURED, return_value=True):
+        with catalogue_on():
             return client.get(self.url).status_code
 
     def test_a_signed_in_viewer_gets_the_tile(self) -> None:
@@ -134,7 +133,7 @@ class TileAuthorisationTests(RedataConfiguredMixin, TestCase):
         The catalogue sits on the same route prefix, is the nearest thing to a lookalike, and is
         the one endpoint a viewer holding tile access might plausibly be handed by mistake.
         """
-        # Seeded so the catalogue answers from cache: REData is stubbed everywhere in these tests,
+        # Seeded so the catalogue answers from cache: the catalogue is a fake everywhere in these tests,
         # and this one is about who gets an answer, not where it came from.
         cache.set(
             CATALOGUE_CACHE_KEY,
@@ -152,13 +151,13 @@ class TileAuthorisationTests(RedataConfiguredMixin, TestCase):
         self.client.force_login(self.user)
         self.assertEqual(self._fetch(self.client), 200)
 
-        with mock.patch(_CONFIGURED, return_value=True):
+        with catalogue_on():
             signed_in = self.client.get(reverse("map.basemap_tiles.sources"))
         self.assertEqual(signed_in.status_code, 200, "the catalogue is expected to work while signed in")
 
         self.client.logout()
 
-        with mock.patch(_CONFIGURED, return_value=True):
+        with catalogue_on():
             signed_out = self.client.get(reverse("map.basemap_tiles.sources"))
         self.assertNotEqual(signed_out.status_code, 200)
 

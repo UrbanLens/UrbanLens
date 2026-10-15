@@ -84,8 +84,8 @@ class _UndecryptableConnectionContract(TestCase):
     def test_delete_for_profile_removes_an_undecryptable_connection_that_delete_signals_would_load(self) -> None:
         self.corrupt(self.make_account())
         receiver = mock.Mock()
-        pre_delete.connect(receiver, sender=self.model, weak=False, dispatch_uid="p169-force-row-load")
-        self.addCleanup(pre_delete.disconnect, sender=self.model, dispatch_uid="p169-force-row-load")
+        pre_delete.connect(receiver, sender=self.model, weak=False, dispatch_uid="force-row-load")
+        self.addCleanup(pre_delete.disconnect, sender=self.model, dispatch_uid="force-row-load")
         self.model.objects.delete_for_profile(self.profile)
         self.assertEqual(self.rows(), 0)
 

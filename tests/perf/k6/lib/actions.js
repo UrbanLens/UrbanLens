@@ -61,7 +61,7 @@ export function labelEdit(session, fixtures, tags) {
  * pins. Polling to completion keeps the phase as long as the work it causes, so the neighbour is
  * measured while the import is actually running - the same thing the import dialog does.
  *
- * `auto_tag` is off so the run measures the import rather than the AI queue it would otherwise
+ * `auto_tag` is off so the run measures the import rather than the suggestion queue it would otherwise
  * fill.
  */
 export function importConfirmed(session, fixtures, tags) {

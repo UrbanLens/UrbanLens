@@ -25,7 +25,7 @@ UrbanLens is a web mapping platform for photographers and urban explorers. It gi
 - **Safety check-ins** — "I didn't come home" alerts that escalate to emergency contacts, with live chat. Contacts never see any of your plans unless you don't check-in on time, so you can keep your activities private unless you actually need help.
 - **End-to-end encrypted messaging** — reactions, disappearing messages, search, and more. End-to-end encrypted, so your messages are only visible from your device.
 - **Social layer** — friendships, granular visibility settings, and comments with mentions and reactions
-- **AI assistance** — import pins from loose notes, auto-tagging, and update your pin data from external urls
+- **Smart import** — auto-tagging, and update your pin data from external urls
 - **Import/export** — Google Takeout, GPX, KML/KMZ, OSM XML, Shapefile, WKT/WKB; full-account export plus scheduled backups
 - **Responsible-exploration ethos** — discovery-gated wikis and discretion by design, not public broadcasting
 
@@ -40,44 +40,31 @@ UrbanLens is a web mapping platform for photographers and urban explorers. It gi
 | Frontend        | HTMX-first interactivity, Leaflet for maps, TypeScript/TSX where JS is unavoidable, SCSS, bundled with Bun   |
 | Geospatial      | GeoDjango, GeoPandas, Shapely, FastKML, geopy                                                                |
 | Auth            | Django auth plus Google and Discord OAuth, passkeys (WebAuthn), and TOTP 2FA                                 |
-| External data   | Google Maps/Places/Search, OpenWeatherMap, Smithsonian, National Park Service, OpenAI, and more              |
+| External data   | Google Maps/Places, OpenWeatherMap, USGS, Wikipedia, Nominatim, Open-Meteo, and more                         |
 | Quality tooling | Ruff, MyPy, pytest-django, Hypothesis, pre-commit                                                            |
 
 
 
 
-## Getting Started
+## Quick start
 
-The project is designed to run entirely through Docker, so you don't need Python, Node, or PostGIS installed locally.
+Docker with the Compose v2 plugin is all the stack needs on the host. Python 3 is useful for generating secrets.
 
-1. Clone the repository.
-2. Copy the environment template and fill in the values you need:
-  ```bash
-   cp .env-sample .env
-  ```
-   Every variable in `.env-sample` is documented inline, including where to get each external API key. You can leave integrations you don't need blank — the app degrades gracefully without them.
-3. Build and start the stack:
-  ```bash
-   docker compose up --build
-  ```
-4. Visit the app at `http://localhost:21800` (nginx serves the app; the port is configurable via `UL_APP_PORT`).
+```bash
+git clone https://github.com/UrbanLens/UrbanLens.git
+cd UrbanLens
+cp .env-sample .env
+# Replace the secrets and set UL_SITE_URL and UL_ALLOWED_HOSTS in .env
+docker compose up -d --build
+```
 
-Docker Compose brings up the Django app, Celery worker/beat, PostgreSQL/PostGIS, Valkey (Redis-compatible cache/broker), and nginx together.
+The sample `.env` is set up for production and refuses to start until its secrets are replaced. [docs/self-hosting/install.md](docs/self-hosting/install.md) covers every required value, TLS, the first admin and email. To run on one machine without TLS, see [section 6 of that page](docs/self-hosting/install.md#6-local-trial-over-plain-http).
 
-## CI/CD and Releases
+## Self-hosting
 
-UrbanLens uses GitHub Actions for automated quality gates, security checks, release preparation, and artifact publishing:
-
-- Pull requests and pushes to `main` run Python linting, formatting checks, type checks, Django checks, tests with coverage, frontend asset builds, and a Docker image build.
-- Security automation runs CodeQL, dependency review for pull requests, and scheduled weekly scans.
-- Renovate, self-hosted by the maintainers, opens one pull request a week (Mondays) with updates for GitHub Actions, Python, npm, and Docker dependencies.
-- Releases are cut on Forgejo (`git.jmann.me/UrbanLens/UrbanLens`) by `bin/release.py`, which reads Conventional Commit messages such as `feat: add route export` or `fix: handle empty weather data` with [git-cliff](https://git-cliff.org) (`cliff.toml`). After a merge into `main`, `bin/release.py pr` opens or updates the release PR, "chore(main): release X.Y.Z", which bumps the version files and adds a `CHANGELOG.md` section. After that PR is merged, `bin/release.py publish <PR#>` tags its merge commit `vX.Y.Z` and publishes the Forgejo release; then run `bin/release.py pr` again. Both steps are safe to repeat. `--dry-run` on `pr` prints the version and section without pushing anything.
-- UrbanLens stays below 1.0.0: a breaking change or a feature bumps the minor version, anything else the patch, and the tool refuses a 1.x version.
-- If a release branch reaches `main` as one squash commit, only that commit's message is read. Title it as a Conventional Commit (`feat: v0.9.0 (#123)`) or put `Release-As: 0.9.0` in its body; a bare `v0.9.0 (#123)` gives the tool nothing to release. `.release-please-manifest.json` (its name is left over from release-please) holds the last released version, never the one in development, because the next version is computed from it.
-- `main` accepts only signed commits, including every commit on a pull request's branch.
-- A commit on `main` is published only once its CI run passes: a provenance-attested container image in GitHub Container Registry (`ghcr.io/UrbanLens/UrbanLens`) tagged `sha-<7>`, plus `main` while it is still `main`'s tip, which the infrastructure repo deploys. The AI tier's egress proxy (`src/urbanlens/config/egress`, see `docs/AI_PIPELINE.md`) is published beside it as `ghcr.io/UrbanLens/UrbanLens-egress-proxy` with the same tags, and before it, so every app tag has a proxy built from the same commit. A release's commit also gets its version tag and, for a stable release, `latest`, and the release gets the Python distributions. If a release commit's CI fails, its version tags wait until someone runs the Publish workflow by hand with the release's tag as `ref`. A release a person publishes on GitHub builds at once.
-
-
+- [Self-hosting guide](docs/self-hosting/README.md): install, configuration, upgrading, backups and operations.
+- [Plugins](docs/plugins/README.md): extending a deployment with plugins.
+- [CHANGELOG.md](CHANGELOG.md): what changed in each release.
 
 ## Security
 
@@ -85,9 +72,12 @@ See [SECURITY.md](SECURITY.md) for supported versions and how to report a vulner
 
 ## Contributing
 
-Contributions are welcome. Please:
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the license terms for contributions, the checks CI runs, and how to open a pull request.
 
-- Follow the conventions and architectural patterns established in the codebase.
-- Use Conventional Commit messages (they drive automated releases — see above).
-- Run Ruff before committing, and include tests for new functionality.
-- Open a pull request; CI will run the full quality gate automatically.
+## Code of conduct
+
+Participation is governed by the [Code of Conduct](CODE_OF_CONDUCT.md).
+
+## License
+
+UrbanLens is licensed under the GNU Affero General Public License, version 3 only (AGPL-3.0-only). The full text is in [LICENSE.md](LICENSE.md).

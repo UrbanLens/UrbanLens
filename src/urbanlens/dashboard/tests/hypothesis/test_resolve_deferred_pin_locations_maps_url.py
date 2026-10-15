@@ -8,7 +8,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard import tasks
-from urbanlens.dashboard.services.apis.locations.cid_resolution import PROVIDER_REDATA, CidResolutionResult
+from urbanlens.dashboard.services.apis.locations.cid_resolution import CidResolutionResult
 
 
 class ResolveDeferredPinLocationsMapsUrlTests(TestCase):
@@ -41,7 +41,7 @@ class ResolveDeferredPinLocationsMapsUrlTests(TestCase):
             mock.patch(
                 "urbanlens.dashboard.services.apis.locations.cid_resolution.resolve_cids",
                 return_value=CidResolutionResult(
-                    provider=PROVIDER_REDATA, resolved={12345: (41.348754, -71.453896), 67890: (40.0, -74.0)}
+                    provider="fake", resolved={12345: (41.348754, -71.453896), 67890: (40.0, -74.0)}
                 ),
             ) as resolve_cids,
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
@@ -63,7 +63,7 @@ class ResolveDeferredPinLocationsMapsUrlTests(TestCase):
         with (
             mock.patch(
                 "urbanlens.dashboard.services.apis.locations.cid_resolution.resolve_cids",
-                return_value=CidResolutionResult(provider=PROVIDER_REDATA, resolved={67890: (40.0, -74.0)}),
+                return_value=CidResolutionResult(provider="fake", resolved={67890: (40.0, -74.0)}),
             ) as resolve_cids,
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
         ):

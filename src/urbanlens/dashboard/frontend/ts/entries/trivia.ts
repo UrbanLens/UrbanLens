@@ -294,8 +294,8 @@ function setRailAvailable(on: boolean): void {
 
 function connectSessionSocket(): void {
     if (ws || sessionId === null) return;
-    // shared/live-socket.ts adds the heartbeat this socket needs to survive the
-    // Cloudflare tunnel's idle cutoff, and the reconnect it never had.
+    // shared/live-socket.ts adds the heartbeat this socket needs to survive
+    // a reverse proxy's idle cutoff, and the reconnect it never had.
     ws = openLiveSocket({
         path: `/ws/trivia/session/${sessionId}/`,
         onMessage: handleSocketMessage,

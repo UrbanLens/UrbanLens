@@ -31,12 +31,28 @@ beforeEach(() => {
         </div>`;
 });
 
-function fire(name: string, elt: Element, status: number): void {
-    const xhr = { status, responseText: "" } as XMLHttpRequest;
+function fire(name: string, elt: Element, status: number, responseText = ""): void {
+    const xhr = { status, responseText } as XMLHttpRequest;
     elt.dispatchEvent(new CustomEvent(name, { bubbles: true, detail: { elt, xhr } }));
 }
 
 describe("external panel fallbacks", () => {
+    test("a panel that asks to go quietly is dismissed on a server error", () => {
+        const panel = document.getElementById("any-new-provider-section") as HTMLElement;
+        panel.setAttribute("data-ext-panel-error", "dismiss");
+        fire("htmx:responseError", panel, 502);
+        expect(flyAway).toHaveBeenCalledWith(panel);
+        expect(laterListener).not.toHaveBeenCalled();
+    });
+
+    test("a panel that answers its error with markup is replaced by it", () => {
+        const panel = document.getElementById("any-new-provider-section") as HTMLElement;
+        panel.setAttribute("data-ext-panel-error", "swap");
+        fire("htmx:responseError", panel, 403, '<div id="why-withheld">Not included in your access.</div>');
+        expect(document.getElementById("any-new-provider-section")).toBeNull();
+        expect(document.getElementById("why-withheld")?.textContent).toBe("Not included in your access.");
+    });
+
     test("any panel carrying the marker is dismissed on a 204, with no list of ids to maintain", () => {
         const panel = document.getElementById("any-new-provider-section") as HTMLElement;
         fire("htmx:afterOnLoad", panel, 204);

@@ -85,9 +85,9 @@ if TYPE_CHECKING:
 _CID_RE = re.compile(r"!1s0x[0-9a-fA-F]+:0x([0-9a-fA-F]+)")
 
 #: Column names (case-insensitive) that hold a Google Maps URL to extract coordinates/CID from.
-#: Google Takeout's various per-category CSV exports don't agree on a header name for this:
-#: starred/saved-place list exports use "URL", but the Timeline "Parking" export uses "Parking
-#: location" - UL-203: every row in Parking.csv silently failed to import (no coordinate column
+#: Takeout's per-category CSV exports disagree on the header: starred/saved-place lists use "URL", the Timeline
+#: "Parking" export uses "Parking location", and checking only "URL" silently failed to import every row of
+#: Parking.csv.
 _TAKEOUT_URL_COLUMN_KEYS: tuple[str, ...] = ("url", "parking location")
 
 
@@ -188,7 +188,7 @@ def _create_pin_from_confirmed(
         user_profile: importing profile.
         list_labels: labels from the owning list's ``label_ids``.
         category_label: the list's category label, if ``create_category`` was set.
-        auto_tag: whether to enqueue AI category suggestion for a newly-created pin.
+        auto_tag: whether to enqueue category suggestion for a newly-created pin.
         TEMPORARY: When that matches, the existing pin is moved onto the corrected coordinates and returned as ``created=False`` instead of a second pin being created nearby.
 
     Returns:
@@ -261,8 +261,8 @@ def _create_pin_from_confirmed(
             from urbanlens.dashboard.tasks import suggest_pin_categories, suggest_pin_category
 
             enqueue_follow_on(suggest_pin_category, suggest_pin_categories, pin.pk, queue=follow_on_queue())
-    # Fill in a still-blank, non-user-provided name from this later import
-    # (UL-207) - get_nearby_or_create's `defaults` are only ever applied
+    # Fill in a still-blank, non-user-provided name from this later import, since
+    # get_nearby_or_create's `defaults` are only ever applied
     # when creating a new row, never to an existing one it merges into.
     elif pin_name and not pin.name and not pin.name_is_user_provided:
         pin.name = pin_name
@@ -720,8 +720,8 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                     "description": (row.get("Note", "") + " " + row.get("Comment", "")).strip(),
                     "cid": int(cid_match.group(1), 16) if cid_match else None,
                     # Carried through to a deferred cid lookup (see
-                    # cid_resolution.resolve_cids) - REData resolves faster and
-                    # more reliably from a place's own URL than from cid alone.
+                    # cid_resolution.resolve_cids) - a resolver that can use it is faster and
+                    # more reliable from a place's own URL than from cid alone.
                     "maps_url": url,
                     # TEMPORARY (see _preview_pins below): this row's cid came out of the same
                     # !1s0x{s2_cell}:0x{cid} URL segment that extract_coordinates_from_url decodes
@@ -994,7 +994,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 # JSON number above 2**53 loses low digits in JavaScript.
                 "cid": str(cid) if cid else None,
                 # Also just carried through to the confirm step - not displayed -
-                # so a deferred lookup can pass it to REData. See _csv_row_iter.
+                # so a deferred lookup can pass it to its resolver. See _csv_row_iter.
                 "maps_url": p.get("maps_url"),
             }
             # --- TEMPORARY (legacy CID coordinate repair) ----------------------- This record's
@@ -1022,7 +1022,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             - ``pins`` (list[dict]): dicts with ``name``, ``lat``, ``lng``,
               ``description``, ``cid`` (decimal digits; checked by
               :func:`confirmed_pin_cid`, and a pin it refuses is skipped), ``maps_url`` (the source Google Maps
-              URL, when the pin came from one - passed to REData for a more
+              URL, when the pin came from one - passed to the CID resolver for a more
               reliable deferred lookup), and ``label_ids`` (list[int]) fields.
               Imports never hit external APIs synchronously; each created pin's
               ``Pin`` post_save signal (``models.pin.signals``) does queue a
@@ -1038,7 +1038,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         it's queued and handed off to ``tasks.resolve_deferred_pin_locations``
         once every list has been walked, so it only ever gets placed once its real
         coordinates are known. This keeps this generator itself free of any
-        live REData/Google call - every pin it places here came from data
+        live provider call - every pin it places here came from data
         already on hand (a matched ``Location``, or a cached lookup).
 
         Yields:
@@ -1053,7 +1053,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         Args:
             confirmed_lists: User-confirmed selection from the preview step.
             user_profile: Profile to import pins for.
-            auto_tag: Whether to enqueue AI category suggestion for newly-created pins.
+            auto_tag: Whether to enqueue category suggestion for newly-created pins.
 
         """
         from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway

@@ -12,11 +12,11 @@ from urbanlens.dashboard.services.sandbox.queues import Queue
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
-    from urbanlens.dashboard.services.pins.external_data import PanelSource
+    from urbanlens.dashboard.plugins.base import PluginContext
 
 logger = logging.getLogger(__name__)
 
-#: Where REData holds no Overture, get_building_attributes() and get_nearby_places() are each independent S3 GeoParquet range reads
+#: Where no regional mirror covers the pin, get_building_attributes() and get_nearby_places() are each independent S3 GeoParquet range reads
 #: (connect/request timeouts of 10s/30s each - see OvertureMapsGateway), and observed in production
 #: to occasionally each take close to their own ceiling, compounding to 100s+ for one fetch() call
 #: when run back-to-back. get_nearby_places() is the less essential of the two.
@@ -37,20 +37,20 @@ class OvertureBuildingAttributesPanelSource(CoordinateGatedInfoPanelSource):
     placement: ClassVar[PanelPlacement] = PanelPlacement.PROPERTY
     building_level: ClassVar[bool] = True
     tab_order: ClassVar[int] = 20
-    # The prefork pool, not the fast thread-pool queue - where REData holds no Overture, OvertureMapsGateway reads GeoParquet via
+    # The prefork pool, not the fast thread-pool queue - where no mirror covers the pin, OvertureMapsGateway reads GeoParquet via
     # pyarrow/geopandas (real CPU-bound parsing/geometry work, same class of cost as
     # BoundaryPanelSource's shapely work), and several running concurrently on a thread pool would
     # cause enough GIL contention to slow down every other panel sharing it. See PanelSource.queue.
     queue = Queue.INTERACTIVE
 
     def gate(self, pin: Pin) -> bool:
-        """Where REData's Overture mirror covers the pin only REData may answer, so an install without it has nothing to fetch there."""
-        from urbanlens.dashboard.services.apis.locations.boundaries.overture import served_by_redata
-        from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
+        """Where a mirror covers the pin only the mirror may answer, so an install where it cannot be asked has nothing to fetch there."""
+        from urbanlens.dashboard.services.apis.locations.boundaries.overture import overture_mirror_for
 
         if not super().gate(pin):
             return False
-        return redata_configured() or not served_by_redata(float(pin.effective_latitude or 0), float(pin.effective_longitude or 0))
+        mirror = overture_mirror_for(float(pin.effective_latitude or 0), float(pin.effective_longitude or 0))
+        return mirror is None or mirror.available()
 
     def fetch(self, pin: Pin) -> None:
         """
@@ -143,11 +143,13 @@ class OvertureBuildingAttributesPlugin(UrbanLensPlugin):
     description: ClassVar[str] = (
         "Free, open-data building class/height/floor-count/roof details from Overture Maps' Buildings "
         "theme, plus nearby named places from its Places theme (same dataset already used for footprint "
-        "boundaries). Where REData's own Overture mirror covers the pin (most of the US) these come from it and "
-        "need UL_REDATA_API_URL/UL_REDATA_API_KEY; elsewhere from Overture's public release."
+        "boundaries). Where a regional Overture mirror covers the pin these come from it, when it is configured; "
+        "elsewhere from Overture's public release."
     )
     author: ClassVar[str] = "UrbanLens"
 
-    def get_panel_sources(self) -> list[PanelSource]:
-        """Contribute the building-characteristics pin-detail panel."""
-        return [OvertureBuildingAttributesPanelSource()]
+    def setup(self, plugin: PluginContext) -> None:
+        """The building-characteristics pin-detail panel."""
+        from urbanlens.dashboard.plugins.points import PANEL_SOURCES
+
+        plugin.extend(PANEL_SOURCES, [OvertureBuildingAttributesPanelSource()])

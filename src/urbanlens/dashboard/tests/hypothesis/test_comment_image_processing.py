@@ -1,5 +1,5 @@
 """
-Comment and trip-comment images while their upload is still being processed (P142).
+Comment and trip-comment images while their upload is still being processed.
 
 A comment image is re-encoded under a new name before its ``pending_scan`` clears, and the raw file is
 deleted, so the same rule as for a photo holds: nothing names the raw file, and the author's placeholder

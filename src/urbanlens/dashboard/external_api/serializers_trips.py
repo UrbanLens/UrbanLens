@@ -14,13 +14,14 @@ from typing import TYPE_CHECKING
 from rest_framework import serializers
 
 from urbanlens.dashboard.models.trips.model import Trip
+from urbanlens.dashboard.plugins.drf import ExtensibleSerializer
 from urbanlens.dashboard.services.trips.trip_crud import TRIP_PERMISSION_FIELDS
 
 if TYPE_CHECKING:
     from typing import Any
 
 
-class TripPermissionsUpdateSerializer(serializers.Serializer):
+class TripPermissionsUpdateSerializer(ExtensibleSerializer):
     """
     A presence-keyed partial update of a trip's four permission levels.
 
@@ -53,7 +54,7 @@ class TripPermissionsUpdateSerializer(serializers.Serializer):
         return attrs
 
 
-class TripCalendarStatusSerializer(serializers.Serializer):
+class TripCalendarStatusSerializer(ExtensibleSerializer):
     """
     Whether a trip is mirrored to the caller's Google Calendar (schema-only).
 
@@ -76,7 +77,7 @@ class TripCalendarStatusSerializer(serializers.Serializer):
     account_email = serializers.CharField(read_only=True, allow_null=True)
 
 
-class TripCalendarExportRequestSerializer(serializers.Serializer):
+class TripCalendarExportRequestSerializer(ExtensibleSerializer):
     """
     Options for a trip export.
 
@@ -88,7 +89,7 @@ class TripCalendarExportRequestSerializer(serializers.Serializer):
     auto_sync = serializers.BooleanField(required=False)
 
 
-class TripCalendarExportResponseSerializer(serializers.Serializer):
+class TripCalendarExportResponseSerializer(ExtensibleSerializer):
     """The result of an export: the refreshed status plus what was written."""
 
     calendar = TripCalendarStatusSerializer(read_only=True)
@@ -107,7 +108,7 @@ class TripCalendarExportResponseSerializer(serializers.Serializer):
     events_refused = serializers.IntegerField(read_only=True)
 
 
-class TripCalendarRemovalResponseSerializer(serializers.Serializer):
+class TripCalendarRemovalResponseSerializer(ExtensibleSerializer):
     """The result of an unexport: the refreshed status plus whether anything went."""
 
     calendar = TripCalendarStatusSerializer(read_only=True)
@@ -120,7 +121,7 @@ class TripCalendarRemovalResponseSerializer(serializers.Serializer):
     events_kept = serializers.IntegerField(read_only=True)
 
 
-class TripCalendarBlockedSerializer(serializers.Serializer):
+class TripCalendarBlockedSerializer(ExtensibleSerializer):
     """
     A 409 the client resolves by sending the user through a browser.
 

@@ -12,22 +12,22 @@ import re
 
 import yaml
 
+from urbanlens.core.tests.compose import compose_document
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.UrbanLens.environments.meta import EnvironmentTypes
 
 #: The repo root - parents[5] from src/urbanlens/dashboard/tests/hypothesis/.
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[5]
-_COMPOSE = _REPO_ROOT / "docker-compose.yml"
 
-#: Built from the app image but never imports Django: ai-inference serves ``urbanlens_ai`` alone.
-_NOT_DJANGO = frozenset({"ai-inference"})
+#: The services docker-compose.yml itself defines; an overlay file may add tiers of its own.
+_BASE_SERVICES = frozenset(yaml.safe_load((_REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8"))["services"])
 
 #: What a tier may set it to: the operator's own value, passed through with no default, or a literal environment.
 _PASSED_THROUGH = "${UL_ENVIRONMENT}"
 
 
 def _services() -> dict[str, dict]:
-    return yaml.safe_load(_COMPOSE.read_text(encoding="utf-8"))["services"]
+    return compose_document()["services"]
 
 
 def _environment(service: dict) -> dict[str, str]:
@@ -46,7 +46,7 @@ def _django_tiers() -> dict[str, dict]:
         if isinstance(service.get("build"), dict)
         and service["build"].get("dockerfile") == "Dockerfile"
         and service["build"].get("context") == "."
-        and name not in _NOT_DJANGO
+        and service.get("x-runs-django", True)
     }
 
 
@@ -54,7 +54,7 @@ class ComposeTests(SimpleTestCase):
     def test_the_inventory_is_what_was_checked(self) -> None:
         """A new tier is read here first: does it run Django, and where does it get its environment?"""
         self.assertEqual(
-            set(_django_tiers()),
+            set(_django_tiers()) & _BASE_SERVICES,
             {
                 "app",
                 "app-ws",
@@ -66,7 +66,6 @@ class ComposeTests(SimpleTestCase):
                 "media-worker-batch",
                 "celery-beat",
                 "celery-metrics",
-                "ai-worker",
                 "test-runner",
             },
         )

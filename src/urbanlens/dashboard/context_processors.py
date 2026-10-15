@@ -49,8 +49,8 @@ def deferred(*keys: str) -> Callable[[Callable[[HttpRequest], Mapping[str, objec
     return decorate
 
 
-@deferred("site_title", "app_version", "public_costs_page_enabled", "media_origin")
-def add_site_settings(request: HttpRequest) -> dict[str, str | bool]:
+@deferred("site_title", "app_version", "media_origin")
+def add_site_settings(request: HttpRequest) -> dict[str, str]:
     """
     Inject site-wide settings into template context.
 
@@ -58,7 +58,7 @@ def add_site_settings(request: HttpRequest) -> dict[str, str | bool]:
         request: The current HttpRequest.
 
     Returns:
-        dict with site_title, app_version, public_costs_page_enabled, and media_origin: the origin uploads are
+        dict with site_title, app_version, and media_origin: the origin uploads are
         served from when ``UL_MEDIA_BASE_URL`` sets one, else ``""`` (they come from the page's own origin).
     """
     from urbanlens.dashboard.services.media.origin import media_origin
@@ -69,15 +69,12 @@ def add_site_settings(request: HttpRequest) -> dict[str, str | bool]:
 
         site = SiteSettings.get_current()
         site_title = site.app_title
-        public_costs_page_enabled = site.public_costs_page_enabled
     except (ImportError, DatabaseError):
         site_title = "UrbanLens"
-        public_costs_page_enabled = False
 
     return {
         "site_title": site_title,
         "app_version": app_settings.app_version,
-        "public_costs_page_enabled": public_costs_page_enabled,
         "media_origin": media_origin(),
     }
 
@@ -407,7 +404,6 @@ def add_e2ee_urls(request: HttpRequest) -> dict[str, dict[str, str]]:
 
 #: Template flag, and the ``SiteFeature`` member it reports.
 _FEATURE_FLAGS = {
-    "can_use_ai_features": "AI",
     "show_places_layer": "PLACES",
     "can_use_web_search": "SEARCH",
     "can_upload_videos": "VIDEO_UPLOADS",

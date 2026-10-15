@@ -1,5 +1,5 @@
 /**
- * The Photos tab's album grid pages its server-rendered cards through the shared photo-grid binder (P171).
+ * The Photos tab's album grid pages its server-rendered cards through the shared photo-grid binder.
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";

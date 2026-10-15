@@ -389,7 +389,7 @@ class HardDeleteProfileCommentTombstoneTests(TestCase):
     """
     Deleting an account erases its own comments, but a reply another
     member wrote is never deleted or emptied - the CASCADE reaches exactly as
-    far as the departing profile's own rows, and the existing UL-219
+    far as the departing profile's own rows, and the
     parent_deleted signal tombstones the reply the same way a direct
     comment-delete already does."""
 

@@ -177,7 +177,7 @@ test.describe("health probes stay boring", () => {
         const report = (await response.json()) as Record<string, unknown>;
         // HealthController._collect's own docstring names db/cache/role/migrations; connections
         // and degraded were added later (see health.py) without this list ever being updated -
-        // this spec had never run since it was added (P91), so nothing caught the drift.
+        // this spec had never run since it was added, so nothing caught the drift.
         expect(Object.keys(report).sort()).toEqual(["cache", "connections", "db", "degraded", "migrations", "role"]);
         const blob = JSON.stringify(report);
         expect(blob, "readiness includes a connection string").not.toMatch(/postgres(?:ql)?:\/\//i);

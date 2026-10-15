@@ -7,16 +7,13 @@ from typing import Annotated, Any, Self
 
 from django import conf
 from django.conf import LazySettings
-from django.core.management.utils import get_random_secret_key
 from pydantic import Field, field_validator, model_validator
 from pydantic._internal._model_construction import ModelMetaclass
 from pydantic_core import Url
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from urbanlens.UrbanLens.egress import parse_share_overrides
-from urbanlens.UrbanLens.environments.base import BaseEnvironment
-from urbanlens.UrbanLens.environments.factory import select_environment
-from urbanlens.UrbanLens.environments.meta import DebugTypes, EnvironmentTypes, environment_from_env
+from urbanlens.UrbanLens.environments.meta import EnvironmentTypes, environment_from_env
 from urbanlens.UrbanLens.settings.meta.app import DEFAULT_PATH_PARENTS, DEFAULT_ROOT
 
 logger = logging.getLogger(__name__)
@@ -36,7 +33,8 @@ MIN_FIELD_ENCRYPTION_KEY_ALPHABET = 16
 
 
 def _encryption_key_weakness(key: str) -> str | None:
-    """Describe why a key is too weak, if it is.
+    """
+    Describe why a key is too weak, if it is.
 
     Args:
         key: The candidate key.
@@ -54,7 +52,7 @@ def _encryption_key_weakness(key: str) -> str | None:
 
 def _default_allowed_hosts() -> list[str]:
     """Default ALLOWED_HOSTS, including localhost for container healthchecks."""
-    return ["urbanlens.org", "localhost", "127.0.0.1"]
+    return ["localhost", "127.0.0.1"]
 
 
 class AppSettingsMeta(ModelMetaclass):
@@ -80,9 +78,6 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         validation_alias="UL_ENVIRONMENT",
         description="The deployment environment, read from UL_ENVIRONMENT exactly as settings.ENVIRONMENT_NAME is",
     )
-    debug_override: bool | None = Field(description="Whether or not to enable debugging", alias="DEBUG", default=None)
-    # default_factory so each instantiation gets a fresh key; never read as stable across processes.
-    secret_key: str = Field(default_factory=get_random_secret_key, description="The secret key")
     field_encryption_key: str | None = Field(
         default=None,
         description=(
@@ -104,18 +99,23 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         ),
     )
     root_urlconf: str = Field(default="urbanlens.UrbanLens.urls", description="The root urlconf")
-    admin_username: str = Field(default="Admin", description="The username to use for the admin user")
-    admin_email: str = Field(default="admin@yourdomain.com", description="The email to use for the admin user")
+    bootstrap_admin_email: str = Field(
+        default="",
+        description="If set, the account with this email (compared after email normalization) becomes the bootstrap site admin while the role is unclaimed, even if other accounts exist, and no other account can. Empty: the first account does.",
+    )
     allowed_hosts: Annotated[list[str], NoDecode] = Field(default_factory=_default_allowed_hosts, description="The allowed hosts")
     plugin_modules: Annotated[list[str], NoDecode] = Field(default_factory=list, description="Dotted module paths of additional UrbanLens plugins to load (comma-separated)")
     disabled_plugins: Annotated[list[str], NoDecode] = Field(default_factory=list, description="Names of discovered UrbanLens plugins to disable for this install (comma-separated)")
+    template_overrides_dir: str = Field(
+        default="",
+        description="A directory of templates that replace the bundled ones of the same relative name, for pages a deployment words its own way: the privacy policy, the FAQ, the about page. A replacement can {% extends %} the template it replaces and override single blocks. Empty uses the bundled templates.",
+    )
     language_code: str = Field(default="en-us", description="The language code")
-    time_zone: str = Field(default="EST", description="The time zone")
     use_i18n: bool = Field(default=True, description="Whether or not to use i18n")
     use_tz: bool = Field(default=True, description="Whether or not to use tz")
     email_backend: str = Field(default="django.core.mail.backends.console.EmailBackend", description="Django email backend class path")
     email_from: str = Field(default="noreply@yourdomain.com", description="The from email")
-    email_host: str = Field(default="smtp.gmail.com", description="The email host")
+    email_host: str = Field(default="", description="The email host")
     email_port: int = Field(default=587, description="The email port")
     email_user: str | None = Field(default=None, description="SMTP username / sending address")
     email_password: str | None = Field(default=None, description="SMTP password or app password")
@@ -140,7 +140,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     media_base_url: str = Field(
         default="",
         description=(
-            "Origin that serves user uploads, e.g. https://media.urbanlens.org. Point it at the media-nginx "
+            "Origin that serves user uploads, e.g. https://media.example.com. Point it at the media-nginx "
             "container's published port (UL_MEDIA_PORT). Serving uploads from their own origin means anything "
             "that slips past validation executes where there is no session cookie and no app data; authentication "
             "there uses a separate media-only signed cookie. Leave empty to serve /media/ from the app's own "
@@ -176,7 +176,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     )
     s3_endpoint_url: str = Field(
         default="",
-        description=("Base URL of the S3-compatible API, e.g. http://garage-s3.garage.svc.cluster.local:3900. Required when UL_MEDIA_STORAGE_BACKEND is 's3'. Leave empty for real AWS S3, which boto3 derives from the region."),
+        description=("Base URL of the S3-compatible API, e.g. http://minio:9000. Required when UL_MEDIA_STORAGE_BACKEND is 's3'. Leave empty for real AWS S3, which boto3 derives from the region."),
     )
     s3_bucket_name: str = Field(default="", description="Bucket holding user uploads. Required when UL_MEDIA_STORAGE_BACKEND is 's3'.")
     s3_access_key_id: str | None = Field(default=None, description="Access key for the object store. Required when UL_MEDIA_STORAGE_BACKEND is 's3'.")
@@ -201,7 +201,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "Seconds the object store may go silent mid-request before the attempt is abandoned. An upload request "
             "makes two storage calls (a name check and the write), so with UL_S3_MAX_ATTEMPTS this bounds how long a "
             "stalled store can hold it: keep 2 x attempts x (connect + read) plus the 20 s upload reservation wait "
-            "well under the proxy's own timeout (Cloudflare gives up at 100 s)."
+            "well under the proxy's own timeout (a typical proxy gives up at 100 s)."
         ),
     )
     s3_max_attempts: int = Field(
@@ -221,8 +221,8 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     process_role: str = Field(
         default="unspecified",
         description=(
-            "What this process is: web, websocket, worker, bulk, panels, sandbox, ai, inference, beat, metrics, or "
-            "setup. Set per service in docker-compose.yml, which also logs each in to Postgres as ul_<role>. "
+            "What this process is: web, websocket, worker, bulk, panels, sandbox, beat, metrics, or "
+            "setup, or a role a plugin declares. Set per service in docker-compose.yml, which also logs each in to Postgres as ul_<role>. "
             "Only 'sandbox' may hand untrusted uploaded bytes to a parser (Pillow, ffmpeg, "
             "LibreOffice, GDAL, zipfile); see UL_UNTRUSTED_PARSE_POLICY."
         ),
@@ -345,15 +345,6 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         ge=1,
         description=("How many Immich thumbnails one account may be fetching at once across every web process, leased in the shared cache. The per-process cap alone lets one account pointed at a slow server hold that cap in every process at once."),
     )
-    public_costs_page_cache_seconds: int = Field(
-        default=600,
-        description=(
-            "How long the public costs page reuses its computed figures. The page is anonymous and every number on "
-            "it is a trailing thirty-day or monthly aggregate - including one that joins every user against every "
-            "pin they own - so recomputing per request buys freshness nobody can perceive. Only the figures are "
-            "cached, never the response, so turning the page off still takes effect immediately."
-        ),
-    )
     markup_max_shapes_per_snapshot: int = Field(
         default=2_000,
         description=(
@@ -387,7 +378,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     organize_rows_page_size: int = Field(
         default=100,
         gt=0,
-        description=("How many label cards one page of an Organize tab renders; the rest arrive as the list scrolls, or all at once when a filter, the tree view or select-all needs them. Rendering costs about 3 ms a card (P66)."),
+        description=("How many label cards one page of an Organize tab renders; the rest arrive as the list scrolls, or all at once when a filter, the tree view or select-all needs them. Rendering costs about 3 ms a card."),
     )
     max_smart_lists_per_sync: int = Field(
         default=25,
@@ -465,15 +456,6 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "processes uploads - without the isolation. Set UL_SANDBOX_ENABLED=false only where no media-worker runs."
         ),
     )
-    ai_worker_enabled: bool = Field(
-        default=False,
-        description=(
-            "Whether an ai-worker container is deployed to drain the 'ai' Celery queue. Unlike "
-            "UL_SANDBOX_ENABLED, this has no degrade-to-default-queue fallback: when false, the assistant "
-            "is simply unavailable (see services.ai.access.assistant_available), because the default "
-            "worker holds REData/OAuth credentials the assistant's tool loop must never run alongside."
-        ),
-    )
     untrusted_parse_policy: str = Field(
         default="warn",
         description=(
@@ -481,15 +463,6 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "'deny' raises, 'warn' logs and proceeds, 'allow' disables the check. Production should be 'deny'; "
             "'warn' exists to collect violations during a rollout, and the test settings force 'allow' because the "
             "suite calls the parsers directly."
-        ),
-    )
-    direct_inference_policy: str = Field(
-        default="warn",
-        description=(
-            "How a process reacts when it is about to call an AI provider directly, in-process, instead of "
-            "through ai-inference: 'deny' raises, 'warn' logs and proceeds, 'allow' disables the check. Production "
-            "should be 'deny'; a local checkout with no UL_PROCESS_ROLE set is always allowed regardless of this "
-            "setting, since it has no ai-inference container to talk to. See services.sandbox.guard.check_direct_inference."
         ),
     )
     allow_dev_toolbar_for_non_admins: bool = Field(
@@ -560,7 +533,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "per-sender budget; safety check-in and game session chat are scoped per conversation, "
             "so handling two at once does not throttle either. People send single emoji or split a "
             "sentence into several messages, so this sits above what a person sends and well below "
-            "the ~15-30/s that one sender needs to saturate daphne (X31). 0 disables it."
+            "the ~15-30/s that one sender needs to saturate daphne. 0 disables it."
         ),
     )
     message_burst: int = Field(
@@ -622,7 +595,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         default="",
         description=(
             "Comma-separated CIDRs (IPv4 or IPv6) permitted to read /metrics, e.g. "
-            "'10.2.0.0/24,127.0.0.1/32'. Empty disables the network check. The client address is "
+            "'10.0.0.0/24,127.0.0.1/32'. Empty disables the network check. The client address is "
             "resolved the same way the rate limiters resolve it, honouring UL_TRUSTED_PROXY_COUNT, so "
             "a forged X-Forwarded-For cannot spoof its way into the allowlist. Combine with "
             "UL_METRICS_TOKEN for defense in depth; either alone satisfies the startup check."
@@ -635,12 +608,12 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         description=(
             "This deployment's share (0-1) of every quota'd and billed external service's budget: each such "
             "service's per-minute, per-day and 30-day limits, and its share of a vendor's free tier. Unset takes "
-            "the UL_ENVIRONMENT default: production 0.9, staging 0.05, development and local 0, anything else 0. "
-            "0 keeps the deployment off every such service. REData and our own hosts are not scaled; hosted AI "
-            "(Cloudflare Workers AI, OpenAI, Anthropic) is called from production and staging only, and local models "
-            "such as Ollama everywhere; email, SMS, push and writes to a third party are production's only. Every "
-            "host shares one address, so keep all deployments' shares at or below 1. See "
-            "urbanlens.UrbanLens.egress (D26)."
+            "the UL_ENVIRONMENT default: production 0.95, staging 0.05, development and local 0, anything else 0. "
+            "0 keeps the deployment off every such service. First-party data services and the deployment's own hosts are not scaled; billed services "
+            "are called only within their share, which development refuses by default; local and self-hosted services "
+            "run everywhere; email, SMS, push and writes to a third party are production's only. Where deployments "
+            "share an outbound address or API keys, keep their shares together at or below 1. See "
+            "urbanlens.UrbanLens.egress."
         ),
     )
     environment_share_overrides: Annotated[dict[str, float], NoDecode] = Field(
@@ -648,10 +621,9 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         description=(
             "Per-service shares that replace UL_ENVIRONMENT_SHARE for the named services, as "
             "'nominatim=0.02,google_geocoding=0.01'. The way to try a provider from development or staging. For "
-            "messaging (sms, whatsapp, unified_push) and public writes (wayback_save, google_calendar, stripe) any "
-            "share above 0 opts the service in off production, and 0 turns it off on production. The same for hosted "
-            "AI, which development and local refuse: name an AI feature (trivia_generation, assistant, link_extraction, "
-            "document_pin_import, ...) or a provider (ai_cloudflare, ai_openai, ai_anthropic) to try it there. Logged "
+            "messaging (sms, whatsapp, unified_push) and public writes (wayback_save, google_calendar, and any a plugin adds) any "
+            "share above 0 opts the service in off production, and 0 turns it off on production. A billed service that "
+            "development refuses can be tried there by name, as in UL_ENVIRONMENT_SHARE_OVERRIDES=google_geocoding=1. Logged "
             "at startup."
         ),
     )
@@ -663,6 +635,14 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         default=False,
         description=("Deliver mail for real off production, through UL_EMAIL_BACKEND (SMTP by default). Unset, development and staging print every message, verification codes and magic links included, to the log instead."),
     )
+    overpass_api_url: str = Field(
+        default="",
+        description=(
+            "Primary Overpass API endpoint this deployment asks first (usually a self-hosted instance), "
+            "with the public mirrors as ordered fallbacks. Empty means no primary: only the public "
+            "mirrors are asked, and only where the environment permits them (production by default)."
+        ),
+    )
     protomaps_api_key: str = Field(
         default="",
         description=(
@@ -670,10 +650,10 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "deployment's own mirror. The browser fetches them directly: the key is written into the "
             "page, which is how Protomaps keys are meant to be used, so restrict its allowed origins in "
             "the Protomaps dashboard. Only the tile source moves - the style, glyphs and sprites stay the "
-            "ones REData publishes - and the client falls back to the style's own tiles for the session "
+            "ones the tile catalogue publishes - and the client falls back to the style's own tiles for the session "
             "when the hosted ones fail. The CSP admits https://api.protomaps.com to connect-src whenever "
             "the key is handed out. Read on production and staging only: development and local ignore it "
-            "and draw the self-hosted tiles (D26). Leave it empty and every environment does."
+            "and draw the self-hosted tiles. Leave it empty and every environment does."
         ),
     )
     basemap_style_base_url: str = Field(
@@ -686,13 +666,9 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "connect-src and img-src, and nothing else: it is not where tiles are fetched "
             "from by this server, it is where the *browser* is allowed to fetch them from. A "
             "raster layer is proxied same-origin and needs no exception, so a deployment whose "
-            "REData offers only raster layers can leave this unset. "
-            "Set it to the origin in REData's published style_url. For the hosted instance that "
-            "is https://tiles.urbanlens.org, which serves the style documents, the glyphs and "
-            "sprites they name, and the Protomaps planet archive behind them - measured "
-            "2026-09-20: styles/street.json, styles/dark.json and styles/terrain.json all answer "
-            "anonymously, with access-control-allow-origin: * and Content-Range exposed for the "
-            "archive's range reads. Without this the browser is refused all four."
+            "tile catalogue offers only raster layers can leave this unset. "
+            "Set it to the origin in the catalogue's published style_url, which must answer the style documents, glyphs, "
+            "sprites and tile archive anonymously, with access-control-allow-origin and Content-Range exposed for range reads."
         ),
     )
     request_upstream_concurrency: int = Field(
@@ -700,21 +676,10 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         ge=1,
         description=(
             "How many fetches one web process may have in flight to each upstream a page calls while the user "
-            "waits: place search, nearby places, trip forecasts, the historical-map list, REData media, Flickr "
+            "waits: place search, nearby places, trip forecasts, the historical-map list, proxied media, Flickr "
             "albums. Each upstream has its own count (services.core.request_upstream). Below gunicorn's "
             "`--threads 4`, so one slow upstream cannot hold every thread in a process; over the cap the caller "
             "is told the upstream is busy at once instead of waiting."
-        ),
-    )
-    historical_tile_upstream_concurrency: int = Field(
-        default=2,
-        ge=1,
-        description=(
-            "How many warped historical-map tiles one web process may be fetching from REData at "
-            "the same time. Its own count rather than the basemap one's, because an overlay "
-            "nobody has switched on must not be able to starve the base layer under it - and "
-            "because REData warps these on demand, so they are slower than a basemap tile rather "
-            "than faster. See basemap_tile_upstream_concurrency for why the bound exists at all."
         ),
     )
     basemap_tile_upstream_concurrency: int = Field(
@@ -743,13 +708,13 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "This deployment IS the public demo instance. Enables the demo-login endpoint and the "
             "demo banner. Isolation is the deployment boundary itself - a demo instance runs against "
             "its own database, seeded synthetically, and never against real data. Setting this true "
-            "on an instance holding real user data would expose it: see docs/DEMO.md."
+            "on an instance holding real user data would expose it."
         ),
     )
     demo_real_site_url: str = Field(
         default="",
         description=(
-            "Set on the demo instance: absolute URL of the real site, e.g. https://urbanlens.org. "
+            "Set on the demo instance: absolute URL of the real site, e.g. https://example.com. "
             "The demo banner links there for 'create a real account'. Empty hides that link - the "
             "demo's own signup would only make another throwaway account on the instance that is "
             "about to delete it."
@@ -767,7 +732,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     demo_url: str = Field(
         default="",
         description=(
-            "Absolute URL of the demo instance, e.g. https://demo.urbanlens.org. Set on the *real* "
+            "Absolute URL of the demo instance, e.g. https://demo.example.com. Set on the *real* "
             "site to show the 'Try the demo' button on the login and registration pages; empty hides "
             "it. Deliberately a URL rather than a boolean, so the button cannot appear without a "
             "destination that someone has actually provisioned."
@@ -781,7 +746,6 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     test_runner: str = Field(default="urbanlens.core.tests.runner.TestRunner", description="The test runner")
 
     # Urls
-    deployment_name: str | None = Field(default=None, description="K3s site/node name, if any. Used to distinguish between deployments.")
     login_url: str = Field(default="login", description="The login url")
     static_url: str = Field(default="static/", description="The static url")
 
@@ -795,30 +759,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
 
     # APIs
     vendor_asset_base_url: Url | None = Field(default=None, description="Root of a mirror of the third-party JS/CSS assets; unset uses the public CDNs")
-    cloudflare_ai_endpoint: Url | None = Field(default=None, description="The cloudflare ai endpoint")
-    cloudflare_worker_ai_endpoint: Url | None = Field(default=None, description="The cloudflare worker ai endpoint")
-    cloudflare_ai_api_key: str | None = Field(default=None, description="The cloudflare ai key")
-    openai_api_key: str | None = Field(default=None, description="The openai key")
-    anthropic_api_key: str | None = Field(default=None, description="The anthropic (claude) key")
-    ai_inference_url: str | None = Field(
-        default=None,
-        description=(
-            "Base URL of the sandboxed ai-inference service (e.g. http://ai-inference:8002). When set, "
-            "LLMGateway calls providers through it instead of in-process; when unset, it falls back to "
-            "calling the provider SDKs directly here (LocalInferenceClient) - the pre-sandbox behavior, "
-            "gated by UL_DIRECT_INFERENCE_POLICY so a deployed container can't silently take this path."
-        ),
-    )
-    ai_inference_token: str | None = Field(
-        default=None,
-        description=("Shared bearer secret presented to ai-inference. Must match that service's own copy of the same variable exactly - it is the same credential, not two."),
-    )
-    ai_inference_timeout_seconds: float = Field(
-        default=90.0,
-        description=("How long to wait for a single ai-inference HTTP call before giving up. Comfortably above that service's own worst case (a 30s provider timeout, one retry) so this client is never the one that times out first."),
-    )
     google_unrestricted_api_key: str | None = Field(default=None, description="The google unrestricted api key")
-    google_domain_restricted_api_key: str | None = Field(default=None, description="The google domain restricted api key")
     google_public_api_key: str | None = Field(default=None, description="The google public api key")
     google_search_tenant: str | None = Field(default=None, description="The google search tenant")
     google_client_id: str | None = Field(default=None, description="The google client id")
@@ -829,8 +770,6 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     usgs_api_key: str | None = Field(default=None, description="The USGS M2M application token (from EarthExplorer account settings)")
     usgs_username: str | None = Field(default=None, description="The USGS EarthExplorer username (required alongside usgs_api_key for M2M auth)")
     azure_maps_subscription_key: str | None = Field(default=None, description="The Azure Maps subscription key (Azure Portal -> Azure Maps account -> Authentication)")
-    ollama_base_url: str | None = Field(default=None, description="Base URL of a self-hosted Ollama server (e.g. http://localhost:11434) for local, free AI photo-keyword generation")
-    ollama_vision_model: str = Field(default="llava", description="Ollama vision model name used for photo keyword generation")
     openweathermap_api_key: str | None = Field(default=None, description="The openweathermap key")
     osrm_base_url: str | None = Field(
         default=None,
@@ -842,8 +781,6 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "either way."
         ),
     )
-    redata_api_url: str | None = Field(default=None, description="Base URL of the REData property-records service (e.g. https://redata.example.com), no trailing slash needed")
-    redata_api_key: str | None = Field(default=None, description="Bearer API key for REData's external API - needs at least the parcels:read scope")
     virustotal_api_key: str | None = Field(
         default=None,
         description=(
@@ -859,14 +796,9 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     twilio_auth_token: str | None = Field(default=None, description="The Twilio auth token")
     twilio_sms_from_number: str | None = Field(default=None, description="The Twilio phone number SMS notifications are sent from (E.164 format)")
     twilio_whatsapp_from_number: str | None = Field(default=None, description="The Twilio-approved WhatsApp sender number (E.164 format, without the 'whatsapp:' prefix)")
-    stripe_secret_key: str | None = Field(default=None, description="The Stripe secret API key (sk_...), for paid subscription checkout/billing-portal/webhook calls")
-    stripe_webhook_secret: str | None = Field(default=None, description="The Stripe webhook signing secret (whsec_...), for verifying incoming /billing/webhooks/stripe/ requests")
 
     # Note: DATABASES is built directly in
     # settings/base.py from UL_DB_* environment variables
-
-    _secrets: dict | None = None
-    _environment: BaseEnvironment | None = None
 
     model_config = SettingsConfigDict(
         env_file=_ENV_FILE_PATHS,
@@ -875,32 +807,6 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         env_ignore_empty=True,
         extra="ignore",
     )
-
-    @property
-    def debug(self) -> bool:
-        """Whether debugging is enabled."""
-        if self._environment:
-            return self._environment.debug
-        # Only before the environment is set; afterwards it propagates there.
-        return self.debug_override or False
-
-    @debug.setter
-    def debug(self, value: bool) -> None:
-        """Set the debug value."""
-        self.debug_override = value
-
-        if self._environment:
-            self._environment.debug_override = DebugTypes.OVERRIDE_ON if value else DebugTypes.OVERRIDE_OFF
-
-    @property
-    def environment(self) -> BaseEnvironment | None:
-        """The environment."""
-        return self._environment
-
-    @property
-    def secrets(self) -> dict:
-        """The secrets."""
-        return self._secrets or {}
 
     @property
     def paths(self) -> dict[str, Path]:
@@ -930,7 +836,8 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     @field_validator("environment_share_overrides", mode="before")
     @classmethod
     def _parse_share_overrides(cls, value: Any) -> dict[str, float]:
-        """Parse ``UL_ENVIRONMENT_SHARE_OVERRIDES`` (``service=share,...``).
+        """
+        Parse ``UL_ENVIRONMENT_SHARE_OVERRIDES`` (``service=share,...``).
 
         Args:
             value: The raw value pydantic read.
@@ -951,7 +858,8 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     @field_validator("environment_name", mode="before")
     @classmethod
     def _resolve_environment_name(cls, value: Any) -> str:
-        """Parse ``UL_ENVIRONMENT`` with the same resolver the Django settings use.
+        """
+        Parse ``UL_ENVIRONMENT`` with the same resolver the Django settings use.
 
         Args:
             value: The raw value pydantic read.
@@ -964,7 +872,8 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     @field_validator("external_api_write_rate", "external_api_burst_rate", "external_api_read_rate", mode="after")
     @classmethod
     def _require_throttle_rate(cls, value: str) -> str:
-        """Refuse a rate DRF would only reject on the first throttled request.
+        """
+        Refuse a rate DRF would only reject on the first throttled request.
 
         Args:
             value: The configured rate.
@@ -982,7 +891,8 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     @field_validator("field_encryption_key", mode="after")
     @classmethod
     def _reject_weak_encryption_keys(cls, value: str | None) -> str | None:
-        """Refuse an active key weak enough for offline brute force.
+        """
+        Refuse an active key weak enough for offline brute force.
 
         Args:
             value: The configured active key, if any.
@@ -1001,7 +911,8 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     @field_validator("field_encryption_key_fallbacks", mode="after")
     @classmethod
     def _warn_about_weak_fallback_keys(cls, value: list[str]) -> list[str]:
-        """Warn (not fail) on weak retired keys so rotation can still run.
+        """
+        Warn (not fail) on weak retired keys so rotation can still run.
 
         Args:
             value: The configured retired keys.
@@ -1072,51 +983,6 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             except OSError:
                 # Report the path; a bare raise would hide which one failed.
                 logger.warning("Could not ensure path %s (%s); continuing without it.", key, value, exc_info=True)
-
-    def refresh_django(self):
-        """Refresh django.conf.settings with current values."""
-        for key, value in self.__dict__.items():
-            # Filter out settings we don't want to propogate back to django
-            if key.startswith("_") or key in ["model_config", "paths", "secrets", "databases", "logging", "django"]:
-                continue
-
-            const_name = key.upper()
-            setattr(conf.settings, const_name, value)
-
-        # Refresh properties as well
-        conf.settings.DEBUG = self.debug
-        conf.settings.ENVIRONMENT = self.environment
-
-        # Refresh django.conf
-        """
-        conf.settings.configure(
-            default_settings = self
-        )
-        """
-
-    def select_environment(self, new_environment_name: EnvironmentTypes | None = None) -> BaseEnvironment:
-        """Select the environment.
-
-        Args:
-            new_environment_name: Environment to switch to, if any.
-
-        Returns:
-            The environment in use.
-        """
-        if self._environment is not None and self.environment_name == new_environment_name:
-            return self._environment
-
-        if new_environment_name:
-            self.environment_name = new_environment_name
-            logger.info("Switching to environment: %s", new_environment_name)
-        self._environment = select_environment(self.environment_name)
-
-        # If we set debug_override to any bool, propogate it to the new env
-        if self.debug_override is True or self.debug_override is False:
-            self._environment.debug_override = DebugTypes.OVERRIDE_ON if self.debug_override else DebugTypes.OVERRIDE_OFF
-
-        self.refresh_django()
-        return self._environment
 
     def __getattr__(self, name: str):
         """Resolve lowercase names from uppercase Django settings."""

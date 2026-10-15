@@ -175,7 +175,6 @@ class ApiKeyScope(TextChoices):
     UNDO_READ = "undo:read", "Read your recent delete history available to undo"
     UNDO_WRITE = "undo:write", "Restore a previously deleted item"
     PANELS_READ = "panels:read", "Read pin-detail enrichment panels (boundaries and other plugin-contributed data)"
-    ASSISTANT_WRITE = "assistant:write", "Chat with your AI assistant, including creating trips and trip activities it suggests"
     DEVICE_SCANS_READ = "device_scans:read", "Read nearby expected devices and their signal info"
     DEVICE_SCANS_WRITE = "device_scans:write", "Upload wireless device scan data"
 
@@ -200,7 +199,7 @@ class ApiKey(DashboardModel):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="api_keys")
     name = models.CharField(max_length=100, help_text='User-facing label, e.g. "Zapier".')
     prefix = models.CharField(max_length=12, unique=True, editable=False)
-    # "ulk1$" + SHA-256 hex (69 chars); rows issued before P146 hold a PBKDF2 string until first use.
+    # "ulk1$" + SHA-256 hex (69 chars); rows issued before the switch to SHA-256 hold a PBKDF2 string until first use.
     key_hash = models.CharField(max_length=128, editable=False)
     scopes = models.JSONField(default=_default_api_key_scopes, editable=False)
     last_used_at = models.DateTimeField(null=True, blank=True)

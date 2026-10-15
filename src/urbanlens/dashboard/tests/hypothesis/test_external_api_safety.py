@@ -519,8 +519,7 @@ class SafetyCheckinMapsTests(_SafetyApiTestCase):
     The check-in maps endpoint answers with the standard paginated envelope.
 
     Regression coverage for the bare top-level array this endpoint used to answer with - it could never gain a
-    field later without breaking clients, so it was normalized onto ``{count,next,previous,results}`` (see
-    the Pagination note in ``docs/EXTERNAL_API.md``)."""
+    field later without breaking clients, so it was normalized onto ``{count,next,previous,results}``."""
 
     def setUp(self) -> None:
         super().setUp()

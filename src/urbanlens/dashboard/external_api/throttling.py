@@ -223,32 +223,6 @@ class GlobalSearchThrottle(ExternalApiRateThrottle):
     tier = TIER_READ
 
 
-class AssistantMessageThrottle(ExternalApiRateThrottle):
-    """
-    A tight cap on AI assistant chat turns.
-
-    Unlike an ordinary write, one assistant turn bills real model-provider cost and can fan out to up to
-    ``MAX_TOOL_CALLS`` (6) model round trips before it replies - resync-shaped cost, the same reasoning
-    as :class:`GameStartThrottle`'s Street View call.
-    """
-
-    scope = "external_api_assistant_message"
-    tier = TIER_WRITE
-
-    #: Used when the settings dict has no rate for :attr:`scope`. See GameStartThrottle.get_rate for why a
-    #: missing scope falls back here instead of taking the endpoint down.
-    fallback_rate: ClassVar[str] = "60/hour"
-
-    def get_rate(self) -> str:
-        """Return the configured rate for this scope, or :attr:`fallback_rate`."""
-        from django.core.exceptions import ImproperlyConfigured
-
-        try:
-            return super().get_rate()
-        except ImproperlyConfigured:
-            return self.fallback_rate
-
-
 class CalendarExportThrottle(ExternalApiRateThrottle):
     """
     A tight cap on trip calendar export and unexport.

@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from django.contrib.auth.models import User
 
     from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.services.profile.settings_groups import SettingsGroup
 
 #: Mirrors ``forms.settings_form._DISCORD_USERNAME_RE`` - this is private contact info rather than a
 #: public identity claim, so it stays permissive (no discriminator-length enforcement) rather than
@@ -101,13 +102,7 @@ SETTINGS_FIELDS: tuple[str, ...] = (
     "markup_border_opacity",
     # Places layer (PlacesLayerForm) - gated behind SiteFeature.PLACES.
     "places_google_enabled",
-    "places_nps_enabled",
     "places_wikipedia_enabled",
-    # AI (AISettingsForm) - gated behind SiteFeature.AI.
-    "ai_enabled",
-    "ai_label_categories",
-    "ai_label_tags",
-    "ai_label_statuses",
     # Keyword tagging (KeywordTaggingSettingsForm).
     "disable_auto_tagging",
     "keyword_tagging_enabled",
@@ -123,7 +118,7 @@ SETTINGS_FIELDS: tuple[str, ...] = (
     "community_enabled",
     "show_wiki_cover_photos",
     "auto_create_pin_article_from_wikipedia",
-    "show_supporter_badge",
+    "show_member_badge",
     # Pin suggestions (PinSuggestionSettingsForm).
     "pin_suggestions_enabled",
     "suggest_public_pins",
@@ -144,12 +139,7 @@ SETTINGS_FIELDS: tuple[str, ...] = (
 
 #: Fields only writable while the owning site feature is enabled for the user.
 _FEATURE_GATED_FIELDS: dict[str, SiteFeature] = {
-    "ai_enabled": SiteFeature.AI,
-    "ai_label_categories": SiteFeature.AI,
-    "ai_label_tags": SiteFeature.AI,
-    "ai_label_statuses": SiteFeature.AI,
     "places_google_enabled": SiteFeature.PLACES,
-    "places_nps_enabled": SiteFeature.PLACES,
     "places_wikipedia_enabled": SiteFeature.PLACES,
 }
 
@@ -185,6 +175,25 @@ def _validate_discord_username(data: dict[str, Any], errors: dict[str, str]) -> 
         errors["discord_username"] = "2-100 characters: letters, digits, underscores, dots, hyphens, or #."
 
 
+def _settings_groups() -> list[SettingsGroup]:
+    """Every settings group a plugin contributed, in priority order."""
+    from urbanlens.dashboard.plugins.points import SETTINGS_GROUPS
+
+    return list(SETTINGS_GROUPS.items())
+
+
+def _groups_by_field() -> dict[str, SettingsGroup]:
+    """Each plugin-kept field, mapped to the group that holds it."""
+    return {field: group for group in _settings_groups() for field in group.fields}
+
+
+def _feature_label(feature: str) -> str:
+    """A site feature's display name, or its value when nothing names it."""
+    from urbanlens.dashboard.models.subscriptions.model import site_feature_choices
+
+    return dict(site_feature_choices()).get(feature, feature)
+
+
 def apply_settings_patch(profile: Profile, data: dict[str, Any], *, user: User) -> list[str]:
     """
     Validate and apply a partial settings update to *profile* (and, for name fields, *user*) in memory.
@@ -192,7 +201,7 @@ def apply_settings_patch(profile: Profile, data: dict[str, Any], *, user: User) 
     Args:
         profile: The profile to mutate.
         data: Submitted field -> value pairs.
-        user: The user whose feature entitlements gate the AI/Places fields, and whose ``first_name``/``last_name`` are written directly.
+        user: The user whose feature entitlements gate the plugin and Places fields, and whose ``first_name``/``last_name`` are written directly.
 
     Returns:
         The names of the changed *profile* fields, for the caller's own ``update_fields`` - never includes ``first_name``/``last_name``, which this function has already saved onto ``user`` itself.
@@ -201,19 +210,31 @@ def apply_settings_patch(profile: Profile, data: dict[str, Any], *, user: User) 
         SettingsValidationError: If any submitted field is unknown, gated behind a feature the user lacks, outside the values their plan entitles them to, or (for ``discord_username``) outside the allowed character set."""
     errors: dict[str, str] = {}
 
-    unknown = set(data) - set(SETTINGS_FIELDS)
+    groups = _groups_by_field()
+    unknown = set(data) - set(SETTINGS_FIELDS) - set(groups)
     for field in unknown:
         errors[field] = "Unknown setting."
 
     for field, feature in _FEATURE_GATED_FIELDS.items():
         if field in data and not user_has_feature(user, feature):
             errors[field] = f"The {feature.label} feature is not enabled for your account."
+    for field, group in groups.items():
+        if field in data and group.feature and not user_has_feature(user, group.feature):
+            errors[field] = f"The {_feature_label(group.feature)} feature is not enabled for your account."
 
     _validate_storage_dimensions(profile, data, errors)
     _validate_discord_username(data, errors)
 
     if errors:
         raise SettingsValidationError(errors)
+
+    grouped: dict[str, dict[str, Any]] = {}
+    for field, group in groups.items():
+        if field in data:
+            grouped.setdefault(group.name, {})[field] = data[field]
+    for group in _settings_groups():
+        if group.name in grouped:
+            group.write(profile, grouped[group.name])
 
     touched: list[str] = []
     user_touched: list[str] = []
@@ -250,12 +271,14 @@ def read_settings(profile: Profile, *, user: User) -> dict[str, Any]:
     Returns:
         Every allowlisted field's current value, plus the read-only keys ``updated``, ``effective_distance_units``, ``features``, ``allowed_image_dimensions`` and ``allowed_video_heights``."""
     payload: dict[str, Any] = {field: getattr(profile, field) for field in SETTINGS_FIELDS}
+    features: dict[str, bool] = {"places": user_has_feature(user, SiteFeature.PLACES)}
+    for group in _settings_groups():
+        payload.update(group.read(profile))
+        if group.feature:
+            features[group.feature] = user_has_feature(user, group.feature)
     payload["updated"] = profile.updated
     payload["effective_distance_units"] = profile.effective_distance_units
-    payload["features"] = {
-        "ai": user_has_feature(user, SiteFeature.AI),
-        "places": user_has_feature(user, SiteFeature.PLACES),
-    }
+    payload["features"] = features
     payload["allowed_image_dimensions"] = sorted(allowed_user_dimension_values(profile))
     payload["allowed_video_heights"] = sorted(allowed_user_video_height_values(profile))
     return payload

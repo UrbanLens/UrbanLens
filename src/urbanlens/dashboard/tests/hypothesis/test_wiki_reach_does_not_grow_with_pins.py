@@ -1,7 +1,7 @@
 """
 A viewer's wiki reach must reach SQL as a subquery, not as a list of every place they have pinned.
 
-Measured on the capacity population (X18): a 17,720-pin account's global search spent 95-176 ms planning each
+Measured on the capacity population: a 17,720-pin account's global search spent 95-176 ms planning each
 provider's query against about 1 ms executing it, and 110-200 ms more in Django and the driver, because every
 pinned location id travelled as a parameter. Nothing about the answer depends on shipping those ids.
 """

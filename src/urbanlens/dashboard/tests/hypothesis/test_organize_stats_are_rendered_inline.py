@@ -4,7 +4,7 @@ The Organize page renders label stats in its first paint, rather than backfillin
 Deferring the stats bought a cheaper first paint in theory only: ``stats_pending``
 swaps each number for a spinner, so the deferred render emitted the same ~414KB
 of card markup as the real one and the backfill then rendered all of it a second
-time. Measured at 120 labels (X25): the stats cost ~16ms (~11ms of queryset,
+time. Measured at 120 labels: the stats cost ~16ms (~11ms of queryset,
 ~5ms of priming) against ~100ms to render the cards, so the deferral spent a
 whole second render plus a round trip to save ~16ms.
 

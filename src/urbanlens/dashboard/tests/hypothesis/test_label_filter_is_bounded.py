@@ -4,7 +4,7 @@ A search's label filter must not let the client choose how much work it is.
 ``label_groups`` arrives as JSON on the search form. Every id in it was expanded
 through a descendant walk that issued one query *per label visited*, and then
 added a join to the queryset - with no ceiling on how many ids, or how many
-groups, a request may carry (N21 H11). Two separate amplifiers: a deep label
+groups, a request may carry. Two separate amplifiers: a deep label
 tree turns one id into a query storm, and a long id list turns one request into
 a join count no planner handles well.
 

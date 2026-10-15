@@ -111,6 +111,21 @@ def effective_relevance(image: Image) -> float:
     return wiki_score + game_score - _decayed_report_penalty(image)
 
 
+def announce_relevance_vote(image: Image, profile: Profile, *, is_relevant: bool) -> None:
+    """
+    Tell the plugins that score photos that ``profile`` explicitly marked ``image`` relevant or not.
+    Clearing a vote back to neutral is not announced.
+
+    Args:
+        image: The stored photo voted on.
+        profile: The voting profile.
+        is_relevant: True for a relevant vote, False for not-relevant.
+    """
+    from urbanlens.dashboard.plugins.points import PHOTO_RELEVANCE_VOTED
+
+    PHOTO_RELEVANCE_VOTED.fire(image, profile, is_relevant)
+
+
 def toggle_media_vote(image: Image, profile: Profile, *, value: int) -> int:
     """
     Cast, flip, or clear one profile's community vote on a materialized media row.
@@ -145,9 +160,8 @@ def toggle_media_vote(image: Image, profile: Profile, *, value: int) -> int:
             defaults={"is_relevant": value == 1, "is_vote": True},
         )
         from urbanlens.dashboard.services.media.quota_rewards import refresh_community_quota_bonus
-        from urbanlens.dashboard.services.photos.redata_relevance import queue_relevance_vote
 
-        queue_relevance_vote(image, profile, is_relevant=value == 1)
+        announce_relevance_vote(image, profile, is_relevant=value == 1)
         if value == 1:
             refresh_community_quota_bonus(image)
 
@@ -224,7 +238,6 @@ def record_relevant_and_cache(
     Returns:
         A :class:`RelevantCacheResult`."""
     from urbanlens.dashboard.services.media.media_materialize import MaterializeError, materialize_media_item
-    from urbanlens.dashboard.services.photos.redata_relevance import queue_relevance_vote
 
     item_key = item_key or media_item_key(url)
     if not item_key:
@@ -269,7 +282,7 @@ def record_relevant_and_cache(
         logger.warning("record_relevant_and_cache: failed to materialize %s: %s", url, exc)
         return RelevantCacheResult(image=None, voted=True, declined=False, error=MATERIALIZE_ERROR_MESSAGE)
 
-    queue_relevance_vote(image, profile, is_relevant=True)
+    announce_relevance_vote(image, profile, is_relevant=True)
     return RelevantCacheResult(image=image, voted=True, declined=False, error=None)
 
 

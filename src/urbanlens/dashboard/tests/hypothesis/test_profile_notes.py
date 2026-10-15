@@ -1,4 +1,4 @@
-"""Private profile notes: create/edit/delete (P37 - ProfileNoteView/Edit/Delete had zero test coverage)."""
+"""Private profile notes: create/edit/delete (ProfileNoteView/Edit/Delete had zero test coverage)."""
 
 from __future__ import annotations
 

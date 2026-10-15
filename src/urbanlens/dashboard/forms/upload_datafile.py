@@ -1,16 +1,19 @@
 from django import forms
 
-from urbanlens.dashboard.services.ai.document_import import SUPPORTED_DOCUMENT_EXTENSIONS
 from urbanlens.dashboard.services.import_export.archive_extractor import _ARCHIVE_ALLOWED_EXTENSIONS
+from urbanlens.dashboard.services.import_formats.documents import document_extensions
 
 _MAX_UPLOAD_FILE_SIZE_BYTES = 500 * 1024 * 1024  # 500 MB
 
 # Extensions accepted for a single uploaded file: outer archive containers (extract_archive/is_archive only
 # actually recognise ZIP and GZIP/TGZ magic bytes - a bare ".tar" without gzip compression is not supported),
 # the individual location-data formats archive_extractor knows how to pull out of - or accept directly outside
-# of - an archive, and the plain-text/Word documents routed to the AI import pipeline.
+# of - an archive, and the documents an extractor turns into pins.
 _ARCHIVE_CONTAINER_EXTENSIONS = frozenset({"zip", "tgz", "gz"})
-_ALLOWED_UPLOAD_EXTENSIONS = _ARCHIVE_CONTAINER_EXTENSIONS | _ARCHIVE_ALLOWED_EXTENSIONS | SUPPORTED_DOCUMENT_EXTENSIONS
+
+
+def _allowed_upload_extensions() -> frozenset[str]:
+    return _ARCHIVE_CONTAINER_EXTENSIONS | _ARCHIVE_ALLOWED_EXTENSIONS | document_extensions()
 
 
 class _MultipleFileInput(forms.ClearableFileInput):
@@ -74,7 +77,7 @@ class _MultipleFileField(forms.FileField):
 
         Raises:
             ValidationError: When the file exceeds ``_MAX_UPLOAD_FILE_SIZE_BYTES`` or its extension is not
-            in ``_ALLOWED_UPLOAD_EXTENSIONS``.
+            allowed.
         """
         from urbanlens.dashboard.services.media.storage import cap_to_ingress
 
@@ -90,7 +93,7 @@ class _MultipleFileField(forms.FileField):
             )
 
         extension = name.rsplit(".", 1)[-1].lower() if "." in name else ""
-        if extension not in _ALLOWED_UPLOAD_EXTENSIONS:
+        if extension not in _allowed_upload_extensions():
             raise forms.ValidationError(
                 f'"{name}" has an unsupported file type.',
                 code="unsupported_extension",

@@ -1,5 +1,5 @@
 /**
- * P128: a label's `icon` reached the add-pin dialog's chips and suggestions as raw HTML.
+ * A label's `icon` reached the add-pin dialog's chips and suggestions as raw HTML.
  */
 import { describe, expect, test } from "bun:test";
 import { labelChip, labelSuggestion, type LabelCandidate } from "./add-pin-label-chips";
@@ -7,8 +7,8 @@ import { labelChip, labelSuggestion, type LabelCandidate } from "./add-pin-label
 const HOSTILE: LabelCandidate = {
     id: 7,
     name: '<b id="name-probe">n</b>',
-    icon: '<img src=x onerror="window.__p128=1">',
-    kind: 'tag"><img src=x onerror="window.__p128k=1">',
+    icon: '<img src=x onerror="window.__xssIcon=1">',
+    kind: 'tag"><img src=x onerror="window.__xssKind=1">',
 };
 
 function assertInert(el: HTMLElement): void {

@@ -1,5 +1,5 @@
 """
-P250: a Location's slug follows its current provider name, as migration 0041 decides it.
+A Location's slug follows its current provider name, as migration 0041 decides it.
 
 A provider rename re-mints the slug, a cleared name falls back to the uuid, and the slug given up goes to the slug
 history so links to it still resolve. A name flipping back reuses its former slug, and the history stays bounded.
@@ -100,7 +100,7 @@ class ProviderRenameTests(_Locations):
         minted = location.slug
         self.assertNotEqual(minted, "main-building")
 
-        self._rename(location, "Main Building", "redata_building")
+        self._rename(location, "Main Building", "azure_maps")
 
         location.refresh_from_db()
         self.assertEqual(location.slug, minted)

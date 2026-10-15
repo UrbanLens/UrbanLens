@@ -38,6 +38,13 @@ if TYPE_CHECKING:
     from types import FrameType
 
 
+class QueueLimits(NamedTuple):
+    """A plugin's queue: the default limits of its tasks, and the longest hard limit one may declare."""
+
+    defaults: TimeLimits
+    ceiling: int
+
+
 class TimeLimits(NamedTuple):
     """A task's soft and hard time limits, in seconds."""
 
@@ -52,14 +59,16 @@ def queue_defaults() -> dict[str, TimeLimits]:
     Returns:
         Limits keyed by queue name. A queue missing here uses the global ``CELERY_TASK_*_TIME_LIMIT``.
     """
+    from urbanlens.dashboard.plugins.points import QUEUE_LIMITS
+
     return {
         Queue.INTERACTIVE: TimeLimits(120, 150),
         Queue.PANEL_FETCH: TimeLimits(110, 130),
-        Queue.AI: TimeLimits(90, 120),
         # A video transcode waits up to ten minutes on ffmpeg (services/media/videos.py).
         Queue.SANDBOX: TimeLimits(720, 780),
         # Under the 3300-second overlap locks the hourly sweeps take.
         Queue.MAINTENANCE: TimeLimits(2700, 3000),
+        **{queue: limits.defaults for queue, limits in QUEUE_LIMITS.as_dict().items()},
     }
 
 
@@ -75,12 +84,14 @@ def queue_ceilings() -> dict[str, int]:
     Returns:
         Ceilings keyed by queue name. Every other queue is capped at :data:`BATCH_CEILING_SECONDS`.
     """
+    from urbanlens.dashboard.plugins.points import QUEUE_LIMITS
+
     return {
         Queue.INTERACTIVE: 300,
         Queue.PANEL_FETCH: 300,
-        Queue.AI: 180,
         Queue.SANDBOX: 900,
         Queue.MAINTENANCE: 3300,
+        **{queue: limits.ceiling for queue, limits in QUEUE_LIMITS.as_dict().items()},
     }
 
 

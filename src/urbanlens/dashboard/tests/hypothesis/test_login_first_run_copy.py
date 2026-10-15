@@ -1,4 +1,4 @@
-"""Tests for UL-179: the login page shouldn't say "Welcome back" the very first time anyone sees it on a fresh install."""
+"""The login page shouldn't say "Welcome back" the very first time anyone sees it on a fresh install."""
 
 from __future__ import annotations
 

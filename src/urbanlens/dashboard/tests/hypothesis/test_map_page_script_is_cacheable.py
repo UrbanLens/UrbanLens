@@ -2,7 +2,7 @@
 The map page's behaviour is a file the browser keeps, not 275 KB re-sent on every visit.
 
 An inline ``<script>`` cannot be cached, cannot be minified by the bundler, and is invisible to the TypeScript
-checks (P83). The map page's single block was 275 KB of a 589 KB response - 69 KB compressed, on every map view -
+checks. The map page's single block was 275 KB of a 589 KB response - 69 KB compressed, on every map view -
 and everything in it is static apart from a few dozen URLs and flags, which now arrive in a config element.
 """
 

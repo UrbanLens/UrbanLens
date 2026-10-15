@@ -65,7 +65,7 @@ def _record_detected_share(sender: Profile, recipient: Profile, pin: Pin, markup
 
 def _record_marked_place_share(sender: Profile, recipient: Profile, latitude: float, longitude: float, markup_map: MarkupMap) -> PinShare | None:
     """
-    Share a place the map marks outside the sender's shared pins, as a coordinate typed into a message is (P21).
+    Share a place the map marks outside the sender's shared pins, as a coordinate typed into a message is.
 
     Args:
         sender: The map's owner at the time of sending.

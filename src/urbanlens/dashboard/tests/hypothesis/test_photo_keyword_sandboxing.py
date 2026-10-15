@@ -166,30 +166,9 @@ class MissingAnalysisCopyTests(TestCase):
         self.assertFalse(image.analysis_thumbnail)
         self.assertIsNone(photo_keywords.analysis_jpeg_bytes(image))
 
-    def test_the_ai_plugin_skips_rather_than_decoding(self) -> None:
-        # Skipped by raising, not by answering []: an empty answer would clear the keywords the photo has (P322).
-        from urbanlens.dashboard.plugins.builtin.photo_keywords import AiVisionKeywordProvider
-
-        image = _photo()
-        with (
-            mock.patch.object(PILImage, "open", side_effect=AssertionError("must not decode")),
-            self.assertRaises(photo_keywords.AnalysisCopyUnavailableError),
-        ):
-            AiVisionKeywordProvider().generate(image)
-
-    def test_the_classifier_plugin_skips_rather_than_decoding(self) -> None:
-        from urbanlens.dashboard.plugins.builtin.photo_keywords import ClassifierKeywordProvider
-
-        image = _photo()
-        with (
-            mock.patch.object(PILImage, "open", side_effect=AssertionError("must not decode")),
-            self.assertRaises(photo_keywords.AnalysisCopyUnavailableError),
-        ):
-            ClassifierKeywordProvider().generate(image)
-
     def test_the_backfill_writes_the_copy_and_re_enqueues_keywording(self) -> None:
         # Without the re-enqueue, a photo whose analysis write failed during
-        # upload would silently never get AI keywords.
+        # upload would silently never get keywords.
         from urbanlens.dashboard.tasks import generate_image_analysis_thumbnails
 
         image = _photo(generate_photo_keywords=True)
@@ -231,9 +210,8 @@ class AnalysisCopyStorageTests(TestCase):
         with image.analysis_thumbnail.open("rb") as stored:
             decoded = PILImage.open(stored)
             decoded.load()
-        # JPEG, not the WebP the display thumbnails use: Cloudflare Workers AI
-        # is the default vision provider and takes a bare byte array with no
-        # format negotiation.
+        # JPEG, not the WebP the display thumbnails use: keyword providers take a bare
+        # byte array with no format negotiation.
         self.assertEqual(decoded.format, "JPEG")
         self.assertLessEqual(max(decoded.size), ANALYSIS_THUMBNAIL_MAX_DIMENSION)
 

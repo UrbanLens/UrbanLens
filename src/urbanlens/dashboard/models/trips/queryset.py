@@ -67,7 +67,7 @@ class TripQuerySet(abstract.PublicDashboardQuerySet["Trip"]):
         first = activities.annotate(value=Min("scheduled_at")).values("value")[:1]
         last = activities.annotate(value=Greatest(Max("scheduled_at"), Max("scheduled_end"))).values("value")[:1]
         return (
-            self.annotate(  # type: ignore[no-redef]  # django-stubs misreads Trip's _eff_* memo attributes as a clash (P85)
+            self.annotate(  # type: ignore[no-redef]  # django-stubs misreads Trip's _eff_* memo attributes as a clash
                 _first_activity_date=Cast(Subquery(first), output_field=DateField()),
                 _last_activity_date=Cast(Subquery(last), output_field=DateField()),
             )
@@ -423,7 +423,7 @@ class TripCommentQuerySet(abstract.DashboardQuerySet["TripComment"]):
         for the planner to join. Given the join, Postgres is free to drive it from the comment
         table and filter afterwards, which costs the site's comment count rather than the
         viewer's: 30 ms and a sequential scan of 50,000 rows for a viewer belonging to a handful
-        of trips, measured on the capacity population (UrbanLens#281).
+        of trips, measured on the capacity population.
 
         Args:
             profile: The viewing profile.

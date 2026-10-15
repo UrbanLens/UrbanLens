@@ -8,14 +8,15 @@
 #   bin/run_contract_tests.sh                        # in-process, safe methods
 #   bin/run_contract_tests.sh --methods all          # include writes
 #   bin/run_contract_tests.sh --examples 40          # search harder
-#   bin/run_contract_tests.sh --url https://s1.dev.urbanlens.org
+#   bin/run_contract_tests.sh --url https://s1.dev.example.com
 #   bin/run_contract_tests.sh --local                # host venv, not the container
 #   bin/run_contract_tests.sh -- -k pins -x          # pass through to pytest
 #
 # --methods all creates/modifies/deletes data; only run it against a test DB or throwaway account.
 #
 # Environment:
-#   UL_TEST_CONTAINER   test-runner container (default urbanlens_development_main_test_runner)
+#   UL_TEST_CONTAINER   test-runner container (default urbanlens_<UL_CONTAINER_NAME or UL_ENVIRONMENT>_test_runner,
+#                       read from the shell or .env; see bin/lib/compose_names.sh)
 #   UL_TEST_DB_NAME     test database name; required in-process, so concurrent
 #                       runs do not collide. Generated when unset.
 #   UL_CONTRACT_API_KEY live mode only: the key to authenticate with. Falls back
@@ -23,7 +24,10 @@
 #                       `provision_integration_env --out` writes.
 set -euo pipefail
 
-CONTAINER="${UL_TEST_CONTAINER:-urbanlens_development_main_test_runner}"
+# shellcheck source=bin/lib/compose_names.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/compose_names.sh"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CONTAINER="${UL_TEST_CONTAINER:-$(ul_container_name "$ROOT" test_runner)}"
 URL=""
 METHODS="safe"
 EXAMPLES=""
@@ -55,7 +59,7 @@ env_args=("UL_CONTRACT_METHODS=$METHODS")
 
 if [ -n "$URL" ]; then
     case "$URL" in
-        https://urbanlens.org|https://www.urbanlens.org|https://app.urbanlens.org)
+        https://example.com|https://www.example.com|https://app.example.com)
             echo "error: refusing to fuzz production ($URL)." >&2
             exit 2
             ;;

@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-from importlib import import_module
 from io import StringIO
 
-from django.apps import apps as django_apps
 from django.core.management import call_command
 from oauth2_provider.models import get_application_model
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.management.commands.provision_mobile_oauth_client import DEFAULT_CLIENT_ID
-from urbanlens.dashboard.oauth_clients import FIRST_PARTY_CLIENT_ID, FIRST_PARTY_CLIENT_NAME, FIRST_PARTY_REDIRECT_URIS
 
 Application = get_application_model()
 
@@ -75,48 +72,3 @@ class ProvisionMobileOauthClientTests(TestCase):
         application = Application.objects.get(client_id=DEFAULT_CLIENT_ID)
         self.assertFalse(application.hash_client_secret)
         self.assertEqual(application.client_secret, "")
-
-
-class FirstPartyClientMigrationTests(TestCase):
-    """
-    The 0010 data migration provisions the same registration at migrate time.
-
-    The row these assertions read is made by the migration's own function in ``setUp``, not by any code in this test,
-    so a regression in the migration surfaces here even though the management command still works. The row the
-    migration made when the test database was built is not used: a mixed run deleted it before these ran. The function
-    gets today's models, since its own historical state lacks columns later migrations added NOT NULL."""
-
-    def setUp(self) -> None:
-        super().setUp()
-        Application.objects.filter(client_id=FIRST_PARTY_CLIENT_ID).delete()
-        import_module("urbanlens.dashboard.migrations.0010_v0_6_0").create_first_party_client(django_apps, None)
-
-    def test_migration_created_the_first_party_client(self) -> None:
-        """A fresh database has the registration the shipped app expects."""
-        application = Application.objects.get(client_id=FIRST_PARTY_CLIENT_ID)
-        self.assertEqual(application.name, FIRST_PARTY_CLIENT_NAME)
-        self.assertEqual(application.client_type, Application.CLIENT_PUBLIC)
-        self.assertEqual(application.authorization_grant_type, Application.GRANT_AUTHORIZATION_CODE)
-        self.assertIsNone(application.user)
-        self.assertFalse(application.skip_authorization)
-
-    def test_migrated_client_secret_is_blank_and_unhashed(self) -> None:
-        """
-        The migration sets hash_client_secret=False, so "" stays "".
-
-        Without it the stored value would be ``make_password("")`` - a hash a
-        presented empty secret would verify against.
-        """
-        application = Application.objects.get(client_id=FIRST_PARTY_CLIENT_ID)
-        self.assertIs(application.hash_client_secret, False)
-        self.assertEqual(application.client_secret, "")
-
-    def test_migrated_redirect_uris_match_the_shared_constants(self) -> None:
-        """Migration and management command provision byte-identical redirects."""
-        application = Application.objects.get(client_id=FIRST_PARTY_CLIENT_ID)
-        self.assertEqual(application.redirect_uris, " ".join(FIRST_PARTY_REDIRECT_URIS))
-
-    def test_command_and_migration_agree_on_the_client_id(self) -> None:
-        """Both provision the same registration rather than two competing rows."""
-        self.assertEqual(DEFAULT_CLIENT_ID, FIRST_PARTY_CLIENT_ID)
-        self.assertEqual(Application.objects.filter(client_id=FIRST_PARTY_CLIENT_ID).count(), 1)

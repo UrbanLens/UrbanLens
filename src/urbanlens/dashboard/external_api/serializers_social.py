@@ -19,6 +19,7 @@ from urllib.parse import urlparse
 from rest_framework import serializers
 
 from urbanlens.dashboard.models.colors import MaterialColor
+from urbanlens.dashboard.plugins.drf import ExtensibleSerializer
 from urbanlens.dashboard.services.profile.avatar import AvatarService
 from urbanlens.dashboard.services.profile.profile_annotations import (
     MAX_PROFILE_NICKNAME_LENGTH,
@@ -33,7 +34,7 @@ from urbanlens.dashboard.services.profile.social_links import KNOWN_PLATFORMS, v
 _DISCORD_HANDLE_RE = re.compile(r"^[a-zA-Z0-9._#-]{2,100}$")
 
 
-class AvatarEmojiSerializer(serializers.Serializer):
+class AvatarEmojiSerializer(ExtensibleSerializer):
     """
     Validates a generated-emoji avatar request.
 
@@ -70,7 +71,7 @@ class AvatarEmojiSerializer(serializers.Serializer):
         return canonical
 
 
-class ProfileAnnotationsSerializer(serializers.Serializer):
+class ProfileAnnotationsSerializer(ExtensibleSerializer):
     """
     Everything the caller privately records about one other profile (read-only).
 
@@ -88,7 +89,7 @@ class ProfileAnnotationsSerializer(serializers.Serializer):
     note_count = serializers.IntegerField(read_only=True)
 
 
-class ProfileNicknameWriteSerializer(serializers.Serializer):
+class ProfileNicknameWriteSerializer(ExtensibleSerializer):
     """
     Validates a nickname assignment.
 
@@ -101,7 +102,7 @@ class ProfileNicknameWriteSerializer(serializers.Serializer):
     nickname = serializers.CharField(max_length=MAX_PROFILE_NICKNAME_LENGTH)
 
 
-class ProfileTrustWriteSerializer(serializers.Serializer):
+class ProfileTrustWriteSerializer(ExtensibleSerializer):
     """
     Validates a trust rating.
 
@@ -114,7 +115,7 @@ class ProfileTrustWriteSerializer(serializers.Serializer):
     rating = serializers.IntegerField(min_value=MIN_TRUST_RATING, max_value=MAX_TRUST_RATING)
 
 
-class SocialLinkSerializer(serializers.Serializer):
+class SocialLinkSerializer(ExtensibleSerializer):
     """
     One entry in a profile's public social-links list, as rendered for display.
 
@@ -129,13 +130,13 @@ class SocialLinkSerializer(serializers.Serializer):
     icon = serializers.CharField(read_only=True)
 
 
-class SocialLinksResponseSerializer(serializers.Serializer):
+class SocialLinksResponseSerializer(ExtensibleSerializer):
     """The full set of a profile's social links (schema-only)."""
 
     links = SocialLinkSerializer(many=True, read_only=True)
 
 
-class SocialLinkWriteSerializer(serializers.Serializer):
+class SocialLinkWriteSerializer(ExtensibleSerializer):
     """
     One social-link entry inside a full-replace submission.
 
@@ -193,7 +194,7 @@ class SocialLinkWriteSerializer(serializers.Serializer):
         return attrs
 
 
-class SocialLinksReplaceSerializer(serializers.Serializer):
+class SocialLinksReplaceSerializer(ExtensibleSerializer):
     """
     Validates a full-replace PUT of the caller's social links.
 

@@ -35,7 +35,7 @@ export interface PinOptions {
  * Where a pin goes when a spec does not care.
  *
  * A real, unremarkable point rather than 0,0: the app resolves boundaries and
- * asks REData about whatever a pin claims to be, and Null Island produces empty
+ * asks its data providers about whatever a pin claims to be, and Null Island produces empty
  * answers everywhere, which reads as a broken page rather than a plain one.
  */
 const DEFAULT_LATITUDE = 42.6526;

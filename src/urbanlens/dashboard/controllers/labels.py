@@ -250,7 +250,7 @@ def _auto_tag_available(user, profile: Profile, label_kind: str) -> bool:
     silently ignores, or ignoring one the server would have accepted.
 
     Args:
-        user: The requesting user, for the site-level AI feature check.
+        user: The requesting user, for the site-level feature check.
         profile: The owning profile, holding the per-kind preference flags.
         label_kind: The label's kind - only tags, categories and statuses are auto-taggable; anything
         else has no path and returns False.
@@ -258,8 +258,8 @@ def _auto_tag_available(user, profile: Profile, label_kind: str) -> bool:
     Returns:
         True when at least one auto-tagging path is available.
     """
-    # Only tags and categories: REData's suggestion service models "which of my labels describes this place",
-    # which statuses (visited, demolished) and people/media labels are not.
+    # Only tags and categories: auto-tagging answers "which of my labels describes this place",
+    # which statuses (visited, demolished) and people/media labels do not.
     if label_kind not in {KIND_CATEGORY, KIND_TAG}:
         return False
     return bool(user_has_feature(user, SiteFeature.AUTO_TAGGING) and not profile.disable_auto_tagging)
@@ -738,7 +738,6 @@ class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):
         selected_ids = {b.id for b in selected_parents} | {b.id for b in selected_children}
         available_parents = _parent_candidates(profile, self.kind, label_id)
 
-        can_use_ai_features = user_has_feature(request.user, SiteFeature.AI)
         show_auto_tag_toggle = _auto_tag_available(request.user, profile, label.kind)
 
         return render(
@@ -756,11 +755,8 @@ class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):
                 "selected_ids": selected_ids,
                 "is_global": label.kind == KIND_TAG and label.profile is None,
                 "show_kind_toggle": cfg.show_kind_toggle,
-                "can_use_ai_features": can_use_ai_features,
-                # Auto-tagging toggle needs either path to actually be able to assign this label kind - the AI
-                # site feature plus the user's own master + per-kind AI settings, OR the user's own
-                # keyword-tagging master + per-kind settings (keyword matching needs no site
-                # feature/subscription).
+                # Auto-tagging toggle needs a path that can actually assign this label kind: the site feature
+                # plus the user's own settings.
                 "show_auto_tag_toggle": show_auto_tag_toggle,
             },
         )
@@ -816,7 +812,7 @@ class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):
         label.order = _label_order(request.POST.get("order"), label.order)
 
         # allow_auto_tag can only be changed when the user actually has some auto-tagging path available for
-        # this label's kind (AI or keyword-based); and never on the protected "Visited" label.
+        # this label's kind; and never on the protected "Visited" label.
         if not label.is_protected:
             can_toggle_auto_tag = _auto_tag_available(request.user, profile, label.kind)
             if can_toggle_auto_tag:
@@ -1391,7 +1387,6 @@ class LabelPinMembershipView(LoginRequiredMixin, View):
     @staticmethod
     def _ctx(request: HttpRequest, profile: Profile, pin: Pin, pin_slug: str) -> dict:
         from urbanlens.dashboard.services.core.child_details import child_details_requested
-        from urbanlens.dashboard.services.labels.redata_suggestions import redata_labels_configured
         from urbanlens.dashboard.services.pins.child_listings import child_label_listings
 
         ctx = _membership_panel_ctx(
@@ -1409,9 +1404,6 @@ class LabelPinMembershipView(LoginRequiredMixin, View):
         # tabs (see _label_dialog.html), so this panel also needs the profile's lists.
         ctx["dialog_title"] = "Add to Pin"
         ctx["pin_lists"] = list(PinList.objects.for_profile(profile).with_pin_counts().order_by("name"))
-        # Lazily loaded (see label.pin_suggestions) rather than fetched here -
-        # a live REData call has no business blocking this panel's own render.
-        ctx["redata_labels_enabled"] = redata_labels_configured()
         ctx["child_listings"] = child_label_listings(pin) if child_details_requested(request, pin) else []
         return ctx
 
@@ -1450,7 +1442,7 @@ class LabelPinMembershipView(LoginRequiredMixin, View):
             from urbanlens.dashboard.services.undo.mutations import stash_label_remove
 
             stash_label_remove(profile, target="pin", target_id=pin.pk, label=label)
-            # Tombstone first: keyword/AI auto-tagging can otherwise silently
+            # Tombstone first: auto-tagging can otherwise silently
             # reattach this exact label the next time it runs on this pin.
             PinAutoRemoval.objects.record(pin=pin, kind=AutoRemovalKind.LABEL, value=str(label.pk))
             pin.labels.remove(label)
@@ -1458,28 +1450,6 @@ class LabelPinMembershipView(LoginRequiredMixin, View):
             request,
             _MEMBERSHIP_PANEL,
             self._ctx(request, profile, pin, pin_slug),
-        )
-
-
-class LabelPinSuggestionsView(LoginRequiredMixin, View):
-    """REData-suggested tag/category labels for a pin (HTMX, lazily loaded inside the Add Labels dialog)."""
-
-    def get(self, request: HttpRequest, pin_slug: str, *args, **kwargs) -> HttpResponse:
-        from urbanlens.dashboard.services.labels.redata_suggestions import get_suggestions
-
-        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
-        suggestions = get_suggestions(pin) or []
-        member_ids = _pin_member_ids(pin)
-        rows = [(label, round(confidence * 100)) for label, confidence in suggestions if label.id not in member_ids]
-        return render(
-            request,
-            "dashboard/partials/labels/_label_suggestions.html",
-            {
-                "pin_slug": pin_slug,
-                "suggestions": rows,
-                "label_url_kind": _MEMBERSHIP_URL_KIND,
-                "panel_id": "category-panel",
-            },
         )
 
 
@@ -1547,7 +1517,7 @@ class LabelLocationMembershipView(LoginRequiredMixin, View):
             from urbanlens.dashboard.services.undo.mutations import stash_label_remove
 
             stash_label_remove(profile, target="wiki", target_id=wiki.pk, label=label)
-            # Tombstone first: keyword/AI auto-tagging can otherwise silently
+            # Tombstone first: auto-tagging can otherwise silently
             # reattach this exact label the next time it runs on this wiki.
             WikiAutoRemoval.objects.record(wiki=wiki, kind=AutoRemovalKind.LABEL, value=str(label.pk))
             wiki.labels.remove(label)

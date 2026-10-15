@@ -230,7 +230,7 @@ class OneRuleDecidesTheWriterTests(TestCase):
     """
     The rule naming a request's writer has one definition, and every binder reaches for it.
 
-    N26 #10: the site and the API each held their own copy, they drifted apart once, and nothing
+    The site and the API each held their own copy, they drifted apart once, and nothing
     failed when they did - a write attributed to SYSTEM that a user actually made is a row that
     looks correct everywhere except in what it means. No test of either path catches that, because
     each path is self-consistent; what catches it is there being one rule to test.

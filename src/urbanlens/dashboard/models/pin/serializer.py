@@ -70,7 +70,7 @@ class PinSerializer(serializers.ModelSerializer):
         # explicit rename.  Only the pin-name editing flows set this guard.
         validated_data["name_is_user_provided"] = False
         pin = Pin.objects.create(**validated_data)
-        # Enqueued, not run here: AutoTagService falls through to the LLM gateway for anything its
+        # Enqueued, not run here: AutoTagService falls through to the model gateway for anything its
         # keyword stage misses, so doing this inline made every pin created through the REST API or
         # an import wait on a network round-trip before the response came back.
         # The other two creation paths (services.pins.pin_creation and the Google Maps import)

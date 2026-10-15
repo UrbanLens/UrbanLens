@@ -1,5 +1,5 @@
 """
-JSON nested past the interpreter's recursion limit is a 400 wherever a client can send it, and changes nothing (P195).
+JSON nested past the interpreter's recursion limit is a 400 wherever a client can send it, and changes nothing.
 
 ``json.loads`` raises ``RecursionError`` on it, which is not a ``ValueError``, so an ``except ValueError`` around the
 decode let it through as a 500. Each route here is reached as its owner, so the request gets as far as the decode.
@@ -55,7 +55,6 @@ from urbanlens.dashboard.models.spotguessr.model import GameSession
 from urbanlens.dashboard.models.visits.model import PinVisit
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit.model import WikiEdit
-from urbanlens.dashboard.services.ai.dismissals import parse_dismissals_json
 from urbanlens.dashboard.services.auth import webauthn as webauthn_service
 from urbanlens.dashboard.services.auth.two_factor import SESSION_WEBAUTHN_PENDING_USER
 from urbanlens.dashboard.services.core import request_body
@@ -439,9 +438,6 @@ class ExternalListsAndFiltersRouteTests(_ExternalFormCase):
 
 class FormFieldParsingTests(TestCase):
     """Helpers that read JSON out of one form field, and promise never to raise on a malformed one."""
-
-    def test_assistant_dismissals_are_dropped(self) -> None:
-        self.assertEqual(parse_dismissals_json(DEEPLY_NESTED_JSON), ())
 
     def test_keyboard_shortcuts_are_dropped(self) -> None:
         profile = baker.make(User).profile

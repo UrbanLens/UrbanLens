@@ -172,6 +172,10 @@ def hard_delete_profile(profile: Profile) -> None:
     email = profile.user.email if profile.user else ""
     username = profile.username
 
+    from urbanlens.dashboard.plugins.points import ACCOUNT_DELETING
+
+    # Before anything is removed, so a plugin that cannot release what it holds stops the deletion for the next sweep.
+    ACCOUNT_DELETING.fire(profile.user)
     _delete_profile_files(profile)
     profile.user.delete()
 

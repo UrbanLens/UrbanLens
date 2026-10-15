@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 _OSM_ID = re.compile(r"[NWRnwr][1-9][0-9]*")
 
 _API_URL = "https://nominatim.openstreetmap.org"
-_USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; hello@urbanlens.org) python-requests/2.x"
+_USER_AGENT = "UrbanLens/1.0 (+https://github.com/UrbanLens/UrbanLens) python-requests/2.x"
 
 # Nominatim's UI convention prefixes a fallback name with its OSM element type
 # (e.g. "Way: College Hill Golf Course"). Strip it defensively wherever a name

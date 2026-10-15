@@ -1,5 +1,5 @@
 """
-Gateway for Microsoft's Global ML Building Footprints dataset.
+Gateway for Microsoft's Global Building Footprints dataset.
 Microsoft has changed this scheme before, so if lookups start turning up empty, double check the zoom level implied by the QuadKey values in the current CSV against ``quadkey_zoom`` below."""
 
 from __future__ import annotations

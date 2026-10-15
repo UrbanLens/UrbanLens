@@ -94,11 +94,18 @@ class MarkupDefaultsForm(ProfileSettingsForm):
 # Kept in sync by hand with DEFAULT_HOTKEYS' keys in frontend/ts/shared/hotkeys.ts - JS and Python don't share a
 # source of truth here, same tradeoff as PIN_CACHE_VERSION's two independent literals (see
 # pin-cache.contract.test.ts).
-_KNOWN_HOTKEY_ACTIONS = frozenset({"undo", "redo", "toggleFullscreen", "openAssistant"})
-# [a-z0-9/?] rather than just [a-z0-9]: openAssistant's default binding is the bare "?" key (shift+/ on most
+_CORE_HOTKEY_ACTIONS = frozenset({"undo", "redo", "toggleFullscreen"})
+# [a-z0-9/?] rather than just [a-z0-9]: a default binding may be the bare "?" key (shift+/ on most
 # layouts, sometimes reported as "/" itself depending on layout/browser) - widened to admit both without opening
 # this up to arbitrary punctuation.
 _HOTKEY_COMBO_RE = re.compile(r"^(ctrl\+)?(shift\+)?(alt\+)?[a-z0-9/?]+$")
+
+
+def _known_hotkey_actions() -> frozenset[str]:
+    """Core's actions and those plugins register."""
+    from urbanlens.dashboard.plugins.points import HOTKEY_ACTIONS
+
+    return _CORE_HOTKEY_ACTIONS | frozenset(HOTKEY_ACTIONS.items())
 
 
 class HotkeySettingsForm(ProfileSettingsForm):
@@ -126,7 +133,8 @@ class HotkeySettingsForm(ProfileSettingsForm):
             return {}
         # Drop an unrecognized action id or malformed combo (a stale client, or someone editing the hidden field
         # directly) rather than rejecting the whole save - every other action's override still gets to save.
-        return {action: combo for action, combo in parsed.items() if action in _KNOWN_HOTKEY_ACTIONS and isinstance(combo, str) and _HOTKEY_COMBO_RE.match(combo)}
+        known = _known_hotkey_actions()
+        return {action: combo for action, combo in parsed.items() if action in known and isinstance(combo, str) and _HOTKEY_COMBO_RE.match(combo)}
 
 
 # "Friends only" is circular for friend requests (they're not friends yet), so exclude it.
@@ -505,12 +513,6 @@ class PlacesLayerForm(ProfileSettingsForm):
         label="Google Historical Landmarks",
         help_text="Show cultural sites, monuments, and historic locations sourced from Google.",
     )
-    places_nps_enabled = forms.BooleanField(
-        required=False,
-        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
-        label="National Park Service",
-        help_text="Show US National Parks and monuments within 100 km of the map center.",
-    )
     places_wikipedia_enabled = forms.BooleanField(
         required=False,
         widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
@@ -520,7 +522,7 @@ class PlacesLayerForm(ProfileSettingsForm):
 
     class Meta:
         model = Profile
-        fields = ["places_google_enabled", "places_nps_enabled", "places_wikipedia_enabled"]
+        fields = ["places_google_enabled", "places_wikipedia_enabled"]
 
 
 class DeleteAccountForm(forms.Form):
@@ -553,45 +555,12 @@ class DeleteAccountForm(forms.Form):
         return confirm_text
 
 
-class AISettingsForm(ProfileSettingsForm):
-    """AI feature preferences - which label kinds can be auto-assigned on pin creation."""
-
-    ai_enabled = forms.BooleanField(
-        required=False,
-        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
-        label="Enable AI Features",
-        help_text="Turn all AI-assisted features on or off.",
-    )
-    ai_label_categories = forms.BooleanField(
-        required=False,
-        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
-        label="Auto-categorize pins",
-        help_text="AI automatically suggests and adds a category label when you create a pin.",
-    )
-    ai_label_tags = forms.BooleanField(
-        required=False,
-        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
-        label="Auto-tag pins",
-        help_text="AI automatically suggests and adds tags when you create a pin.",
-    )
-    ai_label_statuses = forms.BooleanField(
-        required=False,
-        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
-        label="Auto-status pins",
-        help_text="AI automatically suggests and adds a status label when you create a pin.",
-    )
-
-    class Meta:
-        model = Profile
-        fields = ["ai_enabled", "ai_label_categories", "ai_label_tags", "ai_label_statuses"]
-
-
 class KeywordTaggingSettingsForm(ProfileSettingsForm):
     """
-    Keyword-based auto-tagging preferences - independent of the AI settings above.
+    Keyword-based auto-tagging preferences - independent of any plugin's auto-tagging settings.
 
     Keyword matching is local pattern/substring matching with no external API
-    call, so it's available to every user regardless of AI subscription.
+    call, so it's available to every user regardless of subscription.
     """
 
     keyword_tagging_enabled = forms.BooleanField(
@@ -684,16 +653,16 @@ class CommunitySettingsForm(ProfileSettingsForm):
         label="Auto-Start Pin Articles from Wikipedia",
         help_text="When a Wikipedia article is matched to one of your pins, automatically start that pin's article from it (only if it doesn't already have one).",
     )
-    show_supporter_badge = forms.BooleanField(
+    show_member_badge = forms.BooleanField(
         required=False,
         widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
-        label="Show Supporter Badge",
-        help_text="Show a small supporter badge next to your name when you have an active subscription. Has no effect if you don't currently have one.",
+        label="Show Member Badge",
+        help_text="Show a small member badge next to your name when you hold a role. Has no effect if you don't currently hold one.",
     )
 
     class Meta:
         model = Profile
-        fields = ["community_enabled", "show_wiki_cover_photos", "auto_create_pin_article_from_wikipedia", "show_supporter_badge"]
+        fields = ["community_enabled", "show_wiki_cover_photos", "auto_create_pin_article_from_wikipedia", "show_member_badge"]
 
 
 class PinSuggestionSettingsForm(ProfileSettingsForm):
@@ -782,7 +751,7 @@ class ExternalApiSettingsForm(ProfileSettingsForm):
         required=False,
         widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
         label="External Services",
-        help_text="Allow UrbanLens to call external services (weather, geocoding, place data, AI) on your behalf.",
+        help_text="Allow UrbanLens to call external services (weather, geocoding, place data and more) on your behalf.",
     )
 
     class Meta:

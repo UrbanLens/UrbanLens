@@ -1,35 +1,85 @@
-"""Tests for services.apis.locations.routing_resolution - the REData-vs-direct-OSRM choice."""
+"""Tests for services.apis.locations.routing_resolution - the choice among route providers."""
 
 from __future__ import annotations
 
+from typing import Any
 from unittest import mock
 
 from urbanlens.core.tests.testcase import SimpleTestCase
+from urbanlens.dashboard.plugins.points import ROUTE_PROVIDERS
 from urbanlens.dashboard.services.apis.locations import routing_resolution
-from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
+from urbanlens.dashboard.services.apis.locations.routing_resolution import OsrmRouteProvider, RouteProvider
 from urbanlens.dashboard.services.apis.routing import osrm
+from urbanlens.dashboard.services.core.gateway import ProviderUnavailableError
 from urbanlens.UrbanLens.settings.app import settings as app_settings
 
-_MODULE = "urbanlens.dashboard.services.apis.locations.routing_resolution"
+
+class _FakeRoutes(RouteProvider):
+    """Answers with ``answer``, or raises ``failure``; remembers what it was asked."""
+
+    def __init__(
+        self,
+        key: str,
+        answer: dict[str, Any] | None = None,
+        *,
+        failure: Exception | None = None,
+        is_available: bool = True,
+    ) -> None:
+        self.key = key
+        self.answer = answer
+        self.failure = failure
+        self.is_available = is_available
+        self.asked: list[tuple[tuple[float, float], tuple[float, float]]] = []
+
+    def available(self) -> bool:
+        return self.is_available
+
+    def get_route(self, origin: tuple[float, float], destination: tuple[float, float]) -> dict[str, Any] | None:
+        self.asked.append((origin, destination))
+        if self.failure is not None:
+            raise self.failure
+        return self.answer
 
 
 class GetRouteBetweenTests(SimpleTestCase):
-    def test_redata_configured_uses_redata(self) -> None:
-        with (
-            mock.patch(f"{_MODULE}.redata_configured", return_value=True),
-            mock.patch(f"{_MODULE}.RedataRoutingGateway") as gateway_cls,
-        ):
-            gateway_cls.return_value.get_route.return_value = {"distance_meters": 100.0, "duration_seconds": 10.0}
+    def test_the_first_available_provider_answers(self) -> None:
+        skipped = _FakeRoutes("skipped", {"distance_meters": 1.0, "duration_seconds": 1.0}, is_available=False)
+        first = _FakeRoutes("first", {"distance_meters": 100.0, "duration_seconds": 10.0})
+        second = _FakeRoutes("second", {"distance_meters": 50.0, "duration_seconds": 5.0})
+        with ROUTE_PROVIDERS.overridden([skipped, first, second]):
             result = routing_resolution.get_route_between((1.0, 2.0), (3.0, 4.0))
 
-        gateway_cls.return_value.get_route.assert_called_once_with(
-            [(1.0, 2.0), (3.0, 4.0)], capability="as_given", profile="driving"
-        )
         self.assertEqual(result, {"distance_meters": 100.0, "duration_seconds": 10.0})
+        self.assertEqual(first.asked, [((1.0, 2.0), (3.0, 4.0))])
+        self.assertEqual((skipped.asked, second.asked), ([], []))
 
-    def test_redata_not_configured_uses_osrm(self) -> None:
+    def test_no_route_is_the_answer_and_the_next_provider_is_not_asked(self) -> None:
+        first = _FakeRoutes("first")
+        second = _FakeRoutes("second", {"distance_meters": 50.0, "duration_seconds": 5.0})
+        with ROUTE_PROVIDERS.overridden([first, second]):
+            self.assertIsNone(routing_resolution.get_route_between((1.0, 2.0), (3.0, 4.0)))
+
+        self.assertEqual(second.asked, [])
+
+    def test_an_unavailable_provider_hands_over_to_the_next(self) -> None:
+        failing = _FakeRoutes("failing", failure=ProviderUnavailableError("boom"))
+        fallback = _FakeRoutes("fallback", {"distance_meters": 50.0, "duration_seconds": 5.0})
+        with ROUTE_PROVIDERS.overridden([failing, fallback]):
+            result = routing_resolution.get_route_between((1.0, 2.0), (3.0, 4.0))
+
+        self.assertEqual(result, {"distance_meters": 50.0, "duration_seconds": 5.0})
+
+    def test_every_provider_failing_is_no_route(self) -> None:
+        with ROUTE_PROVIDERS.overridden([_FakeRoutes("a", failure=ProviderUnavailableError("boom"))]):
+            self.assertIsNone(routing_resolution.get_route_between((1.0, 2.0), (3.0, 4.0)))
+
+    def test_no_provider_is_no_route(self) -> None:
+        with ROUTE_PROVIDERS.overridden([]):
+            self.assertIsNone(routing_resolution.get_route_between((1.0, 2.0), (3.0, 4.0)))
+
+    def test_osrm_provider_asks_the_osrm_gateway(self) -> None:
         with (
-            mock.patch(f"{_MODULE}.redata_configured", return_value=False),
+            ROUTE_PROVIDERS.overridden([OsrmRouteProvider()]),
             mock.patch("urbanlens.dashboard.services.apis.routing.osrm.OSRMGateway") as gateway_cls,
         ):
             gateway_cls.return_value.get_route_between.return_value = {"distance_meters": 50.0, "duration_seconds": 5.0}
@@ -37,19 +87,6 @@ class GetRouteBetweenTests(SimpleTestCase):
 
         gateway_cls.return_value.get_route_between.assert_called_once_with((1.0, 2.0), (3.0, 4.0))
         self.assertEqual(result, {"distance_meters": 50.0, "duration_seconds": 5.0})
-
-    def test_redata_failure_falls_back_to_osrm(self) -> None:
-        with (
-            mock.patch(f"{_MODULE}.redata_configured", return_value=True),
-            mock.patch(f"{_MODULE}.RedataRoutingGateway") as gateway_cls,
-            mock.patch("urbanlens.dashboard.services.apis.routing.osrm.OSRMGateway") as osrm_cls,
-        ):
-            gateway_cls.return_value.get_route.side_effect = LocationContextUnavailableError("source_error", "boom")
-            osrm_cls.return_value.get_route_between.return_value = None
-            result = routing_resolution.get_route_between((1.0, 2.0), (3.0, 4.0))
-
-        osrm_cls.return_value.get_route_between.assert_called_once()
-        self.assertIsNone(result)
 
 
 class OsrmBaseUrlTests(SimpleTestCase):
@@ -87,12 +124,3 @@ class OsrmBaseUrlTests(SimpleTestCase):
     def test_an_explicit_argument_still_wins(self) -> None:
         with mock.patch.object(app_settings, "osrm_base_url", "http://configured:5000"):
             self.assertEqual(osrm.OSRMGateway(base_url="http://explicit:5000").base_url, "http://explicit:5000")
-
-    def test_the_demo_host_is_reachable_through_the_egress_filter(self) -> None:
-        # The assistant's routing tool runs in ai-worker, behind a deny-by-default
-        # egress proxy; a base URL nothing allowlists is a tool that always fails.
-        import pathlib
-
-        repo_root = pathlib.Path(__file__).resolve().parents[5]
-        allowlist = (repo_root / "src/urbanlens/config/egress/filter").read_text()
-        self.assertIn("router\\.project-osrm\\.org", allowlist)

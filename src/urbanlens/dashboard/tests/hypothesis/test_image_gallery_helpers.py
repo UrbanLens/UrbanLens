@@ -203,7 +203,7 @@ class ExtractGpsCoordsMockTests(SimpleTestCase):
         self.assertIsNone(result)
 
     def test_returns_none_for_gps_off_the_globe(self):
-        """A malformed tag decodes to 200 degrees; storing it placed the photo nowhere on Earth (P285)."""
+        """A malformed tag decodes to 200 degrees; storing it placed the photo nowhere on Earth."""
         for lat_dms, lng_dms in (((200, 0, 0), (74, 0, 21)), ((40, 26, 46), (181, 0, 0)), ((90, 0, 1), (74, 0, 21))):
             with self.subTest(lat=lat_dms, lng=lng_dms):
                 mock_file, mock_img, _ = self._make_file_with_gps(lat_dms, "N", lng_dms, "W")

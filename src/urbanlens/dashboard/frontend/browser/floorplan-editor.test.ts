@@ -470,7 +470,7 @@ beforeAll(async () => {
                 return Response.json({ ok: true, floorplan: echoed });
             }
             // The editor asks this deployment which basemap layers it serves, on every load. A
-            // self-hoster with no REData configured is answered exactly this, and falls back to
+            // self-hoster with no tile catalogue configured is answered exactly this, and falls back to
             // the built-in vendor sources - so the harness runs the same path the fallback does.
             if (path === "/dashboard/map/basemap-tiles/sources/") return Response.json({ layers: [] });
             const file = Bun.file(join(STATIC_DIR, path.replace(/^\//, "")));
@@ -2765,7 +2765,7 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
     });
 
     test("editing someone else's plan forks rather than overwriting it", async () => {
-        // Community/REData plan is not the user's to change. Save must omit uuid
+        // A community or provider plan is not the user's to change. Save must omit uuid
         // so server creates their version; banner must warn before first keystroke —
         // autosave seconds after open is not a decision to edit in place.
         saves.lastHadUuid = true;

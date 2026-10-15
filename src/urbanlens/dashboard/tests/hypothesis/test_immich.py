@@ -698,7 +698,7 @@ class ImportImmichPhotosTaskTests(TestCase):
 
     def test_imported_rows_are_labelled_immich_not_upload(self) -> None:
         # Omitting source= defaults to UPLOAD, indistinguishable from the upload form
-        # to source-keyed consumers (Media gallery tabs, achievements, reputation rules).
+        # to source-keyed consumers (Media gallery tabs, achievements, contribution rules).
         self._run(["a1"], {"a1": (b"jpeg-bytes", "photo.jpg", "image/jpeg")})
         self.assertEqual(Image.objects.get(pin=self.pin, profile=self.profile).source, ImageSource.IMMICH)
 

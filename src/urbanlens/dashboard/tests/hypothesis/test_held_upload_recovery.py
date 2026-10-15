@@ -1,5 +1,5 @@
 """
-A held icon or avatar whose publish never ran is recovered, and a held file nothing can name again is removed (P119).
+A held icon or avatar whose publish never ran is recovered, and a held file nothing can name again is removed.
 
 ``safely_enqueue_task`` returns None when the broker is unreachable, so without a sweep a held upload whose enqueue
 failed is never published: the owner is told it is processing for ever, and the file stays under ``unprocessed/``.

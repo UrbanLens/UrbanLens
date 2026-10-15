@@ -1,4 +1,4 @@
-"""A failed task's ERROR line names its arguments without leaking a coordinate (P212)."""
+"""A failed task's ERROR line names its arguments without leaking a coordinate."""
 
 from __future__ import annotations
 

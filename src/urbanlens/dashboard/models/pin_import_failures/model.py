@@ -31,7 +31,7 @@ class PinImportFailureStatus(abstract.TextChoices):
 class PinImportFailure(abstract.DashboardModel):
     """
     A pin from an import whose Google Maps CID could not be automatically resolved to a location.
-    Raised by ``tasks.resolve_deferred_pin_locations`` (via ``services.pins.pin_import_failures.record_pin_import_failure``) when Google/REData either confirms no location exists for a cid, or repeated lookup attempts stall out - see that task's docstring.
+    Raised by ``tasks.resolve_deferred_pin_locations`` (via ``services.pins.pin_import_failures.record_pin_import_failure``) when the CID resolver either confirms no location exists for a cid, or repeated lookup attempts stall out - see that task's docstring.
     This always reflects a data gap on Google's side (or a transient lookup failure), never a defect in the pin the user tried to import - the review queue built on this model (``controllers.pin_import_failures``) must always phrase it that way to the owner.
 
     Attributes:

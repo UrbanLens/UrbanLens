@@ -23,13 +23,14 @@ from urbanlens.dashboard.external_api.serializers import SafetyCheckinDetailSeri
 # ``typing.get_type_hints`` to infer the field's schema type, and that call *evaluates the whole signature* -
 # including the ``obj`` parameter it has no interest in.
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinMessage, SafetyCheckinPartner, SafetyCheckinPartnerStatus
+from urbanlens.dashboard.plugins.drf import ExtensibleSerializer
 from urbanlens.dashboard.services.visits.safety import MAX_CHAT_MESSAGE_LENGTH
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
 
-class SafetyCheckinMessageSerializer(serializers.Serializer):
+class SafetyCheckinMessageSerializer(ExtensibleSerializer):
     """
     One message in a check-in's shared chat (read-only).
 
@@ -107,7 +108,7 @@ class SafetyCheckinMessageSerializer(serializers.Serializer):
         return viewer is not None and obj.sender_profile_id == viewer.pk
 
 
-class SafetyCheckinMessageCreateSerializer(serializers.Serializer):
+class SafetyCheckinMessageCreateSerializer(ExtensibleSerializer):
     """
     Validates an untrusted chat message submission.
 
@@ -119,7 +120,7 @@ class SafetyCheckinMessageCreateSerializer(serializers.Serializer):
     body = serializers.CharField(max_length=MAX_CHAT_MESSAGE_LENGTH, allow_blank=False, trim_whitespace=True)
 
 
-class SafetyCheckinMessageListResponseSerializer(serializers.Serializer):
+class SafetyCheckinMessageListResponseSerializer(ExtensibleSerializer):
     """Documents the paginated chat transcript envelope (schema-only)."""
 
     count = serializers.IntegerField(read_only=True)
@@ -128,7 +129,7 @@ class SafetyCheckinMessageListResponseSerializer(serializers.Serializer):
     results = SafetyCheckinMessageSerializer(many=True, read_only=True)
 
 
-class SafetyPartnerRoleSerializer(serializers.Serializer):
+class SafetyPartnerRoleSerializer(ExtensibleSerializer):
     """
     The caller's own partner row on someone else's check-in (read-only).
 
@@ -238,7 +239,7 @@ class SafetyPartnerRoleSerializer(serializers.Serializer):
         return obj.invited_by.username if obj.invited_by is not None else None
 
 
-class SafetyPartnerInviteListResponseSerializer(serializers.Serializer):
+class SafetyPartnerInviteListResponseSerializer(ExtensibleSerializer):
     """Documents the paginated pending-invite envelope (schema-only)."""
 
     count = serializers.IntegerField(read_only=True)
@@ -308,7 +309,7 @@ class PartneredCheckinDetailSerializer(_PartneredCheckinOwnerFieldsMixin, Safety
     owner_profile_uuid = serializers.SerializerMethodField()
 
 
-class PartneredCheckinListResponseSerializer(serializers.Serializer):
+class PartneredCheckinListResponseSerializer(ExtensibleSerializer):
     """Documents the paginated partnered-check-in envelope (schema-only)."""
 
     count = serializers.IntegerField(read_only=True)

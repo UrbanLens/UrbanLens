@@ -60,8 +60,7 @@ def live_text_editor_id(article: Article) -> int | None:
     """
     Who wrote the article's current text: the newest revision's editor.
     Deliberately not "the newest revision with an editor": when the newest one came from a deleted account (or a
-    system seed), crediting an earlier person would attribute text they never wrote to them - and, under concealment,
-    show it to their friends.
+    system seed), crediting an earlier person would attribute text they never wrote to them.
 
     Args:
         article: The article to inspect.
@@ -83,9 +82,9 @@ def write_merge_revision(article: Article, *, content: str, editor: Profile | No
         content: The text the article holds from now on.
         editor: Who the revision is attributed to.
         edit_summary: One line explaining the merge.
-        revision_content: The text the revision records, when it must differ from the live text: a concealed editor's
-            revision may only carry what that editor could see (see ``services.wiki.concealment``). Defaults to
-            *content*.
+        revision_content: The text the revision records, when it must differ from the live text: an editor whose
+            projection of the wiki narrows its revisions may only record what that editor could see (see
+            ``services.wiki.viewer_projection``). Defaults to *content*.
 
     Returns:
         The new revision.

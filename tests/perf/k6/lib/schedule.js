@@ -18,7 +18,7 @@ export const PHASES = [
     { name: "map_search_1", seconds: 60, action: "mapSearch", vus: 1 },
     { name: "map_search_8", seconds: 90, action: "mapSearch", vus: 8 },
     { name: "label_edit", seconds: 90, action: "labelEdit", vus: 1 },
-    // P104's mechanism, reproduced deliberately: enough concurrent filter POSTs
+    // Connection pool exhaustion, reproduced deliberately: enough concurrent filter POSTs
     // to exhaust the connection pool if nothing bounds it.
     { name: "search_storm", seconds: 90, action: "mapSearch", vus: 60 },
     // Last and longest: k6 never aborts in-flight requests, so an overrunning import only pollutes cooldown, not a measured phase.

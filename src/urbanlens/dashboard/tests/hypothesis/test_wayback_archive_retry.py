@@ -1,5 +1,5 @@
 """
-A link the Wayback Machine could not archive is asked about again later (P308).
+A link the Wayback Machine could not archive is asked about again later.
 
 The archive task asked once: a lookup that timed out or met a 429 or 5xx, or a save that failed, was logged and
 dropped, and nothing looked for links still without a snapshot. On dev, 86 links naming 63 URLs had none; asked
@@ -32,7 +32,7 @@ from urbanlens.dashboard.services.core.rate_limiter import (
 
 _GATEWAY = "urbanlens.dashboard.services.apis.locations.wayback_machine.WaybackMachineGateway"
 _AVAILABILITY = "https://archive.org/wayback/available"
-_SAVE = "https://web.archive.org/save/https://example.com/a"
+_SAVE = "https://web.archive.org/save/https://elsewhere.example.net/a"
 
 
 def _snapshot(url: str) -> str:
@@ -74,7 +74,7 @@ class _ArchiveCase(TestCase):
 
 class AFailedAttemptIsAskedAgainTests(_ArchiveCase):
     def test_a_link_whose_lookup_failed_is_archived_by_a_later_sweep(self) -> None:
-        link = self._link("https://example.com/a")
+        link = self._link("https://elsewhere.example.net/a")
         with mock.patch(f"{_GATEWAY}.get_availability", side_effect=requests.Timeout("slow")):
             self.assertFalse(tasks.archive_pin_link_to_wayback(link.pk))
 
@@ -88,7 +88,7 @@ class AFailedAttemptIsAskedAgainTests(_ArchiveCase):
         self._assert_archived(link)
 
     def test_a_failed_save_is_asked_again(self) -> None:
-        link = self._link("https://example.com/a")
+        link = self._link("https://elsewhere.example.net/a")
         with (
             mock.patch(f"{_GATEWAY}.get_availability", return_value={"archived_snapshots": {}}),
             mock.patch(f"{_GATEWAY}.save_url", side_effect=_http_error(520)),
@@ -102,8 +102,8 @@ class AFailedAttemptIsAskedAgainTests(_ArchiveCase):
 
     def test_every_link_naming_the_url_waits_together(self) -> None:
         """The URL is asked about once, when it comes due, however many links name it."""
-        first = self._link("https://example.com/a")
-        second = self._link("https://example.com/a", model=WikiLink)
+        first = self._link("https://elsewhere.example.net/a")
+        second = self._link("https://elsewhere.example.net/a", model=WikiLink)
         with mock.patch(f"{_GATEWAY}.get_availability", side_effect=requests.ConnectionError("down")):
             tasks.archive_pin_link_to_wayback(first.pk)
 
@@ -117,7 +117,7 @@ class AFailedAttemptIsAskedAgainTests(_ArchiveCase):
         self._assert_archived(first, second)
 
     def test_the_waits_grow_and_the_url_is_given_up_after_the_last(self) -> None:
-        link = self._link("https://example.com/a")
+        link = self._link("https://elsewhere.example.net/a")
         start = timezone.now()
         asked_at: list = []
 
@@ -145,7 +145,7 @@ class TheArchiveRefusingForNowTests(_ArchiveCase):
     """A refusal for now says nothing about the URL: it is not held against it, and the sweep stops asking."""
 
     def test_a_429_is_not_held_against_the_url_and_ends_the_sweep(self) -> None:
-        links = [self._link(f"https://example.com/{n}") for n in range(3)]
+        links = [self._link(f"https://elsewhere.example.net/{n}") for n in range(3)]
         with mock.patch(f"{_GATEWAY}.get_availability", side_effect=_http_error(429)) as asked:
             tasks.sweep_unarchived_links()
         self.assertEqual(asked.call_count, 1)
@@ -158,7 +158,7 @@ class TheArchiveRefusingForNowTests(_ArchiveCase):
 
     def test_a_503_naming_a_wait_ends_the_sweep(self) -> None:
         for n in range(3):
-            self._link(f"https://example.com/{n}")
+            self._link(f"https://elsewhere.example.net/{n}")
         with mock.patch(f"{_GATEWAY}.get_availability", side_effect=_http_error(503, {"Retry-After": "120"})) as asked:
             tasks.sweep_unarchived_links()
 
@@ -166,8 +166,8 @@ class TheArchiveRefusingForNowTests(_ArchiveCase):
 
     def test_a_bare_503_is_held_against_its_url_not_the_sweep(self) -> None:
         """The Archive failing one page, which a sweep that stopped at it would ask about first, every time."""
-        failing = self._link("https://example.com/failing", age=timedelta(days=5))
-        healthy = self._link("https://example.com/healthy")
+        failing = self._link("https://elsewhere.example.net/failing", age=timedelta(days=5))
+        healthy = self._link("https://elsewhere.example.net/healthy")
 
         def answer(url: str) -> dict:
             if url == failing.url:
@@ -182,7 +182,7 @@ class TheArchiveRefusingForNowTests(_ArchiveCase):
         self.assertEqual([call.args[0] for call in asked.call_args_list].count(failing.url), 1)
 
     def test_the_deployments_own_limit_is_not_an_error_and_ends_the_sweep(self) -> None:
-        links = [self._link(f"https://example.com/{n}") for n in range(3)]
+        links = [self._link(f"https://elsewhere.example.net/{n}") for n in range(3)]
         refused = RateLimitExceededError("wayback_machine")
         with mock.patch(f"{_GATEWAY}.get_availability", side_effect=refused) as asked:
             self.assertFalse(tasks.archive_pin_link_to_wayback(links[0].pk))
@@ -195,7 +195,7 @@ class TheArchiveRefusingForNowTests(_ArchiveCase):
         self._assert_archived(*links)
 
     def test_an_imports_chunk_stops_asking_once_the_archive_refuses(self) -> None:
-        links = [self._link(f"https://example.com/{n}", age=timedelta(0)) for n in range(3)]
+        links = [self._link(f"https://elsewhere.example.net/{n}", age=timedelta(0)) for n in range(3)]
         refused = RateLimitExceededError("wayback_machine")
         with mock.patch(f"{_GATEWAY}.get_availability", side_effect=refused) as asked:
             result = tasks.archive_pin_links_to_wayback([link.pk for link in links])
@@ -211,10 +211,10 @@ class ALinkAddedLaterTests(_ArchiveCase):
     """A link added to a URL already waiting, or given up on, keeps to the URL's state rather than asking at once."""
 
     def test_a_link_added_while_its_url_waits_waits_with_it(self) -> None:
-        first = self._link("https://example.com/a")
+        first = self._link("https://elsewhere.example.net/a")
         with mock.patch(f"{_GATEWAY}.get_availability", side_effect=requests.Timeout("slow")):
             tasks.archive_pin_link_to_wayback(first.pk)
-        added = self._link("https://example.com/a", model=WikiLink, age=timedelta(0))
+        added = self._link("https://elsewhere.example.net/a", model=WikiLink, age=timedelta(0))
 
         with mock.patch(f"{_GATEWAY}.get_availability", side_effect=_found) as asked:
             self.assertFalse(tasks.archive_wiki_link_to_wayback(added.pk))
@@ -228,7 +228,7 @@ class ALinkAddedLaterTests(_ArchiveCase):
         self._assert_archived(first, added)
 
     def test_a_link_added_to_a_url_given_up_on_is_not_sent(self) -> None:
-        long_url = "https://example.com/" + "a" * 1970
+        long_url = "https://elsewhere.example.net/" + "a" * 1970
         self._link(long_url)
         with mock.patch(f"{_GATEWAY}.get_availability", side_effect=_found):
             tasks.sweep_unarchived_links()
@@ -244,22 +244,25 @@ class ALinkAddedLaterTests(_ArchiveCase):
 
 class WhichLinksTheSweepTakesTests(_ArchiveCase):
     def test_a_just_added_link_is_left_to_its_own_task(self) -> None:
-        self._link("https://example.com/a", age=timedelta(0))
+        self._link("https://elsewhere.example.net/a", age=timedelta(0))
         with mock.patch(f"{_GATEWAY}.get_availability", side_effect=_found) as asked:
             tasks.sweep_unarchived_links()
         asked.assert_not_called()
 
     def test_a_link_whose_task_never_ran_is_taken_up(self) -> None:
-        link = self._link("https://example.com/a", model=WikiLink, age=timedelta(hours=1))
+        link = self._link("https://elsewhere.example.net/a", model=WikiLink, age=timedelta(hours=1))
         with mock.patch(f"{_GATEWAY}.get_availability", side_effect=_found):
             tasks.sweep_unarchived_links()
         self._assert_archived(link)
 
     def test_a_snapshot_another_link_holds_is_given_without_asking(self) -> None:
         baker.make(
-            WikiLink, wiki=self.wiki, url="https://example.com/a", wayback_url=_snapshot("https://example.com/a")
+            WikiLink,
+            wiki=self.wiki,
+            url="https://elsewhere.example.net/a",
+            wayback_url=_snapshot("https://elsewhere.example.net/a"),
         )
-        waiting = self._link("https://example.com/a")
+        waiting = self._link("https://elsewhere.example.net/a")
         with (
             mock.patch(f"{_GATEWAY}.get_availability") as asked,
             mock.patch(f"{_GATEWAY}.save_url") as saved,
@@ -271,14 +274,14 @@ class WhichLinksTheSweepTakesTests(_ArchiveCase):
 
     def test_a_sweep_asks_about_a_bounded_number_of_urls(self) -> None:
         for n in range(4):
-            self._link(f"https://example.com/{n}")
+            self._link(f"https://elsewhere.example.net/{n}")
         with mock.patch(f"{_GATEWAY}.get_availability", side_effect=_found) as asked:
             tasks.sweep_unarchived_links(limit=2)
         self.assertEqual(asked.call_count, 2)
 
     def test_a_url_linked_many_times_takes_one_place_in_the_batch(self) -> None:
-        many = [self._link("https://example.com/a", age=timedelta(days=2)) for _ in range(3)]
-        other = self._link("https://example.com/b")
+        many = [self._link("https://elsewhere.example.net/a", age=timedelta(days=2)) for _ in range(3)]
+        other = self._link("https://elsewhere.example.net/b")
         with mock.patch(f"{_GATEWAY}.get_availability", side_effect=_found) as asked:
             tasks.sweep_unarchived_links(limit=2)
         self.assertEqual(sorted(call.args[0] for call in asked.call_args_list), [many[0].url, other.url])
@@ -289,15 +292,15 @@ class WhichLinksTheSweepTakesTests(_ArchiveCase):
         self._link(
             "https://drive.google.com/drive/folders/1AbCdEfGhIjKlMnOpQrStUvWxYz?usp=sharing", age=timedelta(days=3)
         )
-        self._link("https://urbanlens.org/dashboard/map/", model=WikiLink, age=timedelta(days=3))
-        eligible = self._link("https://example.com/a")
+        self._link("https://example.com/dashboard/map/", model=WikiLink, age=timedelta(days=3))
+        eligible = self._link("https://elsewhere.example.net/a")
         with mock.patch(f"{_GATEWAY}.get_availability", side_effect=_found) as asked:
             for _ in range(3):
                 tasks.sweep_unarchived_links(limit=1)
         asked.assert_called_once_with(eligible.url)
 
     def test_a_snapshot_too_long_to_store_is_not_asked_for_again(self) -> None:
-        self._link("https://example.com/" + "a" * 1970)
+        self._link("https://elsewhere.example.net/" + "a" * 1970)
         with mock.patch(f"{_GATEWAY}.get_availability", side_effect=_found) as asked:
             tasks.sweep_unarchived_links()
             with _later(timedelta(days=60)):
@@ -329,11 +332,13 @@ class TheArchivesThrottleIsSharedTests(TestCase):
     """A 429 from the Archive holds every process off for the wait it named, without a request."""
 
     def test_a_429_holds_off_the_next_lookup(self) -> None:
-        _session(_response(429, {"Retry-After": "120"})).get(_AVAILABILITY, params={"url": "https://example.com/a"})
+        _session(_response(429, {"Retry-After": "120"})).get(
+            _AVAILABILITY, params={"url": "https://elsewhere.example.net/a"}
+        )
         second = _session()
 
         with pytest.raises(UpstreamThrottledError) as caught:
-            second.get(_AVAILABILITY, params={"url": "https://example.com/b"})
+            second.get(_AVAILABILITY, params={"url": "https://elsewhere.example.net/b"})
 
         second._session.request.assert_not_called()
         self.assertGreaterEqual(caught.value.retry_after, 119)
@@ -350,7 +355,7 @@ class TheArchivesThrottleIsSharedTests(TestCase):
         _session(_response(429)).get(_SAVE)
         lookup = _session(_response(200))
 
-        lookup.get(_AVAILABILITY, params={"url": "https://example.com/a"})
+        lookup.get(_AVAILABILITY, params={"url": "https://elsewhere.example.net/a"})
 
         lookup._session.request.assert_called_once()
 

@@ -125,34 +125,6 @@ class EmailNormalizedFieldTests(TestCase):
         self.assertEqual(invitation.email_normalized, "jake.smith@example.com")
 
 
-class EmailNormalizedBackfillMigrationTests(TestCase):
-    """
-    The 0048 migration's data backfill, exercised directly against a real row.
-
-    Regression coverage for the migration function itself (app label/field-name typos, the
-    only()/iterator()/bulk_update plumbing) that a plain model-level test of save() can't reach, since save()
-    already keeps email_normalized populated on every row created through the ORM during the test run."""
-
-    def test_backfill_normalizes_a_row_left_blank(self) -> None:
-        import importlib
-
-        from django.apps import apps as live_apps
-
-        migration = importlib.import_module("urbanlens.dashboard.migrations.0032_v0_8_0")
-
-        inviter = baker.make(User).profile
-        invitation = FriendInvitation.objects.create(inviter=inviter, email="Jake.Smith+x@gmail.com")
-        # Simulate a pre-existing row as it looked right after the AddField
-        # ran and before the backfill did - blank, same as the field's own
-        # default.
-        FriendInvitation.objects.filter(pk=invitation.pk).update(email_normalized="")
-
-        migration._0049_backfill_friendinvitation_email_normalized(live_apps, None)
-
-        invitation.refresh_from_db()
-        self.assertEqual(invitation.email_normalized, "jakesmith@gmail.com")
-
-
 class MarkAcceptedClaimTests(TestCase):
     """``mark_accepted`` must be a write-time conditional claim, not a blind update."""
 

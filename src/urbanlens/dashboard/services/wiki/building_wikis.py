@@ -1,5 +1,5 @@
 """
-Which of a campus's buildings a location stands on, and that building's wiki (P261).
+Which of a campus's buildings a location stands on, and that building's wiki.
 
 A building with no place of its own resolves onto its parcel, whose wiki another location holds. The buildings known
 on the parcel are the building wikis nested under the parcel's wiki and the building list cached for that wiki's

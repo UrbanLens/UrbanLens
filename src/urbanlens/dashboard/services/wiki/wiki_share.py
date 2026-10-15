@@ -106,7 +106,7 @@ class WikiShareService:
             Pin.objects.filter(pk=pin.pk).update(wiki=wiki)
 
             if shared and location.place_id is not None:
-                # Sharing grants permanent access (D19); opening the dialog and contributing nothing does not.
+                # Sharing grants permanent access; opening the dialog and contributing nothing does not.
                 from urbanlens.dashboard.models.place.model import PlaceAccessGrant
 
                 PlaceAccessGrant.objects.record_engagement(pin.profile, location.place)

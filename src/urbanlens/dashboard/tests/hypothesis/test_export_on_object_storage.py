@@ -1,5 +1,5 @@
 """
-A data export copies photos and overlay images out of a storage that has no local paths (P321).
+A data export copies photos and overlay images out of a storage that has no local paths.
 
 Production stores media with ``GatedS3Storage``, which, like every ``S3Storage``, has no ``path()``. The export asked
 each file for its path, so one stored photo or image overlay failed the whole export.
@@ -86,7 +86,11 @@ class _ExportCase(TestCase):
             patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"),
         ):
             ok = run_export(
-                self.user.pk, ["photos", "map_annotations"], export_dir_path, "https://example.test", job_id="p321"
+                self.user.pk,
+                ["photos", "map_annotations"],
+                export_dir_path,
+                "https://example.test",
+                job_id="export-job",
             )
             self.assertTrue(ok, "run_export reported failure")
             with zipfile.ZipFile(Path(export_dir_path) / "export.zip") as zf:
@@ -162,7 +166,7 @@ class AnExportOnLocalStorageKeepsTheFilesModifiedTimeTests(_ExportCase):
             patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"),
         ):
             self.assertTrue(
-                run_export(self.user.pk, ["photos"], export_dir_path, "https://example.test", job_id="p321")
+                run_export(self.user.pk, ["photos"], export_dir_path, "https://example.test", job_id="export-job")
             )
             with zipfile.ZipFile(Path(export_dir_path) / "export.zip") as zf:
                 info = next(info for info in zf.infolist() if info.filename.endswith("/photos/dated.jpg"))
@@ -266,7 +270,7 @@ class AnExportOverTheProductionObjectStoreTests(_ExportCase):
                 tempfile.TemporaryDirectory() as export_dir_path,
                 patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"),
             ):
-                ok = run_export(self.user.pk, ["photos"], export_dir_path, "https://example.test", job_id="p321")
+                ok = run_export(self.user.pk, ["photos"], export_dir_path, "https://example.test", job_id="export-job")
                 self.assertFalse(ok)
                 self.assertFalse((Path(export_dir_path) / "export.zip").exists())
 
@@ -279,7 +283,7 @@ class AnExportOverTheProductionObjectStoreTests(_ExportCase):
         ):
             baker.make(Image, profile=self.profile, pin=self.pin, image=name)
             self.assertTrue(
-                run_export(self.user.pk, ["photos"], export_dir_path, "https://example.test", job_id="p321")
+                run_export(self.user.pk, ["photos"], export_dir_path, "https://example.test", job_id="export-job")
             )
             with zipfile.ZipFile(Path(export_dir_path) / "export.zip") as zf:
                 info = next(info for info in zf.infolist() if info.filename.endswith("/photos/dated.jpg"))

@@ -40,9 +40,7 @@
 <div class="floorplan-page">
 {% include "dashboard/partials/ui/_page_explainer.html" with explainer_id="floorplan-first-walls" kicker="Getting started" heading="Start by drawing the exterior walls." body="Arm the Wall tool and trace the building's outline. Once it's closed, rooms are generated automatically from the enclosed space, and the room, opening, and box-select tools become available." %}
 
-<div id="floorplan-origin-banner" class="floorplan-origin-banner" hidden>
-    From REData. Saving creates your own version.
-</div>
+<div id="floorplan-origin-banner" class="floorplan-origin-banner" hidden></div>
 
 <div class="floorplan-editor">
     <div class="floorplan-editor__stage">
@@ -230,14 +228,8 @@
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Image Overlays" %}
     <div id="map-overlays-dialog-body" class="custom-layers-dialog-body ul-dialog-body"
          hx-get="{{ manage_overlays_url }}" hx-trigger="load" hx-swap="innerHTML"></div>
-    {# Loads once, independent of the row-list body above - see the same div's own comment in _map_annotations_panels.html. #}
-    <div class="map-overlay-historical ul-dialog-body">
-        <h4 class="map-overlay-historical-heading">Historical maps covering this location</h4>
-        <div id="map-overlay-historical-results"
-             hx-get="{% url 'pin.overlays.historical' pin.slug %}" hx-trigger="load" hx-swap="innerHTML">
-            <p class="map-overlay-manage-empty">Looking for georeferenced maps covering this spot...</p>
-        </div>
-    </div>
+    {# Loads once, independent of the row-list body above - see the same tag in _map_annotations_panels.html. #}
+    {% overlay_sources_lists "load" %}
 </dialog>
 {% endif %}
 

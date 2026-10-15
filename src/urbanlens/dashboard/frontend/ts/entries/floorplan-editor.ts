@@ -48,13 +48,13 @@ import { History } from "../shared/floorplan/history";
 import { type Face, deriveFaces, faceForSeed } from "../shared/floorplan/planar";
 import { GRID_SPACING_METERS, PIXEL_TOLERANCES, clampOpening, snapPoint, snapTranslation } from "../shared/floorplan/snapping";
 import { createMapImageOverlays, wireManageOverlaysDialog, type MapOverlayEntry } from "../shared/map-image-overlays";
-import { createMapLayers, registerRedataLayers, setAttribution } from "../shared/map-layers";
+import { createMapLayers, registerCatalogueLayers, setAttribution } from "../shared/map-layers";
 import { escHtml } from "../shared/escape-html";
 
-// Fired now rather than awaited inside boot(): starting this deployment's REData tile catalogue
+// Fired now rather than awaited inside boot(): starting this deployment's tile catalogue
 // fetch as early as this module loads gives it a head start on the synchronous DOM/config
 // parsing boot() does before it ever reaches createMapLayers().
-void registerRedataLayers();
+void registerCatalogueLayers();
 
 declare const L: typeof import("leaflet");
 
@@ -3856,8 +3856,8 @@ function boot(): void {
         if (state.doc.origin === "community") {
             banner.textContent = "Published to this place's community wiki by another explorer. Saving creates your own version.";
             banner.hidden = false;
-        } else if (state.doc.origin === "redata") {
-            banner.textContent = "From REData. Saving creates your own version.";
+        } else if (state.doc.origin && state.doc.origin !== "local" && state.doc.origin_banner) {
+            banner.textContent = state.doc.origin_banner;
             banner.hidden = false;
         } else {
             banner.hidden = true;
@@ -3990,6 +3990,7 @@ function boot(): void {
         // Dropping the uuid is what makes the save fork a new dated version instead of overwriting the one that was loaded.
         if (asNewVersion || state.doc.origin !== "local") delete payload.uuid;
         delete payload.origin;
+        delete payload.origin_banner;
         delete payload.versions;
         // Taken now, before anything below can await - state.doc may keep
         // changing while this request is in flight (see snapshotForSend()).
@@ -4030,6 +4031,7 @@ function boot(): void {
                 applyServerIds(sent, body.floorplan);
                 // The response reports where the saved row actually lives, so a document loaded as someone else's community plan becomes "local" here.
                 state.doc.origin = body.floorplan.origin;
+                state.doc.origin_banner = body.floorplan.origin_banner;
                 state.versions = body.floorplan.versions || [];
             }
             state.doc.version_token = body.floorplan?.version_token;

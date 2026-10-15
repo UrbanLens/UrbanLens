@@ -173,7 +173,7 @@ class GooglePhotosGateway(Gateway):
 
         Raises:
             EnvironmentRefusedError: This environment does not call the service; asked before the token refresh, which
-                would otherwise reach Google for a call that is then refused (D26).
+                would otherwise reach Google for a call that is then refused.
             GatewayRequestError: When the token cannot be refreshed."""
         from urbanlens.dashboard.services.core.egress import require_egress
 

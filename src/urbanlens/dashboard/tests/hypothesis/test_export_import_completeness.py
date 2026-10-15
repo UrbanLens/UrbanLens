@@ -143,14 +143,12 @@ class ExportSettingsCompletenessTests(TestCase):
             export_service._export_settings(profile, temp_dir)
             return _read(temp_dir, "settings.json")
 
-    def test_ai_and_keyword_and_community_groups_are_exported(self) -> None:
+    def test_community_group_is_exported(self) -> None:
         profile = baker.make(User).profile
-        profile.ai_label_tags = True
         profile.sync_vulnerability_to_wiki = False
         profile.save()
 
         data = self._export_settings(profile)
-        self.assertTrue(data["ai"]["ai_label_tags"])
         self.assertFalse(data["community"]["sync_vulnerability_to_wiki"])
 
     def test_common_pins_visibility_is_exported(self) -> None:
@@ -334,7 +332,6 @@ class ImportSettingsCompletenessTests(TestCase):
         from urbanlens.dashboard.services.import_export.import_data import ImportResult
 
         exporter = baker.make(User).profile
-        exporter.ai_label_categories = True
         exporter.track_geolocation = False
         exporter.common_pins_visibility = "friends"
         exporter.save()
@@ -348,7 +345,6 @@ class ImportSettingsCompletenessTests(TestCase):
             import_data._import_settings(importer, temp_dir, result, pin_uuid_map={}, label_uuid_map={})
 
         importer.refresh_from_db()
-        self.assertTrue(importer.ai_label_categories)
         self.assertFalse(importer.track_geolocation)
         self.assertEqual(importer.common_pins_visibility, "friends")
         prefs = NotificationPreference.objects.get(profile=importer)

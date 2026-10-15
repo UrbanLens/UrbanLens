@@ -1,9 +1,9 @@
 """
-Renderings of the files the in-app REData proxies serve (CRIS attachments, LoopNet photos), made once and kept.
+Renderings of the files the in-app media proxies serve (documents, listing photos), made once and kept.
 
 A proxied file a browser cannot show is decoded in the sandbox worker, at a gallery tile's size or the lightbox's, and
-the result is stored as a :class:`ProxiedMediaRender`, so a later view neither downloads the file from REData nor
-decodes it again (P189). Third-party images are kept the same way (``remote_copies``).
+the result is stored as a :class:`ProxiedMediaRender`, so a later view neither downloads the file from its upstream nor
+decodes it again. Third-party images are kept the same way (``remote_copies``).
 """
 
 from __future__ import annotations

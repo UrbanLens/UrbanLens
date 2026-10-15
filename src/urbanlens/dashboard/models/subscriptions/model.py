@@ -3,13 +3,10 @@
 from __future__ import annotations
 
 from datetime import timedelta
-from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.models import AnonymousUser, User
-from django.core.exceptions import ValidationError
-from django.core.validators import MinValueValidator
-from django.db.models import CASCADE, SET_NULL, BooleanField, CharField, DateTimeField, ForeignKey, IntegerField, Q, TextChoices, UniqueConstraint
+from django.db.models import CASCADE, SET_NULL, CharField, DateTimeField, ForeignKey, IntegerField, Q, TextChoices, UniqueConstraint
 from django.utils import timezone
 from django.utils.text import slugify
 
@@ -23,45 +20,39 @@ if TYPE_CHECKING:
 class SiteFeature(TextChoices):
     """Feature flags that can be unlocked by subscription roles."""
 
-    AI = "ai", "AI features"
-    # than the text features AI covers, so admins grant this tier explicitly
-    # (it is not part of the VIP canonical set).
-    AI_PHOTO_PROCESSING = "ai_photo_processing", "AI photo processing"
     PLACES = "places", "Places layer (Google Places landmarks)"
     SEARCH = "search", "Web search engines"
-    # larger than photos, so admins grant this tier explicitly to manage
-    # storage cost rather than bundling it into every VIP subscription.
+    # Larger than photos, so admins grant this explicitly to manage storage rather than bundling it into every
+    # access role.
     VIDEO_UPLOADS = "video_uploads", "Video uploads"
     # Documents are converted to PDF and OCR'd on upload (see services.media.documents),
     # which costs meaningfully more CPU than a photo upload - kept as its own
     # grant for the same reason as VIDEO_UPLOADS.
     DOCUMENT_UPLOADS = "document_uploads", "Document uploads"
-    # Nearby-facility/feature research tabs on the Private Pin page - separate from each plugin's
-    # own unconditional "data about this exact pin" card, which everyone gets.
-    # This flag names the concept, not every panel that could plausibly use it - check each
-    # PanelSource.required_feature, don't assume from this comment.
-    NEARBY_RESEARCH = "nearby_research", "Nearby research data"
-    # Full REData incident history for a pin's block (up to 25 years back) - a deeper pull than the
-    # free "Reported Incidents" card everyone gets (last 3 years, top few rows only).
-    # Kept as its own flag rather than folded into NEARBY_RESEARCH: unlike a nearby-facility list, a
-    # block's multi-year crime-report history is sensitive enough that a site may want to manage
-    INCIDENT_HISTORY = "incident_history", "Historical incident data"
-    # Owner identity/contact details UrbanLens looked up *for* the user from county assessor records
-    # (via REData) - the paid data feed, and the part of a property record that names a private
-    # individual.
+    # Official owner identity and contact details a plugin supplies: the part of a property record that names a
+    # private individual.
     PROPERTY_OWNERS = "property_owners", "Official property owner names & contact info"
-    # Automatic tag/category assignment from REData's label-suggestion service.
-    # Its own feature rather than part of AI: suggestions come from REData matching a place against
-    # the user's own taxonomy, not from an LLM call, so the cost profile and the grant decision are
-    # different.
+    # Automatic tag/category assignment, which matches a place against the user's own taxonomy.
     AUTO_TAGGING = "auto_tagging", "Automatic tagging of pins"
-    # Gates access to features still under active development, but stable enough for general (VIP)
+    # Gates access to features still under active development, but stable enough for general access-role
     # use - a single flag reused across every in-progress feature, rather than one SiteFeature per
     # beta, so a feature can graduate out of beta by just removing its gate instead of touching this
     # enum.
     BETA_FEATURES = "beta_features", "Beta features"
     # Earlier-stage than BETA_FEATURES: features not yet ready for general use.
     ALPHA_FEATURES = "alpha_features", "Alpha features"
+
+
+def site_feature_choices() -> list[tuple[str, str]]:
+    """Every grantable feature: the ``SiteFeature`` members, then those plugins contribute."""
+    from urbanlens.dashboard.plugins.points import SITE_FEATURES
+
+    return [*SiteFeature.choices, *((value, label) for value, label in SITE_FEATURES.choices() if value not in SiteFeature.values)]
+
+
+def site_feature_values() -> frozenset[str]:
+    """The value of every grantable feature."""
+    return frozenset(value for value, _label in site_feature_choices())
 
 
 class SubscriptionRole(abstract.DashboardModel):
@@ -98,36 +89,6 @@ class SubscriptionRole(abstract.DashboardModel):
         help_text="Max user-triggered emails per 30 days for this role. Blank uses the site default; 0 means unlimited.",
     )
 
-    # --- Paid subscriptions (Stripe) ---
-
-    monthly_price_cents = IntegerField(
-        null=True,
-        blank=True,
-        validators=[MinValueValidator(0)],
-        help_text="Fixed monthly price in cents, e.g. 500 for $5.00. Blank means not offered at a fixed price.",
-    )
-    pay_what_you_want = BooleanField(
-        default=False,
-        help_text="Let users choose their own monthly pledge instead of (or as well as) the fixed price above.",
-    )
-    pwyw_dynamic_threshold = BooleanField(
-        default=False,
-        help_text="Requires pay_what_you_want. Grants this role only in months the user's pledge meets or exceeds "
-        "the site's current cost-per-user (services.admin.cost_tracking.cost_per_user), recalculated at each "
-        "successful charge - not a fixed minimum.",
-    )
-    pwyw_minimum_cents = IntegerField(
-        null=True,
-        blank=True,
-        validators=[MinValueValidator(0)],
-        help_text="Static minimum pledge (cents) required to hold this role when pay_what_you_want is on and pwyw_dynamic_threshold is off. Blank or 0 means any pledge grants it.",
-    )
-    stripe_product_id = CharField(
-        max_length=255,
-        blank=True,
-        help_text="Stripe Product id for this role, created lazily on first checkout. Prices are generated inline per checkout/pledge instead of being pre-created, so editing monthly_price_cents needs no Stripe sync.",
-    )
-
     objects = SubscriptionRoleManager()
 
     class Meta(abstract.DashboardModel.Meta):
@@ -160,41 +121,10 @@ class SubscriptionRole(abstract.DashboardModel):
     def feature_labels(self) -> list[str]:
         """Human-readable labels for the role's granted features, in declaration order."""
         feature_set = self.feature_set
-        return [label for value, label in SiteFeature.choices if value in feature_set]
+        return [label for value, label in site_feature_choices() if value in feature_set]
 
-    def grants(self, feature: SiteFeature | str) -> bool:
+    def grants(self, feature: str) -> bool:
         return str(feature) in self.feature_set
-
-    def clean(self) -> None:
-        super().clean()
-        errors: dict[str, str] = {}
-        if self.pwyw_dynamic_threshold and not self.pay_what_you_want:
-            errors["pwyw_dynamic_threshold"] = "Requires pay_what_you_want to be enabled."
-        if self.pwyw_minimum_cents and not self.pay_what_you_want:
-            errors["pwyw_minimum_cents"] = "Requires pay_what_you_want to be enabled."
-        if self.pwyw_dynamic_threshold and self.pwyw_minimum_cents:
-            errors["pwyw_minimum_cents"] = "Cannot be set together with pwyw_dynamic_threshold - the dynamic cost-per-user figure is used instead."
-        if errors:
-            raise ValidationError(errors)
-
-    @property
-    def monthly_price_dollars(self) -> Decimal | None:
-        """The fixed monthly price in dollars, or None when not offered at a fixed price."""
-        if self.monthly_price_cents is None:
-            return None
-        return Decimal(self.monthly_price_cents) / 100
-
-    @property
-    def pwyw_minimum_dollars(self) -> Decimal | None:
-        """The static PWYW minimum in dollars, or None when unset/not applicable."""
-        if not self.pwyw_minimum_cents:
-            return None
-        return Decimal(self.pwyw_minimum_cents) / 100
-
-    @property
-    def is_purchasable(self) -> bool:
-        """Whether users can pay for this role at all (fixed price or pay-what-you-want)."""
-        return self.monthly_price_cents is not None or self.pay_what_you_want
 
     def __str__(self) -> str:
         return self.name
@@ -278,18 +208,26 @@ class PendingSubscriptionGrant(abstract.DashboardModel):
         return int(self.duration_months)
 
 
-def _paid_subscription_roles(user: User) -> list[SubscriptionRole]:
+def _additional_subscription_roles(user: User) -> list[SubscriptionRole]:
     """
-    Roles the user currently holds via a paid (Stripe-backed) subscription.
-    Only counts ``RoleSubscription`` rows that are active/trialing *and* have cleared their role's pay-what-you-want threshold (see ``services.billing.pricing.role_pwyw_threshold_cents`` - re-evaluated at each successful Stripe charge, so a dynamic-threshold role can silently stop granting access without the row itself changing status).
+    Roles the user holds through a means other than a direct admin grant.
+
+    Provided by plugins through the ``additional_subscription_roles`` filter
+    (a paid-subscription plugin grants roles whose payment threshold is met).
+    Without such a plugin there are no additional roles.
+
+    Args:
+        user: The user to look up.
+
+    Returns:
+        The extra roles, deduplicated by the caller.
     """
-    from urbanlens.dashboard.models.billing import RoleSubscription
+    from urbanlens.dashboard.plugins.points import SUBSCRIPTION_ROLES
 
-    paid = RoleSubscription.objects.granting_access_for(user).select_related("role")
-    return [subscription.role for subscription in paid]
+    return list(SUBSCRIPTION_ROLES.apply([], user))
 
 
-def user_has_feature(user: AbstractBaseUser | AnonymousUser, feature: SiteFeature | str) -> bool:
+def user_has_feature(user: AbstractBaseUser | AnonymousUser, feature: str) -> bool:
     """
     Return whether the user has the feature, via the admin permission, the site default or an active role.
     Anonymous users never have subscription-backed features.
@@ -308,7 +246,7 @@ def user_features(user: AbstractBaseUser | AnonymousUser) -> frozenset[str]:
     from urbanlens.dashboard.models.subscriptions.access_state import access_state
 
     state = access_state(user)
-    return frozenset(SiteFeature.values) if state.admin else state.features
+    return site_feature_values() if state.admin else state.features
 
 
 def user_features_from_database(user: User) -> frozenset[str]:
@@ -321,26 +259,26 @@ def user_features_from_database(user: User) -> frozenset[str]:
     from urbanlens.dashboard.models.subscriptions.access_state import compute_access_state
 
     state = compute_access_state(user)
-    return frozenset(SiteFeature.values) if state.admin else state.features
+    return site_feature_values() if state.admin else state.features
 
 
 def active_subscription_roles(user: AbstractBaseUser | AnonymousUser) -> list[SubscriptionRole]:
     """
-    Return the subscription roles the user currently holds, admin-granted or paid.
+    Return the subscription roles the user currently holds, admin-granted or otherwise.
 
     Args:
         user: The user to look up; anonymous users hold no roles.
 
     Returns:
         The roles of the user's active (unrevoked, unexpired) admin grants, plus any
-        role currently held via a paid subscription that's cleared its access threshold.
-        Deduplicated by role.
+        additional roles contributed by plugins (e.g. a paid subscription that's cleared
+        its access threshold). Deduplicated by role.
     """
     if not isinstance(user, User) or not user.is_authenticated:
         return []
     subscriptions = UserSubscription.objects.active_for(user).select_related("role")
     roles = {subscription.role_id: subscription.role for subscription in subscriptions}
-    for role in _paid_subscription_roles(user):
+    for role in _additional_subscription_roles(user):
         roles.setdefault(role.pk, role)
     return list(roles.values())
 

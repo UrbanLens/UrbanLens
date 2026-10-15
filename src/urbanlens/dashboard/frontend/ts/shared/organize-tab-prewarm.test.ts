@@ -1,5 +1,5 @@
 /**
- * The Organize prewarm chain loads each deferred tab once (P191): a tab its own trigger already loaded is
+ * The Organize prewarm chain loads each deferred tab once: a tab its own trigger already loaded is
  * skipped, and a tab the chain loaded refuses its own trigger when it is later shown.
  */
 

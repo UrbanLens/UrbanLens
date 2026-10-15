@@ -15,7 +15,7 @@ class _NorthernLatitude:
     A latitude between 0 and 90 degrees, as a field of either kind stores it.
 
     Baker's own decimal for a ``DecimalField(max_digits=9, decimal_places=6)`` runs to 99.999999, so about one baked
-    location in ten was past the pole, and code that checks a coordinate refused it at random (P50). Its longitude,
+    location in ten was past the pole, and code that checks a coordinate refused it at random. Its longitude,
     0 to 99.999999, is always real, so it is left to baker.
     """
 

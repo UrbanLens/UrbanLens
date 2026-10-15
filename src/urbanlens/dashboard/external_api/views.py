@@ -185,6 +185,7 @@ from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripComment, TripMembership
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, VisitSuggestionStatus
 from urbanlens.dashboard.models.visits.model import PinVisit
+from urbanlens.dashboard.services.apis.locations import places_resolution
 from urbanlens.dashboard.services.core.capacity import PIN_LISTS, SAVED_FILTERS, CapacityExceededError, reserve
 from urbanlens.dashboard.services.core.colors import InvalidColorError, require_color
 from urbanlens.dashboard.services.core.request_body import MultiPartParser
@@ -201,7 +202,7 @@ from urbanlens.dashboard.services.labels.merge import (
     merge_labels,
 )
 from urbanlens.dashboard.services.labels.uniqueness import find_conflicting_label, label_conflict_message
-from urbanlens.dashboard.services.map_pins.autocomplete import resolve_google_place, search_google_places, search_local
+from urbanlens.dashboard.services.map_pins.autocomplete import resolve_place, search_local, search_places
 from urbanlens.dashboard.services.media.images import delete_stored_file
 from urbanlens.dashboard.services.media.media_labels import (
     MAX_MEDIA_LABEL_NAME_LENGTH,
@@ -382,9 +383,10 @@ from urbanlens.dashboard.services.visits.visits import (
     visit_logging_allowed,
 )
 from urbanlens.dashboard.services.wiki.wiki_access import wikis_hidden_by_pin_move
-from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from django.db.models import QuerySet
     from rest_framework.request import Request
     from rest_framework.serializers import Serializer
@@ -593,7 +595,9 @@ class ExternalApiView(ErrorEnvelopeMixin, APIView):
     #: All three apply together: the burst cap counts every request, while the
     #: read and write caps each count only their own tier (see ``throttling``).
     throttle_classes = [ExternalApiBurstThrottle, ExternalApiReadThrottle, ExternalApiWriteThrottle]
-    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {}
+    # Typed by name, not ApiKeyScope: plugins add scopes through points.API_KEY_SCOPES. Subclasses still declare
+    # ApiKeyScope members, so a misspelt core scope fails in mypy at its declaration.
+    required_scopes_by_method: ClassVar[Mapping[str, frozenset[str]]] = {}
 
     def initial(self, request, *args, **kwargs):
         """
@@ -611,7 +615,7 @@ class ExternalApiView(ErrorEnvelopeMixin, APIView):
         bind_write_source(source, actor=actor)
 
     @property
-    def required_scopes(self) -> frozenset[ApiKeyScope]:
+    def required_scopes(self) -> frozenset[str]:
         """The scopes the current request's HTTP method requires."""
         return self.required_scopes_by_method.get(self.request.method or "", frozenset())
 
@@ -3078,12 +3082,10 @@ class LocationSearchView(ExternalApiView):
 
         places_disabled = False
         if "places" in sources:
-            api_key = settings.google_unrestricted_api_key
-            redata_configured = bool(settings.redata_api_url and settings.redata_api_key)
-            if not profile.external_apis_enabled or not (api_key or redata_configured):
+            if not profile.external_apis_enabled or not places_resolution.available():
                 places_disabled = True
             else:
-                results.extend(search_google_places(query, api_key or "").value_or([]))
+                results.extend(search_places(query).value_or([]))
 
         return Response({"results": [result.to_dict() for result in results[: params["limit"]]], "places_disabled": places_disabled})
 
@@ -3117,12 +3119,10 @@ class PlaceResolveView(ExternalApiView):
         if not profile.external_apis_enabled:
             return Response({"error": "External lookups are turned off in your settings."}, status=403)
 
-        api_key = settings.google_unrestricted_api_key
-        redata_configured = bool(settings.redata_api_url and settings.redata_api_key)
-        if not (api_key or redata_configured):
+        if not places_resolution.available():
             return Response({"error": "No places provider is configured."}, status=503)
 
-        resolved = resolve_google_place(place_id, api_key or "")
+        resolved = resolve_place(place_id)
         if resolved.outcome is Outcome.REFUSED:
             # Not a place id any provider issues: asking again cannot help, so not a 503 a client retries.
             return Response({"error": "That is not a place id."}, status=400)

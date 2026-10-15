@@ -95,7 +95,7 @@ class CsvRowIterLatLonTests(SimpleTestCase):
         self.assertEqual(list(self.gateway._csv_row_iter(csv_text, self.profile, offline=True)), [None])
 
     def test_parking_location_column_is_recognized_as_a_url_column(self):
-        """UL-203: Google Takeout's Parking.csv export uses a "Parking location" header for its URL column, not "URL" - every row previously fell through to the generic latitude/longitude fallback (which Parking.csv has none of) and was silently skipped, so the whole file failed to import a single pin."""
+        """Google Takeout's Parking.csv export uses a "Parking location" header for its URL column, not "URL" - every row previously fell through to the generic latitude/longitude fallback (which Parking.csv has none of) and was silently skipped, so the whole file failed to import a single pin."""
         csv_text = 'Parking location,Timestamp\n"https://maps.google.com/maps/search/3.0,4.0",2024-01-01T00:00:00Z'
 
         pins = list(self.gateway._csv_row_iter(csv_text, self.profile))
@@ -176,7 +176,7 @@ class CsvRowIterS2GuessFlagTests(SimpleTestCase):
         self.assertEqual(len(pins), 1)
         self.assertTrue(pins[0]["s2_guess"])
         self.assertEqual(pins[0]["cid"], 0x59AC8820518A7E79)
-        # Carried through to a deferred REData lookup (cid_resolution.resolve_cids) -
+        # Carried through to a deferred provider lookup (cid_resolution.resolve_cids) -
         # resolving via the place's own URL is faster/more reliable than cid alone.
         self.assertEqual(
             pins[0]["maps_url"],

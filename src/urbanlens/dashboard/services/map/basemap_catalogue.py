@@ -1,5 +1,5 @@
 """
-The basemap layers this deployment can offer, from REData's tile catalogue.
+The basemap layers this deployment can offer, from the tile catalogue a plugin provides.
 
 Two consumers, one builder: ``BasemapTileCatalogueView`` serves this over HTTP for a client that
 asks after the page has loaded, and ``{% basemap_tile_catalogue %}`` embeds it in the document so
@@ -11,10 +11,11 @@ for (see ``frontend/ts/shared/map-layers.ts``'s note on ``Referrer-Policy: no-re
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 import logging
 import re
 import time
-from typing import Any
+from typing import Any, ClassVar
 from urllib.parse import quote
 
 from django.core.cache import cache
@@ -25,20 +26,73 @@ from urbanlens.dashboard.services.map.basemap_vendors import vendor_for
 
 logger = logging.getLogger(__name__)
 
+
+class TileCatalogue(ABC):
+    """
+    A service that publishes basemap layers and serves their tiles, contributed to ``TILE_CATALOGUES``.
+
+    Layers named in :mod:`~urbanlens.dashboard.services.map.basemap_vendors` are fetched from their vendor directly;
+    this serves the rest, and publishes the list of both.
+
+    Attributes:
+        cache_tag: Fingerprint in the cache key of a tile this catalogue serves, as a vendor's endpoint fingerprint is
+            in a vendor tile's, so a catalogue that changes how it produces a layer can start its tiles afresh.
+    """
+
+    cache_tag: ClassVar[str]
+
+    @abstractmethod
+    def available(self) -> bool:
+        """Whether this install can ask the service."""
+
+    @abstractmethod
+    def list_sources(self) -> list[dict[str, Any]]:
+        """
+        The layers on offer, each with ``id``, ``name``, ``attribution``, ``source_type`` (``"raster"`` or ``"vector"``),
+        ``min_zoom``, ``max_zoom`` and, for a vector layer, ``style_url``.
+
+        Raises:
+            ProviderUnavailableError: The service could not be asked.
+        """
+
+    @abstractmethod
+    def download_tile(self, layer: str, z: int, x: int, y: int) -> tuple[int, bytes, str]:
+        """
+        Fetch one tile.
+
+        Returns:
+            ``(status_code, body, content_type)``.
+
+        Raises:
+            ProviderUnavailableError: The service could not be asked.
+        """
+
+    @abstractmethod
+    def refuses_as_vector(self, status: int, body: bytes) -> bool:
+        """Whether an answer to :meth:`download_tile` says the layer is a vector style the service holds no tiles for."""
+
+
+def active_tile_catalogue() -> TileCatalogue | None:
+    """The first available tile catalogue, or None where this install has none."""
+    from urbanlens.dashboard.plugins.points import TILE_CATALOGUES
+
+    return next((catalogue for catalogue in TILE_CATALOGUES if catalogue.available()), None)
+
+
 #: The catalogue is documented as "called once per session"; a day keeps it
 #: fresh enough to pick up a new layer without asking on every map load.
 CATALOGUE_CACHE_TTL = 86400
 #: Versioned with the entry shape, so a deploy that adds a field is not served yesterday's entries
 #: for a day: v2 added ``esri_service``.
-CATALOGUE_CACHE_KEY = "ul_redata_tile_sources:v2"
+CATALOGUE_CACHE_KEY = "ul_tile_sources:v2"
 
 #: Held for the length of one refill. Its TTL only has to outlive a gateway call that has
 #: already spent the rate limiter's patience; the reservation is released on every exit.
-CATALOGUE_FETCH_KEY = "ul_redata_tile_sources:fetching"
+CATALOGUE_FETCH_KEY = "ul_tile_sources:fetching"
 CATALOGUE_FETCH_TTL = 30
 
 #: How long a caller that lost the reservation waits for the winner's answer before giving up
-#: and rendering vendor layers. One call costs ~1.45s (``P131``).
+#: and rendering vendor layers. One call costs ~1.45s.
 CATALOGUE_WAIT_SECONDS = 3.0
 _WAIT_POLL_SECONDS = 0.05
 
@@ -53,7 +107,7 @@ def tile_url_template(layer: str) -> str:
 
     # Sentinel coordinates rather than braces: reverse() would encode braces as %7Bz%7D, handing the client a
     # template it cannot fill in. Replaced from the right, because the route's alphabet for a layer id is
-    # `[-a-zA-Z0-9_]` and the id comes from REData - so no numeric sentinel is one an id cannot contain, and
+    # `[-a-zA-Z0-9_]` and the id comes from the catalogue - so no numeric sentinel is one an id cannot contain, and
     # a layer called `route900002` would otherwise be published with `{x}` in the middle of its own name.
     concrete = reverse("map.basemap_tiles", kwargs={"layer": layer, "z": 900001, "x": 900002, "y": 900003})
     for sentinel, placeholder in (("900001", "{z}"), ("900002", "{x}"), ("900003", "{y}")):
@@ -69,7 +123,7 @@ def tile_url_template(layer: str) -> str:
 
 def forget_basemap_tile_catalogue() -> None:
     """
-    Drop the cached catalogue, so the next reader asks REData again rather than keeping a day of
+    Drop the cached catalogue, so the next reader asks the service again rather than keeping a day of
     layers this deployment has since turned out to be unable to serve.
 
     A map draws what the catalogue named and nothing else, so a catalogue that outlives the
@@ -93,7 +147,7 @@ def _await_catalogue() -> list[dict[str, Any]]:
         if cached is not None:
             return list(cached)
         if single_flight.holder(CATALOGUE_FETCH_KEY) is None:
-            # The holder finished without publishing, so it failed or REData offers nothing.
+            # The holder finished without publishing, so it failed or the service offers nothing.
             break
     return []
 
@@ -104,7 +158,7 @@ def hosted_basemap_tiles() -> str | None:
 
     Protomaps' hosted API, fetched by the browser directly - the key travels in the URL, which is how a Protomaps key
     is meant to be used: its dashboard restricts the origins it answers. Only the tiles move. The style, glyphs and
-    sprites stay the ones REData publishes on this project's own mirror, so the map looks the same either way: both
+    sprites stay the ones the catalogue publishes, so the map looks the same either way: both
     serve the Protomaps v4 schema. The client falls back to the style's own tiles
     when these fail (``frontend/ts/shared/hosted-basemap.ts``).
 
@@ -128,13 +182,13 @@ def _depth_of_the_bytes(published: Any, vendor_depth: int | None) -> Any:
     """
     How deep the layer goes, given who is actually being fetched.
 
-    A layer named in the vendor table never reaches REData, so REData's depth describes an endpoint
+    A layer named in the vendor table never reaches the catalogue's service, so its depth describes an endpoint
     that is not being used - too shallow and the client upscales levels the vendor would have drawn,
     too deep and the proxy fetches Esri's blank-past-coverage JPEG, which is a 200 and caches like
     any other tile. So where the vendor declares a depth it is the one to publish, either way.
 
     Args:
-        published: The depth REData published, which may be None or a non-integer.
+        published: The depth the catalogue published, which may be None or a non-integer.
         vendor_depth: The vendor's own deepest level, or None when it declares none.
 
     Returns:
@@ -144,7 +198,7 @@ def _depth_of_the_bytes(published: Any, vendor_depth: int | None) -> Any:
 
 
 def _offered_layers(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Rewrite REData's sources into the entries a browser on this deployment can use."""
+    """Rewrite the catalogue's sources into the entries a browser on this deployment can use."""
     layers: list[dict[str, Any]] = []
     for source in sources:
         source_id = source.get("id")
@@ -152,12 +206,12 @@ def _offered_layers(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
             # An id outside the route's alphabet has no proxy URL to build, and
             # reverse() answers that with NoReverseMatch rather than a skip - so
             # one such entry would otherwise 500 the whole catalogue.
-            logger.warning("Skipping REData tile source with unusable id %r", source_id)
+            logger.warning("Skipping tile source with unusable id %r", source_id)
             continue
         if not source.get("attribution"):
             # Every vendor requires attribution on the rendered map.
             continue
-        # Absent on older REData deployments (pre-D11) - treat as raster.
+        # Absent on older catalogues - treat as raster.
         is_vector = source.get("source_type") == "vector"
         if is_vector and not source.get("style_url"):
             continue
@@ -189,7 +243,7 @@ def _offered_layers(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
             raster_depth = _depth_of_the_bytes(entry.get("fallback_max_zoom"), vendor_depth)
             if raster_depth is not None:
                 entry["fallback_max_zoom"] = raster_depth
-        # Vector entries only have a template since D15; before that they returned 400.
+        # Older catalogues gave a vector entry no template; it then returned 400.
         if not is_vector or source.get("url_template"):
             entry["url_template"] = tile_url_template(source_id)
         layers.append(entry)
@@ -198,40 +252,40 @@ def _offered_layers(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def basemap_tile_catalogue(*, allow_fetch: bool = True) -> list[dict[str, Any]]:
     """
-    REData's layer catalogue, rewritten into what a browser on this deployment can actually use.
+    The active tile catalogue's layers, rewritten into what a browser on this deployment can actually use.
 
-    A vendor ``url_template`` is deliberately not passed through: it needs REData's key, and handing
+    A ``url_template`` is deliberately not passed through: it needs the service's key, and handing
     the browser a template it cannot use would produce a layer that silently fails to load. What is
     published instead is this deployment's own proxy URL for that layer. A ``style_url`` needs no
-    key (REData's ``D11``) and is passed through unchanged - the client fetches and renders that
-    style document directly, and REData never sees a vector tile go by.
+    key and is passed through unchanged - the client fetches and renders that
+    style document directly, and the service never sees a vector tile go by.
 
-    Since REData's ``D15`` an entry can carry both, and both are kept: ``style_url`` is what a
+    An entry can carry both, and both are kept: ``style_url`` is what a
     MapLibre map draws, ``url_template`` is what a Leaflet map draws, and a layer that publishes
     only the first leaves every Leaflet map falling back to a hardcoded vendor CDN.
 
     One refill at a time, deployment-wide. The cache has no jitter, so it goes cold for every
     client at the same moment, and each miss holds a request thread for the ~1.45s the call costs
-    (``P131``) - the whole thread pool, on a deployment whose worker count is smaller than its
+    - the whole thread pool, on a deployment whose worker count is smaller than its
     concurrent page loads. Callers that lose the reservation wait for the winner's answer and
     degrade to the vendor layers if it does not arrive.
 
     Args:
-        allow_fetch: Whether a cache miss may go to REData. False for anything rendering a page:
-            that call costs ~1.45s (``P131``) and the embed appears on every page built on
-            ``themes/base.html``, so a cold cache would otherwise put a REData round trip inside
+        allow_fetch: Whether a cache miss may go to the service. False for anything rendering a page:
+            that call costs ~1.45s and the embed appears on every page built on
+            ``themes/base.html``, so a cold cache would otherwise put a round trip inside
             the render of a profile page that has no map on it at all. A miss simply yields no
-            embed, and the client's own ``registerRedataLayers()`` fetch - which is asynchronous,
+            embed, and the client's own ``registerCatalogueLayers()`` fetch - which is asynchronous,
             and which the catalogue view answers - repopulates the cache for every later render.
 
     Returns:
-        One entry per offered layer - empty when REData is unconfigured or unreachable, so a map
+        One entry per offered layer - empty when there is no catalogue or it is unreachable, so a map
         simply keeps its built-in vendor layers.
     """
-    from urbanlens.dashboard.services.apis.locations.redata_basemap_tiles_gateway import RedataBasemapTilesGateway
-    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError, redata_configured
+    from urbanlens.dashboard.services.core.gateway import ProviderUnavailableError
 
-    if not redata_configured():
+    catalogue = active_tile_catalogue()
+    if catalogue is None:
         return []
 
     cached = cache.get(CATALOGUE_CACHE_KEY)
@@ -244,11 +298,11 @@ def basemap_tile_catalogue(*, allow_fetch: bool = True) -> list[dict[str, Any]]:
         return _await_catalogue()
     try:
         try:
-            sources = RedataBasemapTilesGateway().list_sources()
-        except (LocationContextUnavailableError, RequestCancelledError, OSError) as exc:
+            sources = catalogue.list_sources()
+        except (ProviderUnavailableError, RequestCancelledError, OSError) as exc:
             # Not cached: an unreachable catalogue must not cost this
             # deployment its extra layers for a day.
-            logger.warning("REData tile catalogue unavailable: %s", exc)
+            logger.warning("Tile catalogue unavailable: %s", exc)
             return []
 
         layers = _offered_layers(sources)
@@ -265,6 +319,6 @@ def catalogue_for_viewer(*, authenticated: bool, allow_fetch: bool = True) -> li
     layers = basemap_tile_catalogue(allow_fetch=allow_fetch)
     if authenticated:
         return layers
-    # Since D15 vector entries also carry a proxy template; strip it for public viewers.
+    # Vector entries also carry a proxy template; strip it for public viewers.
     # Copy rather than mutate: these dicts are the shared cached catalogue.
     return [{key: value for key, value in entry.items() if key != "url_template"} for entry in layers if entry.get("style_url")]

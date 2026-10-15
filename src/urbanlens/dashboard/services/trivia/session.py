@@ -32,7 +32,7 @@ from urbanlens.dashboard.models.trivia.model import (
 )
 from urbanlens.dashboard.services.social.connections import are_connections
 from urbanlens.dashboard.services.trivia import eligibility, realtime, selection, serializers, voting
-from urbanlens.dashboard.services.trivia.answer_check import is_answer_equivalent
+from urbanlens.dashboard.services.trivia.judging import judge_answer
 from urbanlens.dashboard.services.trivia.ratings import apply_round_ratings
 
 if TYPE_CHECKING:
@@ -392,9 +392,9 @@ def submit_answer(round_: TriviaRound, profile: Profile, raw_answer: str) -> Tri
 
     Rates and backfills ``NO_REACTION`` votes once everyone answered, then
     advances (mirrors ``spotguessr.session.submit_guess``, including the
-    broadcast sequence). A normalized-string mismatch falls back to
-    ``answer_check`` (``SiteFeature.AI``-gated; without it, exact-match
-    only - never blocked from playing).
+    broadcast sequence). A normalized-string mismatch is offered to the answer judges
+    (:data:`~urbanlens.dashboard.plugins.points.TRIVIA_ANSWER_JUDGES`); with none, only
+    an exact match is correct - never blocked from playing.
 
     Raises:
         NotJoinedParticipantError: ``profile`` isn't a JOINED participant
@@ -411,10 +411,11 @@ def submit_answer(round_: TriviaRound, profile: Profile, raw_answer: str) -> Tri
 
     question = round_.question
     is_correct = TriviaQuestion.normalize_answer(raw_answer) == question.answer_normalized
-    matched_via = TriviaAnswerMatchKind.EXACT
-    if not is_correct and is_answer_equivalent(raw_answer, question.answer, profile=profile):
+    # A string, not just core's enum: plugins add match kinds, and a judge may return one of them.
+    matched_via: str = TriviaAnswerMatchKind.EXACT
+    if not is_correct and (judgement := judge_answer(raw_answer, question.answer, profile=profile)) is not None and judgement.equivalent:
         is_correct = True
-        matched_via = TriviaAnswerMatchKind.AI
+        matched_via = judgement.match_kind
     points = POINTS_FOR_CORRECT_ANSWER if is_correct else 0
 
     session = round_.session

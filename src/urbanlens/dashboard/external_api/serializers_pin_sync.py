@@ -13,10 +13,11 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
+from urbanlens.dashboard.plugins.drf import ExtensibleSerializer
 from urbanlens.dashboard.services.pins.pin_wiki_sync import MAX_SYNC_ITEMS
 
 
-class PinWikiSyncPushSerializer(serializers.Serializer):
+class PinWikiSyncPushSerializer(ExtensibleSerializer):
     """Validates which of a pin's child pins to publish to its community wiki."""
 
     #: The child pins to send, by uuid.
@@ -28,7 +29,7 @@ class PinWikiSyncPushSerializer(serializers.Serializer):
     )
 
 
-class PinWikiSyncResultSerializer(serializers.Serializer):
+class PinWikiSyncResultSerializer(ExtensibleSerializer):
     """What one sync call did (schema-only)."""
 
     #: Markers actually created. Zero is a normal outcome, not a failure: it means everything selected was

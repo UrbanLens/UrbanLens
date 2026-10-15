@@ -856,7 +856,7 @@ def _trip_page_url(trip: Trip) -> str:
 def _hidden_activity_ids_for(trip: Trip, profile: Profile) -> set[int]:
     """
     Ids of *trip*'s activities whose location *profile* is not permitted to see.
-    The same gate ``services.trips.trip_visibility`` applies on the activities panel, the trip map, and AI suggestions, run here so an export cannot become the one surface that ignores it.
+    The same gate ``services.trips.trip_visibility`` applies on the activities panel, the trip map, and suggestions, run here so an export cannot become the one surface that ignores it.
 
     Args:
         trip: The trip being exported.
@@ -1519,8 +1519,7 @@ def remove_trip_from_calendar(account: GoogleCalendarAccount, trip: Trip) -> Cal
     """
     Take a trip off this user's calendar: delete the events UrbanLens made, and unlink the rest.
 
-    An event an import linked is the user's own, so it stays on their calendar; only its link goes. See
-    UrbanLens#330 ("removing an imported trip deletes the user's own event").
+    An event an import linked is the user's own, so it stays on their calendar; only its link goes.
 
     Args:
         account: The user's connected calendar account.

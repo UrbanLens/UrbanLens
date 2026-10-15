@@ -6,7 +6,7 @@ The nginx config must be one nginx will actually load.
 applied it, and real_ip preceded it. All three were `assertIn` against
 whole-file text, which cannot see *which block* a directive landed in - so the
 suite stayed green while nginx refused to start at all, taking the whole site
-with it (N22 H59).
+with it.
 
 The failure mode is worse than a broken directive. `nginx.conf` is bind-mounted
 (docker-compose.yml), so a running nginx keeps serving from the config it parsed

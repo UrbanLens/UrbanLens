@@ -5,7 +5,7 @@ A file the database references and the disk does not have must stop being retrie
 failures, and resets when the cursor is exhausted - so a row whose stored file
 can never be read is retried on every wrap, forever, logging a full traceback
 each time. Both sweeps do it over the same rows, so each unreadable file is
-reported twice per cycle. Staging showed 50 such tracebacks per wrap (N22 H64).
+reported twice per cycle. Staging showed 50 such tracebacks per wrap.
 
 The shape of the fix matters more than the fix. Two things it must not be:
 
@@ -14,7 +14,7 @@ The shape of the fix matters more than the fix. Two things it must not be:
   document. Here the question is asked of a *queryset* - excluding rows by
   consulting N cache keys after the query would filter in Python after the
   batch was already cut, which is the defect that made comment pages come back
-  short (H47). The marker has to be a column so the exclusion is SQL.
+  short. The marker has to be a column so the exclusion is SQL.
 * **Not a permanent blacklist.** A boolean "this file is broken" is one storage
   outage away from marking the entire library unreadable, silently and
   irreversibly, in a single sweep. So the column records *when* the file was

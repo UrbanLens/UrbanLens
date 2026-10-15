@@ -1,7 +1,7 @@
 """
 A property's building child pins, surfaced on the property's own Private Pin page.
 
-A building's own records (its CRIS entry, characteristics, notes, description) live on its child pin. The property's
+A building's own records (its own registry entry, characteristics, notes, description) live on its child pin. The property's
 Buildings list opens a pinned building's card in place (``controllers.child_buildings``), and the page-wide "child pin
 details" toggle brings the children's photos, visits and comments up to the property's page.
 """

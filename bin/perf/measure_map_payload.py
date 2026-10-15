@@ -66,7 +66,7 @@ def measure(pins: int, batch: int, labels_per_pin: int) -> dict[str, object]:
             break
     report["paged"] = _per_thousand(rows, wall, cpu, extra={"pages": pages})
 
-    # One document, which is what D12 proposes shipping.
+    # One document, which is what a proposed change would ship.
     started, started_cpu = time.perf_counter(), time.process_time()
     everything = service.all(query)
     document_wall = time.perf_counter() - started

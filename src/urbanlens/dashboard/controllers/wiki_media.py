@@ -88,27 +88,28 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
                     # TIFFs/PDFs/HEICs don't render in <img> - see services.media.previews.
                     "thumb_url": picture.thumb,
                     "view_url": picture.view,
-                    # Transient items have no REData photo_id for votes (see WikiMediaVoteView.post).
+                    # Transient items have no stored photo to score or vote on (see WikiMediaVoteView.post).
                     "image_id": local_image.pk if local_image else None,
                     # Explicit None: external results have no owner; separates "no data" from "not mine".
                     "is_mine": None,
                 },
             )
 
-        return render(request, "dashboard/partials/pins/pin_media_items.html", {"rendered_items": rendered_items, "source_key": source, "wiki_mode": True, "members_media": panel.members_media})
+        return render(request, "dashboard/partials/pins/pin_media_items.html", {"rendered_items": rendered_items, "source_key": source, "source_label": panel.gallery_label, "wiki_mode": True, "members_media": panel.members_media})
 
     def _photos(self, request: HttpRequest, location: Location, wiki: Wiki, profile: Profile) -> HttpResponse:
         """Render photos intentionally shared to this wiki as votable Media tiles."""
         from urbanlens.dashboard.models.images.model import Image
+        from urbanlens.dashboard.models.images.queryset import ImageQuerySet
         from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
         from urbanlens.dashboard.services.apis.assets.base import MediaItem
 
         # Same rows the wiki gallery serves, so the same filter: `visible_to` answers "may this account see this
         # upload at all", which is a different question from "would a brand-new wiki have carried it".
-        from urbanlens.dashboard.services.wiki.concealment import visible_rows
+        from urbanlens.dashboard.services.wiki.viewer_projection import visible_rows
 
         # Votes are keyed by file URL, which a pending upload does not have yet; the wiki gallery shows it as processing.
-        images = visible_rows(Image.objects.filter(wiki=wiki), wiki, profile).select_related("profile").visible_to(profile).exclude(image="").servable().order_by("-created")[:_WIKI_PHOTOS_PREVIEW_LIMIT]
+        images = visible_rows(Image.objects.filter(wiki=wiki), wiki, profile).select_related("profile").visible_to(profile).exclude(image="").servable().with_relevance_confidence().order_by("-created")[:_WIKI_PHOTOS_PREVIEW_LIMIT]
 
         scores = MediaRelevance.objects.vote_scores(location, "photos")
         my_marks = dict(MediaRelevance.objects.for_gallery(profile, location, "photos").votes().values_list("item_key", "is_relevant"))
@@ -130,18 +131,17 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
                     # from..." line - see pin_media_items.html and shared/media-lightbox.ts.
                     "is_mine": img.profile_id == profile.pk,
                     "copied_from_label": img.copied_from_label or "",
-                    "_redata_confidence": img.redata_confidence,
+                    "_relevance_confidence": ImageQuerySet.relevance_confidence_of(img),
                     "_created": img.created,
                 },
             )
         if not rendered_items:
             return HttpResponse(status=204)
 
-        # Most relevant first: the community's own net vote score takes priority; REData's cached confidence
-        # (services.photos.redata_relevance) breaks ties among equally-voted photos - including the common case
-        # of no votes at all, where every score is otherwise 0 - falling back to upload recency for a photo
-        # REData hasn't scored yet.
-        rendered_items.sort(key=lambda entry: (entry["vote_score"], entry["_redata_confidence"] if entry["_redata_confidence"] is not None else -1, entry["_created"]), reverse=True)
+        # Most relevant first: the community's own net vote score takes priority; a scorer's confidence breaks ties
+        # among equally-voted photos - including the common case of no votes at all, where every score is otherwise
+        # 0 - falling back to upload recency for an unscored photo.
+        rendered_items.sort(key=lambda entry: (entry["vote_score"], entry["_relevance_confidence"] if entry["_relevance_confidence"] is not None else -1, entry["_created"]), reverse=True)
 
         return render(request, "dashboard/partials/pins/pin_media_items.html", {"rendered_items": rendered_items, "source_key": "photos", "wiki_mode": True})
 
@@ -189,15 +189,14 @@ class WikiMediaVoteView(LoginRequiredMixin, View):
     download still keeps the vote (the voter's opinion is worth keeping even if today's download attempt
     failed) but is reported back via ``materialize_error`` so the frontend can toast it. A down-vote or a
     cleared vote never materializes anything - only an existing, already-materialized ``image_id`` supplied
-    by the client (re-scoped to this wiki's own attached media) gets its REData signal reversed.
+    by the client (re-scoped to this wiki's own attached media) gets its relevance signal reversed.
     """
 
     def post(self, request: HttpRequest, location_slug: str) -> JsonResponse:
         from urbanlens.dashboard.models.images.model import Image
         from urbanlens.dashboard.models.images.relevance import ITEM_KEY_LENGTH, MediaRelevance, media_item_key
-        from urbanlens.dashboard.services.media.media_relevance import record_relevant_and_cache
+        from urbanlens.dashboard.services.media.media_relevance import announce_relevance_vote, record_relevant_and_cache
         from urbanlens.dashboard.services.media.quota_rewards import refresh_community_quota_bonus
-        from urbanlens.dashboard.services.photos.redata_relevance import queue_relevance_vote
 
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
 
@@ -255,7 +254,7 @@ class WikiMediaVoteView(LoginRequiredMixin, View):
             # same location, which they have no business voting on.
             existing_image = Image.objects.filter(pk=image_id, wiki=wiki).first() if image_id else None
             if existing_image is not None:
-                queue_relevance_vote(existing_image, profile, is_relevant=bool(is_relevant))
+                announce_relevance_vote(existing_image, profile, is_relevant=bool(is_relevant))
                 if is_relevant:
                     refresh_community_quota_bonus(existing_image)
 
@@ -275,7 +274,7 @@ class CopyWikiPhotoView(LoginRequiredMixin, View):
     image lookup only ever operates on images the requester already owns, which a wiki photo being
     copied is not.
     The image is instead scoped and gated exactly like every other wiki-photo lookup in this module -
-    ``resolve_visible_wiki`` for wiki access, ``visible_rows``/``visible_to`` for concealment and the
+    ``resolve_visible_wiki`` for wiki access, ``visible_rows``/``visible_to`` for the viewer's projection and the
     uploader's own visibility setting - so this can never expose a photo the wiki's own gallery views
     wouldn't already show this viewer.
     """
@@ -283,7 +282,7 @@ class CopyWikiPhotoView(LoginRequiredMixin, View):
     def post(self, request: HttpRequest, location_slug: str, image_id: int) -> JsonResponse:
         from urbanlens.dashboard.models.images.model import Image
         from urbanlens.dashboard.services.photos.wiki_copy import copy_wiki_photo_to_pin
-        from urbanlens.dashboard.services.wiki.concealment import visible_rows
+        from urbanlens.dashboard.services.wiki.viewer_projection import visible_rows
 
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
 

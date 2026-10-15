@@ -185,10 +185,14 @@ class SatelliteViewProvider(Gateway, ABC):
     @abstractmethod
     def _generate_satellite_slides(self, latitude: float, longitude: float, *, zoom: int = 17, width: int = 640, height: int = 400, limit: int = -1) -> Generator[SatelliteSlide | SlideSignal]: ...
 
+    def slide_cache_key(self, latitude: float, longitude: float) -> str:
+        """Where this provider's slides for a point are cached."""
+        return make_cache_key(f"satellite_view_{self.service_key}{self.slide_cache_version}", f"{latitude:.5f}", f"{longitude:.5f}")
+
     def get_satellite_slides(self, latitude: float, longitude: float, *, zoom: int = 17, width: int = 640, height: int = 400, limit: int = 5) -> SlideFetch:
         if not self.available():
             return SlideFetch([], from_cache=False, unavailable=True)
-        cache_key = make_cache_key(f"satellite_view_{self.service_key}{self.slide_cache_version}", f"{latitude:.5f}", f"{longitude:.5f}")
+        cache_key = self.slide_cache_key(latitude, longitude)
         cached = cache.get(cache_key, _CACHE_MISS)
         if cached is not _CACHE_MISS:
             return SlideFetch(cached, from_cache=True)
@@ -216,10 +220,14 @@ class StreetViewProvider(Gateway, ABC):
     @abstractmethod
     def _generate_street_view_slides(self, latitude: float, longitude: float, *, radius: float = 50, limit: int = 5) -> Generator[StreetViewSlide | SlideSignal]: ...
 
+    def slide_cache_key(self, latitude: float, longitude: float) -> str:
+        """Where this provider's slides for a point are cached."""
+        return make_cache_key(f"street_view_{self.service_key}", f"{latitude:.5f}", f"{longitude:.5f}")
+
     def get_street_view_slides(self, latitude: float, longitude: float, *, radius: float = 50, limit: int = 5) -> SlideFetch:
         if not self.available():
             return SlideFetch([], from_cache=False, unavailable=True)
-        cache_key = make_cache_key(f"street_view_{self.service_key}", f"{latitude:.5f}", f"{longitude:.5f}")
+        cache_key = self.slide_cache_key(latitude, longitude)
         cached = cache.get(cache_key, _CACHE_MISS)
         if cached is not _CACHE_MISS:
             return SlideFetch(cached, from_cache=True)
@@ -257,6 +265,12 @@ class BoundaryProvider(Service, ABC):
 
     #: The boundary type this provider's ``get_boundary`` result describes.
     boundary_kind: ClassVar[str] = "property"
+    #: The ``Boundary.source`` value of the candidate rows this provider's property geometry is stored under, for
+    #: boundary voting; None for a provider whose geometry never becomes a voting candidate (building footprints).
+    #: The chain order of providers that set it is the vote's tie-break order.
+    vote_source: ClassVar[str | None] = None
+    #: How a voting candidate from this provider is described to people.
+    vote_label: ClassVar[str] = ""
 
     @abstractmethod
     def get_boundary(self, latitude: float, longitude: float, *, name: str | None = None) -> Polygon | None:
@@ -437,7 +451,7 @@ def _close_ring(points: list) -> list[tuple[float, float]] | None:
 def esri_rings_to_polygon(geometry: dict | None) -> Polygon | MultiPolygon | None:
     """
     Convert an Esri ring-list polygon geometry into a GEOS polygon.
-    For sources that hand back Esri's native ring-list shape: Census TIGERweb (``geo_boundary.py``), and the county geometries inside a REData parcel's ``record_payload`` (see :func:`polygon_from_wire`).
+    For sources that hand back Esri's native ring-list shape: Census TIGERweb (``geo_boundary.py``), and the county geometries inside a parcel record's ``record_payload`` (see :func:`polygon_from_wire`).
 
     Args:
         geometry: A dict of the shape ``{"format": "esri_rings", "rings": [...]}``, or None.
@@ -506,9 +520,9 @@ def esri_rings_to_polygon(geometry: dict | None) -> Polygon | MultiPolygon | Non
 
 def polygon_from_wire(geometry: object) -> Polygon | MultiPolygon | None:
     """
-    Read a polygon in whichever of the two shapes REData publishes geometry in.
+    Read a polygon in whichever of the two shapes a record source publishes geometry in.
 
-    REData converts a parcel's own boundary to GeoJSON, but a county record's other geometries (a building footprint)
+    A record source may convert a parcel's own boundary to GeoJSON, but a county record's other geometries (a building footprint)
     arrive inside ``record_payload`` as Esri rings.
 
     Args:

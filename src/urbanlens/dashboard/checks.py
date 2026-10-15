@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-import ipaddress
 import os
 import sys
 from typing import TYPE_CHECKING
 
 from django.apps import apps
 from django.conf import settings
-from django.core.checks import Error, Warning as CheckWarning, register
+from django.core.checks import Error, Tags, Warning as CheckWarning, register
+from django.db import DatabaseError, connections
+from django.db.migrations.loader import MigrationLoader
 from django.db.models import FileField
 
 from urbanlens.dashboard.services.media.access import MEDIA_FAMILY_ATTR, registered_families
@@ -120,7 +121,7 @@ def check_media_origin_cookie_domain(app_configs: Sequence[AppConfig] | None = N
     if not media_origin_host():
         return [
             Error(
-                f"UL_MEDIA_BASE_URL is set to {media_origin()!r}, which has no hostname. It must be a full origin, e.g. https://media.urbanlens.org.",
+                f"UL_MEDIA_BASE_URL is set to {media_origin()!r}, which has no hostname. It must be a full origin, e.g. https://media.example.com.",
                 id="dashboard.E003",
             ),
         ]
@@ -142,7 +143,7 @@ def check_media_origin_cookie_domain(app_configs: Sequence[AppConfig] | None = N
                 f"UL_MEDIA_BASE_URL is set ({media_origin_host()!r}), but no cookie domain can be derived from it and "
                 f"SITE_URL ({str(settings.SITE_URL)!r}). The media cookie would never be set, so every media URL would "
                 f"404 for every viewer. Either point the two at hosts that share a registrable domain "
-                f"(urbanlens.org + media.urbanlens.org), or set UL_MEDIA_COOKIE_DOMAIN explicitly.",
+                f"(example.com + media.example.com), or set UL_MEDIA_COOKIE_DOMAIN explicitly.",
                 id="dashboard.E004",
             ),
         ]
@@ -232,125 +233,6 @@ def check_object_storage_is_configured(app_configs: Sequence[AppConfig] | None =
     )
 
     return messages
-
-
-#: Provider keys that belong only in the ai-inference container.
-_PROVIDER_KEY_SETTINGS = ("anthropic_api_key", "openai_api_key", "cloudflare_ai_api_key")
-
-
-@register()
-def check_provider_keys_are_not_on_the_app_tier(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
-    """
-    Warn when a provider key is readable on the app tier instead of ai-inference.
-
-    Args:
-        app_configs: Unused; part of Django's check signature.
-        **kwargs: Unused; part of Django's check signature.
-
-    Returns:
-        One warning naming every provider key that should have been in
-        ``.env.ai`` instead, or an empty list.
-    """
-    from urbanlens.UrbanLens.settings.app import settings as app_settings
-
-    if not getattr(app_settings, "ai_inference_url", None):
-        return []
-    if getattr(settings, "UL_PROCESS_ROLE", "") == "inference":
-        return []
-
-    present = [name for name in _PROVIDER_KEY_SETTINGS if getattr(app_settings, name, None)]
-    if not present:
-        return []
-    return [
-        CheckWarning(
-            f"Provider API key(s) readable by this process: {', '.join(sorted(present))}.",
-            hint=(
-                "This deployment routes inference through ai-inference, so nothing here reads these. "
-                "They are almost certainly set in the root .env, which app and celery-worker load in full - "
-                "putting a provider credential in the same environment as UL_DB_PASS and "
-                "UL_FIELD_ENCRYPTION_KEY. Move them to .env.ai, which only ai-inference reads. "
-                "See .env.ai-sample and docs/AI_PIPELINE.md."
-            ),
-            id="dashboard.W001",
-        ),
-    ]
-
-
-#: Hosts a dev deployment may point REData at without warning.
-_LOCAL_REDATA_HOSTS = ("localhost", "127.0.0.1", "::1")
-
-#: The private IPv4 ranges of RFC 1918.
-_RFC_1918_NETWORKS = (ipaddress.ip_network("10.0.0.0/8"), ipaddress.ip_network("172.16.0.0/12"), ipaddress.ip_network("192.168.0.0/16"))
-
-#: Host fragments that identify a non-production REData.
-_LOCAL_REDATA_MARKERS = (".dev.", "urbanlens_redata", "redata-", "_redata")
-
-
-def _redata_host_is_local(url: str) -> bool:
-    """
-    Whether *url* points at a local or dev REData instance.
-
-    Args:
-        url: The configured ``redata_api_url``.
-
-    Returns:
-        True when the host is this machine, a container beside it, a private
-        address, or a dev environment.
-    """
-    from urllib.parse import urlparse
-
-    host = (urlparse(url).hostname or "").lower()
-    if not host:
-        return True
-    if host in _LOCAL_REDATA_HOSTS or host.endswith(".local"):
-        return True
-    if any(marker in host for marker in _LOCAL_REDATA_MARKERS):
-        return True
-    if "." not in host:
-        return True
-    try:
-        address = ipaddress.ip_address(host)
-    except ValueError:
-        return False
-    return any(address in network for network in _RFC_1918_NETWORKS)
-
-
-@register()
-def check_dev_is_not_pointed_at_a_real_redata(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
-    """
-    Warn when a dev deployment points at a non-local REData.
-
-    Args:
-        app_configs: Unused; part of Django's check signature.
-        **kwargs: Unused; part of Django's check signature.
-
-    Returns:
-        One warning, or an empty list.
-    """
-    from urbanlens.UrbanLens.settings.app import settings as app_settings
-
-    environment = str(getattr(settings, "ENVIRONMENT_NAME", "")).lower()
-    if environment not in {"development", "local"}:
-        return []
-
-    url = getattr(app_settings, "redata_api_url", None)
-    if not url or _redata_host_is_local(str(url)):
-        return []
-
-    return [
-        CheckWarning(
-            f"This {environment} deployment's REData is {url}, which is not a local or dev instance.",
-            hint=(
-                "REData calls are allowed from every environment (D26), so this deployment's calls spend that "
-                "REData's budget - production's, when it is the hosted one. REData reaches billable providers on "
-                "our behalf on a cache miss, and one pin import enqueues thousands of such calls. That is the "
-                "intended way for development to reach real data (REData caches the answer for everyone), but "
-                "point UL_REDATA_API_URL at your own instance (dev_env.py --own-redata), or clear it "
-                "(--no-redata), for bulk work nobody is watching."
-            ),
-            id="dashboard.W003",
-        ),
-    ]
 
 
 @register()
@@ -455,7 +337,7 @@ def check_every_task_declares_a_queue(app_configs: Sequence[AppConfig] | None = 
     Refuse to start when a task this codebase defines names no queue.
 
     A task with no ``queue=`` lands on ``celery``, which is where 87 of 96 of
-    them were when D13 measured it - one pool, drained by one worker, so an
+    them were when it was measured - one pool, drained by one worker, so an
     account-sized job and a safety escalation shared four concurrency slots.
     The classification fixes that; this is what keeps it fixed, because the
     failure mode is silent. A task added without a queue goes on working, on
@@ -557,5 +439,66 @@ def check_a_channel_layer_is_configured(app_configs: Sequence[AppConfig] | None 
                 "variable at a reachable Dragonfly/Redis, or accept that this deployment has no live features."
             ),
             id="dashboard.W004",
+        ),
+    ]
+
+
+@register(Tags.database)
+def check_migration_history_is_known(app_configs: Sequence[AppConfig] | None = None, databases: Sequence[str] | None = None, **kwargs: object) -> list[CheckMessage]:
+    """
+    Refuse a database whose recorded migrations of our own apps this code does not have.
+
+    Django ignores a recorded migration it cannot find, so a database migrated under an earlier, since consolidated
+    history would otherwise look current while its schema is not. Runs where database checks run, which includes
+    ``migrate``.
+
+    Returns:
+        One error per such database.
+    """
+    labels = {config.label for config in apps.get_app_configs() if config.name.startswith(_OWN_APP_PREFIX)}
+    errors: list[CheckMessage] = []
+    for alias in databases or ():
+        try:
+            loader = MigrationLoader(connections[alias], ignore_no_migrations=True)
+        except DatabaseError:
+            continue
+        replaced = {key for migration in loader.disk_migrations.values() for key in migration.replaces}
+        unknown = sorted(key for key in loader.applied_migrations or {} if key[0] in labels and key not in loader.disk_migrations and key not in replaced)
+        if unknown:
+            errors.append(
+                Error(
+                    f"Database {alias!r} records {len(unknown)} migration(s) this code does not have, such as {unknown[0][0]}.{unknown[0][1]}, so its schema may not be the one these models expect.",
+                    hint=(
+                        "It was migrated under an earlier migration history that has since been consolidated. A plugin "
+                        "carrying that history brings such a database forward when migrate runs; without one, start "
+                        "from a fresh database or restore a backup taken under the current history."
+                    ),
+                    id="dashboard.E014",
+                ),
+            )
+    return errors
+
+
+@register()
+def check_broker_password_is_not_the_default(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
+    """
+    Warn when a deployment's broker still uses RabbitMQ's published default password.
+
+    Compose builds the broker URL from UL_RABBITMQ_USER and UL_RABBITMQ_PASS, defaulting the password to "guest". The
+    broker is reachable only inside the Compose network, so this is a warning rather than a refusal to start.
+    """
+    from urllib.parse import urlparse
+
+    from urbanlens.UrbanLens.environments.meta import EPHEMERAL_ENVIRONMENTS
+
+    if getattr(settings, "ENVIRONMENT_NAME", "") in EPHEMERAL_ENVIRONMENTS:
+        return []
+    if urlparse(getattr(settings, "CELERY_BROKER_URL", "") or "").password != "guest":  # noqa: S105
+        return []
+    return [
+        CheckWarning(
+            "The Celery broker's password is RabbitMQ's published default, 'guest'.",
+            hint="Set UL_RABBITMQ_PASS (Compose) or a UL_RABBITMQ_URL with a password of your own; see .env-sample.",
+            id="dashboard.W005",
         ),
     ]

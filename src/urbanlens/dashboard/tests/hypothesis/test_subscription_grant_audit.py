@@ -1,4 +1,4 @@
-"""A grant outlives the admin who made it (P246), and records who revoked it (P245)."""
+"""A grant outlives the admin who made it, and records who revoked it."""
 
 from __future__ import annotations
 

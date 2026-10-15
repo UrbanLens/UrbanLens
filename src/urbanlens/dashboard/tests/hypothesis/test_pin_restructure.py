@@ -29,6 +29,7 @@ from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_CACHE_SOURCE, is_site_scope
 from urbanlens.dashboard.services.pins import pin_restructure
 
+from .building_fixtures import REGISTRY_NAMESPACE, file_buildings_under_registry
 from .place_helpers import official_geometry
 
 _coord_counter = count(1)
@@ -105,7 +106,7 @@ class BuildingFootprintTests(SimpleTestCase):
         self.assertIsNone(pin_restructure.building_footprint(_BUILDINGS[1]))
 
     def test_a_point_geometry_is_not_a_footprint(self) -> None:
-        """REData sends a Point when it has no real outline - nothing to contain."""
+        """A source sends a Point when it has no real outline - nothing to contain."""
         self.assertIsNone(
             pin_restructure.building_footprint({"geometry": {"type": "Point", "coordinates": [-73.93, 41.733]}})
         )
@@ -232,7 +233,9 @@ class RestructureOfferGatingTests(TestCase):
         self.client.force_login(self.user)
         self.location = _make_location()
         self.pin = baker.make(Pin, profile=self.user.profile, location=self.location, slug="campus")
-        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _BUILDINGS, "provider": "redata"})
+        LocationCache.set(
+            self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _BUILDINGS, "provider": "registry"}
+        )
         self.url = reverse("pin.restructure.offer", kwargs={"pin_slug": self.pin.slug})
 
     def test_a_multi_building_property_is_offered_on_first_view(self) -> None:
@@ -275,7 +278,7 @@ class RestructureOfferGatingTests(TestCase):
 
     def test_a_single_building_place_is_never_offered(self) -> None:
         LocationCache.set(
-            self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _BUILDINGS[:1], "provider": "redata"}
+            self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _BUILDINGS[:1], "provider": "registry"}
         )
         self.assertEqual(self.client.get(self.url).status_code, 204)
 
@@ -305,7 +308,7 @@ class RestructureOfferGatingTests(TestCase):
         self.assertContains(response, "attempt=1")
 
     def test_a_spent_poll_budget_still_offers_whatever_is_known(self) -> None:
-        """Nesting doesn't depend on the building lookup, so a slow REData mustn't hide it."""
+        """Nesting doesn't depend on the building lookup, so a slow source mustn't hide it."""
         from urbanlens.dashboard.services.pins.external_data import MAX_POLL_ATTEMPTS
 
         pin = baker.make(Pin, profile=self.user.profile, location=_make_location(), slug="slow-parcel")
@@ -346,7 +349,9 @@ class RestructureOfferContentTests(TestCase):
         self.location = _make_location()
         self.pin = baker.make(Pin, profile=self.user.profile, location=self.location, slug="campus")
         official_geometry(self.location, _parcel_polygon())
-        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _BUILDINGS, "provider": "redata"})
+        LocationCache.set(
+            self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _BUILDINGS, "provider": "registry"}
+        )
         baker.make(
             Pin,
             profile=self.user.profile,
@@ -411,7 +416,9 @@ class RestructureApplyTests(TestCase):
         self.location = _make_location()
         self.pin = baker.make(Pin, profile=self.user.profile, location=self.location, slug="campus")
         official_geometry(self.location, _parcel_polygon())
-        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _BUILDINGS, "provider": "redata"})
+        LocationCache.set(
+            self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _BUILDINGS, "provider": "registry"}
+        )
         self.stray = baker.make(
             Pin,
             profile=self.user.profile,
@@ -521,7 +528,9 @@ class RestructureWikiMirrorTests(TestCase):
         self.client.force_login(self.user)
         self.location = _make_location()
         self.pin = baker.make(Pin, profile=self.user.profile, location=self.location, slug="campus")
-        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _BUILDINGS, "provider": "redata"})
+        LocationCache.set(
+            self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _BUILDINGS, "provider": "registry"}
+        )
         self.url = reverse("pin.restructure.apply", kwargs={"pin_slug": self.pin.slug})
 
     def _mirror(self) -> int:
@@ -576,7 +585,9 @@ class BuildingImportPanelActionTests(TestCase):
         self.location = _make_location()
         self.pin = baker.make(Pin, profile=self.user.profile, location=self.location, slug="campus")
         official_geometry(self.location, _parcel_polygon())
-        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _BUILDINGS, "provider": "redata"})
+        LocationCache.set(
+            self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _BUILDINGS, "provider": "registry"}
+        )
         self.url = reverse("pin.buildings.import", kwargs={"pin_slug": self.pin.slug})
 
     def test_creates_the_building_pins(self) -> None:
@@ -630,10 +641,11 @@ class BuildingImportPanelActionTests(TestCase):
 
 
 class MissingBuildingsParcelBoundaryTests(TestCase):
-    """REData's own ``is_on_property`` flag isn't guaranteed to agree with our own parcel boundary (``plugins.builtin.parcel_buildings._building_within``'s own docstring says as much) - a building it marks on-property but which our boundary doesn't actually contain must not be suggested. The user can still pin it by hand; it just should not be offered as a suggestion."""
+    """A source's own ``is_on_property`` flag isn't guaranteed to agree with our own parcel boundary (``plugins.builtin.parcel_buildings._building_within``'s own docstring says as much) - a building it marks on-property but which our boundary doesn't actually contain must not be suggested. The user can still pin it by hand; it just should not be offered as a suggestion."""
 
     def setUp(self) -> None:
         super().setUp()
+        file_buildings_under_registry(self)
         self.user = baker.make(User)
         self.client.force_login(self.user)
         self.location = _make_location()
@@ -641,13 +653,15 @@ class MissingBuildingsParcelBoundaryTests(TestCase):
         # Narrower than _parcel_polygon(): Tool Shed and Main Hall are inside,
         # the nameless building (#22, further east at -73.92960) is not - even
         # though every one of _BUILDINGS carries no is_on_property flag at all
-        # (REData's default "yes").
+        # (a source's default "yes").
         boundary = MultiPolygon(
             Polygon(((-73.940, 41.725), (-73.9298, 41.725), (-73.9298, 41.740), (-73.940, 41.740), (-73.940, 41.725))),
             srid=4326,
         )
         official_geometry(self.location, boundary)
-        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _BUILDINGS, "provider": "redata"})
+        LocationCache.set(
+            self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _BUILDINGS, "provider": "registry"}
+        )
 
     def test_a_building_outside_the_boundary_is_not_offered(self) -> None:
         missing = pin_restructure.missing_buildings(self.pin)
@@ -674,7 +688,7 @@ class MissingBuildingsParcelBoundaryTests(TestCase):
         pin_restructure.create_building_pins(self.pin, pin_restructure.missing_buildings(self.pin))
 
         self.assertFalse(
-            Place.objects.filter(kind=PlaceKind.BUILDING, provider="redata", provider_key="22").exists(),
+            Place.objects.filter(kind=PlaceKind.BUILDING, provider=REGISTRY_NAMESPACE, provider_key="22").exists(),
             "the boundary-excluded building was still materialized as a Place",
         )
 
@@ -710,7 +724,9 @@ class BuildingUnderExistingRootPinTests(TestCase):
         self.location = _make_location()
         self.pin = baker.make(Pin, profile=self.user.profile, location=self.location, slug="collide")
         official_geometry(self.location, _parcel_polygon())
-        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _BUILDINGS, "provider": "redata"})
+        LocationCache.set(
+            self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _BUILDINGS, "provider": "registry"}
+        )
         self.occupied = _BUILDINGS[1]
         # The owner's own top-level pin, standing exactly on "Main Hall".
         self.stray = baker.make(
@@ -768,7 +784,7 @@ class RestructureNestChoiceTests(TestCase):
             Pin, profile=self.user.profile, location=self.location, slug="campus", name="Hudson River State Hospital"
         )
         official_geometry(self.location, _parcel_polygon())
-        # No REData buildings in this fixture - isolates the nest choice from
+        # No building records in this fixture - isolates the nest choice from
         # the building-import half already covered above.
         LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {})
         self.dup1 = baker.make(
@@ -854,7 +870,9 @@ class EmptyImportIsNotReportedAsSuccessTests(TestCase):
         self.location = _make_location()
         self.pin = baker.make(Pin, profile=self.user.profile, location=self.location, slug="empty-import")
         official_geometry(self.location, _parcel_polygon())
-        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _BUILDINGS, "provider": "redata"})
+        LocationCache.set(
+            self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _BUILDINGS, "provider": "registry"}
+        )
         self.url = reverse("pin.buildings.import", kwargs={"pin_slug": self.pin.slug})
 
     def test_a_zero_result_import_does_not_claim_success(self) -> None:
@@ -888,7 +906,7 @@ class OrganizeDialogQueryScalingTests(QueryScalingMixin, TestCase):
             Pin, profile=self.user.profile, location=self.location, slug="complex", name="State Hospital"
         )
         official_geometry(self.location, _parcel_polygon())
-        # No REData buildings: the building-import half is a constant cost and
+        # No building records: the building-import half is a constant cost and
         # would only add noise to what is being measured here.
         LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {})
         self.field = CustomField.objects.create(

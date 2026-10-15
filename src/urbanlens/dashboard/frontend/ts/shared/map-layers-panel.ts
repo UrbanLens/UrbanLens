@@ -2,7 +2,7 @@
  * The layers strip's DOM half - flyout panel, button wiring, active-state syncing - with no tile
  * layer or map engine in it, so the Leaflet engine (`map-layers.ts`) and the MapLibre one
  * (`maplibre-layers.ts`) drive the same panel instead of keeping two copies of it in lockstep by
- * hand (the drift `P92` closed out for the pin-cluster badges).
+ * hand (the drift that was closed out for the pin-cluster badges).
  */
 
 import type { BaseLayerKey, CustomLayerToggle } from "./map-layers";

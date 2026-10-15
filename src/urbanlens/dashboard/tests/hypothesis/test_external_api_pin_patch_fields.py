@@ -420,8 +420,8 @@ class PinPatchLabelReplacementTests(_PinPatchTestCase):
 
     def test_every_label_dropped_by_the_replacement_is_tombstoned(self) -> None:
         """
-        Without the tombstone the removal does not stick: keyword and AI
-        auto-tagging re-derive labels from the pin's own text and would put the
+        Without the tombstone the removal does not stick: automatic
+        tagging re-derives labels from the pin's own text and would put the
         label straight back on their next run."""
         response = self._patch({"label_uuids": [str(self.category.uuid)]})
 

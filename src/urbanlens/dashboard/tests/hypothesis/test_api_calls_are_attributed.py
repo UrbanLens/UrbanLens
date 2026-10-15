@@ -13,7 +13,7 @@ ask what it actually needs to know - how many people are using this service
 right now, and how much of the window is left - and only restrain a heavy user
 when someone else is competing for the same budget.
 
-Two properties the fair-share design in D14 rests on:
+Two properties the fair-share design rests on:
 
 - **A refusal is attributed too.** Rows for blocked calls are the record of
   demand that went unmet; an unattributed one cannot tell you whose demand it
@@ -82,7 +82,7 @@ class ApiCallAttributionTests(TestCase):
 
 
 class ServiceDemandReportingTests(TestCase):
-    """Who is using a service, and how much - the measurement H34 needs."""
+    """Who is using a service, and how much."""
 
     def setUp(self) -> None:
         super().setUp()

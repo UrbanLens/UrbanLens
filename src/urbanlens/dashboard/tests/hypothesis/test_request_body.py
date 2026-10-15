@@ -1,4 +1,4 @@
-"""A view reads a posted body as an object, whatever was actually sent (P29: a JSON array was a 500 on six routes; it is a 400)."""
+"""A view reads a posted body as an object, whatever was actually sent (a JSON array was a 500 on six routes; it is a 400)."""
 
 from __future__ import annotations
 

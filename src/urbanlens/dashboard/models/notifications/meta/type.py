@@ -28,7 +28,6 @@ class NotificationType(TextChoices):
     SAFETY_CHECKIN_PARTNER_ACCEPTED = "safety_ci_partner_accepted", "Safety Check-in Partner Accepted"
     ACCOUNT_DELETION_REQUESTED = "account_deletion_requested", "Account Deletion Requested"
     ACCOUNT_DELETION_REMINDER = "account_deletion_reminder", "Account Deletion Reminder"
-    AI_EXTRACTION = "ai_extraction", "AI Link Analysis Complete"
     FRIEND_SUGGESTION = "friend_suggestion", "Friend Suggestion"
     SPOTGUESSR_INVITE = "spotguessr_invite", "SpotGuessr Invitation"
     TRIVIA_INVITE = "trivia_invite", "Trivia Invitation"
@@ -55,3 +54,10 @@ MUTE_EXEMPT_TYPES = frozenset(
         NotificationType.WIKI_SAFETY_CHECKIN,
     },
 )
+
+
+def notification_type_choices() -> list[tuple[str, str]]:
+    """Core's notification kinds and those plugins contribute. Read lazily, since plugins are set up after models load."""
+    from urbanlens.dashboard.plugins.points import NOTIFICATION_TYPES
+
+    return [*NotificationType.choices, *((value, label) for value, label in NOTIFICATION_TYPES.choices() if value not in NotificationType.values)]

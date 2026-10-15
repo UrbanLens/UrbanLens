@@ -1,4 +1,4 @@
-"""Tests for AutoTagService's independent keyword-based and AI-based gating."""
+"""Auto-tagging: the matcher pipeline, and each stage's own gating."""
 
 from __future__ import annotations
 
@@ -13,7 +13,9 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.plugins.points import LABEL_MATCHERS
 from urbanlens.dashboard.services.labels.auto_tag import AutoTagService
+from urbanlens.dashboard.services.labels.matching import KeywordLabelMatcher, LabelMatcher
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -31,127 +33,100 @@ def _make_pin(profile: Profile) -> Pin:
     return baker.make(Pin, profile=profile, location=location)
 
 
-class AiKindEnabledForProfileTests(TestCase):
-    def setUp(self) -> None:
-        super().setUp()
-        self.profile = baker.make(User).profile
-
-    def test_disabled_when_master_ai_toggle_off(self) -> None:
-        self.profile.ai_enabled = False
-        self.profile.ai_label_categories = True
-        self.assertFalse(AutoTagService._ai_kind_enabled_for_profile(KIND_CATEGORY, self.profile))
-
-    def test_disabled_when_external_apis_disabled(self) -> None:
-        self.profile.ai_enabled = True
-        self.profile.external_apis_enabled = False
-        self.profile.ai_label_categories = True
-        self.assertFalse(AutoTagService._ai_kind_enabled_for_profile(KIND_CATEGORY, self.profile))
-
-        # Same profile/kind, external APIs re-enabled - an "external_apis_enabled is ignored"
-        # implementation would still pass above.
-        self.profile.external_apis_enabled = True
-        self.assertTrue(AutoTagService._ai_kind_enabled_for_profile(KIND_CATEGORY, self.profile))
-
-    def test_disabled_when_per_kind_flag_off(self) -> None:
-        self.profile.ai_enabled = True
-        self.profile.ai_label_categories = False
-        self.assertFalse(AutoTagService._ai_kind_enabled_for_profile(KIND_CATEGORY, self.profile))
-
-    def test_enabled_when_all_flags_on(self) -> None:
-        self.profile.ai_enabled = True
-        self.profile.ai_label_categories = True
-        self.assertTrue(AutoTagService._ai_kind_enabled_for_profile(KIND_CATEGORY, self.profile))
-
-
 class KeywordKindEnabledForProfileTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
         self.profile = baker.make(User).profile
+        self.pin = _make_pin(self.profile)
 
     def test_enabled_by_default(self) -> None:
         """keyword_tagging_enabled and the per-kind fields default to True."""
-        self.assertTrue(AutoTagService._keyword_kind_enabled_for_profile(KIND_CATEGORY, self.profile))
-        self.assertTrue(AutoTagService._keyword_kind_enabled_for_profile(KIND_TAG, self.profile))
-        self.assertTrue(AutoTagService._keyword_kind_enabled_for_profile(KIND_STATUS, self.profile))
+        self.assertTrue(KeywordLabelMatcher().applies(self.pin, KIND_CATEGORY, self.profile))
+        self.assertTrue(KeywordLabelMatcher().applies(self.pin, KIND_TAG, self.profile))
+        self.assertTrue(KeywordLabelMatcher().applies(self.pin, KIND_STATUS, self.profile))
 
     def test_disabled_when_master_keyword_toggle_off(self) -> None:
         self.profile.keyword_tagging_enabled = False
-        self.assertFalse(AutoTagService._keyword_kind_enabled_for_profile(KIND_CATEGORY, self.profile))
+        self.assertFalse(KeywordLabelMatcher().applies(self.pin, KIND_CATEGORY, self.profile))
 
     def test_disabled_when_per_kind_flag_off(self) -> None:
         self.profile.keyword_label_tags = False
-        self.assertFalse(AutoTagService._keyword_kind_enabled_for_profile(KIND_TAG, self.profile))
+        self.assertFalse(KeywordLabelMatcher().applies(self.pin, KIND_TAG, self.profile))
 
     def test_ignores_external_apis_disabled(self) -> None:
         """Keyword matching makes no API call, so it isn't gated on external_apis_enabled."""
         self.profile.external_apis_enabled = False
-        self.assertTrue(AutoTagService._keyword_kind_enabled_for_profile(KIND_CATEGORY, self.profile))
-
-    def test_ignores_ai_enabled(self) -> None:
-        """Keyword matching is independent of the AI master toggle."""
-        self.profile.ai_enabled = False
-        self.assertTrue(AutoTagService._keyword_kind_enabled_for_profile(KIND_CATEGORY, self.profile))
+        self.assertTrue(KeywordLabelMatcher().applies(self.pin, KIND_CATEGORY, self.profile))
 
 
-class SuggestForPinStageGatingTests(TestCase):
-    """
-    suggest_for_pin must only invoke the stages the profile allows.
+class _Fixed(LabelMatcher):
+    """A stage that chooses given labels, recording what it was offered."""
 
-    The pin path's first stage is REData suggestions rather than keyword matching (a wiki, which has no owner
-    and so no per-user taxonomy, still keyword-matches)."""
+    def __init__(self, slug: str, chosen: list[Label], *, applies: bool = True, fails: bool = False) -> None:
+        self.slug = slug
+        self.chosen = chosen
+        self._applies = applies
+        self.fails = fails
+        self.offered: list[list[Label]] = []
 
+    def applies(self, target, kind, profile) -> bool:
+        return self._applies
+
+    def match(self, target, eligible, kind, *, limit):
+        self.offered.append(list(eligible))
+        if self.fails:
+            raise RuntimeError("unavailable")
+        return [label for label in self.chosen if label in eligible][:limit]
+
+
+class PipelineTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
-        self.user: User = baker.make(User)
-        self.profile: Profile = self.user.profile
+        self.profile = baker.make(User).profile
         self.pin = _make_pin(self.profile)
+        self.labels = [baker.make(Label, kind=KIND_CATEGORY, name=f"label-{index}", profile=None) for index in range(4)]
 
-    def _run(self, *, auto_tagging: bool):
+    def test_each_stage_is_offered_only_what_earlier_stages_left(self) -> None:
+        first = _Fixed("first", self.labels[:1])
+        second = _Fixed("second", self.labels[:2])
+        with LABEL_MATCHERS.overridden([first, second]):
+            matched = AutoTagService().match(self.pin, self.labels, KIND_CATEGORY, self.profile)
+        self.assertEqual(matched, self.labels[:2])
+        self.assertEqual(second.offered, [self.labels[1:]])
+
+    def test_the_limit_stops_the_pipeline(self) -> None:
+        first = _Fixed("first", self.labels[:2])
+        second = _Fixed("second", self.labels[2:])
+        with LABEL_MATCHERS.overridden([first, second]):
+            matched = AutoTagService(max_labels=2).match(self.pin, self.labels, KIND_CATEGORY, self.profile)
+        self.assertEqual(matched, self.labels[:2])
+        self.assertEqual(second.offered, [])
+
+    def test_a_failing_or_inapplicable_stage_is_passed_over(self) -> None:
+        broken = _Fixed("broken", self.labels, fails=True)
+        off = _Fixed("off", self.labels, applies=False)
+        working = _Fixed("working", self.labels[3:])
         with (
-            mock.patch.object(AutoTagService, "_redata_match", return_value=[]) as redata_match,
-            mock.patch.object(AutoTagService, "_ai_match", return_value=[]) as ai_match,
-            mock.patch.object(
-                AutoTagService, "_eligible_labels", return_value=[baker.prepare(Label, kind=KIND_CATEGORY)]
-            ),
-            mock.patch("urbanlens.dashboard.models.subscriptions.model.user_has_feature", return_value=auto_tagging),
+            LABEL_MATCHERS.overridden([broken, off, working]),
+            self.assertLogs("urbanlens.dashboard.services.labels.auto_tag", level="ERROR"),
         ):
-            AutoTagService(kinds=[KIND_CATEGORY]).suggest_for_pin(self.pin)
-        return redata_match, ai_match
+            matched = AutoTagService().match(self.pin, self.labels, KIND_CATEGORY, self.profile)
+        self.assertEqual(matched, self.labels[3:])
+        self.assertEqual(off.offered, [])
 
-    def test_the_capability_alone_runs_the_redata_stage(self) -> None:
-        self.profile.ai_enabled = False
-        self.profile.save(update_fields=["ai_enabled"])
+    def test_a_stage_cannot_choose_a_label_it_was_not_offered(self) -> None:
+        foreign = baker.make(Label, kind=KIND_CATEGORY, name="not-eligible", profile=None)
+        rogue = _Fixed("rogue", [])
+        rogue.match = lambda target, eligible, kind, *, limit: [foreign, self.labels[0]]
+        with LABEL_MATCHERS.overridden([rogue]):
+            self.assertEqual(
+                AutoTagService().match(self.pin, self.labels, KIND_CATEGORY, self.profile), self.labels[:1]
+            )
 
-        redata_match, ai_match = self._run(auto_tagging=True)
-
-        redata_match.assert_called_once()
-        ai_match.assert_not_called()
-
-    def test_the_user_switch_turns_the_redata_stage_off(self) -> None:
-        self.profile.disable_auto_tagging = True
-        self.profile.ai_enabled = False
-        self.profile.save(update_fields=["disable_auto_tagging", "ai_enabled"])
-
-        redata_match, ai_match = self._run(auto_tagging=True)
-
-        redata_match.assert_not_called()
-        ai_match.assert_not_called()
-
-    def test_neither_stage_runs_without_either_grant(self) -> None:
-        self.profile.ai_enabled = False
-        self.profile.save(update_fields=["ai_enabled"])
-
-        redata_match, ai_match = self._run(auto_tagging=False)
-
-        redata_match.assert_not_called()
-        ai_match.assert_not_called()
-
-    def test_both_grants_run_both_stages(self) -> None:
-        self.profile.ai_enabled = True
-        self.profile.ai_label_categories = True
-        self.profile.save(update_fields=["ai_enabled", "ai_label_categories"])
-
-        redata_match, ai_match = self._run(auto_tagging=True)
-
-        redata_match.assert_called_once()
-        ai_match.assert_called_once()
+    def test_pins_are_keyword_matched(self) -> None:
+        church = baker.make(Label, kind=KIND_CATEGORY, name="Church", profile=None, allow_auto_tag=True)
+        with (
+            mock.patch.object(KeywordLabelMatcher, "keyword_text", return_value="St. Mary's Church"),
+            LABEL_MATCHERS.overridden([KeywordLabelMatcher()]),
+        ):
+            self.assertIn(church, AutoTagService().suggest_for_pin(self.pin))

@@ -783,10 +783,10 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
 
         // Renders a non-interactive Leaflet/MapLibre map into `el`. Caller must size `el` first.
         window._renderMapThumb = function (el, data, refLatLng) {
-            // PL8 item 2's dual-engine branch: MapLibre when this browser
+            // The dual-engine branch: MapLibre when this browser
             // supports WebGL2 and MapLibre is loaded on this page,
             // Leaflet otherwise - unchanged below, a permanent fallback path,
-            // not a migration-period stopgap (D12).
+            // not a migration-period stopgap.
             if (typeof maplibregl !== 'undefined' && window.WebGLSupport && window.WebGLSupport.supportsWebGL2()) {
                 return _renderMapThumbMaplibre(el, data, refLatLng);
             }

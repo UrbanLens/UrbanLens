@@ -1,4 +1,4 @@
-"""Regression coverage for UL-221: a returning GPS-mode user's map must not visibly jump once a fresh geolocation fix resolves after loading at a cached position."""
+"""Regression coverage: a returning GPS-mode user's map must not visibly jump once a fresh geolocation fix resolves after loading at a cached position."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from pathlib import Path
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 
-#: P92 moved this from an inline <script> into a bundled TS entry (P124); the guard is
+#: The map code moved from an inline <script> into a bundled TS entry; the guard is
 #: static code, unconditional on any given viewer, so it is checked against the source
 #: file directly rather than a per-request response body.
 _SCRIPT_SOURCE = (Path(__file__).resolve().parents[3] / "dashboard/frontend/ts/entries/map-page.ts").read_text()

@@ -17,6 +17,8 @@ from django.conf import settings
 from django.db import connections, transaction
 from psycopg import sql
 
+from urbanlens.dashboard.plugins.points import DATABASE_ROLES
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
@@ -105,7 +107,7 @@ def declared_roles() -> tuple[DatabaseRole, ...]:
     """
     task_deadline = int(settings.CELERY_TASK_TIME_LIMIT)
     reads_stats = frozenset({"pg_read_all_stats"})
-    roles = (
+    roles: tuple[DatabaseRole, ...] = (
         # 3 gunicorn workers x 4 threads, each keeping its connection; the rest is headroom for timeout_utils' executor and more workers.
         DatabaseRole("web", 54, REQUEST_DEADLINE_SECONDS, reads_stats),
         # Channels runs every consumer's database call on one thread; the health probe is the other.
@@ -115,10 +117,10 @@ def declared_roles() -> tuple[DatabaseRole, ...]:
         DatabaseRole("bulk", 4, task_deadline, frozenset({"pg_read_all_data"})),
         DatabaseRole("panels", 21, task_deadline),
         DatabaseRole("sandbox", 5, task_deadline),
-        DatabaseRole("ai", 3, task_deadline),
         DatabaseRole("beat", 1, REQUEST_DEADLINE_SECONDS),
         DatabaseRole("metrics", 1, REQUEST_DEADLINE_SECONDS),
     )
+    roles = (*roles, *DATABASE_ROLES.items())
     if settings.UL_DB_ROLES_POOLED:
         return tuple(replace(role, connection_limit=UNLIMITED_CONNECTIONS) for role in roles)
     return roles

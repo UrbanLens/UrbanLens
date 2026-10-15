@@ -1,5 +1,5 @@
 """
-A parameter value no parser expects is refused or ignored, never a 500 or a stored row (P283).
+A parameter value no parser expects is refused or ignored, never a 500 or a stored row.
 
 ``float()`` reads ``inf`` and ``nan``, ``Decimal()`` reads both and ``1e999``, ``int()`` reads a number past a 64-bit
 column, and a ``UUIDField`` lookup raises ``ValidationError`` on anything that is not a UUID.
@@ -27,7 +27,6 @@ from urbanlens.dashboard.models.pin_list.model import PinList
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.property_owner.model import PinOwner, PinPropertySale
 from urbanlens.dashboard.models.trips.model import Trip
-from urbanlens.dashboard.services.billing.pricing import STRIPE_MAXIMUM_CHARGE_CENTS, typed_dollars_to_cents
 from urbanlens.dashboard.services.core.numbers import DB_BIGINT_MAX, typed_decimal_for_column
 from urbanlens.dashboard.services.core.pagination import offset_window
 from urbanlens.dashboard.services.core.request_body import json_body, list_field, text_field, text_type_error
@@ -256,18 +255,6 @@ class LookupsByIdentifierTests(_SignedIn):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["items"], [])
-
-
-class TypedDollarsTests(SimpleTestCase):
-    def test_what_stripe_could_not_charge_is_none(self) -> None:
-        for raw in ("nan", "inf", "-inf", "1e999999999", "-0.01", "1000000", "abc", ""):
-            with self.subTest(raw=raw):
-                self.assertIsNone(typed_dollars_to_cents(raw))
-
-    def test_amounts_stripe_charges_are_cents(self) -> None:
-        self.assertEqual(typed_dollars_to_cents(" 0.5 "), 50)
-        self.assertEqual(typed_dollars_to_cents("0"), 0)
-        self.assertEqual(typed_dollars_to_cents("999999.99"), STRIPE_MAXIMUM_CHARGE_CENTS)
 
 
 class TypedDecimalTests(SimpleTestCase):

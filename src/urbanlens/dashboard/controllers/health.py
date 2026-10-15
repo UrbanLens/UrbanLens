@@ -51,7 +51,7 @@ def _limit_probe_runtime(cursor: CursorWrapper) -> None:
     Scoped to the transaction because a session-level setting survives on a ``CONN_MAX_AGE``
     connection and would silently cap every later real query at two seconds. ``set_config`` rather
     than ``SET LOCAL`` because the deadline is a bound parameter and Postgres accepts none in a
-    ``SET`` statement - under server-side binding (X27) that is a syntax error, not an interpolation.
+    ``SET`` statement - under server-side binding that is a syntax error, not an interpolation.
 
     Args:
         cursor: A cursor inside an open transaction.
@@ -254,7 +254,7 @@ class HealthController(GenericViewSet):
         """
         Report whether unapplied migrations exist.
 
-        During a rolling multi-site deploy an instance legitimately runs briefly against a schema its own
+        During a rolling deploy an instance legitimately runs briefly against a schema its own
         image has not caught up to, and failing readiness here would take the last serving site out
         precisely when it is needed.
 

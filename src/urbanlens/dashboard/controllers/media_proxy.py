@@ -15,7 +15,6 @@ import requests
 from urbanlens.dashboard.controllers.media_auth import CredentialOrSessionMediaMixin, MediaThrottledError, mark_private_media
 from urbanlens.dashboard.services.core import bounded_cache
 from urbanlens.dashboard.services.media.proxied_media import proxied_media_response
-from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -116,17 +115,16 @@ class GoogleMapsPhotoProxyView(CredentialOrSessionMediaMixin, View):
             content, content_type = cached
             return mark_private_media(proxied_media_response(content, content_type))
 
-        redata_configured = bool(settings.redata_api_url and settings.redata_api_key)
-        if not settings.google_unrestricted_api_key and not redata_configured:
+        if not places_resolution.available():
             return HttpResponse(status=404)
         # Serving from cache above is free, but an upstream fetch consumes the site's Places quota on this
         # requester's behalf - honor their own external-lookups opt-out for the actual API call.
         if not profile.external_apis_enabled:
             return HttpResponse(status=404)
         try:
-            content, content_type = places_resolution.download_photo(photo_name, api_key=settings.google_unrestricted_api_key or "")
+            content, content_type = places_resolution.download_photo(photo_name)
         except places_resolution.PhotoNotFoundError:
-            # Confirmed gone (either provider) - same treatment as a Google
+            # Confirmed gone (by any provider) - same treatment as a Google
             # 404 below: an ordinary, expected condition, not a server error.
             logger.info("Photo reference expired for %r", photo_name)
             bounded_cache.set_or_skip(cache_key, _EXPIRED_SENTINEL, _EXPIRED_CACHE_TTL, label=label)

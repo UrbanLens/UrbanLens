@@ -67,7 +67,7 @@ test.describe("another account's activity", () => {
         await ok(await secondaryApi.post(`pins/${mine.slug}/links/`, { url: "https://example.invalid/mine", name: resourceName("my link") }), "B's link");
         const before = await settledRecordOf(secondaryApi, mine.slug);
 
-        // A's own pin a few metres away, so its building child can stand exactly on my coordinate (P181).
+        // A's own pin a few metres away, so its building child can stand exactly on my coordinate.
         const theirs = await api.createPin({ name: resourceName("their pin beside my spot"), latitude: mine.latitude + NEIGHBOURING_DEG, longitude: mine.longitude });
         await ok(
             await api.patch(`pins/${theirs.slug}/`, {

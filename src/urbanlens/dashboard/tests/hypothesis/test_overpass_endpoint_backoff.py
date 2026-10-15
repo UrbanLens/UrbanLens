@@ -1,4 +1,4 @@
-"""A transient Overpass failure takes an endpoint out for minutes, growing on repeats, not until the next day (P205)."""
+"""A transient Overpass failure takes an endpoint out for minutes, growing on repeats, not until the next day."""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ class EndpointBackoffTests(SimpleTestCase):
         ):
             patcher.start()
             self.addCleanup(patcher.stop)
-        self.gateway = OverpassGateway(session=mock.Mock())
+        self.gateway = OverpassGateway(session=mock.Mock(), base_url="https://primary.example/api/interpreter")
         self.primary = self.gateway.base_url
 
     def _down_for(self, *responses: mock.Mock) -> list[int]:

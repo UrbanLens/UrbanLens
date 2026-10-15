@@ -4,20 +4,20 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Self
 
-from django.db.models import Case, IntegerField, Q, Sum, Value, When
+from django.db.models import Case, F, FloatField, IntegerField, Q, Sum, Value, When
 
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from urbanlens.dashboard.models.images.model import Image  # noqa: F401 - mypy needs these; ruff does not
+    from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.models.images.relevance import MediaRelevance  # noqa: F401 - mypy needs these; ruff does not
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.profile.model import Profile
 
 
-def _own_contribution_q() -> Q:
+def own_contribution_q() -> Q:
     """
     Build the ORM form of ``Image.is_own_contribution``.
     Three conjuncts, each ruling out a real row shape that ``source`` alone misreads: This is what excludes a photograph the profile merely up-voted, and ``LINKED_URL`` bytes fetched because a page referred to them. * No ``media_source_key``.
@@ -309,6 +309,28 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet["Image"]):
 
         return set(TripMembership.objects.trip_ids_for(profile_id))
 
+    def with_relevance_confidence(self) -> ImageQuerySet:
+        """
+        Annotate ``relevance_confidence``, the best score any scorer gave each photo (null when unscored).
+
+        Plugins that score photos supply the annotation through ``points.PHOTO_RELEVANCE_SCORES``; with none, every photo is unscored.
+        """
+        from urbanlens.dashboard.plugins.points import PHOTO_RELEVANCE_SCORES
+
+        scored = PHOTO_RELEVANCE_SCORES.apply(self)
+        if "relevance_confidence" not in scored.query.annotations:
+            scored = scored.annotate(relevance_confidence=Value(None, output_field=FloatField()))
+        return scored
+
+    @staticmethod
+    def relevance_confidence_of(image: Image) -> float | None:
+        """The ``relevance_confidence`` a row from :meth:`with_relevance_confidence` carries, which the model doesn't declare."""
+        return image.__dict__.get("relevance_confidence")
+
+    def most_relevant_first(self) -> ImageQuerySet:
+        """Order by ``relevance_confidence`` (unscored last), then newest first."""
+        return self.with_relevance_confidence().order_by(F("relevance_confidence").desc(nulls_last=True), "-created", "-pk")
+
     def with_coords(self) -> Self:
         """Filter to images that have GPS and the owner has not hidden from the map."""
         return self.filter(latitude__isnull=False, longitude__isnull=False, map_hidden=False)
@@ -329,12 +351,12 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet["Image"]):
         """
         Filter to rows whose ``profile`` is the photographer, not the up-voter.
         The distinction ``source`` cannot draw: a photo imported from the uploader's own Immich server or Google Photos library carries that provider's name in ``source`` while still being their own picture, whereas a row materialised from somebody else's provider search carries the up-voter in ``profile``.
-        Ownership questions - concealment, who may withdraw a photo from a wiki, whether a contribution earns reputation - all want this rather than ``source == UPLOAD``.
+        Ownership questions - such as who may withdraw a photo from a wiki - want this rather than ``source == UPLOAD``.
 
         Returns:
             Rows the profile actually contributed.
         """
-        return self.filter(_own_contribution_q())
+        return self.filter(own_contribution_q())
 
     def with_file(self) -> Self:
         """

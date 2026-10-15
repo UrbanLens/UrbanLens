@@ -45,9 +45,10 @@ class ProcessRole(StrEnum):
         PANELS: The external-data panel-fetch worker.
         BEAT: The Celery scheduler.
         SANDBOX: The isolated media/parsing worker.
-        AI: The Celery worker draining the AI tool-loop queue.
-        INFERENCE: The Django-free ``ai-inference`` service.
-        UNSPECIFIED: No ``UL_PROCESS_ROLE`` was set - a local checkout, a management command, or a container that predates this setting."""
+        UNSPECIFIED: No ``UL_PROCESS_ROLE`` was set - a local checkout, a management command, or a container that predates this setting.
+
+    Plugins name further roles; see :func:`is_locked_down_role`.
+    """
 
     WEB = "web"
     WEBSOCKET = "websocket"
@@ -55,8 +56,6 @@ class ProcessRole(StrEnum):
     PANELS = "panels"
     BEAT = "beat"
     SANDBOX = "sandbox"
-    AI = "ai"
-    INFERENCE = "inference"
     UNSPECIFIED = "unspecified"
 
 
@@ -80,35 +79,38 @@ class UnsandboxedParseError(RuntimeError):
     Raised rather than logged so the violation surfaces where it was introduced."""
 
 
-class DirectInferencePolicy(StrEnum):
-    """
-    How strictly a direct, in-process AI provider call is enforced.
+def _plugin_roles() -> frozenset[str]:
+    """The ``UL_PROCESS_ROLE`` values plugins name, as locked-down roles or as the tier a database role belongs to."""
+    from urbanlens.dashboard.plugins.points import DATABASE_ROLES, LOCKED_DOWN_PROCESS_ROLES
 
-    Attributes:
-        ALLOW: No enforcement.
-        WARN: Log a warning naming the role that made the call, then proceed.
-        DENY: Raise :class:`DirectInferenceError`."""
-
-    ALLOW = "allow"
-    WARN = "warn"
-    DENY = "deny"
+    return frozenset(LOCKED_DOWN_PROCESS_ROLES.items()) | {role.process_role for role in DATABASE_ROLES.items()}
 
 
-class DirectInferenceError(RuntimeError):
-    """A direct, in-process AI provider call was attempted from a deployed role."""
-
-
-def current_role() -> ProcessRole:
+def current_role() -> str:
     """
     The role of the process making this call.
 
     Returns:
-        The ``UL_PROCESS_ROLE`` value, or :attr:`ProcessRole.UNSPECIFIED` when it is unset or not a role this version knows about."""
+        The ``UL_PROCESS_ROLE`` value when this version or a plugin knows it, else :attr:`ProcessRole.UNSPECIFIED`: an unrecognised role is some other container, never the sandbox."""
     raw = str(getattr(settings, "UL_PROCESS_ROLE", "") or "").strip().lower()
     try:
         return ProcessRole(raw)
     except ValueError:
-        return ProcessRole.UNSPECIFIED
+        return raw if raw in _plugin_roles() else ProcessRole.UNSPECIFIED
+
+
+def is_locked_down_role(role: str) -> bool:
+    """
+    Whether *role* is a process of reduced trust, which the plugins that run one declare through ``LOCKED_DOWN_PROCESS_ROLES``.
+
+    Args:
+        role: A value :func:`current_role` returned.
+
+    Returns:
+        True when such a process must deny untrusted parsing and never reach credentialled data services."""
+    from urbanlens.dashboard.plugins.points import LOCKED_DOWN_PROCESS_ROLES
+
+    return role in LOCKED_DOWN_PROCESS_ROLES.items()
 
 
 def current_policy() -> UntrustedParsePolicy:
@@ -116,48 +118,14 @@ def current_policy() -> UntrustedParsePolicy:
     How this process should react to an out-of-sandbox parse.
 
     Returns:
-        :attr:`UntrustedParsePolicy.DENY` unconditionally under :attr:`ProcessRole.AI`, regardless of ``UL_UNTRUSTED_PARSE_POLICY`` - the AI worker's compose env sets that variable to ``deny`` too, but the tool loop calls arbitrary, registry-dispatched..."""
-    if current_role() is ProcessRole.AI:
+        :attr:`UntrustedParsePolicy.DENY` unconditionally in a locked-down role, regardless of ``UL_UNTRUSTED_PARSE_POLICY`` - the worker's compose env sets that variable to ``deny`` too, but the tool loop calls arbitrary, registry-dispatched..."""
+    if is_locked_down_role(current_role()):
         return UntrustedParsePolicy.DENY
     raw = str(getattr(settings, "UL_UNTRUSTED_PARSE_POLICY", "") or "").strip().lower()
     try:
         return UntrustedParsePolicy(raw)
     except ValueError:
         return UntrustedParsePolicy.WARN
-
-
-def current_direct_inference_policy() -> DirectInferencePolicy:
-    """
-    How this process should react to a direct, in-process AI provider call.
-
-    Returns:
-        The configured policy, defaulting to :attr:`DirectInferencePolicy.WARN` for an unset or unrecognised value - same rationale as :func:`current_policy`."""
-    raw = str(getattr(settings, "UL_DIRECT_INFERENCE_POLICY", "") or "").strip().lower()
-    try:
-        return DirectInferencePolicy(raw)
-    except ValueError:
-        return DirectInferencePolicy.WARN
-
-
-def check_direct_inference() -> None:
-    """
-    Enforce that a direct, in-process AI provider call only happens outside a deployed role.
-
-    Raises:
-        DirectInferenceError: The policy is ``deny`` and this process has a real ``UL_PROCESS_ROLE``."""
-    policy = current_direct_inference_policy()
-    if policy is DirectInferencePolicy.ALLOW:
-        return
-
-    role = current_role()
-    if role is ProcessRole.UNSPECIFIED:
-        return
-
-    message = f"A direct, in-process AI provider call ran in the {role.value!r} process instead of going through ai-inference"
-    if policy is DirectInferencePolicy.DENY:
-        raise DirectInferenceError(message)
-
-    logger.warning("%s (policy=warn)", message)
 
 
 @contextmanager
@@ -197,10 +165,10 @@ def check_untrusted_parse(operation: str) -> None:
         return
 
     role = current_role()
-    if role is ProcessRole.SANDBOX:
+    if role == ProcessRole.SANDBOX:
         return
 
-    message = f"Untrusted-parse operation {operation!r} ran in the {role.value!r} process, which is not the sandbox worker"
+    message = f"Untrusted-parse operation {operation!r} ran in the {role!r} process, which is not the sandbox worker"
     if policy is UntrustedParsePolicy.DENY:
         raise UnsandboxedParseError(message)
 

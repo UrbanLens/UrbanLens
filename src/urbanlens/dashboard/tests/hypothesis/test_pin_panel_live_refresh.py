@@ -11,7 +11,6 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
 
 def _hx_trigger_events(response) -> dict:
@@ -19,7 +18,7 @@ def _hx_trigger_events(response) -> dict:
     return json.loads(header) if header else {}
 
 
-class PinPanelLiveRefreshTests(RedataConfiguredMixin, TestCase):
+class PinPanelLiveRefreshTests(TestCase):
     """PinController._notify_panel_ready: only fires on a poll (attempt >= 1)."""
 
     def setUp(self) -> None:
@@ -64,26 +63,6 @@ class PinPanelLiveRefreshTests(RedataConfiguredMixin, TestCase):
     def test_nominatim_first_synchronous_load_does_not_fire(self) -> None:
         LocationCache.set(self.pin.location, "nominatim", {"website": "https://example.com"}, query_key="")
         response = self.client.get(reverse("pin.nominatim", args=[self.pin.slug]))
-        self.assertEqual(response.status_code, 200)
-        self.assertNotIn("HX-Trigger", response)
-
-    def test_epa_echo_detail_poll_completion_fires_links_changed(self) -> None:
-        LocationCache.set(
-            self.pin.location,
-            "epa_echo",
-            {"exact_site": {"name": "Acme Plant", "registry_id": "12345", "programs": []}},
-            query_key="",
-        )
-        response = self.client.get(reverse("pin.panel", args=[self.pin.slug, "epa_echo_detail"]), {"attempt": "1"})
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(_hx_trigger_events(response), {"pinLinksChanged": True})
-
-    def test_other_generic_panels_never_fire(self) -> None:
-        """
-        Only epa_echo_detail is known to have a side effect - every other
-        InfoPanelSource-backed panel must stay silent even on a poll."""
-        LocationCache.set(self.pin.location, "photon", {"locality": "Old Mill"}, query_key="")
-        response = self.client.get(reverse("pin.panel", args=[self.pin.slug, "photon"]), {"attempt": "1"})
         self.assertEqual(response.status_code, 200)
         self.assertNotIn("HX-Trigger", response)
 

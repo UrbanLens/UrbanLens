@@ -20,6 +20,7 @@ from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.abstract.security import SECURITY_FIELDS
 from urbanlens.dashboard.models.aliases.model import AliasType
 from urbanlens.dashboard.models.boundary.model import BoundaryType
+from urbanlens.dashboard.plugins.drf import ExtensibleSerializer
 from urbanlens.dashboard.services.core.numbers import DB_BIGINT_MAX
 from urbanlens.dashboard.services.core.text_limits import (
     MAX_ARTICLE_EDIT_SUMMARY_LENGTH,
@@ -33,7 +34,7 @@ from urbanlens.dashboard.services.wiki.wiki_aliases import alias_is_current_name
 _SECURITY_FIELD_NAMES = tuple(name for name, _label in SECURITY_FIELDS)
 
 
-class WikiSecuritySerializer(serializers.Serializer):
+class WikiSecuritySerializer(ExtensibleSerializer):
     """The 8 security indicators on a wiki (schema-only, read side)."""
 
     fences = serializers.CharField(read_only=True)
@@ -46,7 +47,7 @@ class WikiSecuritySerializer(serializers.Serializer):
     locked = serializers.CharField(read_only=True)
 
 
-class WikiSecurityUpdateSerializer(serializers.Serializer):
+class WikiSecurityUpdateSerializer(ExtensibleSerializer):
     """
     The writable half of :class:`WikiSecuritySerializer`.
 
@@ -63,7 +64,7 @@ class WikiSecurityUpdateSerializer(serializers.Serializer):
     locked = serializers.ChoiceField(choices=SecurityLevel.choices, required=False)
 
 
-class WikiStatSerializer(serializers.Serializer):
+class WikiStatSerializer(ExtensibleSerializer):
     """One community stat composite plus the viewer's own vote (schema-only)."""
 
     #: Nearest whole star, or null when nobody has voted.
@@ -76,7 +77,7 @@ class WikiStatSerializer(serializers.Serializer):
     my_vote = serializers.IntegerField(read_only=True, allow_null=True)
 
 
-class WikiAliasSerializer(serializers.Serializer):
+class WikiAliasSerializer(ExtensibleSerializer):
     """
     An alternate name for a wiki (schema-only).
 
@@ -111,14 +112,14 @@ class WikiAliasSerializer(serializers.Serializer):
         return alias_is_current_name(alias, self.context.get("wiki"))
 
 
-class WikiAliasCreateSerializer(serializers.Serializer):
+class WikiAliasCreateSerializer(ExtensibleSerializer):
     """Validates a submitted wiki alias."""
 
     name = serializers.CharField(max_length=255)
     kind = serializers.ChoiceField(choices=AliasType.choices, required=False)
 
 
-class WikiLinkSerializer(serializers.Serializer):
+class WikiLinkSerializer(ExtensibleSerializer):
     """An external link attached to a wiki (schema-only)."""
 
     id = serializers.IntegerField(read_only=True)
@@ -141,14 +142,14 @@ class WikiLinkSerializer(serializers.Serializer):
         return link.auto_source or None
 
 
-class WikiLinkCreateSerializer(serializers.Serializer):
+class WikiLinkCreateSerializer(ExtensibleSerializer):
     """Validates a submitted wiki link."""
 
     name = serializers.CharField(max_length=255, required=False, allow_blank=True)
     url = LinkUrlField()
 
 
-class WikiArticleSummarySerializer(serializers.Serializer):
+class WikiArticleSummarySerializer(ExtensibleSerializer):
     """The wiki's article without its body (schema-only)."""
 
     id = serializers.IntegerField(read_only=True)
@@ -159,7 +160,7 @@ class WikiArticleSummarySerializer(serializers.Serializer):
     base_revision_id = serializers.IntegerField(read_only=True, allow_null=True)
 
 
-class WikiDetailSerializer(serializers.Serializer):
+class WikiDetailSerializer(ExtensibleSerializer):
     """
     Documents the full wiki-detail response (schema-only).
 
@@ -202,7 +203,7 @@ class WikiDetailSerializer(serializers.Serializer):
     updated = serializers.DateTimeField(read_only=True)
 
 
-class WikiUpdateSerializer(serializers.Serializer):
+class WikiUpdateSerializer(ExtensibleSerializer):
     """
     Validates an untrusted wiki PATCH payload.
 
@@ -241,7 +242,7 @@ class WikiUpdateSerializer(serializers.Serializer):
         return attrs
 
 
-class WikiEditSerializer(serializers.Serializer):
+class WikiEditSerializer(ExtensibleSerializer):
     """One entry in a wiki's edit history (schema-only)."""
 
     id = serializers.IntegerField(read_only=True)
@@ -252,13 +253,13 @@ class WikiEditSerializer(serializers.Serializer):
     created = serializers.DateTimeField(read_only=True)
 
 
-class WikiStatVoteInputSerializer(serializers.Serializer):
+class WikiStatVoteInputSerializer(ExtensibleSerializer):
     """Validates a submitted community stat vote."""
 
     value = serializers.IntegerField(min_value=1, max_value=5)
 
 
-class ArticleDetailSerializer(serializers.Serializer):
+class ArticleDetailSerializer(ExtensibleSerializer):
     """A wiki article with its full body (schema-only)."""
 
     id = serializers.IntegerField(read_only=True)
@@ -274,7 +275,7 @@ class ArticleDetailSerializer(serializers.Serializer):
     base_revision_id = serializers.IntegerField(read_only=True, allow_null=True)
 
 
-class ArticleSaveSerializer(serializers.Serializer):
+class ArticleSaveSerializer(ExtensibleSerializer):
     """
     Validates an article save.
 
@@ -287,7 +288,7 @@ class ArticleSaveSerializer(serializers.Serializer):
     base_revision_id = serializers.IntegerField(required=True, allow_null=True, max_value=DB_BIGINT_MAX)
 
 
-class ArticleRevisionSerializer(serializers.Serializer):
+class ArticleRevisionSerializer(ExtensibleSerializer):
     """One entry in an article's revision history (schema-only)."""
 
     id = serializers.IntegerField(read_only=True)
@@ -307,7 +308,7 @@ class ArticleRevisionDetailSerializer(ArticleRevisionSerializer):
     diff = serializers.JSONField(read_only=True)
 
 
-class CommentMentionSerializer(serializers.Serializer):
+class CommentMentionSerializer(ExtensibleSerializer):
     """A resolved ``@location`` mention inside a comment (schema-only)."""
 
     display = serializers.CharField(read_only=True)
@@ -316,7 +317,7 @@ class CommentMentionSerializer(serializers.Serializer):
     location_slug = serializers.CharField(read_only=True)
 
 
-class CommentSerializer(serializers.Serializer):
+class CommentSerializer(ExtensibleSerializer):
     """
     A comment as the external API returns it (schema-only).
 
@@ -355,7 +356,7 @@ class CommentSerializer(serializers.Serializer):
         return fields
 
 
-class CommentCreateSerializer(serializers.Serializer):
+class CommentCreateSerializer(ExtensibleSerializer):
     """Validates a submitted comment."""
 
     text = serializers.CharField(max_length=MAX_COMMENT_TEXT_LENGTH)
@@ -363,13 +364,13 @@ class CommentCreateSerializer(serializers.Serializer):
     parent_id = serializers.IntegerField(required=False, allow_null=True, max_value=DB_BIGINT_MAX)
 
 
-class ReviewSerializer(serializers.Serializer):
+class ReviewSerializer(ExtensibleSerializer):
     """The caller's own star rating for one of their pins."""
 
     rating = serializers.IntegerField(min_value=0, max_value=5)
 
 
-class GalleryImageSerializer(serializers.Serializer):
+class GalleryImageSerializer(ExtensibleSerializer):
     """
     One image in a wiki's gallery (schema-only).
 
@@ -393,14 +394,14 @@ class GalleryImageSerializer(serializers.Serializer):
     created = serializers.DateTimeField(read_only=True)
 
 
-class WikiBoundaryEntrySerializer(serializers.Serializer):
+class WikiBoundaryEntrySerializer(ExtensibleSerializer):
     """One typed boundary's resolved geometry and where it came from (schema-only)."""
 
     polygon = serializers.JSONField(read_only=True, allow_null=True)
     source = serializers.CharField(read_only=True, allow_null=True)
 
 
-class WikiBoundaryPayloadSerializer(serializers.Serializer):
+class WikiBoundaryPayloadSerializer(ExtensibleSerializer):
     """
     The wiki page map's full boundary payload (schema-only).
 
@@ -417,26 +418,26 @@ class WikiBoundaryPayloadSerializer(serializers.Serializer):
     boundaries = serializers.DictField(child=WikiBoundaryEntrySerializer(), read_only=True)
 
 
-class WikiBoundaryUpdateSerializer(serializers.Serializer):
+class WikiBoundaryUpdateSerializer(ExtensibleSerializer):
     """Save or clear one typed boundary. A null ``polygon`` clears the custom drawing."""
 
     boundary_type = serializers.ChoiceField(choices=BoundaryType.choices)
     polygon = JSONField(required=False, allow_null=True)
 
 
-class WikiCoverPhotoUpdateSerializer(serializers.Serializer):
+class WikiCoverPhotoUpdateSerializer(ExtensibleSerializer):
     """Set the wiki's cover photo to one already in its own gallery."""
 
     image_uuid = serializers.UUIDField()
 
 
-class WikiCoverPhotoResponseSerializer(serializers.Serializer):
+class WikiCoverPhotoResponseSerializer(ExtensibleSerializer):
     """The wiki's cover photo after a set/clear (schema-only)."""
 
     cover_photo_url = serializers.CharField(read_only=True, allow_null=True)
 
 
-class WikiOwnerSerializer(serializers.Serializer):
+class WikiOwnerSerializer(ExtensibleSerializer):
     """
     One shared owner record on a wiki's Ownership card (schema-only, read-only).
 
@@ -456,14 +457,14 @@ class WikiOwnerSerializer(serializers.Serializer):
     updated = serializers.DateTimeField(read_only=True)
 
 
-class WikiPropertySaleOwnerRefSerializer(serializers.Serializer):
+class WikiPropertySaleOwnerRefSerializer(ExtensibleSerializer):
     """A minimal owner reference nested inside a sale record (schema-only)."""
 
     id = serializers.IntegerField(read_only=True)
     name = serializers.CharField(read_only=True)
 
 
-class WikiPropertySaleSerializer(serializers.Serializer):
+class WikiPropertySaleSerializer(ExtensibleSerializer):
     """One shared sale record on a wiki's Sale History tab (schema-only, read-only)."""
 
     id = serializers.IntegerField(read_only=True)

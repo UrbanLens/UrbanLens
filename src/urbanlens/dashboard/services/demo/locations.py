@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 import json
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.services.security.redact import redact_coordinate
 
@@ -14,8 +15,42 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: Name source for a place REData's public-locations catalog names.
-REDATA_PUBLIC_LOCATIONS_NAME_SOURCE = "redata_public_locations"
+
+class DemoLocationSource(ABC):
+    """
+    A catalog of public places a demo instance's pool can be filled from.
+
+    Attributes:
+        key: Short identifier, for logs.
+        verbose_name: What the catalog is called when seeding reports where the pool came from.
+    """
+
+    key: ClassVar[str]
+    verbose_name: ClassVar[str]
+
+    @abstractmethod
+    def entries(self) -> list[dict[str, Any]]:
+        """
+        The catalog's locations.
+
+        Returns:
+            Entries in export format (``latitude``, ``longitude``, ``official_name``, ``official_name_source``, ``wiki``) - possibly empty, including when the catalog is unconfigured or unreachable.
+        """
+
+
+def demo_location_entries() -> tuple[list[dict[str, Any]], str]:
+    """
+    The first non-empty catalog among the contributed sources.
+
+    Returns:
+        ``(entries, verbose_name)`` of the source that answered, or ``([], "")`` when none did.
+    """
+    from urbanlens.dashboard.plugins.points import DEMO_LOCATION_SOURCES
+
+    for source in DEMO_LOCATION_SOURCES:
+        if entries := source.entries():
+            return entries, source.verbose_name
+    return [], ""
 
 
 def manifest_path() -> Path | None:
@@ -119,40 +154,6 @@ def import_location_entries(entries: list[dict[str, Any]]) -> tuple[int, int]:
                     WikiAlias.objects.create(wiki=wiki, name=alias)
 
     return created, updated
-
-
-def redata_demo_locations() -> list[dict[str, Any]]:
-    """
-    Public demo locations published by REData's ``/public-locations/`` catalog.
-
-    Returns:
-        Entries in export format (``latitude``, ``longitude``, ``official_name``, ``official_name_source``, ``wiki``) - possibly empty."""
-    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
-    from urbanlens.dashboard.services.apis.locations.redata_public_locations_gateway import RedataPublicLocationsGateway
-
-    if not redata_configured():
-        return []
-
-    gateway = RedataPublicLocationsGateway()
-    entries: list[dict[str, Any]] = []
-    for record in gateway.list_public_locations(limit=100):
-        latitude, longitude, name = record.get("latitude"), record.get("longitude"), record.get("name")
-        if latitude is None or longitude is None:
-            continue
-        entries.append(
-            {
-                "latitude": latitude,
-                "longitude": longitude,
-                "official_name": name or "",
-                "official_name_source": REDATA_PUBLIC_LOCATIONS_NAME_SOURCE if name else "",
-                # No wiki payload of its own - unlike a PASSED PublicPinCandidate, REData's catalog
-                # carries no cached photos or aliases, only the coordinate and name.
-                # import_public_locations still gives it a minimal Wiki so the location isn't pinned
-                # into a dead end.
-                "wiki": {"name": name or "", "aliases": [], "photos": []},
-            },
-        )
-    return entries
 
 
 def pool_locations() -> list[Location]:

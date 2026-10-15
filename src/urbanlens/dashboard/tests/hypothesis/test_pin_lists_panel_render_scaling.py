@@ -1,4 +1,4 @@
-"""Render-time cost of one more list on the Organize "Lists" tab (P69 - deliberately unpaginated, never measured)."""
+"""Render-time cost of one more list on the Organize "Lists" tab, deliberately unpaginated and never measured."""
 
 from __future__ import annotations
 

@@ -3,7 +3,7 @@ Smart-list membership, kept current off the request.
 
 A pin save or label change used to re-evaluate the pin against every smart list its owner had, in the request's
 commit hook, once per pin per signal. At 25 smart lists over 2,000 pins a bulk edit of 500 pins took about 84,000
-queries and three minutes (N30, Batch 1). A change now records a ``SmartListSyncRequest`` in its own transaction,
+queries and three minutes. A change now records a ``SmartListSyncRequest`` in its own transaction,
 so the request rolls back with it. Once the change commits, one sync is queued per account, and that sync evaluates
 every requested pin against each list together
 (:func:`~urbanlens.dashboard.services.pins.pin_list_membership.sync_pins_against_smart_lists`).

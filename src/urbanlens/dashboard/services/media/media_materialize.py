@@ -1,7 +1,7 @@
 """
 Turns a transient Media-gallery item into a persisted ``Image`` row.
 
-The Private Pin page's Media gallery (Wikimedia, Smithsonian, Yelp, Google
+The Private Pin page's Media gallery (Wikimedia, Yelp, Google
 Images, ...) renders straight from each provider's live results (see
 ``services.pins.external_data``) without persisting anything per item - that's
 what keeps browsing it cheap. Two actions need a real, durable photo though:
@@ -37,7 +37,7 @@ from django.db.models import Q, QuerySet, Sum
 from django.utils import timezone
 import requests
 
-from urbanlens.dashboard.models.images.model import Image, ImageSource, QuotaExemption
+from urbanlens.dashboard.models.images.model import Image, ImageSource, QuotaExemption, image_source_traits
 from urbanlens.dashboard.models.images.relevance import media_item_key
 from urbanlens.dashboard.services.core.text_limits import column_max_length
 from urbanlens.dashboard.services.core.user_agent import USER_AGENT
@@ -71,17 +71,6 @@ _MAX_REDIRECTS = 5
 # match the descriptive string the Wikimedia/Wikipedia gateways already send.
 _DOWNLOAD_HEADERS = {"User-Agent": USER_AGENT}
 
-# The Media gallery's per-provider panel key (GalleryMediaSource.key, what's actually sent as
-# `source` here) doesn't always match the ImageSource value with the same real-world meaning -
-# translate the ones that differ so a materialized row keeps correct attribution instead of silently
-# falling back to plain ImageSource.UPLOAD (see ImageSource.valid() below).
-_PANEL_KEY_TO_IMAGE_SOURCE = {
-    "loc": ImageSource.LIBRARY_OF_CONGRESS,
-    "cris_building": ImageSource.CRIS,
-    # An image a user gave the address of: a pasted overlay URL.
-    "external_url": ImageSource.LINKED_URL,
-}
-
 _CAPTION_MAX_LENGTH = column_max_length(Image, "caption")
 
 
@@ -96,8 +85,15 @@ class MaterializeError(RuntimeError):
 
 
 def _translated_source(source: str) -> str:
-    """Translate a Media gallery panel key to its ``ImageSource`` value, falling back to ``UPLOAD``."""
-    translated = _PANEL_KEY_TO_IMAGE_SOURCE.get(source, source)
+    """
+    Translate a Media gallery panel key to its ``ImageSource`` value, falling back to ``UPLOAD``.
+
+    The panel key (GalleryMediaSource.key, what is sent as ``source``) does not always match the value with the same
+    meaning, so a source declares the keys that name it (``ImageSourceTraits.panel_keys``). Without the translation a
+    row would fall back to plain ``UPLOAD`` and lose its attribution.
+    """
+    keys_by_panel = {key: value for value, traits in image_source_traits().items() for key in traits.panel_keys}
+    translated = keys_by_panel.get(source, source)
     return translated if ImageSource.valid(translated) else ImageSource.UPLOAD
 
 

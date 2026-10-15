@@ -34,6 +34,7 @@ from urbanlens.dashboard.services.notifications.comment_notifications import not
 from urbanlens.dashboard.services.trips.trip_comments import ALLOWED_COMMENT_EMOJIS
 from urbanlens.dashboard.services.undo.handlers.markup_map import MODEL_LABEL as MARKUP_MAP_MODEL_LABEL
 from urbanlens.dashboard.services.undo.service import stash_for_undo
+from urbanlens.dashboard.services.wiki.viewer_projection import viewer_projection, visible_rows
 from urbanlens.dashboard.services.wiki.wiki_access import location_visible_to, resolve_visible_wiki
 
 # Re-exported so existing imports (e.g. tests) keep resolving from this module.
@@ -46,6 +47,7 @@ if TYPE_CHECKING:
 
     from urbanlens.dashboard.models.trips.model import TripComment
     from urbanlens.dashboard.models.wiki.model import Wiki
+    from urbanlens.dashboard.services.wiki.viewer_projection import ViewerProjection
 
 logger = logging.getLogger(__name__)
 
@@ -287,7 +289,7 @@ def _render_comments(request, context: dict) -> HttpResponse:
     return render(request, "dashboard/partials/comments/comment_panel.html", context)
 
 
-def _build_context(comments_qs, profile: Profile, request: HttpRequest, replies_qs=None, conceal: bool = False, **extra) -> dict:
+def _build_context(comments_qs, profile: Profile, request: HttpRequest, replies_qs=None, projection: ViewerProjection | None = None, **extra) -> dict:
     # Gate before paging so page size stays meaningful.
     visible_qs = comments_qs.visible_to(profile)
     visible_replies = (replies_qs if replies_qs is not None else Comment.objects.all()).visible_to(profile)
@@ -311,12 +313,12 @@ def _build_context(comments_qs, profile: Profile, request: HttpRequest, replies_
         {
             "comment": item.comment,
             "rendered_text": item.rendered_text,
-            "reactions": _aggregate_reactions(item.comment.reactions.all(), profile, conceal=conceal),
+            "reactions": _aggregate_reactions(item.comment.reactions.all(), profile, projection=projection),
             "replies": [
                 {
                     "comment": reply.comment,
                     "rendered_text": reply.rendered_text,
-                    "reactions": _aggregate_reactions(reply.comment.reactions.all(), profile, conceal=conceal),
+                    "reactions": _aggregate_reactions(reply.comment.reactions.all(), profile, projection=projection),
                 }
                 for reply in item.replies
             ],
@@ -458,8 +460,8 @@ def _visible_wiki_comments(wiki: Wiki, profile: Profile, *, include_children: bo
     The wiki's comments as *profile* is entitled to see them at page scope.
 
     One function rather than the same two lines at each of the three call sites: the GET had them and
-    the POST and DELETE re-renders did not, so posting a comment handed a concealed viewer the whole
-    thread that the page they were looking at had just filtered.
+    the POST and DELETE re-renders did not, so posting a comment handed a viewer the whole
+    thread that the page they were looking at had just narrowed.
 
     Args:
         wiki: The wiki whose comments are being listed.
@@ -467,22 +469,21 @@ def _visible_wiki_comments(wiki: Wiki, profile: Profile, *, include_children: bo
         include_children: When True, also list comments on descendant child wikis.
 
     Returns:
-        A comment queryset, filtered when this viewer is concealed.
+        A comment queryset, narrowed to what this viewer is shown.
     """
     from urbanlens.dashboard.models.wiki.model import Wiki as WikiModel
-    from urbanlens.dashboard.services.wiki.concealment import conceal_rows, concealment_active
 
     if include_children:
         subtree = WikiModel.objects.filter(pk=wiki.pk).with_descendants()
         rows = Comment.objects.filter(wiki__in=subtree).select_related("wiki", "wiki__location")
     else:
         rows = wiki.comments.all()
-    return conceal_rows(rows, profile) if concealment_active(wiki, profile) else rows
+    return visible_rows(rows, wiki, profile)
 
 
 def _visible_wiki_reply_prefetch(wiki: Wiki, profile: Profile) -> QuerySet[Comment] | None:
     """
-    The queryset a concealed viewer's replies must be prefetched from.
+    The queryset replies must be prefetched from when the viewer's projection narrows the wiki's comments.
 
     Narrowing the top level is not enough.
 
@@ -493,14 +494,13 @@ def _visible_wiki_reply_prefetch(wiki: Wiki, profile: Profile) -> QuerySet[Comme
     Returns:
         A narrowed reply queryset, or None to leave the default prefetch alone.
     """
-    from urbanlens.dashboard.services.wiki.concealment import conceal_rows, concealment_active
-
-    if not concealment_active(wiki, profile):
+    projection = viewer_projection(wiki, profile)
+    if not projection.active:
         return None
     from urbanlens.dashboard.models.wiki.model import Wiki as WikiModel
 
     wiki_ids = WikiModel.objects.filter(pk=wiki.pk).with_descendants()
-    return conceal_rows(Comment.objects.filter(wiki__in=wiki_ids), profile)
+    return projection.rows(Comment.objects.filter(wiki__in=wiki_ids))
 
 
 def _wiki_comment_addressable_by(wiki: Wiki, profile: Profile, comment_id: int | str) -> Comment:
@@ -521,7 +521,7 @@ def _wiki_comment_addressable_by(wiki: Wiki, profile: Profile, comment_id: int |
         The comment, with ``profile`` selected.
 
     Raises:
-        Http404: Unknown id, a comment on a concealed row, or a comment this caller was never shown -
+        Http404: Unknown id, or a comment this caller was never shown -
         all indistinguishable.
     """
     comment = get_object_or_404(
@@ -537,8 +537,6 @@ class WikiCommentsView(LoginRequiredMixin, View):
     """GET/POST comment panel for a wiki."""
 
     def get(self, request, location_slug):
-        from urbanlens.dashboard.services.wiki.concealment import concealment_active
-
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
         include_children = child_details_requested(request, wiki)
         ctx = _build_context(
@@ -546,7 +544,7 @@ class WikiCommentsView(LoginRequiredMixin, View):
             profile,
             request,
             replies_qs=_visible_wiki_reply_prefetch(wiki, profile),
-            conceal=concealment_active(wiki, profile),
+            projection=viewer_projection(wiki, profile),
             wiki=wiki,
             location=wiki.location,
             context_type="wiki",
@@ -556,8 +554,6 @@ class WikiCommentsView(LoginRequiredMixin, View):
         return _render_comments(request, ctx)
 
     def post(self, request, location_slug):
-        from urbanlens.dashboard.services.wiki.concealment import concealment_active
-
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
         text = request.POST.get("text", "").strip()
         image = request.FILES.get("image")
@@ -598,7 +594,7 @@ class WikiCommentsView(LoginRequiredMixin, View):
             profile,
             request,
             replies_qs=_visible_wiki_reply_prefetch(wiki, profile),
-            conceal=concealment_active(wiki, profile),
+            projection=viewer_projection(wiki, profile),
             wiki=wiki,
             location=wiki.location,
             context_type="wiki",
@@ -612,8 +608,7 @@ class WikiCommentDeleteView(LoginRequiredMixin, View):
     """DELETE /location/<slug>/wiki/comments/<int>/delete/"""
 
     def delete(self, request, location_slug, comment_id):
-        from urbanlens.dashboard.services.reputation.scoring import retract_events_for_target
-        from urbanlens.dashboard.services.wiki.concealment import concealment_active
+        from urbanlens.dashboard.plugins.points import CONTRIBUTION_WITHDRAWN
 
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
         comment = _wiki_comment_addressable_by(wiki, profile, comment_id)
@@ -622,7 +617,7 @@ class WikiCommentDeleteView(LoginRequiredMixin, View):
         markup_map = comment.markup_map
         # Owner-only, per the guard above, so this is always the contributor ending their own contribution - the
         # same case, and the same treatment, as withdrawing a photo from a wiki (see detach_image_from_wiki).
-        retract_events_for_target(comment, reason="contribution_withdrawn")
+        CONTRIBUTION_WITHDRAWN.fire(comment)
         comment.delete()
         _discard_comment_image(comment)
         if markup_map is not None:
@@ -637,7 +632,7 @@ class WikiCommentDeleteView(LoginRequiredMixin, View):
             profile,
             request,
             replies_qs=_visible_wiki_reply_prefetch(wiki, profile),
-            conceal=concealment_active(wiki, profile),
+            projection=viewer_projection(wiki, profile),
             wiki=wiki,
             location=wiki.location,
             context_type="wiki",
@@ -663,8 +658,8 @@ class CommentReactionView(LoginRequiredMixin, View):
         if comment.wiki is not None:
             if not location_visible_to(comment.wiki.location, profile):
                 raise Http404
-            # Re-resolve with concealment narrowing; the fetch above applies none,
-            # so concealed comments stay unreachable by guessed id.
+            # Re-resolve with the viewer's projection applied; the fetch above applies none,
+            # so comments they are not shown stay unreachable by guessed id.
             comment = _wiki_comment_addressable_by(comment.wiki, profile, comment_id)
         # Same per-comment gates as listing (visibility, scan, @loc).
         elif not comment_is_visible(comment, profile):
@@ -706,12 +701,8 @@ class TripCommentReactionView(LoginRequiredMixin, View):
 
 
 def _render_reaction_row(request, comment: Comment, profile: Profile) -> HttpResponse:
-    conceal = False
-    if comment.wiki is not None:
-        from urbanlens.dashboard.services.wiki.concealment import concealment_active
-
-        conceal = concealment_active(comment.wiki, profile)
-    reactions = _aggregate_reactions(comment.reactions.all(), profile, conceal=conceal)
+    projection = viewer_projection(comment.wiki, profile) if comment.wiki is not None else None
+    reactions = _aggregate_reactions(comment.reactions.all(), profile, projection=projection)
     return render(
         request,
         "dashboard/partials/comments/comment_reactions.html",
@@ -748,20 +739,18 @@ class _ReactionData(TypedDict):
     reacted_by: list[int]
 
 
-def _aggregate_reactions(reactions_qs, profile: Profile | None = None, *, conceal: bool = False) -> dict[str, _ReactionData]:
+def _aggregate_reactions(reactions_qs, profile: Profile | None = None, *, projection: ViewerProjection | None = None) -> dict[str, _ReactionData]:
     """
     Group reactions by emoji → {count, reacted_by: list of profile_ids}.
 
     Args:
         reactions_qs: The comment's reactions.
-        profile: The viewer, required when ``conceal`` is True.
-        conceal: Whether this viewer sees the concealed form of the wiki the comment belongs to - a
-        reaction is a contribution like any other, so a...
+        profile: The viewer.
+        projection: How the viewer reads the wiki the comment belongs to, if it belongs to one - a
+            reaction is a contribution like any other, so the projection narrows them too.
     """
-    if conceal:
-        from urbanlens.dashboard.services.wiki.concealment import conceal_rows
-
-        reactions_qs = conceal_rows(reactions_qs, profile)
+    if projection is not None:
+        reactions_qs = projection.rows(reactions_qs)
     result: dict[str, _ReactionData] = {}
     # Do not clone the queryset (.all()/select_related): clones drop the
     # prefetch cache and `emoji`/`profile_id` need no join.

@@ -13,8 +13,8 @@ Per run:
     :data:`SWEEP_TIME_BUDGET_SECONDS`. Only the source that did not answer is asked, never the photo's other sources.
 
 Per source:
-    A source is not asked at all in four cases: this environment does not call it (D26: development makes no hosted
-    AI call), its API-limits switch is off, provider health has it backed off, or the sweep's own backoff for it is
+    A source is not asked at all in four cases: this environment does not call it (development calls no external
+    service), its service switch is off, provider health has it backed off, or the sweep's own backoff for it is
     running. A refusal stops the source for the rest of the run, and so do :data:`FAILURES_THAT_STOP_A_SOURCE`
     failures in a row: after one failure the run asks about one more photo when one is due, so one photo the source
     cannot answer does not pass for an outage while others wait. A run in which the source failed and answered nothing
@@ -72,7 +72,7 @@ MAX_WAIT = timedelta(days=30)
 FAILURES_THAT_STOP_A_SOURCE = 2
 #: Photos one run asks a source about, across every source.
 SWEEP_BATCH = 20
-#: A run starts no call after this long. The task's soft limit is 600 s, and an Ollama call may take 60 s.
+#: A run starts no call after this long. The task's soft limit is 600 s, and one provider call may take 60 s.
 SWEEP_TIME_BUDGET_SECONDS = 480
 #: What a sweep reports for a row it deleted because the photo no longer wants the source.
 DROPPED = "dropped"
@@ -316,12 +316,12 @@ def sweep(limit: int = SWEEP_BATCH) -> Counter[str]:
     Returns:
         How many rows came to each :class:`KeywordOutcome`, or :data:`DROPPED`.
     """
-    from urbanlens.dashboard.plugins.registry import plugin_registry
+    from urbanlens.dashboard.plugins.points import PHOTO_KEYWORD_PROVIDERS
     from urbanlens.dashboard.services.core.background_work import background_work
 
     outcomes: Counter[str] = Counter()
     open_sources: dict[str, PhotoKeywordProvider] = {}
-    for provider in plugin_registry.photo_keyword_providers():
+    for provider in PHOTO_KEYWORD_PROVIDERS:
         if not provider.slug or provider.slug in open_sources:
             continue
         reason = _closed_reason(provider)

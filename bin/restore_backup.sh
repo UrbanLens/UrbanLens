@@ -5,7 +5,7 @@
 # Dumps are plain SQL, gzip-compressed or uncompressed; restore from the app container into
 # an empty DB with ON_ERROR_STOP + --single-transaction.
 #
-# Never writes to the live database - see docs/BACKUPS.md.
+# Never writes to the live database.
 #
 # Usage:
 #   bin/restore_backup.sh --list
@@ -17,12 +17,16 @@
 # container's backup directory) or a path to one on this host.
 #
 # Environment:
-#   UL_APP_CONTAINER   app container name (default urbanlens_development_main_app)
+#   UL_APP_CONTAINER   app container name (default: what compose names it, urbanlens_<UL_CONTAINER_NAME or UL_ENVIRONMENT, from the
+#                      shell or .env, else production>_app)
 #   UL_DB_CONTAINER    database container, whose owner the restore runs as (default: the app's name, _app -> _db)
 
 set -euo pipefail
 
-CONTAINER="${UL_APP_CONTAINER:-urbanlens_development_main_app}"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=lib/compose_names.sh
+. "$ROOT/bin/lib/compose_names.sh"
+CONTAINER="$(ul_app_container_name "$ROOT")"
 DB_CONTAINER="${UL_DB_CONTAINER:-${CONTAINER%_app}_db}"
 BACKUP_DIR=/app/src/backups
 
@@ -92,7 +96,7 @@ LIVE_DB=$(in_app "$CONTAINER" printenv UL_DB_NAME)
 [ -n "$LIVE_DB" ] \
     || die "'$CONTAINER' has no UL_DB_NAME, so the guard against restoring over the live database cannot be evaluated. Refusing rather than guessing."
 [ "$TARGET" != "$LIVE_DB" ] \
-    || die "'$TARGET' is the live database this deployment serves. Restore into a scratch database and cut over deliberately - see docs/BACKUPS.md."
+    || die "'$TARGET' is the live database this deployment serves. Restore into a scratch database and cut over deliberately."
 
 # The owner's password crosses from one container to the other over a pipe, never into a process table.
 # `shift`, not "${@:4}": the container's /bin/sh is dash.

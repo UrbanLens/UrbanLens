@@ -1,7 +1,7 @@
 """
 The wiki photo map re-answers "may I see this uploader" once per photo.
 
-N21 H28's second half. `bound_map_layer` already caps how many photos the layer
+`bound_map_layer` already caps how many photos the layer
 plots, but every one of the survivors still calls `_visible_uploader_name`,
 which calls `Profile.can_view_profile` - and at the `COMMON_PIN` visibility
 setting that reaches `_have_common_pin`, which reads *both* accounts' entire

@@ -21,6 +21,7 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.core.text_limits import MAX_ARTICLE_LENGTH, text_length_error
 from urbanlens.dashboard.services.wiki.articles import ArticleConflictError, diff_revisions, get_article, render_article, restore_revision, save_article_checked
+from urbanlens.dashboard.services.wiki.viewer_projection import visible_rows
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
@@ -88,8 +89,8 @@ def _resolved_article(scope: ArticleScope) -> Article | None:
     """
     Re-read the scope's article the way ``ArticleViewBase.resolve`` would.
 
-    Used after a write, so the fragment sent back reflects what was just saved while staying concealed
-    for the viewer who saved it.
+    Used after a write, so the fragment sent back reflects what was just saved while staying as the viewer who
+    saved it reads it.
 
     Args:
         scope: The resolved scope, after a write.
@@ -101,16 +102,16 @@ def _resolved_article(scope: ArticleScope) -> Article | None:
     if scope.wiki is None:
         return article
 
-    from urbanlens.dashboard.services.wiki.concealment import conceal_article
+    from urbanlens.dashboard.services.wiki.viewer_projection import project_article
 
-    return conceal_article(article, scope.wiki, scope.profile)
+    return project_article(article, scope.wiki, scope.profile)
 
 
 def _writable_article(scope: ArticleScope) -> Article:
     """
     The scope's article as a row that may be written.
 
-    ``scope.article`` may be a concealed projection carrying an older revision's text; restoring through
+    ``scope.article`` may be a viewer's projection carrying an older revision's text; restoring through
     it would publish that text as the current article.
 
     Args:
@@ -122,12 +123,12 @@ def _writable_article(scope: ArticleScope) -> Article:
     Raises:
         Http404: The article vanished between resolve and write.
     """
-    from urbanlens.dashboard.services.wiki.concealment import is_concealed
+    from urbanlens.dashboard.services.wiki.viewer_projection import is_projected
 
     article = scope.article
     if article is None:
         raise Http404
-    if not is_concealed(article):
+    if not is_projected(article):
         return article
 
     live = get_article(pin=scope.pin, wiki=scope.wiki)
@@ -155,12 +156,10 @@ def _visible_revision_queryset(scope: ArticleScope):
 
     revisions = ArticleRevision.objects.filter(article_id=scope.article.pk).select_related("editor__user", "restored_from")
     if scope.wiki is None:
-        # A pin article is private to its owner; there is nobody to conceal from.
+        # A pin article is private to its owner; there is no wiki projection to apply.
         return revisions
 
-    from urbanlens.dashboard.services.wiki.concealment import conceal_rows, concealment_active
-
-    return conceal_rows(revisions, scope.profile) if concealment_active(scope.wiki, scope.profile) else revisions
+    return visible_rows(revisions, scope.wiki, scope.profile)
 
 
 def owned_pin(request: HttpRequest, pin_slug: str) -> Pin:
@@ -208,14 +207,14 @@ class ArticleViewBase(LoginRequiredMixin, View):
             Http404: Host not found or not accessible to the requester.
         """
         if "location_slug" in kwargs:
-            from urbanlens.dashboard.services.wiki.concealment import conceal_article
+            from urbanlens.dashboard.services.wiki.viewer_projection import project_article
 
             location, wiki, profile = resolve_visible_wiki(request, kwargs["location_slug"])
             return ArticleScope(
                 profile=profile,
-                # An article is entirely user-contributed prose, so a concealed viewer sees the newest revision
-                # they are entitled to - or None, which is what a place nobody has written up looks like.
-                article=conceal_article(get_article(wiki=wiki), wiki, profile),
+                # An article is entirely user-contributed prose, so it reads as the newest revision the viewer's
+                # projection of the wiki shows them - or None, which is what a place nobody has written up looks like.
+                article=project_article(get_article(wiki=wiki), wiki, profile),
                 pin=None,
                 wiki=wiki,
                 location=location,
@@ -271,7 +270,7 @@ class ArticleViewBase(LoginRequiredMixin, View):
         resolved scope.
         """
         # The visible revisions, not all of them: this id goes out to the client as the conflict-check baseline
-        # and comes back on save, so taking it from the live row would hand a concealed viewer the id of a
+        # and comes back on save, so taking it from the live row would hand a viewer the id of a
         # revision they were not shown - and make the conflict check compare against text they never saw.
         latest_revision = _visible_revision_queryset(scope).order_by("-created").first()
         return render(
@@ -507,7 +506,7 @@ class ArticleRevisionView(ArticleViewBase):
             raise Http404
         # Scoped to what this viewer may see, not merely to the article: an unfiltered by-id lookup is an
         # oracle, answering "does revision N exist here" - and then handing over its whole diff - for revisions
-        # concealment has already decided this account cannot read.
+        # this account is not shown.
         visible = _visible_revision_queryset(scope)
         revision = get_object_or_404(visible, id=kwargs["revision_id"])
         previous = visible.filter(created__lt=revision.created).order_by("-created").first()

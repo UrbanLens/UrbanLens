@@ -21,6 +21,7 @@ from rest_framework import serializers
 from urbanlens.dashboard.models.direct_messages.meta import MessageRetentionChoice
 from urbanlens.dashboard.models.group_chats.model import MAX_GROUP_NAME_LENGTH
 from urbanlens.dashboard.models.reactions.model import Reaction
+from urbanlens.dashboard.plugins.drf import ExtensibleSerializer
 from urbanlens.dashboard.services.core.numbers import DB_BIGINT_MAX, DB_INTEGER_MAX
 from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LENGTH, column_max_length
 from urbanlens.dashboard.services.messaging.direct_messages import reaction_summary, serialize_direct_message
@@ -42,7 +43,7 @@ MAX_ATTACHED_IMAGES = 20
 MAX_MEMBER_SLUGS = 50
 
 
-class MessageBodySerializer(serializers.Serializer):
+class MessageBodySerializer(ExtensibleSerializer):
     """
     The plaintext-or-ciphertext half of any message payload.
 
@@ -58,7 +59,7 @@ class MessageBodySerializer(serializers.Serializer):
     is_encrypted = serializers.BooleanField(read_only=True)
 
 
-class DirectMessageShareSerializer(serializers.Serializer):
+class DirectMessageShareSerializer(ExtensibleSerializer):
     """
     The `@pin` / `@trip` / `@friend` offer attached to a message, if any.
 
@@ -115,7 +116,7 @@ class DirectMessageSerializer(MessageBodySerializer):
     image_ids = serializers.ListField(read_only=True, child=serializers.IntegerField())
 
 
-class ConversationSerializer(serializers.Serializer):
+class ConversationSerializer(ExtensibleSerializer):
     """
     One row of the unified inbox - a one-to-one thread or a group chat.
 
@@ -142,7 +143,7 @@ class ConversationSerializer(serializers.Serializer):
     last_message = DirectMessageSerializer(read_only=True, allow_null=True)
 
 
-class GroupChatSerializer(serializers.Serializer):
+class GroupChatSerializer(ExtensibleSerializer):
     """A group chat's own identity and the caller's standing in it."""
 
     uuid = serializers.CharField(read_only=True)
@@ -153,7 +154,7 @@ class GroupChatSerializer(serializers.Serializer):
     created = serializers.DateTimeField(read_only=True)
 
 
-class GroupMemberSerializer(serializers.Serializer):
+class GroupMemberSerializer(ExtensibleSerializer):
     """One active member, named as this viewer is permitted to see them."""
 
     slug = serializers.CharField(read_only=True, allow_blank=True, help_text="Blank when this member's identity is masked from the viewer - a masked member must not be lookup-able by slug.")
@@ -162,7 +163,7 @@ class GroupMemberSerializer(serializers.Serializer):
     is_creator = serializers.BooleanField(read_only=True)
 
 
-class MessageSendSerializer(serializers.Serializer):
+class MessageSendSerializer(ExtensibleSerializer):
     """
     Validates an untrusted "send a message" payload.
 
@@ -268,26 +269,26 @@ class GroupMessageSendSerializer(MessageSendSerializer):
         return super().validate(attrs)
 
 
-class GroupCreateSerializer(serializers.Serializer):
+class GroupCreateSerializer(ExtensibleSerializer):
     """Validates a "start a group chat" payload."""
 
     name = serializers.CharField(max_length=MAX_GROUP_NAME_LENGTH)
     member_slugs = serializers.ListField(child=serializers.CharField(max_length=255), max_length=MAX_MEMBER_SLUGS, allow_empty=False)
 
 
-class GroupRenameSerializer(serializers.Serializer):
+class GroupRenameSerializer(ExtensibleSerializer):
     """Validates a group rename. Any active member may rename a group."""
 
     name = serializers.CharField(max_length=MAX_GROUP_NAME_LENGTH)
 
 
-class GroupMembersSerializer(serializers.Serializer):
+class GroupMembersSerializer(ExtensibleSerializer):
     """Validates an add-members / remove-member payload."""
 
     member_slugs = serializers.ListField(child=serializers.CharField(max_length=255), max_length=MAX_MEMBER_SLUGS, allow_empty=False)
 
 
-class ReactionSerializer(serializers.Serializer):
+class ReactionSerializer(ExtensibleSerializer):
     """
     Validates a reaction toggle.
 
@@ -300,7 +301,7 @@ class ReactionSerializer(serializers.Serializer):
     emoji = serializers.CharField(max_length=column_max_length(Reaction, "emoji"))
 
 
-class ReactionResultSerializer(serializers.Serializer):
+class ReactionResultSerializer(ExtensibleSerializer):
     """
     What a reaction toggle did, plus the target's resulting summary.
 
@@ -313,7 +314,7 @@ class ReactionResultSerializer(serializers.Serializer):
     reactions = serializers.ListField(read_only=True, child=serializers.DictField())
 
 
-class MuteStateSerializer(serializers.Serializer):
+class MuteStateSerializer(ExtensibleSerializer):
     """
     One conversation's notification-mute state.
 
@@ -327,13 +328,13 @@ class MuteStateSerializer(serializers.Serializer):
     is_muted = serializers.BooleanField(read_only=True)
 
 
-class RetentionSettingsSerializer(serializers.Serializer):
+class RetentionSettingsSerializer(ExtensibleSerializer):
     """The caller's message-retention preference."""
 
     direct_message_delete_after = serializers.ChoiceField(choices=MessageRetentionChoice.choices)
 
 
-class PageSerializer(serializers.Serializer):
+class PageSerializer(ExtensibleSerializer):
     """
     The list envelope shared by this surface's paginated endpoints.
 

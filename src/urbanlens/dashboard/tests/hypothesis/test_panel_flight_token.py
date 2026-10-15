@@ -14,7 +14,7 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.core.locks import acquire_lock
 from urbanlens.dashboard.services.pins.external_data import get_panel_source, run_panel_fetch
 
-_SOURCE_KEY = "photon"
+_SOURCE_KEY = "wikipedia"
 
 
 class PanelFlightTokenTests(TestCase):

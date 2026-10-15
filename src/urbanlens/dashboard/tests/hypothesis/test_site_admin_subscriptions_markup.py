@@ -55,10 +55,10 @@ class SubscriptionsSaveStatusMarkupTests(TestCase):
     def test_each_forms_confirmation_names_that_form(self) -> None:
         """The client matches ``roleSettingsSaved`` to a form by its field group and role."""
         for tag, body in self._autosave_forms():
-            action = _hidden(body, "action")
-            response = self.client.post(
-                _URL, {"action": action, "role_slug": _hidden(body, "role_slug") or ""}, HTTP_HX_REQUEST="true"
-            )
+            # Plugins add autosaving forms of their own, posting to their own routes.
+            action = _hidden(body, "action") or ""
+            data = {"role_slug": _hidden(body, "role_slug") or ""} | ({"action": action} if action else {})
+            response = self.client.post(_attr(tag, "hx-post") or _URL, data, HTTP_HX_REQUEST="true")
             self.assertEqual(response.status_code, 204, action)
             saved = json.loads(response["HX-Trigger"])["roleSettingsSaved"]
             self.assertEqual(

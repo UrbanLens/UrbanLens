@@ -16,7 +16,7 @@ LOGGER = "urbanlens.dashboard.controllers.csp_report"
 
 LEGACY_REPORT = {
     "csp-report": {
-        "document-uri": "https://urbanlens.org/oauth/authorize/?code=secret-code&state=s",
+        "document-uri": "https://example.com/oauth/authorize/?code=secret-code&state=s",
         "effective-directive": "form-action",
         "violated-directive": "form-action",
         "blocked-uri": "https://accounts.google.com/o/oauth2/auth?client_id=x&state=abc",
@@ -59,11 +59,11 @@ class CspReportEndpointTests(SimpleTestCase):
         batch = [
             {
                 "type": "csp-violation",
-                "url": "https://urbanlens.org/dashboard/map/",
+                "url": "https://example.com/dashboard/map/",
                 "body": {
                     "effectiveDirective": "worker-src",
                     "blockedURL": "blob",
-                    "documentURL": "https://urbanlens.org/dashboard/map/",
+                    "documentURL": "https://example.com/dashboard/map/",
                     "disposition": "enforce",
                 },
             },
@@ -73,7 +73,7 @@ class CspReportEndpointTests(SimpleTestCase):
                 "body": {
                     "effectiveDirective": "script-src-elem",
                     "blockedURL": "https://evil.example/x.js",
-                    "documentURL": "https://urbanlens.org/",
+                    "documentURL": "https://example.com/",
                 },
             },
         ]

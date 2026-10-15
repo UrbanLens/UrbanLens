@@ -1,4 +1,4 @@
-"""Custom pin and label icons are served only to viewers who can see the pin or label (P14)."""
+"""Custom pin and label icons are served only to viewers who can see the pin or label."""
 
 from __future__ import annotations
 

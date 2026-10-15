@@ -223,7 +223,7 @@ class CompetitiveRoundFlowTests(TestCase):
 
 
 class EndingAGameMidRoundTests(TestCase):
-    """The host ending a competitive game leaves no vote open behind it (P29)."""
+    """The host ending a competitive game leaves no vote open behind it."""
 
     def setUp(self) -> None:
         self.enterContext(

@@ -1,4 +1,4 @@
-"""Tests for `backfill_wiki_edit_points` (services.consensus.points), P90."""
+"""Tests for `backfill_wiki_edit_points` (services.consensus.points)."""
 
 from __future__ import annotations
 

@@ -30,7 +30,7 @@ class LoginParamsThrottleTests(TestCase):
         for index in range(LOGIN_PARAMS_RATE.limit + 1):
             self._ask(f"user{index}", "203.0.113.7")
 
-        self.assertEqual(self._ask("jess", "198.51.100.9"), 200)
+        self.assertEqual(self._ask("alex", "198.51.100.9"), 200)
 
     def test_the_limit_is_generous_and_per_address(self) -> None:
         self.assertGreaterEqual(LOGIN_PARAMS_RATE.limit, 30)

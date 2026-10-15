@@ -19,10 +19,8 @@ if TYPE_CHECKING:
 
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.plugins.base import PluginContext
     from urbanlens.dashboard.services.apis.assets.base import MediaProvider
-    from urbanlens.dashboard.services.locations.enrichment import EnrichmentSource
-    from urbanlens.dashboard.services.locations.name_resolution import NameProvider
-    from urbanlens.dashboard.services.pins.external_data import PanelSource
 
 logger = logging.getLogger(__name__)
 
@@ -363,38 +361,43 @@ class WikipediaPlugin(UrbanLensPlugin):
     description: ClassVar[str] = "Shows the best-matching Wikipedia article for a pin's location on the Private Pin page."
     author: ClassVar[str] = "UrbanLens"
 
-    def get_service_defaults(self) -> dict[str, ServiceDefaults]:
-        """Rate-limit defaults for the Wikipedia API."""
-        return {
-            "wikipedia": ServiceDefaults(
-                display_name="Wikipedia",
-                category=EgressCategory.QUOTA,
-                calls_per_minute=30,
-                calls_per_day=2000,
-                notes="Free API. Be polite - set a descriptive User-Agent.",
-            ),
-            "wikipedia_media": ServiceDefaults(
-                display_name="Wikipedia (article images)",
-                category=EgressCategory.QUOTA,
-                calls_per_minute=20,
-                calls_per_day=1000,
-                notes="Free API. Only called for pins with an already-matched article.",
-            ),
-        }
+    def setup(self, plugin: PluginContext) -> None:
+        """Wikipedia rate-limit defaults, the summary panel and article-images Media panel, the cached article title as a place-name candidate, and background article caching."""
+        from urbanlens.dashboard.plugins.points import DATA_SOURCE_CREDITS, DataSourceCredit
 
-    def get_panel_sources(self) -> list[PanelSource]:
-        """Contribute the Wikipedia summary panel and its article-images Media panel."""
+        plugin.add(DATA_SOURCE_CREDITS, DataSourceCredit(name="Wikipedia", category="reference", url="https://www.wikipedia.org/", note="Encyclopedia summaries, matched to a pin by name and coordinates."))
+
+        from urbanlens.dashboard.plugins.points import ENRICHMENT_SOURCES, NAME_PROVIDERS, PANEL_SOURCES, SERVICE_DEFAULTS
         from urbanlens.dashboard.services.apis.assets.wikipedia import WikipediaMediaGateway
 
-        return [
-            WikipediaPanelSource(),
-            WikipediaMediaPanelSource("wikipedia_media", WikipediaMediaGateway.service_key, WikipediaMediaGateway),
-        ]
+        plugin.register_all(
+            SERVICE_DEFAULTS,
+            {
+                "wikipedia": ServiceDefaults(
+                    display_name="Wikipedia",
+                    category=EgressCategory.QUOTA,
+                    calls_per_minute=30,
+                    calls_per_day=2000,
+                    notes="Free API. Be polite - set a descriptive User-Agent.",
+                ),
+                "wikipedia_media": ServiceDefaults(
+                    display_name="Wikipedia (article images)",
+                    category=EgressCategory.QUOTA,
+                    calls_per_minute=20,
+                    calls_per_day=1000,
+                    notes="Free API. Only called for pins with an already-matched article.",
+                ),
+            },
+        )
 
-    def get_name_providers(self) -> list[NameProvider]:
-        """Contribute the cached article's title as a place-name candidate."""
-        return [LocationCacheNameProvider(source="wikipedia", cache_source="wikipedia", keys=("title",), verbose_name="Wikipedia")]
+        plugin.extend(
+            PANEL_SOURCES,
+            [
+                WikipediaPanelSource(),
+                WikipediaMediaPanelSource("wikipedia_media", WikipediaMediaGateway.service_key, WikipediaMediaGateway, gallery_order=30, gallery_label="Wikipedia"),
+            ],
+        )
 
-    def get_enrichment_sources(self) -> list[EnrichmentSource]:
-        """Contribute the Wikipedia article cache to scheduled background enrichment."""
-        return [WikipediaEnrichmentSource()]
+        plugin.extend(NAME_PROVIDERS, [LocationCacheNameProvider(source="wikipedia", cache_source="wikipedia", keys=("title",), verbose_name="Wikipedia")])
+
+        plugin.extend(ENRICHMENT_SOURCES, [WikipediaEnrichmentSource()])

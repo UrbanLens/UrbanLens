@@ -12,6 +12,8 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 from urbanlens.dashboard.models.place.model import PlaceKind
 from urbanlens.dashboard.services.places import resolution
+from urbanlens.dashboard.services.wiki.viewer_projection import projected_copy
+from urbanlens.dashboard.tests.hypothesis.viewer_projection_helpers import HidingProjection
 
 from .test_places_campus import make_place
 
@@ -41,7 +43,7 @@ class BoundaryModelTests(TestCase):
     def test_is_source_candidate(self) -> None:
         place = make_place(PlaceKind.PARCEL, _BIG)
         row = baker.make(
-            "dashboard.Boundary", place=place, location=None, wiki=None, pin=None, profile=None, source="redata"
+            "dashboard.Boundary", place=place, location=None, wiki=None, pin=None, profile=None, source="county"
         )
         self.assertTrue(row.is_source_candidate)
 
@@ -79,7 +81,7 @@ class BoundaryQuerySetTests(TestCase):
         self.wiki = baker.make("dashboard.Wiki", location=self.location)
         self.place = make_place(PlaceKind.PARCEL, _BIG)
         self.candidate_row = baker.make(
-            "dashboard.Boundary", place=self.place, location=None, boundary_type=BoundaryType.PROPERTY, source="redata"
+            "dashboard.Boundary", place=self.place, location=None, boundary_type=BoundaryType.PROPERTY, source="county"
         )
         self.wiki_row = baker.make(
             "dashboard.Boundary", wiki=self.wiki, location=self.location, boundary_type=BoundaryType.PROPERTY
@@ -436,7 +438,7 @@ class ScopeGateResolutionTests(TestCase):
 
 class FootprintlessBuildingTests(TestCase):
     """
-    P264: a building place with no footprint still takes an outline drawn on its wiki.
+    A building place with no footprint still takes an outline drawn on its wiki.
 
     ``place_polygon`` is None both for a place the type does not apply to and for a building whose footprint is
     unknown; only the first rules a drawn outline out.
@@ -586,10 +588,8 @@ class WikiResolutionTests(TestCase):
         self.assertEqual(source, "wiki")
         self.assertEqual(polygon.wkt, _MEDIUM.wkt)
 
-    def test_concealed_viewer_never_sees_the_wiki_drawing(self) -> None:
-        """
-        A wiki-scoped Boundary row records no author, so concealment hides it outright
-        rather than risk showing a stranger's edit back as if it were automatic."""
+    def test_a_projection_that_hides_the_wiki_drawing_falls_back_to_the_place(self) -> None:
+        """A wiki-scoped Boundary row records no author, so a projection can only show it or hide it outright."""
         baker.make(
             "dashboard.Boundary",
             wiki=self.wiki,
@@ -598,8 +598,8 @@ class WikiResolutionTests(TestCase):
             polygon=_MEDIUM,
         )
 
-        with mock.patch("urbanlens.dashboard.services.wiki.concealment.is_concealed", return_value=True):
-            polygon, source = Boundary.objects.resolve_for_wiki(self.wiki, BoundaryType.PROPERTY)
+        projected = projected_copy(self.wiki, HidingProjection(self.wiki, None))
+        polygon, source = Boundary.objects.resolve_for_wiki(projected, BoundaryType.PROPERTY)
 
         self.assertEqual(source, "circle")
         self.assertNotEqual(polygon.wkt, _MEDIUM.wkt)
@@ -757,3 +757,29 @@ class BoundaryControllerTests(TestCase):
 
         self.assertEqual(len(payload["detail_buildings"]), 1)
         self.assertEqual(payload["detail_buildings"][0]["pin_id"], child.pk)
+
+
+class OwnPolygonsForWikisTests(TestCase):
+    """A viewer whose projection hides a wiki's own drawing is shown the place's outline for it, and only for that wiki."""
+
+    def test_the_drawing_is_hidden_only_for_the_wiki_the_projection_applies_to(self) -> None:
+        from urbanlens.dashboard.tests.hypothesis.viewer_projection_helpers import projecting
+
+        drawn_on = []
+        for _ in range(2):
+            wiki = baker.make("dashboard.Wiki", location=baker.make("dashboard.Location"))
+            baker.make(
+                "dashboard.Boundary",
+                wiki=wiki,
+                location=wiki.location,
+                boundary_type=BoundaryType.PROPERTY,
+                polygon=_MEDIUM,
+            )
+            drawn_on.append(wiki)
+        hidden, shown = drawn_on
+
+        with projecting(lambda wiki, viewer: wiki.pk == hidden.pk):
+            polygons = Boundary.objects.own_polygons_for_wikis(drawn_on, BoundaryType.PROPERTY, None)
+
+        self.assertEqual(polygons[shown.pk].wkt, _MEDIUM.wkt)
+        self.assertNotEqual(getattr(polygons[hidden.pk], "wkt", None), _MEDIUM.wkt)

@@ -188,7 +188,7 @@ def start_confirmed_import(profile: Profile, confirmed_lists: object, *, auto_ta
     Args:
         profile: The importing profile.
         confirmed_lists: The ``lists`` value the client posted.
-        auto_tag: Whether created pins get AI category suggestions.
+        auto_tag: Whether created pins get category suggestions.
         preview_id: The preview whose history to import with the pins, or None for pins alone.
 
     Returns:
@@ -319,7 +319,7 @@ def run_confirmed_import(profile_id: int, job_id: str) -> dict[str, Any]:
 
         events = _import_events(GoogleMapsGateway(), payload, profile)
         try:
-            # Per-pin signals (wiki creation, category suggestion, reputation) would queue thousands of tasks; coalesced into bounded chunks.
+            # Per-pin signals (wiki creation, category suggestion) would queue thousands of tasks; coalesced into bounded chunks.
             with batching_follow_on_work():
                 for event in events:
                     kind = event["type"]

@@ -94,7 +94,7 @@ class TheAsgiEntrypointWarmsTheUrlconfTests(SimpleTestCase):
         self.assertEqual(result.stdout.strip().splitlines()[-1], "COLD", f"stderr:\n{result.stderr[-1500:]}")
 
     def test_importing_asgi_leaves_the_warmed_heap_out_of_full_collections(self) -> None:
-        """P207: a full collection walked the whole boot heap, about 190 ms holding the GIL on every WebSocket."""
+        """A full collection walked the whole boot heap, about 190 ms holding the GIL on every WebSocket."""
         source = textwrap.dedent(
             f"""
             import gc, sys

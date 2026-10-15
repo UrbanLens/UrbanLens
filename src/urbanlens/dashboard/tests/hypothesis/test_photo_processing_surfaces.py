@@ -1,5 +1,5 @@
 """
-Every surface that lists a user's upload names no file while it is still being processed (P142).
+Every surface that lists a user's upload names no file while it is still being processed.
 
 The raw file of a pending upload is deleted once its re-encode lands, so any URL for it 404s moments later.
 """
@@ -29,11 +29,11 @@ from urbanlens.dashboard.services.map_pins import MapPinPayloadService
 from urbanlens.dashboard.services.media.images import image_to_gallery_json
 from urbanlens.dashboard.services.memories.aggregator import _photos_for_range
 
-_RAW = "pin_images/raw0p142s/upload-p142s.jpg"
-_RAW_DOC = "pin_images/raw0p142s/vault-doc-p142s.txt"
-_ENCODED = "pin_images/encp142s/encoded-p142s.webp"
-_THUMB = "pin_images/thumbp142s/thumb-p142s.webp"
-_MARKER = "pin_images/markerp142s/marker-p142s.webp"
+_RAW = "pin_images/raw0surface/upload-surface.jpg"
+_RAW_DOC = "pin_images/raw0surface/vault-doc-surface.txt"
+_ENCODED = "pin_images/encsurface/encoded-surface.webp"
+_THUMB = "pin_images/thumbsurface/thumb-surface.webp"
+_MARKER = "pin_images/markersurface/marker-surface.webp"
 _TAKEN = datetime(2026, 5, 4, 12, 0, tzinfo=UTC)
 
 
@@ -88,7 +88,7 @@ class VaultDocumentsTests(_Owner):
         self.assertNotIn(_RAW_DOC, json.dumps(payload))
 
     def test_the_documents_page_shows_a_placeholder(self) -> None:
-        document = _pending(self.profile, image=_RAW_DOC, media_type=MediaKind.DOCUMENT, caption="p142s.txt")
+        document = _pending(self.profile, image=_RAW_DOC, media_type=MediaKind.DOCUMENT, caption="surface.txt")
         response = self.client.get(reverse("vault.documents"))
         self.assertEqual(response.status_code, 200)
         self.assertNotIn(_RAW_DOC, response.content.decode())
@@ -151,7 +151,7 @@ class HomeAndVaultHomeTests(_Owner):
         self.assertIn('data-processing="pending"', body)
 
     def test_the_vault_home_video_list_does_not_link_a_pending_video(self) -> None:
-        raw_video = "pin_images/raw0p142s/clip-p142s.mov"
+        raw_video = "pin_images/raw0surface/clip-surface.mov"
         _pending(self.profile, image=raw_video, media_type=MediaKind.VIDEO, file_size=10)
         response = self.client.get(reverse("vault.home"))
         self.assertNotIn(raw_video, response.content.decode())
@@ -177,7 +177,7 @@ class ExternalApiTests(_Owner):
 
     def test_the_photos_endpoint_lists_a_pending_photo_without_its_path(self) -> None:
         image = _pending(self.profile)
-        api_key, raw_key = generate_api_key(self.user, "p142s")
+        api_key, raw_key = generate_api_key(self.user, "surface")
         api_key.scopes = [ApiKeyScope.PHOTOS_READ.value]
         api_key.save(update_fields=["scopes"])
         response = Client().get(reverse("external_api:photos"), HTTP_AUTHORIZATION=f"Bearer {raw_key}")
@@ -240,8 +240,8 @@ class MapPhotoLayerTests(_Owner):
 class MapPinCoverTests(_Owner):
     def setUp(self) -> None:
         super().setUp()
-        location = baker.make(Location, official_name="P142 place", latitude="40.0", longitude="-74.0")
-        self.pin = baker.make(Pin, profile=self.profile, location=location, name="P142 pin")
+        location = baker.make(Location, official_name="upload place", latitude="40.0", longitude="-74.0")
+        self.pin = baker.make(Pin, profile=self.profile, location=location, name="upload pin")
 
     def _urls(self) -> tuple[str | None, str | None]:
         service = MapPinPayloadService(self.profile)

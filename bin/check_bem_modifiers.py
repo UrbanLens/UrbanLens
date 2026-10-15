@@ -73,7 +73,6 @@ _DELIMITER = re.compile(r"[{};]")
 _KNOWN_UNSTYLED = frozenset(
     {
         "album-card--readonly",
-        "assistant-msg--pending",
         "btn--sel",
         "btn--trigger",
         "card--primary",
@@ -101,7 +100,6 @@ _KNOWN_UNSTYLED = frozenset(
         "fp-cf-input--select",
         "fp-cf-input--text",
         "home-widget--stats",
-        "inline-sub-form--pricing",
         "map-overlay-btn--cancel",
         "notif-item--friend-req",
         "notif-item__icon-wrap--pin_shared",

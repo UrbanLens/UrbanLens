@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.album.queryset import AlbumItemQuerySet
     from urbanlens.dashboard.models.album.sort import AlbumSortSpec
     from urbanlens.dashboard.models.images.model import Image
+    from urbanlens.dashboard.services.wiki.viewer_projection import ViewerProjection
 
 
 #: How many photo tiles a grid page carries. Sized so a typical desktop
@@ -130,25 +131,25 @@ def albums_for_owners(owners: Sequence[Pin | Wiki | Profile]) -> QuerySet[Album]
     return Album.objects.filter(query).select_related("cover_image", "parent_pin__location__wiki")
 
 
-def _owner_conceal(owner: Pin | Wiki | Profile, viewer: Profile | None) -> bool:
+def _owner_projection(owner: Pin | Wiki | Profile, viewer: Profile | None) -> ViewerProjection | None:
     """
-    Whether *viewer* sees the concealed form of *owner*'s wiki.
-    Always False for a Pin or a Vault (Profile-owned) album - concealment is a wiki-only concept.
+    How *viewer* reads *owner*'s wiki.
+    None for a Pin or a Vault (Profile-owned) album - a viewer projection is a wiki-only concept.
 
     Args:
         owner: The Pin, Wiki, or Profile whose albums/photos are being resolved.
         viewer: The browsing profile, or None for anonymous.
 
     Returns:
-        Whether album/photo visibility here must also apply concealment."""
+        The projection album/photo visibility here must also apply, or None when no wiki is involved."""
     if isinstance(owner, (Pin, Profile)):
-        return False
-    from urbanlens.dashboard.services.wiki.concealment import concealment_active
+        return None
+    from urbanlens.dashboard.services.wiki.viewer_projection import viewer_projection
 
-    return concealment_active(owner, viewer)
+    return viewer_projection(owner, viewer)
 
 
-def _visible_items(items: AlbumItemQuerySet, viewer: Profile | None, *, conceal: bool = False) -> AlbumItemQuerySet:
+def _visible_items(items: AlbumItemQuerySet, viewer: Profile | None, *, projection: ViewerProjection | None = None) -> AlbumItemQuerySet:
     """
     Narrow membership rows to the photos *viewer* may see, as SQL.
 
@@ -159,7 +160,7 @@ def _visible_items(items: AlbumItemQuerySet, viewer: Profile | None, *, conceal:
     Args:
         items: Membership rows, typically one album's or one owner's.
         viewer: The browsing profile, or None for anonymous.
-        conceal: Whether to also narrow to what a concealed viewer of the owning wiki may see.
+        projection: How *viewer* reads the owning wiki, to also narrow to the photos it shows them.
 
     Returns:
         *items* restricted to viewer-visible photos.
@@ -167,10 +168,8 @@ def _visible_items(items: AlbumItemQuerySet, viewer: Profile | None, *, conceal:
     from urbanlens.dashboard.models.images.model import Image
 
     images = Image.objects.filter(pk__in=items.values("image_id")).visible_to(viewer)
-    if conceal:
-        from urbanlens.dashboard.services.wiki.concealment import conceal_rows
-
-        images = conceal_rows(images, viewer)
+    if projection is not None:
+        images = projection.rows(images)
     return items.filter(image__in=images.values("pk"))
 
 
@@ -187,53 +186,60 @@ def visible_album_items(album: Album, viewer: Profile | None, owner: Pin | Wiki 
         A queryset to page, count or use as a subquery (``.values("image_id")``).
     """
     resolved_owner = owner if owner is not None else album_owner(album)
-    return _visible_items(AlbumItem.objects.for_album(album), viewer, conceal=_owner_conceal(resolved_owner, viewer))
+    return _visible_items(AlbumItem.objects.for_album(album), viewer, projection=_owner_projection(resolved_owner, viewer))
 
 
-def _concealed_wikis(owners: Sequence[Pin | Wiki | Profile], viewer: Profile | None) -> list[Wiki]:
-    """Those of *owners* that *viewer* sees the concealed form of."""
-    return [owner for owner in owners if isinstance(owner, Wiki) and _owner_conceal(owner, viewer)]
+def _narrowing_projections(owners: Sequence[Pin | Wiki | Profile], viewer: Profile | None) -> dict[int, ViewerProjection]:
+    """The projections of those of *owners* that are wikis *viewer* reads differently from the stored rows, by wiki id."""
+    from urbanlens.dashboard.services.wiki.viewer_projection import viewer_projection
+
+    projections = {owner.pk: viewer_projection(owner, viewer) for owner in owners if isinstance(owner, Wiki)}
+    return {wiki_id: projection for wiki_id, projection in projections.items() if projection.active}
 
 
-def _conceal_by_wiki[QuerySetT: QuerySet[Any]](queryset: QuerySetT, wiki_field: str, concealed: Sequence[Wiki], owner_count: int, viewer: Profile | None) -> QuerySetT:
+def _narrow_by_wiki[QuerySetT: QuerySet[Any]](queryset: QuerySetT, wiki_field: str, projections: dict[int, ViewerProjection], owner_count: int) -> QuerySetT:
     """
-    Narrow the rows of *queryset* that belong to a *concealed* wiki, leaving every other owner's rows alone.
+    Narrow the rows of *queryset* that belong to a wiki the viewer reads differently, leaving every other owner's rows alone.
 
     Args:
         queryset: Rows of several owners.
         wiki_field: The field naming a row's wiki (``parent_wiki`` for an album, ``wiki`` for a photo).
-        concealed: The owners' wikis *viewer* is concealed from.
-        owner_count: How many owners *queryset* spans; when every one is concealed, the whole set is narrowed.
-        viewer: Who is looking.
+        projections: How the viewer reads each of those owners' wikis that differs from the stored rows, by wiki id.
+        owner_count: How many owners *queryset* spans; when there is one and it is narrowed, the whole set is.
 
     Returns:
-        *queryset*, narrowed where concealment applies.
+        *queryset*, narrowed where a projection applies.
     """
-    if not concealed:
+    if not projections:
         return queryset
-    from urbanlens.dashboard.services.wiki.concealment import conceal_rows
+    if owner_count == 1:
+        return next(iter(projections.values())).rows(queryset)
+    keep = ~Q(**{f"{wiki_field}__in": list(projections)})
+    for wiki_id, projection in projections.items():
+        keep |= Q(pk__in=projection.rows(queryset.filter(**{wiki_field: wiki_id})).values("pk"))
+    return queryset.filter(keep)
 
-    if len(concealed) == owner_count:
-        return conceal_rows(queryset, viewer)
-    in_concealed = Q(**{f"{wiki_field}__in": concealed})
-    return queryset.filter(~in_concealed | Q(pk__in=conceal_rows(queryset.filter(in_concealed), viewer).values("pk")))
 
-
-def _listed_albums(owner: Pin | Wiki | Profile | Sequence[Pin | Wiki | Profile], viewer: Profile | None) -> tuple[QuerySet[Album], set[int]]:
-    """The albums a Photos tab lists for *owner*, in listing order, and the ids of the wikis concealed from *viewer*."""
+def _listed_albums(owner: Pin | Wiki | Profile | Sequence[Pin | Wiki | Profile], viewer: Profile | None) -> tuple[QuerySet[Album], dict[int, ViewerProjection]]:
+    """The albums a Photos tab lists for *owner*, in listing order, and how *viewer* reads each wiki among them that they read differently."""
     owners: list[Pin | Wiki | Profile] = [owner] if isinstance(owner, (Pin, Wiki, Profile)) else list(owner)
-    concealed = _concealed_wikis(owners, viewer)
-    albums_qs = _conceal_by_wiki(albums_for_owners(owners), "parent_wiki", concealed, len(owners), viewer)
-    return albums_qs.order_by("name", "pk"), {wiki.pk for wiki in concealed}
+    projections = _narrowing_projections(owners, viewer)
+    albums_qs = _narrow_by_wiki(albums_for_owners(owners), "parent_wiki", projections, len(owners))
+    return albums_qs.order_by("name", "pk"), projections
 
 
-def _describe_listed(albums: list[Album], viewer: Profile | None, concealed_wiki_ids: set[int]) -> list[AlbumListEntry]:
-    """:func:`describe_albums` for a listing whose owners' wikis may differ in whether they are concealed."""
-    hidden = [album for album in albums if album.parent_wiki_id in concealed_wiki_ids]
-    if not hidden or len(hidden) == len(albums):
-        return describe_albums(albums, viewer, conceal=bool(hidden))
-    shown = [album for album in albums if album.parent_wiki_id not in concealed_wiki_ids]
-    described = {entry.album.pk: entry for entry in [*describe_albums(hidden, viewer, conceal=True), *describe_albums(shown, viewer)]}
+def _describe_listed(albums: list[Album], viewer: Profile | None, projections: dict[int, ViewerProjection]) -> list[AlbumListEntry]:
+    """:func:`describe_albums` for a listing whose owners' wikis may differ in how the viewer reads them."""
+    groups: dict[int | None, list[Album]] = {}
+    for album in albums:
+        groups.setdefault(album.parent_wiki_id if album.parent_wiki_id in projections else None, []).append(album)
+
+    def projection_of_group(wiki_id: int | None) -> ViewerProjection | None:
+        return projections[wiki_id] if wiki_id is not None else None
+
+    if len(groups) <= 1:
+        return describe_albums(albums, viewer, projection=projection_of_group(next(iter(groups), None)))
+    described = {entry.album.pk: entry for wiki_id, group in groups.items() for entry in describe_albums(group, viewer, projection=projection_of_group(wiki_id))}
     return [described[album.pk] for album in albums if album.pk in described]
 
 
@@ -249,8 +255,8 @@ def albums_listing(owner: Pin | Wiki | Profile | Sequence[Pin | Wiki | Profile],
 
     Returns:
         One :class:`AlbumListEntry` per album, in album order."""
-    albums_qs, concealed_wiki_ids = _listed_albums(owner, viewer)
-    return _describe_listed(list(albums_qs), viewer, concealed_wiki_ids)
+    albums_qs, projections = _listed_albums(owner, viewer)
+    return _describe_listed(list(albums_qs), viewer, projections)
 
 
 def albums_listing_page(
@@ -275,15 +281,15 @@ def albums_listing_page(
 
     Returns:
         ``(page, total)``, *total* counting every album that matches."""
-    albums_qs, concealed_wiki_ids = _listed_albums(owner, viewer)
+    albums_qs, projections = _listed_albums(owner, viewer)
     if name_contains:
         albums_qs = albums_qs.filter(name__icontains=name_contains)
     if exclude is not None:
         albums_qs = albums_qs.exclude(pk=exclude.pk)
-    return _describe_listed(list(albums_qs[offset : offset + limit]), viewer, concealed_wiki_ids), albums_qs.count()
+    return _describe_listed(list(albums_qs[offset : offset + limit]), viewer, projections), albums_qs.count()
 
 
-def describe_albums(albums: Sequence[Album], viewer: Profile | None, *, conceal: bool = False) -> list[AlbumListEntry]:
+def describe_albums(albums: Sequence[Album], viewer: Profile | None, *, projection: ViewerProjection | None = None) -> list[AlbumListEntry]:
     """
     Cover, photo count and date range for each of *albums*, computed in SQL.
 
@@ -293,7 +299,7 @@ def describe_albums(albums: Sequence[Album], viewer: Profile | None, *, conceal:
     Args:
         albums: The albums to describe, in the order they should be rendered.
         viewer: The browsing profile, for the photo-visibility gate.
-        conceal: Whether wiki concealment applies to *viewer*.
+        projection: How *viewer* reads the albums' wiki, when they belong to one.
 
     Returns:
         One :class:`AlbumListEntry` per album, in the given order."""
@@ -305,7 +311,7 @@ def describe_albums(albums: Sequence[Album], viewer: Profile | None, *, conceal:
         return []
 
     album_ids = [album.pk for album in albums]
-    per_album = _visible_items(AlbumItem.objects.filter(album_id__in=album_ids), viewer, conceal=conceal).filter(album_id=OuterRef("pk"))
+    per_album = _visible_items(AlbumItem.objects.filter(album_id__in=album_ids), viewer, projection=projection).filter(album_id=OuterRef("pk"))
     capture_time = Coalesce("image__taken_at", "image__created")
 
     def aggregate(expression) -> Subquery:
@@ -365,10 +371,9 @@ def eligible_images_for(owner: Pin | Wiki | Profile, viewer: Profile | None) -> 
     from urbanlens.dashboard.models.images.model import Image
 
     qs = Image.objects.filter(**owner_kwargs_to_image_scope(owner)).photos().visible_to(viewer).order_by("-created")
-    if _owner_conceal(owner, viewer):
-        from urbanlens.dashboard.services.wiki.concealment import conceal_rows
-
-        qs = conceal_rows(qs, viewer)
+    projection = _owner_projection(owner, viewer)
+    if projection is not None:
+        qs = projection.rows(qs)
     return qs
 
 
@@ -439,7 +444,7 @@ def owner_images_for(owner: Pin | Wiki | Profile | Sequence[Pin | Wiki | Profile
     from urbanlens.dashboard.models.images.model import Image
 
     qs = Image.objects.filter(query).visible_to(viewer).order_by("-created")
-    return _conceal_by_wiki(qs, "wiki", _concealed_wikis(owners, viewer), len(owners), viewer)
+    return _narrow_by_wiki(qs, "wiki", _narrowing_projections(owners, viewer), len(owners))
 
 
 def loose_images_for(owner: Pin | Wiki | Profile | Sequence[Pin | Wiki | Profile], viewer: Profile | None) -> QuerySet[Image]:
@@ -572,7 +577,7 @@ def describe_album(album: Album, viewer: Profile | None, owner: Pin | Wiki | Pro
         The album's :class:`AlbumListEntry`.
     """
     resolved_owner = owner if owner is not None else album_owner(album)
-    entries = describe_albums([album], viewer, conceal=_owner_conceal(resolved_owner, viewer))
+    entries = describe_albums([album], viewer, projection=_owner_projection(resolved_owner, viewer))
     return entries[0] if entries else AlbumListEntry(album=album, photo_count=0, cover=None, date_start=None, date_end=None)
 
 

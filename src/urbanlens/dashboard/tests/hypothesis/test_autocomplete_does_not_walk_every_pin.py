@@ -1,7 +1,7 @@
 """
 Map autocomplete must read the viewer's pins, not every pin on the site.
 
-Measured on the capacity population (471,756 pins, X28): one keystroke cost 405 ms of SQL, and
+Measured on the capacity population (471,756 pins): one keystroke cost 405 ms of SQL, and
 `EXPLAIN (ANALYZE, BUFFERS)` put 197 ms of it in a single node:
 
     Index Scan using dashboard_user_pins_pkey on dashboard_user_pins

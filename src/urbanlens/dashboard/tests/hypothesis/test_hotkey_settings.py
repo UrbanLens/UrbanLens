@@ -14,6 +14,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.forms.settings_form import HotkeySettingsForm
+from urbanlens.dashboard.plugins.points import HOTKEY_ACTIONS
 
 
 class HotkeySettingsFormCleaningTests(TestCase):
@@ -36,11 +37,15 @@ class HotkeySettingsFormCleaningTests(TestCase):
             {"undo": "ctrl+alt+z", "toggleFullscreen": "g"},
         )
 
-    def test_openassistant_combos_survive(self) -> None:
-        # The default binding's own key ("?") and its shifted form - the
-        # regex was widened for exactly these two, not arbitrary punctuation.
-        self.assertEqual(self._clean(json.dumps({"openAssistant": "?"})), {"openAssistant": "?"})
-        self.assertEqual(self._clean(json.dumps({"openAssistant": "shift+?"})), {"openAssistant": "shift+?"})
+    def test_question_mark_combos_survive(self) -> None:
+        # A bare "?" and its shifted form - the regex was widened for exactly these two, not arbitrary punctuation.
+        self.assertEqual(self._clean(json.dumps({"toggleFullscreen": "?"})), {"toggleFullscreen": "?"})
+        self.assertEqual(self._clean(json.dumps({"toggleFullscreen": "shift+?"})), {"toggleFullscreen": "shift+?"})
+
+    def test_an_action_a_plugin_registers_survives(self) -> None:
+        with HOTKEY_ACTIONS.overridden(["pluginAction"]):
+            self.assertEqual(self._clean(json.dumps({"pluginAction": "?"})), {"pluginAction": "?"})
+        self.assertEqual(self._clean(json.dumps({"pluginAction": "?"})), {})
 
     def test_an_unknown_action_id_is_dropped(self) -> None:
         self.assertEqual(self._clean(json.dumps({"undo": "ctrl+alt+z", "notARealAction": "x"})), {"undo": "ctrl+alt+z"})

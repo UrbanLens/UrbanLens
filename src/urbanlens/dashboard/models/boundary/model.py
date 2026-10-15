@@ -30,11 +30,10 @@ class BoundaryType(TextChoices):
 
 class BoundarySource(TextChoices):
     """
-    External provider a candidate boundary's geometry came from.
-    Blank (``""``) marks every other row: the canonical location default, wiki/pin customizations, and legacy rows from before per-source candidates existed.
+    External provider a candidate boundary's geometry came from, for the sources core ships.
+    A plugin's provider names its own (``BoundaryProvider.vote_source``), so the column holds any value. Blank (``""``) marks every other row: the canonical location default, wiki/pin customizations, and legacy rows from before per-source candidates existed.
     """
 
-    REDATA = "redata", "County records (REData)"
     OVERPASS = "overpass", "OpenStreetMap (Overpass)"
 
 
@@ -47,7 +46,7 @@ class Boundary(abstract.DashboardModel):
     boundary_type = CharField(max_length=20, choices=BoundaryType.choices, default=BoundaryType.PROPERTY)
     # External provider for source-candidate rows (see class docstring).
     # Blank on the canonical default, wiki, and pin rows.
-    source = CharField(max_length=20, choices=BoundarySource.choices, blank=True, default="")
+    source = CharField(max_length=20, blank=True, default="")
 
     # User-drawn boundary (clearable). None = fall back to generated_polygon.
     polygon = MultiPolygonField(geography=True, srid=4326, null=True, blank=True)

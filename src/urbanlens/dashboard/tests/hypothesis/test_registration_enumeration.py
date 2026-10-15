@@ -1,4 +1,4 @@
-"""Signup and email-change forms must not tell anyone whether an address already has an account (P147)."""
+"""Signup and email-change forms must not tell anyone whether an address already has an account."""
 
 from __future__ import annotations
 

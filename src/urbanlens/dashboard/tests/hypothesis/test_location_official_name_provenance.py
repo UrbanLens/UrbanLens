@@ -1,5 +1,5 @@
 """
-P186: text a client sent never becomes ``Location.official_name``, so it never reaches the wiki's name or URL.
+Text a client sent never becomes ``Location.official_name``, so it never reaches the wiki's name or URL.
 
 The paired tests prove the request really ran, that the person still sees the name they sent, and that a provider's
 name given at creation does become the slug.
@@ -158,13 +158,3 @@ class OfficialByContractTests(TestCase):
         self.assertIsNone(unknown.official_name)
         self.assertEqual(provided.official_name, TYPED)
         self.assertNotIn(TYPED, [value for _label, value in unknown.deduplicated_identity_fields])
-
-    def test_concealment_shows_only_a_provider_name(self) -> None:
-        from urbanlens.dashboard.services.wiki.concealment import concealed_field_values
-
-        unknown = Wiki.objects.create(location=self._location(""), name="Anything")
-        provided = Wiki.objects.create(location=self._location("wikipedia"), name="Anything")
-        viewer = baker.make(User).profile
-
-        self.assertNotEqual(concealed_field_values(unknown, viewer)["name"], TYPED)
-        self.assertEqual(concealed_field_values(provided, viewer)["name"], TYPED)

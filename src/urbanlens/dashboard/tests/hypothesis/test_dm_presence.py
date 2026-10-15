@@ -1,5 +1,5 @@
 """
-DM presence is per-connection membership that expires, not a counter that cannot (G2-28).
+DM presence is per-connection membership that expires, not a counter that cannot.
 
 The counter had no expiry and a non-atomic first increment: two sockets opening together
 both "created" it at 1, so closing one showed the other tab offline, and a worker that died

@@ -8,11 +8,10 @@ cannot be skipped by a new caller.
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 import logging
-import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 from urllib.parse import urlsplit
-import uuid
 
 from django.db import transaction
 
@@ -23,11 +22,58 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from urbanlens.dashboard.models.images.model import Image
+    from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.map_overlay.queryset import MapImageOverlayQuerySet
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.wiki.model import Wiki
 
 logger = logging.getLogger(__name__)
+
+
+class OverlaySource(ABC):
+    """
+    A place overlays can be taken from besides uploads, contributed to ``OVERLAY_SOURCES``.
+
+    Attributes:
+        heading: Heading of this source's list in the overlay manager.
+        empty_text: Shown in its place while the list loads.
+    """
+
+    heading: ClassVar[str]
+    empty_text: ClassVar[str] = "Looking for georeferenced maps covering this spot..."
+
+    @abstractmethod
+    def available(self) -> bool:
+        """Whether this install can ask the source."""
+
+    @abstractmethod
+    def browse_url(self, owner: Pin | Location) -> str:
+        """The URL of the list of this source's maps covering ``owner``'s location, as an HTML fragment."""
+
+    @abstractmethod
+    def recognized_path(self, path: str) -> str | None:
+        """
+        This site's tile template for a tile path of this source's, however another deployment or the source itself spells it.
+
+        Args:
+            path: The path of an XYZ template, with ``{z}/{x}/{y}`` placeholders.
+
+        Returns:
+            This site's template for that map, or None when the path is not one of this source's.
+        """
+
+
+def overlay_sources_for(owner: Pin | Location) -> list[dict[str, str]]:
+    """
+    The browse lists the overlay manager shows for the map of ``owner``, a pin or a location's wiki.
+
+    Returns:
+        ``{"heading", "empty_text", "url"}`` for each available source, in priority order.
+    """
+    from urbanlens.dashboard.plugins.points import OVERLAY_SOURCES
+
+    return [{"heading": source.heading, "empty_text": source.empty_text, "url": source.browse_url(owner)} for source in OVERLAY_SOURCES if source.available()]
+
 
 #: Overlays one pin's or wiki's map may hold (rendering budget).
 MAX_OVERLAYS_PER_MAP = 12
@@ -70,28 +116,12 @@ def at_overlay_limit(owner: Pin | Wiki) -> bool:
     return overlays_on(owner).count() >= MAX_OVERLAYS_PER_MAP
 
 
-def historical_tile_template(georeference_uuid: str) -> str:
-    """
-    The XYZ template for one REData georeference, served through this site's own tile proxy.
-
-    ``reverse()`` can't emit literal ``{z}/{x}/{y}``, so it builds with zeros and substitutes, keeping the template
-    tied to URL routing rather than a hardcoded prefix.
-    """
-    from django.urls import reverse
-
-    return reverse("map.historical_tiles", args=[georeference_uuid, 0, 0, 0]).replace("/0/0/0.png", "/{z}/{x}/{y}.png")
-
-
-#: REData's own tile pyramid for a georeference (``RedataHistoricalMapsGateway.download_tile``).
-_REDATA_SHEET_TILES = re.compile(r"/api/v1/maps/georeferences/(?P<uuid>[0-9a-fA-F-]{36})/tiles/\{z\}/\{x\}/\{y\}\.png")
-
-
 def recognized_sheet_template(template: str) -> str | None:
     """
     This site's template for a georeferenced sheet named by another address for it.
 
-    Recognised: this site's own historical-tile route, relative or on any host (another deployment's export), and
-    REData's own tile URL for the georeference.
+    A source recognises its own tile route, relative or on any host (another deployment's export), and the upstream
+    address of the sheet.
 
     Args:
         template: An XYZ template.
@@ -99,21 +129,12 @@ def recognized_sheet_template(template: str) -> str | None:
     Returns:
         The sheet's template on this site, or None when *template* names no sheet this site can draw itself.
     """
+    from urbanlens.dashboard.plugins.points import OVERLAY_SOURCES
+
     parts = urlsplit(template)
     if parts.query or parts.fragment or (parts.netloc and parts.scheme not in ("http", "https")):
         return None
-    sentinel = "00000000-0000-0000-0000-000000000000"
-    prefix, _, suffix = historical_tile_template(sentinel).partition(sentinel)
-    if parts.path.startswith(prefix) and parts.path.endswith(suffix):
-        candidate = parts.path[len(prefix) : len(parts.path) - len(suffix)]
-    elif match := _REDATA_SHEET_TILES.fullmatch(parts.path):
-        candidate = match["uuid"]
-    else:
-        return None
-    try:
-        return historical_tile_template(str(uuid.UUID(candidate)))
-    except ValueError:
-        return None
+    return next((rebuilt for source in OVERLAY_SOURCES if (rebuilt := source.recognized_path(parts.path)) is not None), None)
 
 
 def imported_tile_template(template: str) -> str:

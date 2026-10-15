@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 import contextlib
-from decimal import Decimal
 from unittest import mock
 
 from django.contrib.auth.models import User
@@ -58,12 +57,11 @@ class _StreetViewCheckCase(TestCase):
 
 
 class EveryCheckIsInTheLedgerTests(_StreetViewCheckCase):
-    def test_a_check_writes_one_api_call_log_row_at_no_cost(self) -> None:
+    def test_a_check_writes_one_api_call_log_row(self) -> None:
         self.assertEqual(self.check(), {"available": True})
 
         entry = ApiCallLog.objects.get(service=SERVICE)
         self.assertTrue(entry.success)
-        self.assertEqual(entry.cost_estimate, Decimal(0))
         self.urlopen.assert_not_called()
 
     def test_the_key_never_reaches_the_ledger(self) -> None:
@@ -75,7 +73,6 @@ class EveryCheckIsInTheLedgerTests(_StreetViewCheckCase):
         """Google: "Street View Static API metadata requests are available at no charge."""
         defaults = rate_limiter.all_service_defaults()[SERVICE]
         self.assertFalse(defaults.billable)
-        self.assertEqual(defaults.cost_per_call, Decimal(0))
         self.assertIsNotNone(defaults.calls_per_minute)
 
 

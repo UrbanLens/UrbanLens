@@ -214,7 +214,7 @@ class GeocodeAddressGoogleFallbackTests(_SignedInTestCase):
         self.assertEqual(resp.status_code, 404)
 
     def test_a_rate_limit_refusal_falls_back_to_nominatim_instead_of_500(self) -> None:
-        """P122: a refusal is routine (dev/demo refuse most services outright), not an error to 500 on."""
+        """A refusal is routine (dev/demo refuse most services outright), not an error to 500 on."""
         from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
 
         with (

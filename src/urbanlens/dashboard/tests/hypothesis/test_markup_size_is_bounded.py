@@ -1,7 +1,7 @@
 """
 Markup geometry is whatever the client posts, and the reader returns all of it.
 
-Two halves of N21 H39, and they compound. Nothing caps how many coordinate pairs
+Two halves of one finding, and they compound. Nothing caps how many coordinate pairs
 one markup item carries - `geometry` is a JSONField written from the request body
 after a type check and nothing else - and `MarkupJsonView` returns every item in a
 whole pin/wiki subtree in one response. On a community wiki that markup is read by

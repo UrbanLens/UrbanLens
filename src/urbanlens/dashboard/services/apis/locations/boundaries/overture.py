@@ -1,52 +1,81 @@
 """
-Overture Maps buildings and places for a coordinate, from REData's mirror where it holds them and the public release elsewhere.
+Overture Maps buildings and places for a coordinate, from a regional mirror where one covers it and the public release elsewhere.
 
-REData syncs Overture's themes by padded US state and territory boxes and serves them from ``/buildings/`` and the
-``overture`` points-of-interest provider, so a coordinate it covers never reaches Overture itself, even when REData
-has nothing or is not configured.
+A mirror (``points.OVERTURE_MIRRORS``) syncs Overture's themes for the regions it covers, so a coordinate it covers
+never reaches Overture itself, even when the mirror has nothing or is not configured.
 
 The public reader (``overture_maps``) is imported only when used: importing it loads pyarrow.
 """
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from urbanlens.dashboard.plugins.points import OVERTURE_MIRRORS
 from urbanlens.dashboard.services.apis.locations.base import BoundaryProvider, BoundaryProviderDeferredError, best_containing_polygon
-from urbanlens.dashboard.services.apis.locations.boundaries.redata_overture_shards import in_redata_overture_shard
-from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError, redata_configured
-from urbanlens.dashboard.services.core.gateway import UpstreamBusyError, is_source_outage
-from urbanlens.dashboard.services.geo.geo_filter import is_usa_coordinates
+from urbanlens.dashboard.services.core.gateway import ProviderUnavailableError, UpstreamBusyError, is_source_outage
 
 if TYPE_CHECKING:
     from django.contrib.gis.geos import Polygon
 
     from urbanlens.dashboard.services.apis.locations.boundaries.overture_maps import OvertureMapsGateway
 
-#: REData's provider tag for its Overture mirror, on both endpoints.
-_REDATA_PROVIDER = "overture"
 
-#: Only a footprint containing the coordinate is used, and its distance is zero, so the search need not reach further.
-_BUILDING_SEARCH_RADIUS_METERS = 10.0
-
-
-def served_by_redata(latitude: float, longitude: float) -> bool:
+class OvertureMirror(ABC):
     """
-    Whether REData's Overture mirror covers a coordinate, so the public release is not read for it.
+    A regional copy of Overture Maps, served in place of the public release where it covers a coordinate.
 
-    REData answers its ``overture`` providers only where its ``is_usa_coordinates`` holds (the same boxes as ours),
-    and holds rows only inside the shards it syncs. Those boxes are wider than the US in places (Canada and Mexico
-    near the border, the Bahamas) and miss the western Aleutians, so both must hold.
+    Attributes:
+        key: Names the mirror in a deferral.
+    """
+
+    key: ClassVar[str]
+
+    @abstractmethod
+    def covers(self, latitude: float, longitude: float) -> bool:
+        """
+        Whether this mirror serves a coordinate, so the public release is not read for it.
+
+        Independent of whether the mirror is reachable or configured: a covered coordinate is never read from Overture.
+        """
+
+    @abstractmethod
+    def building_features(self, latitude: float, longitude: float) -> list[dict[str, Any]]:
+        """
+        Overture building features (GeoJSON, Overture's own properties) around a coordinate, or ``[]`` when the mirror cannot be asked.
+
+        Raises:
+            ProviderUnavailableError: The mirror could not answer for now.
+        """
+
+    @abstractmethod
+    def place_features(self, latitude: float, longitude: float, *, radius_m: float) -> list[dict[str, Any]]:
+        """
+        Overture place features (GeoJSON, Overture's own properties) within a radius, or ``[]`` when the mirror cannot be asked.
+
+        Raises:
+            ProviderUnavailableError: The mirror could not answer for now.
+        """
+
+    def available(self) -> bool:
+        """Whether this mirror can be asked at all."""
+        return True
+
+
+def overture_mirror_for(latitude: float, longitude: float) -> OvertureMirror | None:
+    """
+    The mirror that serves a coordinate, if any.
 
     Args:
         latitude: WGS-84 latitude.
         longitude: WGS-84 longitude.
 
     Returns:
-        True where REData both applies its Overture providers and syncs a shard.
+        The highest-priority mirror covering it, or None where the public release serves it.
     """
-    return is_usa_coordinates(latitude, longitude) and in_redata_overture_shard(latitude, longitude)
+    return next((mirror for mirror in OVERTURE_MIRRORS if mirror.covers(latitude, longitude)), None)
 
 
 @dataclass(slots=True)
@@ -69,17 +98,18 @@ class OvertureProvider(BoundaryProvider):
             The footprint, or None when no building contains the point.
 
         Raises:
-            BoundaryProviderDeferredError: REData could not answer for now.
+            BoundaryProviderDeferredError: The mirror covering the coordinate could not answer for now.
         """
-        if not served_by_redata(latitude, longitude):
+        mirror = overture_mirror_for(latitude, longitude)
+        if mirror is None:
             return _public_release().get_boundary(latitude, longitude)
         try:
-            features = _redata_building_features(latitude, longitude)
-        except LocationContextUnavailableError as exc:
+            features = mirror.building_features(latitude, longitude)
+        except ProviderUnavailableError as exc:
             if not is_source_outage(exc):
                 raise
             retry_after = exc.retry_after if isinstance(exc, UpstreamBusyError) else None
-            raise BoundaryProviderDeferredError(self.service_key or _REDATA_PROVIDER, retry_after=retry_after) from exc
+            raise BoundaryProviderDeferredError(self.service_key or mirror.key, retry_after=retry_after) from exc
         return best_containing_polygon(features, latitude, longitude)
 
     def get_building_attributes(self, latitude: float, longitude: float) -> dict[str, Any] | None:
@@ -94,13 +124,14 @@ class OvertureProvider(BoundaryProvider):
             See :func:`~urbanlens.dashboard.services.apis.locations.boundaries.overture_maps.building_attributes`.
 
         Raises:
-            LocationContextUnavailableError: REData could not answer.
+            ProviderUnavailableError: The mirror covering the coordinate could not answer.
         """
-        if not served_by_redata(latitude, longitude):
+        mirror = overture_mirror_for(latitude, longitude)
+        if mirror is None:
             return _public_release().get_building_attributes(latitude, longitude)
         from urbanlens.dashboard.services.apis.locations.boundaries.overture_maps import building_attributes
 
-        return building_attributes(_redata_building_features(latitude, longitude), latitude, longitude)
+        return building_attributes(mirror.building_features(latitude, longitude), latitude, longitude)
 
     def get_nearby_places(self, latitude: float, longitude: float, *, radius_m: float = 150.0, limit: int = 5) -> list[dict[str, Any]]:
         """
@@ -116,58 +147,19 @@ class OvertureProvider(BoundaryProvider):
             See :func:`~urbanlens.dashboard.services.apis.locations.boundaries.overture_maps.nearby_places`.
 
         Raises:
-            LocationContextUnavailableError: REData could not answer.
+            ProviderUnavailableError: The mirror covering the coordinate could not answer.
         """
-        if not served_by_redata(latitude, longitude):
+        mirror = overture_mirror_for(latitude, longitude)
+        if mirror is None:
             return _public_release().get_nearby_places(latitude, longitude, radius_m=radius_m, limit=limit)
-        if not redata_configured():
+        if not mirror.available():
             return []
         from urbanlens.dashboard.services.apis.locations.boundaries.overture_maps import nearby_places
-        from urbanlens.dashboard.services.apis.locations.redata_points_of_interest_gateway import RedataPointsOfInterestGateway
 
-        rows = RedataPointsOfInterestGateway().find_near(latitude, longitude, provider=_REDATA_PROVIDER, radius_meters=radius_m)
-        return nearby_places([_place_feature(row) for row in rows], latitude, longitude, radius_m=radius_m, limit=limit)
+        return nearby_places(mirror.place_features(latitude, longitude, radius_m=radius_m), latitude, longitude, radius_m=radius_m, limit=limit)
 
 
 def _public_release() -> OvertureMapsGateway:
     from urbanlens.dashboard.services.apis.locations.boundaries.overture_maps import OvertureMapsGateway
 
     return OvertureMapsGateway()
-
-
-def _redata_building_features(latitude: float, longitude: float) -> list[dict]:
-    if not redata_configured():
-        return []
-    from urbanlens.dashboard.services.apis.locations.redata_buildings_gateway import RedataBuildingsGateway
-
-    records = RedataBuildingsGateway().find_near(latitude, longitude, provider=_REDATA_PROVIDER, radius_meters=_BUILDING_SEARCH_RADIUS_METERS)
-    return [_building_feature(record) for record in records]
-
-
-def _building_feature(record: dict[str, Any]) -> dict[str, Any]:
-    """
-    A REData ``BuildingRecord`` from its Overture mirror, as the feature it was mirrored from.
-
-    Its ``attributes`` are the Overture row's own properties: the promoted ``subtype``/``class``/``height``/
-    ``num_floors``/``sources`` plus every other column REData stores, the roof columns among them. The name is taken
-    from the record's published ``name`` (Overture's ``names.primary``), falling back to the untyped ``attributes``.
-    """
-    properties = dict(record.get("attributes") or {})
-    if record.get("name"):
-        properties["names"] = {"primary": record["name"]}
-    return {"type": "Feature", "geometry": record.get("geometry"), "properties": properties}
-
-
-def _place_feature(row: dict[str, Any]) -> dict[str, Any]:
-    """
-    A REData ``overture`` point of interest as the Overture place it was mirrored from.
-
-    REData flattens ``names.primary`` into ``name`` and the taxonomy's primary category into ``category``, and keeps
-    the rest of the row (``confidence``, ``operating_status``, and anything it does not promote) in ``attributes``.
-    """
-    attributes = row.get("attributes") or {}
-    return {
-        "type": "Feature",
-        "geometry": {"type": "Point", "coordinates": [row.get("longitude"), row.get("latitude")]},
-        "properties": {**attributes, "names": {"primary": row.get("name")}, "categories": {"primary": row.get("category")}},
-    }

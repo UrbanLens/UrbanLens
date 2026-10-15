@@ -215,8 +215,8 @@ def announce_wiki_change(wiki: Wiki, actor: Profile, change: str, *, fields: Col
         wiki: The changed wiki.
         actor: Who changed it.
         change: What changed, completing "<actor> ...".
-        fields: For an edit of the wiki's own fields, which ones; a viewer under concealment hears of the edit only
-            when it touched a field concealment would show them.
+        fields: For an edit of the wiki's own fields, which ones; a viewer hears of the edit only when their
+            projection of the wiki shows them one of those fields.
     """
     _enqueue("announce_wiki_change_task", wiki.pk, actor.pk, change, sorted(fields))
 
@@ -294,9 +294,8 @@ def notify_wiki_change(wiki: Wiki, actor: Profile, change: str, fields: Collecti
     """
     Tell a wiki's audience of a change; the worker side of :func:`announce_wiki_change`.
 
-    A recipient under concealment hears only of a change by someone whose contributions concealment shows them, and
-    of a field edit only when it touched a field concealment does not always blank. The wiki is named as that
-    recipient sees it.
+    A recipient hears of a change only when their projection of the wiki shows it to them, and the wiki is named as
+    that recipient sees it.
 
     Args:
         wiki: The changed wiki.
@@ -307,19 +306,17 @@ def notify_wiki_change(wiki: Wiki, actor: Profile, change: str, fields: Collecti
     Returns:
         How many people were told.
     """
-    from urbanlens.dashboard.services.wiki.concealment import ALWAYS_UNSET, concealed_field_values, concealment_active, visible_actor_ids
+    from urbanlens.dashboard.services.wiki.viewer_projection import viewer_projection
 
     if wiki.location_id is None:
         return 0
     url = reverse("location.wiki", kwargs={"location_slug": wiki.location.slug or str(wiki.location.uuid)})
-    shows_a_field = not fields or any(name not in ALWAYS_UNSET for name in fields)
 
     def notice_for(recipient: Profile) -> ChangeNotice | None:
-        name = wiki.name
-        if concealment_active(wiki, recipient):
-            if actor.pk not in visible_actor_ids(recipient) or not shows_a_field:
-                return None
-            name = concealed_field_values(wiki, recipient).get("name") or name
+        projection = viewer_projection(wiki, recipient)
+        if not projection.shows_change(actor, fields):
+            return None
+        name = projection.shown_wiki().name or wiki.name
         return ChangeNotice(title=f'The wiki for "{name}" was updated', url=url, change=change)
 
     return announce_change(

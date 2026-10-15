@@ -4,7 +4,7 @@
  * "Markup" is any template literal or `+` chain whose static text holds a tag, plus anything assigned to
  * `innerHTML`/`outerHTML` or passed to `insertAdjacentHTML`. Leaflet's and MapLibre's popup and tooltip setters,
  * and `divIcon`'s `html`, render a string as HTML too, so whatever they are handed is checked whatever its shape. A local variable is followed to every value it is
- * given, so markup built in a variable and interpolated later is checked where it is built (P128: an
+ * given, so markup built in a variable and interpolated later is checked where it is built (for example, an
  * `iconHtml` built from a raw label icon passed because the name `iconHtml` was approved everywhere).
  */
 
@@ -322,7 +322,7 @@ describe("markup interpolations are escaped", () => {
         expect([...REVIEWED_SAFE.keys()].filter((key) => !present.has(key))).toEqual([]);
     });
 
-    test("a label icon interpolated through a local variable is caught (P128)", () => {
+    test("a label icon interpolated through a local variable is caught", () => {
         const source = ts.createSourceFile(
             "probe.ts",
             'function chip(b) { const iconHtml = b.icon ? `<span>${b.icon}</span>` : ""; el.innerHTML = `${iconHtml}<span>${escHtml(b.name)}</span>`; }',

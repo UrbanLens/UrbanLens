@@ -1,5 +1,5 @@
 """
-The Organize page's label cards, prepared in one pass so the template only places them (P66).
+The Organize page's label cards, prepared in one pass so the template only places them.
 
 The card template once derived all of this itself: about thirty variable renders and as many ``{% if %}``
 nodes per card, which at 400 tags was nearly two seconds of template interpretation and no queries to speak

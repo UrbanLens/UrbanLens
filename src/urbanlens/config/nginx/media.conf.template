@@ -1,4 +1,4 @@
-# The media origin: media.urbanlens.org and nothing else.
+# The media origin: media.example.com and nothing else.
 #
 # A second, deliberately tiny nginx whose config contains only the two media
 # locations. The app's routes are not merely un-matched here, they are absent -
@@ -7,7 +7,7 @@
 # `server_name` block to django.conf: a Host header cannot walk from this vhost
 # into the application, because this vhost does not know how to get there.
 #
-# Point NGINX Proxy Manager's media.urbanlens.org host at ${UL_MEDIA_PORT}.
+# Point your reverse proxy's media.example.com host at ${UL_MEDIA_PORT}.
 #
 # Requests still reach Django - the media gate authenticates and authorizes every
 # byte (dashboard/controllers/media.py). What changes on this origin is *how* it
@@ -28,8 +28,8 @@ server {
     server_name _;
 
     # Both of Docker's default pools; the reasoning is django.conf's.
-    set_real_ip_from 172.16.0.0/12;
-    set_real_ip_from 192.168.0.0/16;
+    # Written at start from UL_TRUSTED_PROXY_CIDRS by 10-trusted-proxies.sh.
+    include /etc/nginx/conf.d/trusted_proxies.inc;
     real_ip_header X-Forwarded-For;
     real_ip_recursive on;
 

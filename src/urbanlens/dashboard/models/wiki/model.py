@@ -26,6 +26,8 @@ if TYPE_CHECKING:
 
     from django.db.models.fetch_modes import FetchMode
 
+    from urbanlens.dashboard.services.wiki.viewer_projection import ViewerProjection
+
 
 logger = logging.getLogger(__name__)
 
@@ -123,15 +125,14 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
     # A top-level page has no creator: every pinned Location gets one automatically
     # (tasks.ensure_wiki_for_location), so there is nobody to attribute it to and nothing about
 
+    #: Set only on a copy built by ``services.wiki.viewer_projection.projected_copy``: the projection under which
+    #: one viewer reads this wiki rather than the stored row. Its viewer is who the copy was built for, so projecting
+    #: again for that viewer is a no-op and for anyone else a rebuild.
+    _ul_projection: ViewerProjection | None = None
+
     #: Scalar fields whose writes record provenance.
     #: Mirrors services.wiki.wiki_edits.WIKI_EDITABLE_FIELDS - the fields a person can change - plus
     #: pin_type and indoor_outdoor, which enrichment and the Consensus game both write.
-    _ul_concealed: bool = False
-
-    #: Which viewer the projection above was built for, so re-concealing is a
-    #: no-op for that viewer and a rebuild for anyone else. None means signed
-    #: out, which is why this is a separate attribute rather than a falsy pk.
-    _ul_concealed_for: int | None = None
 
     versioned_fields = (
         "name",

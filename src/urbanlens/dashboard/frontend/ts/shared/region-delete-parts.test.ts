@@ -1,4 +1,4 @@
-/** Splitting a stored region into one polygon per part, so each part loads as its own deletable layer (P120). */
+/** Splitting a stored region into one polygon per part, so each part loads as its own deletable layer. */
 import { describe, expect, test } from "bun:test";
 
 import { polygonParts } from "./region-delete";

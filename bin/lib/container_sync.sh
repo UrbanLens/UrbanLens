@@ -68,7 +68,7 @@ sync_tree_into() {
         # tests are known to read today.
         local f
         for f in Dockerfile docker-compose.yml docker-compose.hot-reload.yml docker-entrypoint.sh \
-            gunicorn.conf.py pyproject.toml uv.lock .gitignore .env-sample .env.ai-sample; do
+            gunicorn.conf.py pyproject.toml uv.lock .gitignore .env-sample .env.*-sample; do
             [ -e "$f" ] && docker cp "$f" "$container":/app/"$f"
         done
     fi

@@ -10,8 +10,8 @@ let respond: () => Response = () => new Response("{}", { status: 200 });
 let triggered: string[] = [];
 let errors: string[] = [];
 
-function item(key: string, source: string, score: number, relevant = ""): string {
-    return `<div class="media-item" data-media-source="${source}" data-media-key="${key}" data-media-url="/u/${key}" data-vote-score="${score}" data-media-relevant="${relevant}">
+function item(key: string, source: string, score: number, relevant = "", label = ""): string {
+    return `<div class="media-item" data-media-source="${source}"${label ? ` data-media-source-label="${label}"` : ""} data-media-key="${key}" data-media-url="/u/${key}" data-vote-score="${score}" data-media-relevant="${relevant}">
       <img class="media-item-thumb" src="/t/${key}">
       <button class="media-item-vote-up-btn" data-media-action="vote-up"><i>up</i></button>
       <span class="media-item-votes">${score}</span>
@@ -59,7 +59,7 @@ beforeEach(() => {
     errors = [];
     respond = () => new Response("{}", { status: 200 });
     window.toastr = { success: () => undefined, error: (m) => void errors.push(m), warning: () => undefined, info: () => undefined, clear: () => undefined };
-    render(item("a", "flickr", 1) + item("b", "wikimedia", 5) + item("c", "flickr", 3));
+    render(item("a", "flickr", 1) + item("b", "wikimedia", 5, "", "Wikimedia") + item("c", "flickr", 3));
     media.refresh();
 });
 
@@ -85,8 +85,23 @@ describe("tabs", () => {
         expect(triggered).toEqual(["ul:load-manage"]);
     });
 
+    test("a tab is named by its tiles' label, and by its key when they carry none", () => {
+        render(item("a", "one", 1, "", "First Provider") + item("b", "two", 1));
+        media.refresh();
+        expect(tabs()).toEqual(["All2", "Manage", "First Provider1", "two1"]);
+    });
+
+    test("the wiki's own photos tab is named Photos", () => {
+        render(item("a", "photos", 1) + item("b", "one", 1, "", "First Provider"));
+        media.refresh();
+        expect(tabs()).toEqual(["All2", "Manage", "First Provider1", "Photos1"]);
+    });
+
     test("a source name is text, not markup", () => {
         render(item("x", "<img src=x onerror=alert(1)>", 1));
+        media.refresh();
+        expect(document.querySelector("#wiki-media-tabs img")).toBeNull();
+        render(item("y", "safe", 1, "", "&lt;img src=x onerror=alert(1)&gt;"));
         media.refresh();
         expect(document.querySelector("#wiki-media-tabs img")).toBeNull();
     });

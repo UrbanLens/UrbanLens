@@ -1,5 +1,5 @@
 /**
- * A native `<select>` popup is legible in both themes (P51).
+ * A native `<select>` popup is legible in both themes.
  *
  * Chromium draws each row on the option's own background, falling back to the select's, and to a white
  * popup when neither is opaque. The site's inputs use a translucent background, so a dark-theme popup

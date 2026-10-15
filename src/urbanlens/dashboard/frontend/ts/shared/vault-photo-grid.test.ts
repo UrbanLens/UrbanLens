@@ -1,6 +1,6 @@
 /**
  * Vault Photos' windowed grid, bound the way the page binds it: tiles far from the viewport drop their bitmap,
- * and get it back once they come near again (P59).
+ * and get it back once they come near again.
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";

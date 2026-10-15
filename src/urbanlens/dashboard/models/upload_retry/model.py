@@ -1,4 +1,4 @@
-"""An upload storage failed on, waiting to be tried again rather than dropped or rejected (P119)."""
+"""An upload storage failed on, waiting to be tried again rather than dropped or rejected."""
 
 from __future__ import annotations
 

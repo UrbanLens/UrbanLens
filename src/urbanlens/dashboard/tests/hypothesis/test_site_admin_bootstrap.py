@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest import mock
+
 from django.contrib.auth.models import User
 from django.test import Client
 from django.urls import reverse
@@ -17,6 +19,7 @@ from urbanlens.dashboard.services.admin.site_admin import (
     promote_first_user_if_needed,
     should_redirect_to_site_admin,
 )
+from urbanlens.UrbanLens.settings.app import settings as app_settings
 
 
 class PromoteFirstUserTests(TestCase):
@@ -40,6 +43,52 @@ class PromoteFirstUserTests(TestCase):
     def test_promote_is_idempotent_for_first_user(self) -> None:
         user: User = baker.make(User, username="founder")
         self.assertFalse(promote_first_user_if_needed(user))
+
+    def test_bootstrap_email_unset_leaves_the_first_account_in_charge(self) -> None:
+        with mock.patch.object(app_settings, "bootstrap_admin_email", ""):
+            user: User = baker.make(User, username="founder", email="anyone@example.com")
+
+        self.assertEqual(SiteSettings.get_current().bootstrap_admin_user_id, user.pk)
+
+    def test_bootstrap_email_matches_case_insensitively(self) -> None:
+        with mock.patch.object(app_settings, "bootstrap_admin_email", "Owner@Example.com"):
+            user: User = baker.make(User, username="founder", email="owner@example.COM")
+
+        self.assertEqual(SiteSettings.get_current().bootstrap_admin_user_id, user.pk)
+
+    def test_bootstrap_email_matches_after_gmail_normalization(self) -> None:
+        with mock.patch.object(app_settings, "bootstrap_admin_email", "jake.smith@gmail.com"):
+            user: User = baker.make(User, username="founder", email="JakeSmith+urbex@googlemail.com")
+
+        self.assertEqual(SiteSettings.get_current().bootstrap_admin_user_id, user.pk)
+
+    def test_first_account_with_another_email_does_not_claim_the_slot(self) -> None:
+        with mock.patch.object(app_settings, "bootstrap_admin_email", "owner@example.com"):
+            stranger: User = baker.make(User, username="stranger", email="stranger@example.com")
+
+        settings = SiteSettings.get_current()
+        self.assertIsNone(settings.bootstrap_admin_user_id)
+        self.assertFalse(stranger.groups.filter(name=SITE_ADMIN_GROUP_NAME).exists())
+
+    def test_non_matching_account_is_refused_even_when_the_slot_is_empty(self) -> None:
+        with mock.patch.object(app_settings, "bootstrap_admin_email", "owner@example.com"):
+            self.assertFalse(promote_first_user_if_needed(baker.make(User, username="guest", email="")))
+
+    def test_matching_account_claims_the_empty_slot_after_others_exist(self) -> None:
+        with mock.patch.object(app_settings, "bootstrap_admin_email", "owner@example.com"):
+            baker.make(User, username="early", email="early@example.com")
+            owner: User = baker.make(User, username="owner", email="Owner@Example.com")
+
+        self.assertEqual(SiteSettings.get_current().bootstrap_admin_user_id, owner.pk)
+        self.assertTrue(owner.groups.filter(name=SITE_ADMIN_GROUP_NAME).exists())
+
+    def test_matching_account_cannot_displace_a_claimed_slot(self) -> None:
+        first: User = baker.make(User, username="founder", email="founder@example.com")
+        with mock.patch.object(app_settings, "bootstrap_admin_email", "owner@example.com"):
+            owner: User = baker.make(User, username="owner", email="owner@example.com")
+
+        self.assertEqual(SiteSettings.get_current().bootstrap_admin_user_id, first.pk)
+        self.assertFalse(owner.groups.filter(name=SITE_ADMIN_GROUP_NAME).exists())
 
 
 class SiteAdminRedirectTests(TestCase):

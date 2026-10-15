@@ -2,12 +2,16 @@
 from __future__ import annotations
 
 import csv
+from typing import TYPE_CHECKING
 
 from django.apps import AppConfig
 from django.contrib.auth.signals import user_logged_out
 from django.core.signals import request_finished, request_started
-from django.db.models.signals import post_delete, post_save
+from django.db.models.signals import post_delete, post_migrate, post_save
 from pillow_heif import register_heif_opener
+
+if TYPE_CHECKING:
+    from django.db.models import Model
 
 
 class DashboardConfig(AppConfig):
@@ -32,6 +36,7 @@ class DashboardConfig(AppConfig):
         # drf-spectacular resolves target_class by mutating a shared attribute with no
         # lock - unsafe under threaded workers. See schema.patch_extension_thread_safety.
         from urbanlens.dashboard.external_api.schema import patch_extension_thread_safety
+        import urbanlens.dashboard.plugins.checks
 
         patch_extension_thread_safety()
 
@@ -74,9 +79,24 @@ class DashboardConfig(AppConfig):
         user_logged_out.connect(forget_tile_viewer, dispatch_uid="basemap_tile_auth_forget")
 
         # Memoises the SiteSettings singleton for a request only; see that module for why.
-        from urbanlens.dashboard.models.billing import RoleSubscription
         from urbanlens.dashboard.models.site_settings import request_cache as site_settings_cache
         from urbanlens.dashboard.models.site_settings.model import SiteSettings
+        from urbanlens.dashboard.plugins.points import SITE_SETTINGS_SENDERS
+
+        # Plugin setup must never touch the database this early, and it runs before the signal connections below
+        # so the senders plugins contribute connect with core's.
+        plugin_registry.discover()
+
+        # Plugin tables reach core rows through foreign keys that must act in the database, since a disabled plugin's
+        # rows are invisible to Django's own cascades; see that module.
+        from urbanlens.dashboard.plugins.integrity import after_migrate
+
+        post_migrate.connect(after_migrate, sender=self, dispatch_uid="plugin_foreign_keys_act_in_database")
+
+        from urbanlens.dashboard.plugins.points import LABEL_MATCHERS
+        from urbanlens.dashboard.services.labels.matching import KeywordLabelMatcher
+
+        LABEL_MATCHERS.add(KeywordLabelMatcher(), priority=50)
 
         # Caches navbar subscriptions across requests; see that module for invalidation.
         from urbanlens.dashboard.models.subscriptions.access_state import connect_invalidation as connect_access_invalidation
@@ -87,7 +107,8 @@ class DashboardConfig(AppConfig):
         request_started.connect(site_settings_cache.begin_scope, dispatch_uid="site_settings_cache_begin")
         request_finished.connect(site_settings_cache.end_scope, dispatch_uid="site_settings_cache_end")
         post_save.connect(site_settings_cache.invalidate, sender=SiteSettings, dispatch_uid="site_settings_cache_invalidate")
-        for sender in (UserSubscription, RoleSubscription, SubscriptionRole):
+        cache_senders: list[type[Model]] = [UserSubscription, SubscriptionRole, *SITE_SETTINGS_SENDERS.apply([])]
+        for sender in cache_senders:
             post_save.connect(
                 site_settings_cache.invalidate,
                 sender=sender,
@@ -102,19 +123,24 @@ class DashboardConfig(AppConfig):
         # Achievements fan out to many models, so receivers register from a table.
         connect_achievement_signals()
 
-        # rule_key choices come from this registry, so populate before forms render it.
-        # Registration only builds dataclasses.
-        from urbanlens.dashboard.services.reputation.builtin_rules import register_builtin_rules
+        # Plugins name the origins their pages load. django-csp reads the policy per request, so appending here is enough;
+        # the enforcing and report-only policies share one directives dict, hence the de-duplication.
+        from django.conf import settings as django_settings
 
-        register_builtin_rules()
+        from urbanlens.dashboard.plugins.points import API_KEY_SCOPES, CSP_SOURCES
 
-        # Ledger write is synchronous - see that module's docstring.
-        from urbanlens.dashboard.models.reputation.signals import connect as connect_reputation_signals
+        for policy_name in ("CONTENT_SECURITY_POLICY", "CONTENT_SECURITY_POLICY_REPORT_ONLY"):
+            policy = getattr(django_settings, policy_name, None)
+            if policy:
+                for directive, origin in CSP_SOURCES:
+                    existing = policy["DIRECTIVES"].setdefault(directive, [])
+                    if origin not in existing:
+                        existing.append(origin)
 
-        connect_reputation_signals()
-
-        # Plugin discovery must never touch the database this early.
-        plugin_registry.discover()
+        # The OAuth provider reads its scope table from settings, which load before plugins name their scopes.
+        provider = getattr(django_settings, "OAUTH2_PROVIDER", None)
+        if isinstance(provider, dict):
+            provider["SCOPES"] = {**provider.get("SCOPES", {}), **dict(API_KEY_SCOPES.choices())}
 
         # Logs callable egress once per process after discovery, so overrides are never silent.
         from urbanlens.dashboard.services.core.egress import log_egress_policy

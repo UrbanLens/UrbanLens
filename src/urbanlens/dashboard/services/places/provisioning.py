@@ -52,7 +52,7 @@ def find_matching_place(kind: str, polygon: MultiPolygon, *, provider: str = "",
     Args:
         kind: The :class:`PlaceKind` the polygon describes.
         polygon: The candidate geometry.
-        provider: Provider key namespace (e.g. ``"redata"``).
+        provider: Provider key namespace (e.g. ``"osm"``).
         provider_key: The provider's stable id for this record, when it has one.
         exclude_pk: A place to never match, however well its geometry fits - for a parcel being split, its own (still-``CURRENT`` until the split transaction commits) centroid very often lands inside one of its own successors, and without this a successor's upsert...
     """
@@ -69,7 +69,7 @@ def find_matching_place(kind: str, polygon: MultiPolygon, *, provider: str = "",
     for candidate in centroid_holders:
         # A place already claimed by a *different* id from this same provider is not this record,
         # whatever the geometry says - the provider has just told us they are two things.
-        # This matters most for nested buildings: REData reconciles a block and the wings inside it
+        # This matters most for nested buildings: a source that reconciles a block and the wings inside it
         # into separate records on purpose, and an L-shaped block can contain a wing's centroid
         if provider and provider_key and candidate.provider == provider and candidate.provider_key and candidate.provider_key != provider_key:
             continue
@@ -299,19 +299,20 @@ def ensure_building_places(parcel: Place | None, buildings: list[dict], *, provi
 
     Args:
         parcel: The parcel these buildings stand on; None skips the whole step, since a building place with no parcel has no domain to join.
-        buildings: Cached building records (see ``plugins.builtin.parcel_buildings``).
+        buildings: Cached building records (see ``services.places.building_records``).
         provider: Provider namespace for stable-id matching.
 
     Returns:
         Dict mapping each record's index in ``buildings`` to its place."""
     from urbanlens.dashboard.services.pins.pin_restructure import building_footprint, building_name
-    from urbanlens.dashboard.services.places import overture_refs
+    from urbanlens.dashboard.services.places.building_records import building_key, place_provider
 
     if parcel is None:
         return {}
-    resolver = overture_refs.RedataResolver() if provider == overture_refs.REDATA else None
+    source = place_provider(provider)
+    rekey = source.place_keyer() if source is not None else None
 
-    # REData's reconciled shape reports nesting: a coarse footprint enclosing finer ones becomes
+    # A reconciled record reports nesting: a coarse footprint enclosing finer ones becomes
     # their `parent_ref` rather than a duplicate of them.
     # Parenting every building to the parcel regardless made an envelope and the wings inside it
     by_ref: dict[str, int] = {}
@@ -328,12 +329,11 @@ def ensure_building_places(parcel: Place | None, buildings: list[dict], *, provi
 
     def _key(building: dict) -> str:
         """The building's identity: global ids as they are, a building number only within this parcel."""
-        # "stable_ref" (else "ref") is the reconciled shape's id (e.g. "cris:02714.000098")
-        # and doubles as the key floorplan lookups use - prefer it.
-        if ref := overture_refs.building_key(building) or str(building.get("uuid") or building.get("id") or "").strip():
+        # "stable_ref" (else "ref") is the record's id and doubles as the key floorplan lookups use - prefer it.
+        if ref := building_key(building) or str(building.get("uuid") or building.get("id") or "").strip():
             return ref
         if osm_id := building.get("osm_id"):
-            # REData's own ref for an OSM building, so a later REData answer finds this place.
+            # The ref a source of reconciled records gives an OSM building, so its later answers find this place.
             return f"osm:{building.get('osm_type') or 'way'}/{osm_id}"
         if number := str(building.get("building_number") or "").strip():
             return f"parcel:{parcel.pk}:{number}"
@@ -350,8 +350,8 @@ def ensure_building_places(parcel: Place | None, buildings: list[dict], *, provi
         building = buildings[index]
         footprint = _as_multipolygon(building_footprint(building))
         key = _key(building)
-        if provider and key.startswith(overture_refs.OVERTURE_PREFIX):
-            key = overture_refs.key_for_building(building, footprint, resolver=resolver)
+        if rekey is not None and key:
+            key = rekey(building, footprint, key)
         _adopt_legacy_number_key(key)
         place = upsert_place(
             PlaceKind.BUILDING,
@@ -426,12 +426,12 @@ def record_boundary_candidates(place: Place, candidates: list[tuple[str, MultiPo
         place: The parcel place the candidates describe.
         candidates: ``(provider service_key, polygon)`` pairs from the chain."""
     from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
+    from urbanlens.dashboard.services.geo.boundary_sources import vote_sources
     from urbanlens.dashboard.services.geo.boundary_voting import apply_winning_boundary
-    from urbanlens.dashboard.services.locations.boundaries import PROVIDER_BOUNDARY_SOURCES
 
     now = timezone.now()
     for service_key, polygon in candidates:
-        source = PROVIDER_BOUNDARY_SOURCES.get(service_key)
+        source = vote_sources().get(service_key)
         if source is None:
             continue
         candidate, _created = Boundary.objects.get_or_create(

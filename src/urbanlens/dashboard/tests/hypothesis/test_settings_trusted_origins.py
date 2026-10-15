@@ -8,13 +8,13 @@ from hypothesis import given, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.UrbanLens.settings.base import _derive_trusted_origins, _origin_from_url
 
-_PRODUCTION_HOSTS = ["urbanlens.org", "www.urbanlens.org", "localhost"]
+_PRODUCTION_HOSTS = ["example.com", "www.example.com", "localhost"]
 
 
 class OriginFromUrlTests(SimpleTestCase):
     def test_a_url_is_reduced_to_its_origin(self) -> None:
         self.assertEqual(
-            _origin_from_url("https://a1b2c3.dev.urbanlens.org/accounts/login/"), "https://a1b2c3.dev.urbanlens.org"
+            _origin_from_url("https://a1b2c3.dev.example.com/accounts/login/"), "https://a1b2c3.dev.example.com"
         )
 
     def test_a_port_is_kept_because_an_origin_includes_it(self) -> None:
@@ -35,16 +35,16 @@ class OriginFromUrlTests(SimpleTestCase):
 
 class DerivedTrustedOriginTests(SimpleTestCase):
     def test_a_host_in_allowed_hosts_becomes_a_trusted_origin(self) -> None:
-        exact, wildcard = _derive_trusted_origins(["a1b2c3.dev.urbanlens.org"], "", allow_http=False)
+        exact, wildcard = _derive_trusted_origins(["a1b2c3.dev.example.com"], "", allow_http=False)
 
-        self.assertEqual(exact, ["https://a1b2c3.dev.urbanlens.org"])
+        self.assertEqual(exact, ["https://a1b2c3.dev.example.com"])
         self.assertEqual(wildcard, [])
 
     def test_the_site_url_becomes_a_trusted_origin(self) -> None:
         """The generated hostname is already written into every dev environment's .env."""
-        exact, _ = _derive_trusted_origins([], "https://a1b2c3.dev.urbanlens.org", allow_http=False)
+        exact, _ = _derive_trusted_origins([], "https://a1b2c3.dev.example.com", allow_http=False)
 
-        self.assertEqual(exact, ["https://a1b2c3.dev.urbanlens.org"])
+        self.assertEqual(exact, ["https://a1b2c3.dev.example.com"])
 
     def test_a_site_url_with_a_path_still_yields_the_bare_origin(self) -> None:
         exact, _ = _derive_trusted_origins([], "https://example.org/some/page", allow_http=False)
@@ -97,11 +97,11 @@ class DerivedTrustedOriginTests(SimpleTestCase):
 
     def test_a_production_shaped_deployment_gains_nothing_it_did_not_configure(self) -> None:
         """No dev-only path exists any more: production trusts exactly its own hosts, over HTTPS."""
-        exact, wildcard = _derive_trusted_origins(_PRODUCTION_HOSTS, "https://urbanlens.org", allow_http=False)
+        exact, wildcard = _derive_trusted_origins(_PRODUCTION_HOSTS, "https://example.com", allow_http=False)
 
-        self.assertEqual(exact, ["https://urbanlens.org", "https://www.urbanlens.org", "https://localhost"])
+        self.assertEqual(exact, ["https://example.com", "https://www.example.com", "https://localhost"])
         self.assertEqual(wildcard, [])
-        self.assertNotIn("https://*.dev.urbanlens.org", exact + wildcard)
+        self.assertNotIn("https://*.dev.example.com", exact + wildcard)
 
     @given(st.lists(st.from_regex(r"\A[a-z][a-z0-9-]{0,20}\.example\.org\Z"), max_size=6), st.booleans())
     def test_every_derived_origin_is_a_scheme_and_a_host_and_nothing_else(

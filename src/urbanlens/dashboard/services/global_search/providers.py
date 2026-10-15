@@ -20,11 +20,12 @@ from urbanlens.dashboard.services.auth.username import username_search_q
 from urbanlens.dashboard.services.global_search.results import SearchResult, excerpt
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable
+    from collections.abc import Callable
 
     from urbanlens.dashboard.models.abstract.queryset import DashboardQuerySet
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.global_search.parser import ParsedQuery
+    from urbanlens.dashboard.services.wiki.viewer_projection import ViewerProjection
 from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_locations_cached
 
 #: Preserves the concrete queryset class through the shared helpers. Without it they hand back
@@ -35,158 +36,41 @@ _QS = TypeVar("_QS", bound="DashboardQuerySet[Any]")
 
 logger = logging.getLogger(__name__)
 
-#: A concealed wiki's field/alias match cannot be expressed as a SQL predicate - name/description are
-#: versioned fields resolved per viewer, and whether a given wiki is concealed at all depends on the
-#: reputation ledger, not on any column search can filter by.
-#: So the SQL query over-fetches candidates and each is re-verified in Python against exactly what
-_CONCEALMENT_OVERFETCH = 4
+#: How much headroom the SQL query fetches when a viewer's projection of a wiki may reject some candidates. A
+#: projection that rewrites a wiki's text makes a match on the stored text unreliable, and which wikis it applies to
+#: is not a column search can filter by, so each candidate is re-verified in Python against what the viewer is shown.
+_PROJECTION_OVERFETCH = 4
 
 
-class ConcealedWikiText:
+def _projection_survivors(queryset: Any, viewer: Profile, limit: int, wiki_of: Callable[[Any], Any], survives: Callable[[Any, ViewerProjection], bool]) -> list:
     """
-    The alias and place-tag text a concealed viewer may see, read for a whole batch of candidate wikis at once.
-
-    Filled by :func:`_concealment_survivors` for every concealed candidate before any is re-checked, so the
-    over-fetched batch costs one alias query and one tag query rather than two per candidate.
-    """
-
-    def __init__(self, viewer: Profile) -> None:
-        self.viewer = viewer
-        self._aliases: dict[int, list[str]] = {}
-        self._tags: dict[int, list[str]] = {}
-
-    def load(self, wikis: Iterable[Any]) -> None:
-        """
-        Read the alias and tag text of every wiki in *wikis* not already read.
-
-        Args:
-            wikis: Wiki rows with ``location`` selected.
-        """
-        from urbanlens.dashboard.models.aliases.model import WikiAlias
-        from urbanlens.dashboard.models.place.external_tag import PlaceExternalTag
-        from urbanlens.dashboard.services.locations.external_tags import humanize_tag_value
-        from urbanlens.dashboard.services.wiki.concealment import conceal_rows
-
-        missing = {wiki.pk: wiki for wiki in wikis if wiki.pk not in self._aliases}
-        if not missing:
-            return
-        for pk in missing:
-            self._aliases[pk] = []
-            self._tags[pk] = []
-        for wiki_id, name in conceal_rows(WikiAlias.objects.filter(wiki_id__in=missing), self.viewer).values_list("wiki_id", "name"):
-            self._aliases[wiki_id].append(name.lower())
-        wikis_by_place: dict[int, list[int]] = {}
-        for wiki in missing.values():
-            if wiki.location_id and wiki.location.place_id:
-                wikis_by_place.setdefault(wiki.location.place_id, []).append(wiki.pk)
-        for place_id, value in PlaceExternalTag.objects.filter(place_id__in=wikis_by_place).values_list("place_id", "value"):
-            for pk in wikis_by_place[place_id]:
-                self._tags[pk].append(humanize_tag_value(value).lower())
-
-    def haystacks(self, wiki: Any) -> list[str]:
-        """
-        Lowercased name/description/alias/tag text the viewer may actually see on *wiki*.
-        What a concealed viewer's own search may match against is exactly what the page would render them, never the live row.
-
-        Args:
-            wiki: A Wiki row with ``location`` selected.
-
-        Returns:
-            The texts to match terms against.
-        """
-        from urbanlens.dashboard.services.wiki.concealment import concealed_field_values
-
-        self.load([wiki])
-        values = concealed_field_values(wiki, self.viewer)
-        return [str(values.get("name") or "").lower(), str(values.get("description") or "").lower(), *self._aliases[wiki.pk], *self._tags[wiki.pk]]
-
-
-def _terms_survive(terms: list[str], haystacks: list[str]) -> bool:
-    """Whether every term appears in at least one haystack (mirrors ``term_filter``'s AND/OR shape)."""
-    return all(any(term in haystack for haystack in haystacks) for term in terms)
-
-
-def _concealed_wiki_survives(wiki: Any, text: ConcealedWikiText, terms: list[str]) -> bool:
-    """
-    Whether *wiki*'s name/description/aliases, as *viewer* would actually see them, still match *terms*.
-    Called only once :func:`concealment_active` has already said this wiki is concealed for this viewer.
-
-    Args:
-        wiki: A candidate Wiki row (the live one - resolution happens here).
-        text: The batch's concealed text, for the searching profile.
-        terms: Lowercased AND-ed search terms (``parsed.terms``).
-
-    Returns:
-        True when there is nothing to re-verify (no free-text terms - a near-me-only or date-only query carries no textual oracle) or every term appears in what this viewer may see."""
-    if not terms:
-        return True
-    return _terms_survive(terms, text.haystacks(wiki))
-
-
-def _concealed_article_survives(article: Any, text: ConcealedWikiText, terms: list[str]) -> bool:
-    """
-    Whether an article's viewer-visible content and host still match *terms* once its wiki is concealed.
-    Only called for wiki-hosted articles a concealment gate has already fired for.
-
-    Args:
-        article: A candidate Article row.
-        text: The batch's concealed text, for the searching profile.
-        terms: Lowercased AND-ed search terms.
-
-    Returns:
-        True when there is nothing to re-verify, or every term appears in the newest revision this viewer may see (content) or in the host wiki's own concealed name/description/aliases."""
-    if not terms:
-        return True
-    from urbanlens.dashboard.services.wiki.concealment import visible_article_revision
-
-    revision = visible_article_revision(article, text.viewer)
-    haystacks = [(revision.content or "").lower()] if revision is not None else []
-    haystacks += text.haystacks(article.wiki)
-    return _terms_survive(terms, haystacks)
-
-
-def _concealed_comment_survives(comment: Any, viewer: Profile) -> bool:
-    """
-    Whether *comment* is one of *viewer*'s own or a friend's, per the same rule ``conceal_rows`` applies elsewhere.
-
-    Args:
-        comment: A candidate Comment row.
-        viewer: The searching profile.
-
-    Returns:
-        Whether this comment survives concealment for this viewer."""
-    from urbanlens.dashboard.services.wiki.concealment import visible_actor_ids
-
-    return comment.profile_id in visible_actor_ids(viewer)
-
-
-def _concealment_survivors(queryset: Any, viewer: Profile, limit: int, wiki_of, survives, text: ConcealedWikiText | None = None) -> list:
-    """
-    Fetch up to *limit* SQL-matched candidates, re-fetching with headroom only if concealment needs it.
+    Fetch up to *limit* SQL-matched candidates, re-fetching with headroom only if a viewer's projection needs it.
 
     Args:
         queryset: The already SQL-matched, ordered, unsliced queryset.
         viewer: The searching profile.
         limit: The caller's real result limit.
         wiki_of: ``candidate -> Wiki | None``.
-        survives: ``(candidate, viewer) -> bool``, called only when ``wiki_of(candidate)`` is concealed for ``viewer``.
-        text: When *survives* reads concealed wiki text, the cache it reads from; loaded here for every
-            concealed candidate at once.
+        survives: ``(candidate, projection) -> bool``, called only for a candidate whose wiki the viewer reads differently from the stored row.
 
     Returns:
         Up to ``limit`` candidates, order preserved."""
-    from urbanlens.dashboard.services.wiki.concealment import concealment_active
+    from urbanlens.dashboard.services.wiki.viewer_projection import prefetch_projections, viewer_projection
+
+    def projections_of(candidates: list) -> list[ViewerProjection | None]:
+        wikis = (wiki_of(candidate) for candidate in candidates)
+        return [viewer_projection(wiki, viewer) if wiki is not None else None for wiki in wikis]
 
     candidates = list(queryset[:limit])
-    if any(concealment_active(wiki, viewer) for wiki in (wiki_of(c) for c in candidates) if wiki is not None):
-        candidates = list(queryset[: limit * _CONCEALMENT_OVERFETCH])
-        if text is not None:
-            text.load(wiki for wiki in (wiki_of(c) for c in candidates) if wiki is not None and concealment_active(wiki, viewer))
+    projections = projections_of(candidates)
+    if any(projection is not None and projection.active for projection in projections):
+        candidates = list(queryset[: limit * _PROJECTION_OVERFETCH])
+        projections = projections_of(candidates)
+        prefetch_projections(projection for projection in projections if projection is not None and projection.active)
 
     kept = []
-    for candidate in candidates:
-        wiki = wiki_of(candidate)
-        if wiki is not None and concealment_active(wiki, viewer) and not survives(candidate, viewer):
+    for candidate, projection in zip(candidates, projections, strict=True):
+        if projection is not None and projection.active and not survives(candidate, projection):
             continue
         kept.append(candidate)
         if len(kept) >= limit:
@@ -770,21 +654,20 @@ class WikiSearchProvider(SearchProvider):
             queryset = queryset.annotate(**author_ann).filter(author_q)
         queryset = self.apply_text(queryset, parsed, ["name", "description", "aliases__name"], location_path="location", tag_path="location__place__external_tags")
         queryset, _ = apply_sort(queryset, parsed, location_path="location")
-        text = ConcealedWikiText(profile)
-        wikis = _concealment_survivors(queryset, profile, limit, lambda w: w, lambda w, _v: _concealed_wiki_survives(w, text, parsed.terms), text)
+        wikis = _projection_survivors(queryset, profile, limit, lambda w: w, lambda _w, projection: projection.matches_wiki_text(parsed.terms))
 
-        from urbanlens.dashboard.services.wiki.concealment import conceal_wiki
+        from urbanlens.dashboard.services.wiki.viewer_projection import project_wiki
 
         results = []
         for wiki in wikis:
             location = wiki.location
             if location is None or not location.slug:
                 continue
-            # Surviving the concealment gate says this candidate is ALLOWED to appear in the result
-            # list; it says nothing about what its title/snippet should say. conceal_wiki is a no-op
-            # when the viewer isn't concealed for this wiki, so this costs nothing in the common
+            # Surviving the projection check says this candidate is ALLOWED to appear in the result
+            # list; it says nothing about what its title/snippet should say. project_wiki returns the
+            # row itself when the viewer reads it unchanged, so this costs nothing in the common
             # case.
-            shown = conceal_wiki(wiki, profile)
+            shown = project_wiki(wiki, profile)
             results.append(
                 SearchResult(
                     type=self.slug,
@@ -828,10 +711,9 @@ class ArticleSearchProvider(SearchProvider):
             queryset = queryset.annotate(**author_ann).filter(author_q)
         queryset = self.apply_text(queryset, parsed, ["content", "pin__name", "pin__aliases__name", "wiki__name", "wiki__aliases__name"])
         queryset, _ = apply_sort(queryset, parsed)
-        text = ConcealedWikiText(profile)
-        articles = _concealment_survivors(queryset, profile, limit, lambda a: a.wiki, lambda a, _v: _concealed_article_survives(a, text, parsed.terms), text)
+        articles = _projection_survivors(queryset, profile, limit, lambda a: a.wiki, lambda a, projection: projection.matches_article_text(a, parsed.terms))
 
-        from urbanlens.dashboard.services.wiki.concealment import conceal_wiki, concealment_active, visible_article_revision
+        from urbanlens.dashboard.services.wiki.viewer_projection import project_wiki, viewer_projection
 
         results = []
         for article in articles:
@@ -847,15 +729,16 @@ class ArticleSearchProvider(SearchProvider):
                 subtitle = "Private pin article"
                 object_slug, object_uuid = pin.slug or "", str(pin.uuid)
             elif article.wiki is not None and article.wiki.location is not None and article.wiki.location.slug:
-                # Surviving the concealment gate said this article's viewer-
+                # Surviving the projection check said this article's viewer-
                 # visible content matches; the title and snippet must be
                 # built from that same visible content, not the live row.
                 wiki = article.wiki
-                if concealment_active(wiki, profile):
-                    revision = visible_article_revision(article, profile)
+                projection = viewer_projection(wiki, profile)
+                if projection.active:
+                    revision = projection.newest_revision(article)
                     content = revision.content if revision is not None else ""
                 url = reverse("location.wiki", kwargs={"location_slug": wiki.location.slug}) + "#tab-article"
-                title = f"Article: {conceal_wiki(wiki, profile).name or 'Unnamed wiki'}"
+                title = f"Article: {project_wiki(wiki, profile).name or 'Unnamed wiki'}"
                 subtitle = "Community wiki article"
                 object_slug, object_uuid = wiki.location.slug, str(wiki.uuid)
             else:
@@ -1238,10 +1121,10 @@ class CommentSearchProvider(SearchProvider):
                 author_ann, author_q = author_match
                 comment_qs = comment_qs.annotate(**author_ann).filter(author_q)
             comment_qs, _ = apply_sort(comment_qs, parsed)
-            comments = _concealment_survivors(comment_qs, profile, limit, lambda c: c.wiki, _concealed_comment_survives)
+            comments = _projection_survivors(comment_qs, profile, limit, lambda c: c.wiki, lambda c, projection: projection.shows_comment(c))
             names = _display_names(profile, [comment.profile for comment in comments])
 
-            from urbanlens.dashboard.services.wiki.concealment import conceal_wiki
+            from urbanlens.dashboard.services.wiki.viewer_projection import project_wiki
 
             for comment in comments:
                 # Comments are read through their host's collection (``pins/<slug>/comments/``,
@@ -1254,7 +1137,7 @@ class CommentSearchProvider(SearchProvider):
                     object_slug = comment.pin.slug or ""
                 elif comment.wiki is not None and comment.wiki.location is not None and comment.wiki.location.slug:
                     url = reverse("location.wiki", kwargs={"location_slug": comment.wiki.location.slug})
-                    host = conceal_wiki(comment.wiki, profile).name or "a wiki"
+                    host = project_wiki(comment.wiki, profile).name or "a wiki"
                     object_slug = comment.wiki.location.slug
                 else:
                     continue

@@ -22,6 +22,7 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.media.images import image_associations
+from urbanlens.dashboard.tests.hypothesis.viewer_projection_helpers import projecting
 
 _coord_counter = 0
 
@@ -116,26 +117,20 @@ class ImageAssociationsTests(TestCase):
             albums[0]["url"], reverse("location.wiki.albums.detail", args=[wiki.location.slug, album.slug])
         )
 
-    def test_wiki_filing_is_omitted_for_a_concealed_viewer(self) -> None:
-        from unittest.mock import patch
-
+    def test_wiki_filing_is_omitted_when_the_viewers_projection_does_not_link_the_wiki(self) -> None:
         wiki = _wiki_with_pin(self.profile, name="Sunset Ridge")
         image = baker.make(Image, profile=self.profile, wiki=wiki, pin=None, media_type=MediaKind.PHOTO)
-        with patch("urbanlens.dashboard.services.photos.albums._owner_conceal", return_value=True) as mock_conceal:
+        with projecting():
             result = image_associations(image, self.profile)
-        mock_conceal.assert_called_once_with(wiki, self.profile)
         self.assertIsNone(result["wiki"])
 
-    def test_concealed_wiki_album_is_omitted_for_a_concealed_viewer(self) -> None:
-        from unittest.mock import patch
-
+    def test_wiki_album_is_omitted_when_the_viewers_projection_does_not_link_the_wiki(self) -> None:
         old_wiki = _wiki_with_pin(self.profile, name="Old Ridge")
         album = Album.objects.create(name="Community shots", profile=self.profile, parent_wiki=old_wiki)
         image = baker.make(Image, profile=self.profile, wiki=None, pin=None, media_type=MediaKind.PHOTO)
         AlbumItem.objects.create(album=album, image=image)
-        with patch("urbanlens.dashboard.services.photos.albums._owner_conceal", return_value=True) as mock_conceal:
+        with projecting():
             albums = image_associations(image, self.profile)["albums"]
-        mock_conceal.assert_called_once_with(old_wiki, self.profile)
         self.assertEqual(albums, [])
 
 

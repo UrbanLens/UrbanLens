@@ -1,4 +1,4 @@
-"""Private profile trust/nickname/label-toggle widgets (P37 - all three had zero test coverage)."""
+"""Private profile trust/nickname/label-toggle widgets (all three had zero test coverage)."""
 
 from __future__ import annotations
 

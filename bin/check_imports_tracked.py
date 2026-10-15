@@ -117,6 +117,18 @@ def _referenced_templates(source: str) -> set[str]:
     return found
 
 
+def _plugin_template_roots(visible: set[str]) -> set[pathlib.Path]:
+    """The ``templates`` directory of each package plugin that has committed templates."""
+    prefix = "src/urbanlens/plugins/"
+    roots: set[pathlib.Path] = set()
+    for path in visible:
+        if path.startswith(prefix):
+            name, _, rest = path.removeprefix(prefix).partition("/")
+            if rest.startswith("templates/"):
+                roots.add(pathlib.Path(prefix) / name / "templates")
+    return roots
+
+
 def _missing_templates(visible: set[str], python_files: list[str]) -> list[str]:
     """
     Templates referenced by committed Python that a fresh checkout would lack.
@@ -133,7 +145,7 @@ def _missing_templates(visible: set[str], python_files: list[str]) -> list[str]:
         for template in sorted(_referenced_templates(source)):
             if pathlib.Path(template).name in _CONVENTION_TEMPLATES:
                 continue
-            if any((root / template).as_posix() in visible for root in _TEMPLATE_ROOTS):
+            if any((root / template).as_posix() in visible for root in (*_TEMPLATE_ROOTS, *_plugin_template_roots(visible))):
                 continue
             problems.append(f"{path}: renders {template}, which no committed file provides")
     return problems

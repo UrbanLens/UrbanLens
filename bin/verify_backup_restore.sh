@@ -12,12 +12,16 @@
 #   bin/verify_backup_restore.sh --keep     # leave the scratch databases behind
 #
 # Environment:
-#   UL_APP_CONTAINER   app container name (default urbanlens_development_main_app)
+#   UL_APP_CONTAINER   app container name (default: what compose names it, urbanlens_<UL_CONTAINER_NAME or UL_ENVIRONMENT, from the
+#                      shell or .env, else production>_app)
 #   UL_DB_CONTAINER    database container, whose owner this runs as (default: the app's name, _app -> _db)
 
 set -euo pipefail
 
-CONTAINER="${UL_APP_CONTAINER:-urbanlens_development_main_app}"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=lib/compose_names.sh
+. "$ROOT/bin/lib/compose_names.sh"
+CONTAINER="$(ul_app_container_name "$ROOT")"
 DB_CONTAINER="${UL_DB_CONTAINER:-${CONTAINER%_app}_db}"
 KEEP=0
 [ "${1:-}" = "--keep" ] && KEEP=1

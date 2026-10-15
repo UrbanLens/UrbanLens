@@ -1,4 +1,4 @@
-"""What the Organize page's bulk label editor writes, and to which labels (P37)."""
+"""What the Organize page's bulk label editor writes, and to which labels."""
 
 from __future__ import annotations
 

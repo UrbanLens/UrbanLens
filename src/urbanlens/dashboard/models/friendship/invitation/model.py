@@ -93,12 +93,11 @@ class FriendInvitation(abstract.DashboardModel):
         claimed = FriendInvitation.objects.filter(pk=self.pk, accepted_at__isnull=True, declined_at__isnull=True).update(accepted_at=now) == 1
         if claimed:
             self.accepted_at = now
-            # Recorded here rather than by a post_save subscription: this transition is a queryset
-            # update() precisely so it is an atomic compare-and-set, and update() fires no signal.
-            # A rule subscribed to FriendInvitation saves would never see an acceptance.
-            from urbanlens.dashboard.services.reputation.scoring import record_event
+            # Announced here rather than by a post_save signal: this transition is a queryset update() precisely
+            # so it is an atomic compare-and-set, and update() fires no signal.
+            from urbanlens.dashboard.plugins.points import INVITATION_ACCEPTED
 
-            record_event(self.inviter_id, "invite_accepted", target=self)
+            INVITATION_ACCEPTED.fire(self)
         return claimed
 
     def __str__(self) -> str:

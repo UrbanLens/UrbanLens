@@ -35,6 +35,7 @@ from urbanlens.dashboard.models.site_settings import (
     EnvironmentOverrideChoice,
     SiteSettings,
 )
+from urbanlens.dashboard.plugins.points import API_LIMIT_CATEGORIES
 from urbanlens.dashboard.services.admin.infrastructure_stats import _format_duration
 from urbanlens.dashboard.services.admin.site_admin import SITE_ADMIN_GROUP_NAME, complete_site_admin_onboarding
 from urbanlens.dashboard.services.core.json_safety import safe_json_for_script
@@ -102,7 +103,7 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
         if not isinstance(request.user, User):
             return HttpResponseForbidden()
 
-        from urbanlens.dashboard.plugins.registry import plugin_registry
+        from urbanlens.dashboard.plugins.points import NAME_PROVIDERS
 
         settings = SiteSettings.get_current()
         complete_site_admin_onboarding(request.user)
@@ -110,7 +111,7 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
         # Ranked sources first, in the admin's configured priority order, followed by any remaining available
         # sources (unranked, falling back to plugin order at resolution time).
         priority_slugs = settings.name_source_priority_list
-        providers_by_slug = {provider.source: provider.verbose_name for provider in plugin_registry.name_providers()}
+        providers_by_slug = {provider.source: provider.verbose_name for provider in NAME_PROVIDERS}
         name_source_order = [(slug, providers_by_slug[slug], True) for slug in priority_slugs if slug in providers_by_slug]
         ranked_slugs = {slug for slug, _label, _ranked in name_source_order}
         name_source_order += [(slug, label, False) for slug, label in providers_by_slug.items() if slug not in ranked_slugs]
@@ -527,333 +528,6 @@ class SiteAdminStatsView(LoginRequiredMixin, PermissionRequiredMixin, View):
         )
 
 
-class SiteAdminPullLatestCodeView(LoginRequiredMixin, PermissionRequiredMixin, View):
-    """Development-only endpoint to enqueue code updates for local/dev deployments."""
-
-    permission_required = "dashboard.view_site_admin"
-    raise_exception = True
-    request: HttpRequest
-
-    def post(self, request: HttpRequest):
-        settings = SiteSettings.get_current()
-        if not settings.is_development_environment():
-            return JsonResponse(
-                {"ok": False, "message": "Pulling code from the admin UI is only available in development."},
-                status=403,
-            )
-
-        from urbanlens.core.version import (
-            apply_pending_migrations,
-            get_current_git_commit,
-            pull_latest_git_code,
-            trigger_development_app_reload,
-        )
-
-        before_commit = get_current_git_commit()
-        ok, message = pull_latest_git_code()
-        after_commit = get_current_git_commit()
-        if not ok:
-            return JsonResponse({"ok": False, "message": message}, status=500)
-
-        changed = bool(before_commit and after_commit and before_commit != after_commit)
-        migration_message = "Database migrations were not needed because the code was already up to date."
-        reload_message = "Development server reload was not needed because the code was already up to date."
-
-        if changed:
-            migration_ok, migration_message = apply_pending_migrations()
-            if not migration_ok:
-                return JsonResponse({"ok": False, "message": migration_message, "details": message}, status=500)
-            reload_ok, reload_message = trigger_development_app_reload()
-            if not reload_ok:
-                return JsonResponse({"ok": False, "message": reload_message, "details": message}, status=500)
-
-        return JsonResponse(
-            {
-                "ok": True,
-                "changed": changed,
-                "message": "Code updated, migrations applied, and app reload requested." if changed else "Code is already up to date.",
-                "details": message,
-                "migration_details": migration_message,
-                "reload_details": reload_message,
-            },
-            status=200,
-        )
-
-
-class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, View):
-    """Manage subscription grants without exposing a general user directory."""
-
-    permission_required = "dashboard.view_site_admin"
-    raise_exception = True
-    request: HttpRequest
-
-    def get(self, request: HttpRequest):
-        from django.db.models import Count
-
-        from urbanlens.dashboard.models.site_settings import SiteSettings
-        from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, UserSubscription
-        from urbanlens.dashboard.services.admin.cost_tracking import cost_per_user
-        from urbanlens.dashboard.services.billing import stripe_client
-
-        grants = UserSubscription.objects.grants_for_site_admin()
-        roles = SubscriptionRole.objects.all().annotate(
-            active_grant_count=Count("user_subscriptions", filter=Q(user_subscriptions__revoked_at__isnull=True), distinct=True),
-            paid_subscriber_count=Count(
-                "paid_subscriptions",
-                filter=Q(paid_subscriptions__status__in=["active", "trialing"]),
-                distinct=True,
-            ),
-        )
-        return render(
-            request,
-            "dashboard/pages/site_admin_subscriptions.html",
-            {
-                "page_name": "site-admin-subscriptions",
-                "roles": roles,
-                "grants": grants,
-                "site_features": SiteFeature.choices,
-                "site_settings": SiteSettings.get_current(),
-                "saved": request.GET.get("saved"),
-                "error": request.GET.get("error"),
-                "stripe_configured": stripe_client.is_configured(),
-                "current_cost_per_user": cost_per_user(),
-            },
-        )
-
-    def _grants_list_response(self, request: HttpRequest, *, toast: tuple[str, str] | None = None) -> HttpResponse:
-        """
-        Re-render the "Active grants" partial, optionally with a toast.
-
-        Args:
-            request: The current request.
-            toast: Optional (level, message) toast to trigger via HX-Trigger.
-
-        Returns:
-            The rendered grants-list partial.
-        """
-        from urbanlens.dashboard.models.subscriptions import UserSubscription
-
-        grants = UserSubscription.objects.grants_for_site_admin()
-        response = render(request, "dashboard/partials/site_admin/_subscription_grants_list.html", {"grants": grants})
-        if toast:
-            response["HX-Trigger"] = json.dumps({"showToast": {"level": toast[0], "message": toast[1]}})
-        return response
-
-    def post(self, request: HttpRequest):
-        from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, UserSubscription, grant_subscription
-
-        if not isinstance(request.user, User):
-            return HttpResponseForbidden()
-
-        is_htmx = bool(request.headers.get("HX-Request"))
-        action = request.POST.get("action", "grant")
-
-        if action == "revoke":
-            subscription_id = safe_int_or_none(request.POST.get("subscription_id"))
-            if UserSubscription.objects.not_revoked().filter(pk=subscription_id).update(revoked_at=timezone.now(), revoked_by=request.user):
-                logger.info("Subscription grant %s revoked by user %s", subscription_id, request.user.pk)
-            if is_htmx:
-                return self._grants_list_response(request, toast=("info", "Subscription revoked."))
-            return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?saved=revoked")
-
-        if action == "update":
-            sub = UserSubscription.objects.not_revoked().filter(pk=safe_int_or_none(request.POST.get("subscription_id"))).first()
-            if sub:
-                sub.set_duration_months(_parse_duration_months(request.POST.get("duration_months")))
-                sub.save(update_fields=["expires_at", "updated"])
-                logger.info("Subscription grant %s duration changed by user %s", sub.pk, request.user.pk)
-            if is_htmx:
-                return self._grants_list_response(request, toast=("success", "Subscription updated."))
-            return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?saved=updated")
-
-        if action == "role_quota":
-            role = SubscriptionRole.objects.get_by_slug(request.POST.get("role_slug", ""))
-            if role is None:
-                if is_htmx:
-                    response = HttpResponse(status=404)
-                    response["HX-Trigger"] = json.dumps({"showToast": {"level": "error", "message": "Role not found - no changes saved."}})
-                    return response
-                return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": "Role not found."}))
-            raw_quota = (request.POST.get("storage_quota_gb") or "").strip()
-            if raw_quota == "":
-                quota = None
-            else:
-                try:
-                    quota = max(0, int(raw_quota))
-                except (ValueError, TypeError):
-                    if is_htmx:
-                        response = HttpResponse(status=400)
-                        response["HX-Trigger"] = json.dumps({"showToast": {"level": "error", "message": "Storage quota must be a whole number of GB."}})
-                        return response
-                    return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": "Storage quota must be a whole number of GB."}))
-            SubscriptionRole.objects.filter(pk=role.pk).update(storage_quota_gb=quota)
-            if is_htmx:
-                response = HttpResponse(status=204)
-                response["HX-Trigger"] = json.dumps({"roleSettingsSaved": {"field_group": "role_quota", "role": role.slug}})
-                return response
-            return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"saved": "storage quota saved"}))
-
-        if action == "role_email_limits":
-            role = SubscriptionRole.objects.get_by_slug(request.POST.get("role_slug", ""))
-            if role is None:
-                if is_htmx:
-                    response = HttpResponse(status=404)
-                    response["HX-Trigger"] = json.dumps({"showToast": {"level": "error", "message": "Role not found - no changes saved."}})
-                    return response
-                return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": "Role not found."}))
-            updates: dict[str, int | None] = {}
-            for field in ("email_limit_per_hour", "email_limit_per_day", "email_limit_per_month"):
-                raw = (request.POST.get(field) or "").strip()
-                if raw == "":
-                    updates[field] = None
-                    continue
-                try:
-                    updates[field] = max(0, int(raw))
-                except (ValueError, TypeError):
-                    if is_htmx:
-                        response = HttpResponse(status=400)
-                        response["HX-Trigger"] = json.dumps({"showToast": {"level": "error", "message": "Email limits must be whole numbers."}})
-                        return response
-                    return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": "Email limits must be whole numbers."}))
-            SubscriptionRole.objects.filter(pk=role.pk).update(**updates)
-            if is_htmx:
-                response = HttpResponse(status=204)
-                response["HX-Trigger"] = json.dumps({"roleSettingsSaved": {"field_group": "role_email_limits", "role": role.slug}})
-                return response
-            return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"saved": "email limits saved"}))
-
-        if action == "role_pricing":
-            from django.core.exceptions import ValidationError
-
-            from urbanlens.dashboard.services.billing.pricing import typed_dollars_to_cents
-
-            role = SubscriptionRole.objects.get_by_slug(request.POST.get("role_slug", ""))
-            if role is None:
-                if is_htmx:
-                    response = HttpResponse(status=404)
-                    response["HX-Trigger"] = json.dumps({"showToast": {"level": "error", "message": "Role not found - no changes saved."}})
-                    return response
-                return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": "Role not found."}))
-
-            def _parse_dollars(field: str) -> int | None:
-                raw = (request.POST.get(field) or "").strip()
-                if raw == "":
-                    return None
-                cents = typed_dollars_to_cents(raw)
-                if cents is None:
-                    raise ValueError(raw)
-                return cents
-
-            error_message: str | None = None
-            try:
-                role.monthly_price_cents = _parse_dollars("monthly_price_dollars")
-                role.pwyw_minimum_cents = _parse_dollars("pwyw_minimum_dollars")
-            except ValueError:
-                error_message = "Prices must be amounts from $0 to $999,999.99."
-            else:
-                role.pay_what_you_want = request.POST.get("pay_what_you_want") == "on"
-                role.pwyw_dynamic_threshold = request.POST.get("pwyw_dynamic_threshold") == "on"
-                try:
-                    role.full_clean(validate_unique=False)
-                except ValidationError as exc:
-                    error_message = " ".join(msg for messages_list in exc.message_dict.values() for msg in messages_list)
-
-            if error_message:
-                if is_htmx:
-                    response = HttpResponse(status=400)
-                    response["HX-Trigger"] = json.dumps({"showToast": {"level": "error", "message": error_message}})
-                    return response
-                return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": error_message}))
-
-            role.save(
-                update_fields=["monthly_price_cents", "pwyw_minimum_cents", "pay_what_you_want", "pwyw_dynamic_threshold", "updated"],
-            )
-            if is_htmx:
-                response = HttpResponse(status=204)
-                response["HX-Trigger"] = json.dumps({"roleSettingsSaved": {"field_group": "role_pricing", "role": role.slug}})
-                return response
-            return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"saved": "pricing saved"}))
-
-        if action == "role_features":
-            role = SubscriptionRole.objects.get_by_slug(request.POST.get("role_slug", ""))
-            if role is None:
-                if is_htmx:
-                    response = HttpResponse(status=404)
-                    response["HX-Trigger"] = json.dumps({"showToast": {"level": "error", "message": "Role not found - no changes saved."}})
-                    return response
-                return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": "Role not found."}))
-            valid_features = set(SiteFeature.values)
-            selected = sorted(value for value in request.POST.getlist("features") if value in valid_features)
-            SubscriptionRole.objects.filter(pk=role.pk).update(features=",".join(selected))
-            if is_htmx:
-                response = HttpResponse(status=204)
-                response["HX-Trigger"] = json.dumps({"roleSettingsSaved": {"field_group": "role_features", "role": role.slug}})
-                return response
-            return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"saved": "features saved"}))
-
-        if action == "role_create":
-            name = request.POST.get("name", "").strip()[:100]
-            if not name:
-                return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": "Role name is required."}))
-            description = request.POST.get("description", "").strip()[:255]
-            role = SubscriptionRole.objects.create(slug=SubscriptionRole.unique_slug(name), name=name, description=description)
-            return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"saved": f'"{role.name}" role created'}))
-
-        if action == "role_rename":
-            role = SubscriptionRole.objects.get_by_slug(request.POST.get("role_slug", ""))
-            if role is None:
-                return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": "Role not found."}))
-            name = request.POST.get("name", "").strip()[:100]
-            if not name:
-                return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": "Role name is required."}))
-            description = request.POST.get("description", "").strip()[:255]
-            SubscriptionRole.objects.filter(pk=role.pk).update(name=name, description=description)
-            return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"saved": "role renamed"}))
-
-        if action == "role_delete":
-            role = SubscriptionRole.objects.get_by_slug(request.POST.get("role_slug", ""))
-            if role is None:
-                return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": "Role not found."}))
-            name = role.name
-            role.delete()
-            return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"saved": f'"{name}" role deleted'}))
-
-        if action == "default_features":
-            from urbanlens.dashboard.models.site_settings import SiteSettings
-
-            settings_obj = SiteSettings.get_current()
-            valid_features = set(SiteFeature.values)
-            selected = sorted(value for value in request.POST.getlist("features") if value in valid_features)
-            # save(update_fields=...), not queryset.update(): the get_current() above memoises the row for the
-            # rest of this request (see models.site_settings.request_cache), and only post_save invalidates that
-            # memo.
-            settings_obj.default_features = ",".join(selected)
-            settings_obj.save(update_fields=["default_features", "updated"])
-            if is_htmx:
-                response = HttpResponse(status=204)
-                response["HX-Trigger"] = json.dumps({"roleSettingsSaved": {"field_group": "default_features", "role": "__default__"}})
-                return response
-            return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"saved": "default features saved"}))
-
-        identifier = request.POST.get("user_identifier", "").strip()
-        role = SubscriptionRole.objects.get_by_slug(request.POST.get("role_slug", ""))
-        from urbanlens.dashboard.services.auth.identity import find_user_by_identifier
-
-        user = find_user_by_identifier(identifier)
-        if user is not None and not user.is_active:
-            user = None
-        if not identifier or not role or not user:
-            if is_htmx:
-                response = self._grants_list_response(request, toast=("error", "User or role not found."))
-                response.status_code = 400
-                return response
-            return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": "User or role not found."}))
-        grant_subscription(user, role, request.user, _parse_duration_months(request.POST.get("duration_months")))
-        if is_htmx:
-            return self._grants_list_response(request, toast=("success", f"Granted {role.name} to {user.username}."))
-        return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?saved=granted")
-
-
 def _parse_duration_months(raw: str | None) -> int | None:
     """Parse form duration; blank/indefinite means no expiry."""
     if not raw or raw == "indefinite":
@@ -864,93 +538,36 @@ def _parse_duration_months(raw: str | None) -> int | None:
         return None
 
 
-#: Groups services into tabs on the API limits page.
+#: Groups core's services into tabs on the API limits page. A plugin's service names its own tab (``ServiceDefaults.group``).
 _API_LIMIT_CATEGORIES: dict[str, str] = {
     # Geocoding & Places
     "google_geocoding": "Geocoding & Places",
     "google_places": "Geocoding & Places",
     "nominatim": "Geocoding & Places",
-    "photon": "Geocoding & Places",
-    "redata_geocode": "Geocoding & Places",
-    "redata_places": "Geocoding & Places",
-    "redata_cid_lookup": "Geocoding & Places",
     # Search & News
-    "gdelt": "Search & News",
     "marginalia_search": "Search & News",
     "mojeek_search": "Search & News",
     "duckduckgo": "Search & News",
-    "redata_search_web": "Search & News",
-    "redata_search_news": "Search & News",
     # Imagery & Maps
     "azure_maps": "Imagery & Maps",
     "google_maps": "Imagery & Maps",
     "apple_maps": "Imagery & Maps",
     "esri": "Imagery & Maps",
-    "panoramax": "Imagery & Maps",
-    "mapillary": "Imagery & Maps",
-    "kartaview": "Imagery & Maps",
     "google_earth": "Imagery & Maps",
     "osrm": "Imagery & Maps",
     "overture_building_attributes": "Imagery & Maps",
-    "redata_imagery": "Imagery & Maps",
-    "redata_routing": "Imagery & Maps",
-    "redata_media": "Imagery & Maps",
-    "redata_street_view": "Imagery & Maps",
-    "redata_historical_maps": "Imagery & Maps",
-    "redata_basemap_tiles": "Imagery & Maps",
     # Weather
     "openweathermap": "Weather",
     "open_meteo": "Weather",
-    "redata_weather": "Weather",
-    "redata_weather_history": "Weather",
     # Boundaries & GIS
     "overpass": "Boundaries & GIS",
     "census_tigerweb": "Boundaries & GIS",
-    "open_elevation": "Boundaries & GIS",
-    "redata_elevation": "Boundaries & GIS",
-    "redata_boundary": "Boundaries & GIS",
-    "redata_land_cover": "Boundaries & GIS",
-    "redata_soil": "Boundaries & GIS",
-    "redata_hydrology": "Boundaries & GIS",
-    "redata_underground": "Boundaries & GIS",
-    "redata_buildings": "Boundaries & GIS",
     # Reference & Archives
     "wikipedia": "Reference & Archives",
     "wikimedia": "Reference & Archives",
-    "smithsonian": "Reference & Archives",
-    "digital_commonwealth": "Reference & Archives",
-    "library_of_congress": "Reference & Archives",
-    "internet_archive": "Reference & Archives",
     "wayback_machine": "Reference & Archives",
-    "redata_reference_documents": "Reference & Archives",
-    # The state/city historic inventories behind the historic-registers panel. Archival rather than regulatory:
-    # these are survey records, the same kind of material as the other entries here.
-    "redata_cultural_resources": "Reference & Archives",
-    "redata_public_locations": "Reference & Archives",
-    # Mapped historical features near a pin, standing or long gone - survey
-    # material like the two above, and the sibling of redata_reference_documents.
-    "redata_historical_features": "Reference & Archives",
     # Parks & Regulatory
-    "nps": "Parks & Regulatory",
-    "epa_echo": "Parks & Regulatory",
     "usgs": "Parks & Regulatory",
-    "usgs_earthquakes": "Parks & Regulatory",
-    "inaturalist": "Parks & Regulatory",
-    "redata_hazards": "Parks & Regulatory",
-    "redata_nature_observations": "Parks & Regulatory",
-    "redata_national_parks": "Parks & Regulatory",
-    "redata_air_quality": "Parks & Regulatory",
-    "redata_incidents": "Parks & Regulatory",
-    "redata_permits": "Parks & Regulatory",
-    "redata_walkability": "Parks & Regulatory",
-    # Business & Places Data
-    "yelp": "Business & Places Data",
-    "loopnet": "Business & Places Data",
-    "redata_points_of_interest": "Business & Places Data",
-    "redata_capabilities": "Business & Places Data",
-    "redata_prewarm": "Business & Places Data",
-    "redata_locations_context": "Business & Places Data",
-    "redata_api": "Business & Places Data",
     # Notifications
     "sms": "Notifications",
     "whatsapp": "Notifications",
@@ -960,62 +577,7 @@ _API_LIMIT_CATEGORIES: dict[str, str] = {
     "google_photos": "Personal Media & Accounts",
     "immich": "Personal Media & Accounts",
     "google_calendar": "Personal Media & Accounts",
-    # AI
-    "ollama": "AI",
-    "redata_photos": "AI",
-    "redata_labels": "AI",
 }
-
-
-def _redata_capabilities() -> dict | None:
-    """
-    REData's capability index for the api-limits page, cached for an hour.
-
-    The index changes on REData deploys, not per request, and this page must render whether or not
-    REData is configured or reachable - so a failure is a ``None`` (the template hides the card), never
-    an exception.
-
-    Returns:
-        The ``{"domains", "text_domains"}`` body, or None when REData is unconfigured or unreachable.
-    """
-    from django.core.cache import cache
-
-    from urbanlens.dashboard.services.apis.locations.redata_capabilities_gateway import RedataCapabilitiesGateway
-    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
-
-    if not redata_configured():
-        return None
-    cache_key = "ul_redata_capabilities"
-    cached = cache.get(cache_key)
-    if cached is not None:
-        return cached or None
-    try:
-        body = RedataCapabilitiesGateway().get_capabilities()
-    except Exception:
-        # Broad on purpose: this card is strictly optional, and the page must render whatever a gateway can
-        # throw (structured REData errors, transport errors, the test suite's network guard).
-        logger.warning("REData capabilities fetch failed; omitting the card", exc_info=True)
-        cache.set(cache_key, {}, 300)
-        return None
-    cache.set(cache_key, body, 3600)
-    return body
-
-
-def _redata_refusals() -> list[dict]:
-    """
-    The REData endpoints that refused this deployment's key recently, for the api-limits page.
-
-    A refusal is a key missing a scope: nothing retries its way past it, so the page says which endpoint and when it is
-    next tried.
-
-    Returns:
-        ``{"endpoint", "refused_at", "retry_at"}`` dicts, most recent first.
-    """
-    from datetime import UTC, datetime
-
-    from urbanlens.dashboard.services.core.upstream_breaker import RedataBreaker
-
-    return [{"endpoint": entry.endpoint, "refused_at": datetime.fromtimestamp(entry.refused_at, tz=UTC), "retry_at": datetime.fromtimestamp(entry.retry_at, tz=UTC)} for entry in RedataBreaker().refused_endpoints()]
 
 
 #: An evaluation older than this means the beat task has stopped, which the page says rather than showing old verdicts.
@@ -1074,8 +636,10 @@ class SiteAdminApiLimitsView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
     def get(self, request: HttpRequest):
         from urbanlens.dashboard.models.api_call_log import ApiCallLog
+        from urbanlens.dashboard.services.core.rate_limiter import all_service_defaults
 
         configs = self._get_all_configs()
+        defaults = all_service_defaults()
 
         # Build a quick usage summary indexed by service key for the last 30 days
         summaries = {row["service"]: row for row in ApiCallLog.objects.summary_by_service()}
@@ -1084,7 +648,7 @@ class SiteAdminApiLimitsView(LoginRequiredMixin, PermissionRequiredMixin, View):
         categories: dict[str, int] = {}
         for cfg in configs:
             summary = summaries.get(cfg.service, {})
-            category = _API_LIMIT_CATEGORIES.get(cfg.service, "Other")
+            category = (defaults[cfg.service].group if cfg.service in defaults else None) or _API_LIMIT_CATEGORIES.get(cfg.service) or API_LIMIT_CATEGORIES.get(cfg.service) or "Other"
             categories[category] = categories.get(category, 0) + 1
             enriched.append(
                 {
@@ -1111,8 +675,6 @@ class SiteAdminApiLimitsView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 "page_name": "site-admin-api-limits",
                 "services": enriched,
                 "tabs": tabs,
-                "redata_capabilities": _redata_capabilities(),
-                "redata_refusals": _redata_refusals(),
                 "provider_health": _provider_health(),
             },
         )
@@ -1207,31 +769,25 @@ class SiteAdminPluginsView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
     def get(self, request: HttpRequest):
         from urbanlens.dashboard.plugins import plugin_registry
+        from urbanlens.dashboard.plugins.extensions import catalog
+        from urbanlens.dashboard.plugins.lifecycle import migration_status
+        from urbanlens.dashboard.plugins.points import SERVICE_DEFAULTS
         from urbanlens.dashboard.services.core.rate_limiter import get_limit_config
 
+        seams = catalog().values()
         entries = []
         for info in plugin_registry.plugins():
-            plugin = info.plugin
-            plugin_enabled = plugin_registry.is_enabled(plugin.name)
-            services = []
-            if plugin_enabled:
-                for service_key in sorted(plugin.get_service_defaults()):
-                    config = get_limit_config(service_key)
-                    services.append({"key": service_key, "enabled": config.enabled})
+            contributions = [{"seam": declared, "count": count} for declared in seams if (count := sum(1 for contribution in declared.contributions() if contribution.owner == info.name))]
+            services = [{"key": key, "enabled": get_limit_config(key).enabled} for contribution in SERVICE_DEFAULTS.contributions() if contribution.owner == info.name for key in [contribution.value[0]]]
             entries.append(
                 {
-                    "plugin": plugin,
-                    "source": info.source,
-                    "module": info.module,
-                    "enabled": plugin_enabled,
-                    "services": services,
-                    "panel_count": len(plugin.get_panel_sources()) if plugin_enabled else 0,
-                    "satellite_count": len(plugin.get_satellite_providers()) if plugin_enabled else 0,
-                    "street_count": len(plugin.get_street_view_providers()) if plugin_enabled else 0,
-                    "name_sources": [provider.source for provider in plugin.get_name_providers()] if plugin_enabled else [],
-                }
+                    "info": info,
+                    "plugin": info.plugin,
+                    "contributions": contributions,
+                    "services": sorted(services, key=lambda service: service["key"]),
+                    "migrations": migration_status(info) if info.app_label else None,
+                },
             )
-
         return render(
             request,
             "dashboard/pages/site_admin_plugins.html",
@@ -1473,7 +1029,7 @@ class SiteAdminHomeView(LoginRequiredMixin, PermissionRequiredMixin, View):
         with contextlib.suppress(Exception):
             from urbanlens.dashboard.models.subscriptions import UserSubscription
 
-            total_subscriptions = UserSubscription.objects.not_revoked().count()
+            total_subscriptions = UserSubscription.objects.active().count()
 
         site_settings = SiteSettings.get_current()
 
@@ -1588,7 +1144,7 @@ class SiteAdminStatsKpiPartialView(_AdminPermissionMixin, View):
         with contextlib.suppress(Exception):
             from urbanlens.dashboard.models.subscriptions import UserSubscription
 
-            total_subscriptions = UserSubscription.objects.not_revoked().count()
+            total_subscriptions = UserSubscription.objects.active().count()
 
         total_site_admins = User.objects.filter(groups__name=SITE_ADMIN_GROUP_NAME).distinct().count()
 
@@ -1670,7 +1226,6 @@ class SiteAdminStatsSystemPartialView(_AdminPermissionMixin, View):
                 "git_has_newer_commits": git_update.has_newer_commits,
                 "git_available": git_update.git_available,
                 "git_remote_refreshed": git_update.remote_refreshed,
-                "show_git_pull_button": (SiteSettings.get_current().show_dev_admin_features(request.user) and git_update.has_newer_commits),
                 "infrastructure_services": collect_infrastructure_service_stats(),
                 "backup_stats": collect_backup_stats(),
             },
@@ -1687,13 +1242,12 @@ class SiteAdminStatsApiUsagePartialView(_AdminPermissionMixin, View):
     def get(self, request: HttpRequest):
         from urbanlens.dashboard.services.core.rate_limiter import all_service_defaults
 
-        # all_service_defaults() (SERVICE_REGISTRY + every plugin's own
-        # get_service_defaults()) - the static registry alone only covers the
+        # all_service_defaults() (SERVICE_REGISTRY + every plugin's contribution
+        # to SERVICE_DEFAULTS) - the static registry alone only covers the
         # handful of integrations not yet converted to plugins, which would
-        # silently omit the great majority of this app's API usage/cost data.
+        # silently omit the great majority of this app's API usage data.
         service_defaults = all_service_defaults()
         api_usage: list[dict] = []
-        total_cost_30d = None
         with contextlib.suppress(Exception):
             from urbanlens.dashboard.models.api_call_log import ApiCallLog
             from urbanlens.dashboard.models.api_rate_limit import ApiRateLimit
@@ -1704,9 +1258,6 @@ class SiteAdminStatsApiUsagePartialView(_AdminPermissionMixin, View):
             for svc in sorted(service_defaults):
                 cfg = rate_configs.get(svc)
                 row = summaries.get(svc, {})
-                cost_30d = row.get("total_cost")
-                if cost_30d is not None:
-                    total_cost_30d = cost_30d if total_cost_30d is None else total_cost_30d + cost_30d
                 api_usage.append(
                     {
                         "service": svc,
@@ -1720,14 +1271,13 @@ class SiteAdminStatsApiUsagePartialView(_AdminPermissionMixin, View):
                         "rejected": row.get("rejected_inputs", 0),
                         "errors": row.get("errors", 0),
                         "avg_ms": round(row.get("avg_response_ms") or 0),
-                        "cost_30d": cost_30d,
                     }
                 )
 
         return render(
             request,
             "dashboard/partials/admin/admin_stats_api_usage.html",
-            {"api_usage": api_usage, "total_cost_30d": total_cost_30d},
+            {"api_usage": api_usage},
         )
 
 

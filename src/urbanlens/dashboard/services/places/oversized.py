@@ -1,5 +1,5 @@
 """
-Taking places too large to be what they claim out of every access domain (P148).
+Taking places too large to be what they claim out of every access domain.
 
 ``PlaceQuerySet.implausible`` already keeps such a place from resolving or sharing access. This removes what it
 left behind: locations still attached to it, buildings parented under it, wikis nested because of it, and marker

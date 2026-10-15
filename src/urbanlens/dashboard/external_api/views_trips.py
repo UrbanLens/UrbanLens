@@ -75,7 +75,7 @@ _CONNECT_NEXT_VIEW = "trips.list"
 _NOT_CONNECTED_MESSAGE = "Connect your Google Calendar before exporting a trip to it."
 _REAUTHORIZATION_MESSAGE = "Your Google Calendar connection has expired. Reconnect it to keep exporting trips."
 
-#: GatewayRequestError is shared across every gateway integration (Calendar, Flickr, Immich, REData, ...); some
+#: GatewayRequestError is shared across every gateway integration (Calendar, Flickr, Immich, ...); some
 #: of them build its message from an upstream response's own error text, which is not safe to return verbatim to
 #: a caller. Never surface it - log it and answer with this fixed message.
 _GATEWAY_FAILURE_MESSAGE = "Google Calendar could not be reached. Please try again shortly."

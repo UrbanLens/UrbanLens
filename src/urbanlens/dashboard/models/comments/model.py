@@ -69,8 +69,7 @@ class Comment(LocationMentioningModel, abstract.FrontendDashboardModel):
     map_removed = models.BooleanField(default=False)
     # Set by this model's own pre_delete signal (see signals.py) on every reply of a comment that's
     # about to be deleted, before `parent` is nulled out by SET_NULL below.
-    # Without this, a reply to a deleted comment silently becomes an unexplained top-level comment -
-    # UL-219.
+    # Without this, a reply to a deleted comment silently becomes an unexplained top-level comment.
     parent_deleted = models.BooleanField(default=False)
 
     if TYPE_CHECKING:

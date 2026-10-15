@@ -166,19 +166,6 @@ class LinkDeletionTombstoneTests(TestCase):
         # The wiki side is a separate tombstone scope - unaffected by the pin-side deletion.
         self.assertTrue(self.wiki.links.filter(url="https://osm.org/way/123").exists())
 
-    def test_deleting_wiki_link_prevents_epa_auto_readd(self) -> None:
-        from urbanlens.dashboard.plugins.builtin.epa_echo import EpaEchoDetailPanelSource
-
-        link = WikiLink.objects.create(
-            wiki=self.wiki, name="EPA Compliance Report", url="https://echo.epa.gov/detailed-facility-report?fid=123"
-        )
-        response = self.client.delete(reverse("location.wiki.link.delete", args=[self.location.slug, link.id]))
-        self.assertEqual(response.status_code, 200)
-
-        EpaEchoDetailPanelSource._add_echo_report_link(self.pin, self.location, "123")
-
-        self.assertFalse(self.wiki.links.filter(url="https://echo.epa.gov/detailed-facility-report?fid=123").exists())
-
 
 class ExternalApiWikiTombstoneTests(TestCase):
     """The mobile/API-key surface must record the same tombstones as the web UI."""
@@ -248,27 +235,9 @@ class ExternalApiWikiTombstoneTests(TestCase):
             )
         )
 
-    def test_a_wiki_link_deleted_via_the_api_prevents_epa_auto_readd(self) -> None:
-        from urbanlens.dashboard.plugins.builtin.epa_echo import EpaEchoDetailPanelSource
-
-        link = WikiLink.objects.create(
-            wiki=self.wiki, name="EPA Compliance Report", url="https://echo.epa.gov/detailed-facility-report?fid=123"
-        )
-        response = self.client.delete(
-            reverse(
-                "external_api:wikis.links.detail", kwargs={"location_slug": self.location.slug, "link_id": link.id}
-            ),
-            **_bearer(self.raw_key),
-        )
-        self.assertEqual(response.status_code, 204)
-
-        EpaEchoDetailPanelSource._add_echo_report_link(self.pin, self.location, "123")
-
-        self.assertFalse(self.wiki.links.filter(url="https://echo.epa.gov/detailed-facility-report?fid=123").exists())
-
 
 class OwnerDeletionTombstoneTests(TestCase):
-    """Deleting a PinOwner must record a tombstone and prevent AI-extraction auto-recreation."""
+    """Deleting a PinOwner must record a tombstone and prevent automatic re-creation."""
 
     def setUp(self) -> None:
         baker.make("auth.User")  # bootstrap site admin
@@ -284,18 +253,6 @@ class OwnerDeletionTombstoneTests(TestCase):
         self.assertTrue(
             PinAutoRemoval.objects.was_removed(pin=self.pin, kind=AutoRemovalKind.OWNER, value="Jane Landlord")
         )
-
-    def test_deleted_owner_is_not_recreated_by_ai_extraction(self) -> None:
-        from urbanlens.dashboard.services.ai.link_extraction import _apply_owner_name
-
-        owner = PinOwner.objects.create(pin=self.pin, name="Jane Landlord")
-        self.client.delete(reverse("pin.ownership.remove", args=[self.pin.slug, owner.id]))
-
-        applied, message = _apply_owner_name(self.pin, "Jane Landlord", {})
-
-        self.assertFalse(applied)
-        self.assertEqual(message, "Skipped - this owner was previously removed.")
-        self.assertFalse(self.pin.owners.filter(name="Jane Landlord").exists())
 
 
 class LabelDeletionTombstoneTests(TestCase):
@@ -332,7 +289,7 @@ class LabelDeletionTombstoneTests(TestCase):
             data={"label_id": self.label.id, "action": "remove"},
         )
 
-        with patch.object(AutoTagService, "_match", return_value=[self.label]):
+        with patch.object(AutoTagService, "match", return_value=[self.label]):
             AutoTagService(kinds=["category"]).suggest_for_pin(self.pin, apply=True)
 
         self.assertFalse(self.pin.labels.filter(pk=self.label.pk).exists())
@@ -350,7 +307,7 @@ class LabelDeletionTombstoneTests(TestCase):
             WikiAutoRemoval.objects.was_removed(wiki=self.wiki, kind=AutoRemovalKind.LABEL, value=str(self.label.pk))
         )
 
-        with patch.object(AutoTagService, "_match", return_value=[self.label]):
+        with patch.object(AutoTagService, "match", return_value=[self.label]):
             AutoTagService(kinds=["category"]).suggest_for_wiki(self.wiki, apply=True)
 
         self.assertFalse(self.wiki.labels.filter(pk=self.label.pk).exists())
@@ -402,7 +359,7 @@ class BulkEditLabelRemovalTombstoneTests(TestCase):
             data=json.dumps({"uuids": [str(self.pin.uuid)], "remove_label_ids": [self.label.id]}),
             content_type="application/json",
         )
-        with patch.object(AutoTagService, "_match", return_value=[self.label]):
+        with patch.object(AutoTagService, "match", return_value=[self.label]):
             AutoTagService(kinds=["category"]).suggest_for_pin(self.pin, apply=True)
         self.assertFalse(self.pin.labels.filter(pk=self.label.pk).exists())
 
@@ -461,7 +418,7 @@ class QuickEditLabelRemovalTombstoneTests(TestCase):
             reverse("pin.quick_edit", kwargs={"pin_slug": self.pin.slug}),
             data={"label_ids": [str(self.other_label.id)]},
         )
-        with patch.object(AutoTagService, "_match", return_value=[self.label]):
+        with patch.object(AutoTagService, "match", return_value=[self.label]):
             AutoTagService(kinds=["category"]).suggest_for_pin(self.pin, apply=True)
         self.assertFalse(self.pin.labels.filter(pk=self.label.pk).exists())
 

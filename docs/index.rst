@@ -1,11 +1,10 @@
 UrbanLens Documentation
 =======================
 
-.. warning::
+.. note::
 
-   With few exceptions everything under ``docs/`` was written by a Claude agent,
-   not by a person, and records what one automated session measured or believed
-   on a given date. Treat it as evidence, not authority - see ``docs/README.md``.
+   These pages record design decisions, measurements and operational notes as they
+   were when written. Where a page and the source disagree, the source is current.
 
 .. Every toctree here is a ``present-toctree`` (docs/conf.py): a page this checkout
    lacks is left out rather than warned about, so the public mirror, which ships

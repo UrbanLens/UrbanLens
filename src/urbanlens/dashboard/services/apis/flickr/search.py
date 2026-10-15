@@ -253,7 +253,7 @@ class FlickrSearchGateway(MediaProvider):
 class FlickrFeedSearchGateway(MediaProvider):
     """
     Keyless fallback: Flickr's public tags syndication feed.
-    Used automatically in place of :class:`FlickrSearchGateway` when the site has no Flickr API key configured (see ``FlickrPlugin.get_panel_sources``) - Flickr's public feeds have never required a key."""
+    Used automatically in place of :class:`FlickrSearchGateway` when the site has no Flickr API key configured (see the ``PANEL_SOURCES`` contribution in ``FlickrPlugin.setup``) - Flickr's public feeds have never required a key."""
 
     service_key: ClassVar[str] = "flickr"
     display_name: ClassVar[str] = "Flickr"

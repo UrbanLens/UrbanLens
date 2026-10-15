@@ -8,9 +8,11 @@ ARG UL_ENVIRONMENT=production
 # Ensure logging dir exists at /var/log/urbanlens
 RUN mkdir -p /var/log/urbanlens
 
+# Blank UL_LOG_DIR: console only, read with `docker compose logs`. Set it to /var/log/urbanlens to keep a file in the logs volume.
 ENV PYTHONUNBUFFERED=1 \
     UV_COMPILE_BYTECODE=1 \
-    PYTHONPATH=/app/src
+    PYTHONPATH=/app/src \
+    UL_LOG_DIR=
 
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive && \
     apt-get install -y --no-install-recommends ca-certificates curl gcc pkg-config gnupg && \
@@ -65,10 +67,6 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-install-project; \
     fi
 
-ENV TIKTOKEN_CACHE_DIR=/app/.tiktoken
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv run --no-project python -c "import tiktoken; tiktoken.get_encoding('o200k_base'); tiktoken.get_encoding('cl100k_base')"
-
 COPY package.json bun.lock ./
 RUN --mount=type=cache,target=/root/.bun/install/cache \
     bun install --frozen-lockfile
@@ -83,6 +81,13 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     else \
     uv sync --frozen; \
     fi
+
+# Packages only the bundled package plugins need, after the sync, which would remove them.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    bin/install_plugin_requirements.sh
+
+# Each plugin's build steps, if it declares any.
+RUN bin/run_plugin_build_steps.sh
 
 # Precompile the source tree.
 RUN gosu appuser python -m compileall -q -j 0 /app/src || echo "compileall reported errors; continuing"
@@ -109,9 +114,10 @@ RUN DJANGO_SECRET_KEY=build-time-placeholder-not-used-at-runtime \
     UL_RABBITMQ_URL=amqp://build.invalid:5672/ \
     gosu appuser python /app/bin/container_init.py --frontend-only
 
-# Git >= 2.35.2 refuses to run in directories not owned by the current user.
+# Git >= 2.35.2 refuses to run in directories not owned by the current user. Run from / so a checkout whose .git
+# is a worktree's pointer file, which means nothing inside the image, cannot fail the build.
 RUN if [ "$UL_ENVIRONMENT" = "development" ] || [ "$UL_ENVIRONMENT" = "local" ]; then \
-    git config --system safe.directory /app; \
+    cd / && git config --system safe.directory /app; \
     fi
 
 COPY docker-entrypoint.sh /docker-entrypoint.sh

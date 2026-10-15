@@ -29,14 +29,18 @@ class RoleFeaturesActionTests(TestCase):
         role = baker.make(SubscriptionRole, slug="explorer", features="")
         response = self.client.post(
             _SUBSCRIPTIONS_URL,
-            {"action": "role_features", "role_slug": role.slug, "features": [SiteFeature.AI, SiteFeature.SEARCH]},
+            {
+                "action": "role_features",
+                "role_slug": role.slug,
+                "features": [SiteFeature.ALPHA_FEATURES, SiteFeature.SEARCH],
+            },
         )
         self.assertEqual(response.status_code, 302)
         role.refresh_from_db()
-        self.assertEqual(role.feature_set, {SiteFeature.AI, SiteFeature.SEARCH})
+        self.assertEqual(role.feature_set, {SiteFeature.ALPHA_FEATURES, SiteFeature.SEARCH})
 
     def test_unchecking_every_box_clears_features(self) -> None:
-        role = baker.make(SubscriptionRole, slug="explorer", features=SiteFeature.AI)
+        role = baker.make(SubscriptionRole, slug="explorer", features=SiteFeature.ALPHA_FEATURES)
         response = self.client.post(_SUBSCRIPTIONS_URL, {"action": "role_features", "role_slug": role.slug})
         self.assertEqual(response.status_code, 302)
         role.refresh_from_db()
@@ -46,16 +50,20 @@ class RoleFeaturesActionTests(TestCase):
         role = baker.make(SubscriptionRole, slug="explorer", features="")
         response = self.client.post(
             _SUBSCRIPTIONS_URL,
-            {"action": "role_features", "role_slug": role.slug, "features": [SiteFeature.AI, "not_a_real_feature"]},
+            {
+                "action": "role_features",
+                "role_slug": role.slug,
+                "features": [SiteFeature.ALPHA_FEATURES, "not_a_real_feature"],
+            },
         )
         self.assertEqual(response.status_code, 302)
         role.refresh_from_db()
-        self.assertEqual(role.feature_set, {SiteFeature.AI})
+        self.assertEqual(role.feature_set, {SiteFeature.ALPHA_FEATURES})
 
     def test_unknown_role_is_a_no_op(self) -> None:
         response = self.client.post(
             _SUBSCRIPTIONS_URL,
-            {"action": "role_features", "role_slug": "does-not-exist", "features": [SiteFeature.AI]},
+            {"action": "role_features", "role_slug": "does-not-exist", "features": [SiteFeature.ALPHA_FEATURES]},
         )
         self.assertEqual(response.status_code, 302)
         self.assertIn("error", response.headers["Location"])
@@ -79,7 +87,7 @@ class RoleFeaturesActionTests(TestCase):
         client.force_login(other)
         response = client.post(
             _SUBSCRIPTIONS_URL,
-            {"action": "role_features", "role_slug": role.slug, "features": [SiteFeature.AI]},
+            {"action": "role_features", "role_slug": role.slug, "features": [SiteFeature.ALPHA_FEATURES]},
         )
         self.assertEqual(response.status_code, 403)
 
@@ -96,24 +104,26 @@ class DefaultFeaturesActionTests(TestCase):
 
     def test_selected_features_are_saved(self) -> None:
         response = self.client.post(
-            _SUBSCRIPTIONS_URL, {"action": "default_features", "features": [SiteFeature.AI, SiteFeature.SEARCH]}
+            _SUBSCRIPTIONS_URL,
+            {"action": "default_features", "features": [SiteFeature.ALPHA_FEATURES, SiteFeature.SEARCH]},
         )
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(SiteSettings.get_current().feature_set, {SiteFeature.AI, SiteFeature.SEARCH})
+        self.assertEqual(SiteSettings.get_current().feature_set, {SiteFeature.ALPHA_FEATURES, SiteFeature.SEARCH})
 
     def test_unchecking_every_box_clears_default_features(self) -> None:
         settings_obj = SiteSettings.get_current()
-        SiteSettings.objects.filter(pk=settings_obj.pk).update(default_features=SiteFeature.AI)
+        SiteSettings.objects.filter(pk=settings_obj.pk).update(default_features=SiteFeature.ALPHA_FEATURES)
         response = self.client.post(_SUBSCRIPTIONS_URL, {"action": "default_features"})
         self.assertEqual(response.status_code, 302)
         self.assertEqual(SiteSettings.get_current().feature_set, set())
 
     def test_unknown_feature_values_are_ignored(self) -> None:
         response = self.client.post(
-            _SUBSCRIPTIONS_URL, {"action": "default_features", "features": [SiteFeature.AI, "not_a_real_feature"]}
+            _SUBSCRIPTIONS_URL,
+            {"action": "default_features", "features": [SiteFeature.ALPHA_FEATURES, "not_a_real_feature"]},
         )
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(SiteSettings.get_current().feature_set, {SiteFeature.AI})
+        self.assertEqual(SiteSettings.get_current().feature_set, {SiteFeature.ALPHA_FEATURES})
 
     def test_htmx_request_saves_and_returns_no_content(self) -> None:
         response = self.client.post(
@@ -129,7 +139,9 @@ class DefaultFeaturesActionTests(TestCase):
         other: User = baker.make(User)
         client = Client()
         client.force_login(other)
-        response = client.post(_SUBSCRIPTIONS_URL, {"action": "default_features", "features": [SiteFeature.AI]})
+        response = client.post(
+            _SUBSCRIPTIONS_URL, {"action": "default_features", "features": [SiteFeature.ALPHA_FEATURES]}
+        )
         self.assertEqual(response.status_code, 403)
 
 
@@ -141,16 +153,16 @@ class UserHasFeatureDefaultTests(TestCase):
 
         baker.make(User)  # first user is auto-promoted to site admin; keep it off the subject
         user: User = baker.make(User)
-        self.assertFalse(user_has_feature(user, SiteFeature.AI))
+        self.assertFalse(user_has_feature(user, SiteFeature.ALPHA_FEATURES))
 
     def test_user_with_no_subscription_gets_site_default_features(self) -> None:
         from urbanlens.dashboard.models.subscriptions import user_has_feature
 
         baker.make(User)
         settings_obj = SiteSettings.get_current()
-        SiteSettings.objects.filter(pk=settings_obj.pk).update(default_features=SiteFeature.AI)
+        SiteSettings.objects.filter(pk=settings_obj.pk).update(default_features=SiteFeature.ALPHA_FEATURES)
         user: User = baker.make(User)
-        self.assertTrue(user_has_feature(user, SiteFeature.AI))
+        self.assertTrue(user_has_feature(user, SiteFeature.ALPHA_FEATURES))
         self.assertFalse(user_has_feature(user, SiteFeature.SEARCH))
 
     def test_subscribed_user_still_gets_default_features_on_top_of_role_features(self) -> None:
@@ -159,9 +171,9 @@ class UserHasFeatureDefaultTests(TestCase):
         baker.make(User)
         settings_obj = SiteSettings.get_current()
         SiteSettings.objects.filter(pk=settings_obj.pk).update(default_features=SiteFeature.SEARCH)
-        role = baker.make(SubscriptionRole, slug="explorer", features=SiteFeature.AI)
+        role = baker.make(SubscriptionRole, slug="explorer", features=SiteFeature.ALPHA_FEATURES)
         user: User = baker.make(User)
         granter: User = baker.make(User)
         grant_subscription(user, role, granter, months=None)
-        self.assertTrue(user_has_feature(user, SiteFeature.AI))
+        self.assertTrue(user_has_feature(user, SiteFeature.ALPHA_FEATURES))
         self.assertTrue(user_has_feature(user, SiteFeature.SEARCH))

@@ -25,7 +25,12 @@ from urbanlens.dashboard.models.floorplans.model import (
     FloorplanWall,
 )
 from urbanlens.dashboard.models.place.model import Place, PlaceKind, PlaceRelation
-from urbanlens.dashboard.services.floorplans.resolution import resolve_document
+from urbanlens.dashboard.plugins.points import FLOORPLAN_PROVIDERS
+from urbanlens.dashboard.services.floorplans.resolution import (
+    FloorplanProvider,
+    floorplan_for_editing,
+    resolve_document,
+)
 from urbanlens.dashboard.services.floorplans.serialization import document_for, save_document
 
 #: A minimal valid 1x1 PNG - real bytes, so the stored-file read path is exercised.
@@ -53,8 +58,8 @@ def _building(parcel: Place | None = None, *, provider_key: str = "") -> Place:
     return baker.make(
         Place,
         kind=PlaceKind.BUILDING,
-        provider="redata",
-        provider_key=provider_key or f"cris:{next(_building_seq)}",
+        provider="registry",
+        provider_key=provider_key or f"registry:{next(_building_seq)}",
         parent=parcel,
     )
 
@@ -607,29 +612,49 @@ class FloorplanLockTests(TestCase):
         self.assertEqual(len(lock["references"]), 1)
 
 
+class _Upstream(FloorplanProvider):
+    """An upstream source of floorplans answering what it was given."""
+
+    origin = "upstream"
+    origin_banner = "From upstream. Saving creates your own version."
+
+    def __init__(self, document: dict | None = None, *, error: Exception | None = None, available: bool = True) -> None:
+        self._document = document
+        self._error = error
+        self._available = available
+        self.asked: list[tuple[Place, dt.date | None]] = []
+
+    def available(self) -> bool:
+        return self._available
+
+    def document(self, place: Place, on_date: dt.date | None) -> dict | None:
+        self.asked.append((place, on_date))
+        if self._error is not None:
+            raise self._error
+        return self._document
+
+    def building_ref(self, place: Place) -> str:
+        return f"upstream-ref:{place.provider_key}"
+
+
 class FloorplanResolutionTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
         baker.make(User)
         self.profile = baker.make(User).profile
-        self.parcel = baker.make(Place, kind=PlaceKind.PARCEL, provider="redata", provider_key="parcel-uuid-1")
-        self.place = _building(self.parcel, provider_key="cris:res-1")
-
-    def _configured(self):
-        settings_path = "urbanlens.UrbanLens.settings.app.settings"
-        return (
-            mock.patch(f"{settings_path}.redata_api_url", "https://redata.example.test"),
-            mock.patch(f"{settings_path}.redata_api_key", "k"),
-        )
+        self.parcel = baker.make(Place, kind=PlaceKind.PARCEL, provider="registry", provider_key="parcel-uuid-1")
+        self.place = _building(self.parcel, provider_key="registry:res-1")
 
     def test_a_local_plan_wins(self) -> None:
         Floorplan.objects.create(place=self.place, profile=self.profile, name="mine")
+        upstream = _Upstream({"name": "Upstream plan", "floors": []})
 
-        with mock.patch("urbanlens.dashboard.services.floorplans.resolution._redata_document") as upstream:
+        with FLOORPLAN_PROVIDERS.overridden([upstream]):
             document = resolve_document(self.place, profile=self.profile)
 
         self.assertEqual(document["origin"], "local")
-        upstream.assert_not_called()
+        self.assertNotIn("origin_banner", document)
+        self.assertEqual(upstream.asked, [])
 
     def test_another_users_plan_is_not_served(self) -> None:
         """
@@ -640,74 +665,65 @@ class FloorplanResolutionTests(TestCase):
         """
         Floorplan.objects.create(place=self.place, profile=baker.make(User).profile, name="theirs")
 
-        with mock.patch("urbanlens.dashboard.services.floorplans.resolution._redata_document", return_value=None):
+        with FLOORPLAN_PROVIDERS.overridden([_Upstream()]):
             self.assertIsNone(resolve_document(self.place, profile=self.profile))
 
-    def test_redata_fills_when_local_is_absent(self) -> None:
-        url_patch, key_patch = self._configured()
-        with (
-            mock.patch("urbanlens.dashboard.services.apis.property_records.redata_gateway.RedataGateway") as gateway,
-            url_patch,
-            key_patch,
-        ):
-            gateway.return_value.lookup_floorplans.return_value = [{"uuid": "fp-1", "building_ref": "cris:res-1"}]
-            gateway.return_value.lookup_floorplan_document.return_value = {"name": "REData plan", "floors": []}
+    def test_an_upstream_plan_fills_when_local_is_absent(self) -> None:
+        upstream = _Upstream({"name": "Upstream plan", "floors": []})
 
+        with FLOORPLAN_PROVIDERS.overridden([upstream]):
             document = resolve_document(self.place, profile=self.profile)
 
-        self.assertEqual(document["origin"], "redata")
-        self.assertEqual(document["name"], "REData plan")
-        gateway.return_value.lookup_floorplans.assert_called_once_with(
-            "parcel-uuid-1", building_ref="cris:res-1", on_date=None
-        )
-        gateway.return_value.lookup_floorplan_document.assert_called_once_with("fp-1")
+        self.assertEqual(document["origin"], "upstream")
+        self.assertEqual(document["origin_banner"], "From upstream. Saving creates your own version.")
+        self.assertEqual(document["name"], "Upstream plan")
+        self.assertEqual(upstream.asked, [(self.place, None)])
 
-    def test_an_empty_summary_list_is_a_quiet_none(self) -> None:
-        url_patch, key_patch = self._configured()
-        with (
-            mock.patch("urbanlens.dashboard.services.apis.property_records.redata_gateway.RedataGateway") as gateway,
-            url_patch,
-            key_patch,
-        ):
-            gateway.return_value.lookup_floorplans.return_value = []
-
+    def test_without_a_provider_there_is_no_plan(self) -> None:
+        with FLOORPLAN_PROVIDERS.overridden([]):
             self.assertIsNone(resolve_document(self.place, profile=self.profile))
 
-        gateway.return_value.lookup_floorplan_document.assert_not_called()
+    def test_an_empty_answer_is_a_quiet_none(self) -> None:
+        with FLOORPLAN_PROVIDERS.overridden([_Upstream(None)]):
+            self.assertIsNone(resolve_document(self.place, profile=self.profile))
 
     def test_upstream_trouble_is_never_load_bearing(self) -> None:
-        url_patch, key_patch = self._configured()
-        with (
-            mock.patch("urbanlens.dashboard.services.apis.property_records.redata_gateway.RedataGateway") as gateway,
-            url_patch,
-            key_patch,
-        ):
-            gateway.return_value.lookup_floorplans.side_effect = RuntimeError("boom")
+        later = _Upstream({"name": "Later plan", "floors": []})
+        later.origin = "later"
+        with FLOORPLAN_PROVIDERS.overridden([_Upstream(error=RuntimeError("boom")), later]):
+            document = resolve_document(self.place, profile=self.profile)
 
+        self.assertEqual(
+            document["origin"], "later", "a provider that failed is skipped, not fatal to the ones after it"
+        )
+
+    def test_a_provider_that_cannot_be_asked_is_not(self) -> None:
+        absent = _Upstream({"name": "Never", "floors": []}, available=False)
+
+        with FLOORPLAN_PROVIDERS.overridden([absent]):
             self.assertIsNone(resolve_document(self.place, profile=self.profile))
 
-    def test_a_building_with_no_redata_parcel_never_calls_upstream(self) -> None:
-        orphan = baker.make(Place, kind=PlaceKind.BUILDING, provider="redata", provider_key="cris:orphan", parent=None)
-
-        with mock.patch("urbanlens.dashboard.services.apis.property_records.redata_gateway.RedataGateway") as gateway:
-            self.assertIsNone(resolve_document(orphan, profile=self.profile))
-
-        gateway.assert_not_called()
+        self.assertEqual(absent.asked, [])
 
     def test_the_date_flows_through_to_upstream(self) -> None:
-        url_patch, key_patch = self._configured()
-        with (
-            mock.patch("urbanlens.dashboard.services.apis.property_records.redata_gateway.RedataGateway") as gateway,
-            url_patch,
-            key_patch,
-        ):
-            gateway.return_value.lookup_floorplans.return_value = []
+        upstream = _Upstream()
 
+        with FLOORPLAN_PROVIDERS.overridden([upstream]):
             resolve_document(self.place, profile=self.profile, on_date=dt.date(1954, 1, 1))
 
-        gateway.return_value.lookup_floorplans.assert_called_once_with(
-            "parcel-uuid-1", building_ref="cris:res-1", on_date="1954-01-01"
-        )
+        self.assertEqual(upstream.asked, [(self.place, dt.date(1954, 1, 1))])
+
+    def test_a_new_plan_carries_the_ref_a_provider_knows_the_building_by(self) -> None:
+        with FLOORPLAN_PROVIDERS.overridden([_Upstream()]):
+            created = floorplan_for_editing(self.place, self.profile)
+
+        self.assertEqual(created.building_ref, "upstream-ref:registry:res-1")
+
+    def test_a_new_plan_without_a_provider_carries_no_ref(self) -> None:
+        with FLOORPLAN_PROVIDERS.overridden([]):
+            created = floorplan_for_editing(self.place, self.profile)
+
+        self.assertEqual(created.building_ref, "")
 
 
 class ResolveFloorplanRowTests(TestCase):
@@ -956,8 +972,8 @@ class FloorplanVersionSafetyTests(TestCase):
         theirs.refresh_from_db()
         self.assertEqual(theirs.name, "theirs")
 
-    def test_a_redata_origin_document_forks_to_a_local_plan(self) -> None:
-        """Its uuid is REData's, so it can never match a local row."""
+    def test_an_upstream_origin_document_forks_to_a_local_plan(self) -> None:
+        """Its uuid is the upstream's, so it can never match a local row."""
         created = self._edit(version_uuid="11111111-1111-1111-1111-111111111111")
 
         self.assertEqual(created.profile_id, self.profile.pk)
@@ -1438,7 +1454,7 @@ class FloorplanCommunityTests(TestCase):
 
     def test_a_personal_plan_is_still_not_served_to_others(self) -> None:
         with (
-            mock.patch("urbanlens.dashboard.services.floorplans.resolution._redata_document", return_value=None),
+            FLOORPLAN_PROVIDERS.overridden([]),
             mock.patch("urbanlens.dashboard.services.floorplans.resolution._community_plan", return_value=None),
         ):
             self.assertIsNone(resolve_document(self.place, profile=self.other))

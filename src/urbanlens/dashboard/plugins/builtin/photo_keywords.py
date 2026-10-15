@@ -1,6 +1,6 @@
 """
 Built-in photo keywording plugins.
-Three independent strategies, each storing its own ``ImageKeyword`` rows so they coexist and can be regenerated separately:"""
+Core ships the embedded-metadata strategy; other plugins register theirs the same way. Each stores its own ``ImageKeyword`` rows, so they coexist and can be regenerated separately:"""
 
 from __future__ import annotations
 
@@ -8,17 +8,13 @@ import logging
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
-from urbanlens.dashboard.services.photos.photo_keywords import KeywordResult, KeywordSourceUnavailableError, PhotoKeywordProvider, require_analysis_jpeg_bytes
-from urbanlens.UrbanLens.egress import EgressCategory
+from urbanlens.dashboard.services.photos.photo_keywords import KeywordResult, PhotoKeywordProvider
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.images.model import Image
+    from urbanlens.dashboard.plugins.base import PluginContext
 
 logger = logging.getLogger(__name__)
-
-#: Classifier labels below this confidence are noise, not keywords.
-CLASSIFIER_MIN_CONFIDENCE = 0.15
 
 
 class MetadataKeywordProvider(PhotoKeywordProvider):
@@ -66,174 +62,8 @@ class PhotoMetadataKeywordsPlugin(UrbanLensPlugin):
     description: ClassVar[str] = "Makes photos searchable using the XMP/IPTC keyword tags photographers embed in their files. Runs locally; no external calls."
     author: ClassVar[str] = "UrbanLens"
 
-    def get_photo_keyword_providers(self) -> list[PhotoKeywordProvider]:
-        """Contribute the embedded-metadata keyword reader."""
-        return [MetadataKeywordProvider()]
+    def setup(self, plugin: PluginContext) -> None:
+        """The embedded-metadata photo-keyword provider."""
+        from urbanlens.dashboard.plugins.points import PHOTO_KEYWORD_PROVIDERS
 
-
-class AiVisionKeywordProvider(PhotoKeywordProvider):
-    """Asks the site's AI provider to describe the photo as keywords."""
-
-    slug = "photo_keywords_ai_vision"
-    label = "AI vision keywords"
-    #: ``services.ai.vision.SERVICE_AI_PHOTO_KEYWORDS``; a literal so discovering plugins imports no AI module.
-    service_key = "ai_photo_keywords"
-
-    def is_available_for(self, image: Image) -> bool:
-        """
-        Gate on the AI photo processing subscription, every AI toggle, and this environment calling hosted AI.
-
-        Args:
-            image: The uploaded image.
-
-        Returns:
-            True when the AI vision call is allowed for this uploader (development makes none, D26).
-        """
-        from urbanlens.dashboard.models.site_settings import SiteSettings
-        from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
-        from urbanlens.dashboard.services.ai.access import ai_refused_here
-        from urbanlens.dashboard.services.ai.vision import SERVICE_AI_PHOTO_KEYWORDS
-
-        if ai_refused_here(SERVICE_AI_PHOTO_KEYWORDS):
-            return False
-        profile = image.profile
-        if profile is None or not profile.ai_enabled or not profile.external_apis_enabled:
-            return False
-        if not SiteSettings.get_current().ai_enabled:
-            return False
-        return user_has_feature(profile.user, SiteFeature.AI_PHOTO_PROCESSING)
-
-    def generate(self, image: Image) -> list[KeywordResult]:
-        """
-        Downscale the photo and ask the AI provider for descriptive keywords.
-
-        Args:
-            image: The uploaded image.
-
-        Returns:
-            AI-described keywords; empty when the provider refused the image.
-
-        Raises:
-            KeywordSourceUnavailableError: The provider did not answer, or the photo's analysis copy could not be read.
-            RequestCancelledError: The call was refused before it was sent.
-        """
-        from urbanlens.dashboard.services.ai.vision import describe_photo_keywords
-
-        small = require_analysis_jpeg_bytes(image)
-        keywords = describe_photo_keywords(small, raise_refusal=True)
-        if keywords is None:
-            raise KeywordSourceUnavailableError("the AI vision provider did not answer")
-        return [KeywordResult(keyword=keyword) for keyword in keywords]
-
-
-class AiVisionKeywordsPlugin(UrbanLensPlugin):
-    """AI-described photo keywords for subscribers with AI photo processing."""
-
-    name: ClassVar[str] = "photo_keywords_ai_vision"
-    verbose_name: ClassVar[str] = "Photo keywords: AI vision"
-    description: ClassVar[str] = "Uses the site's AI provider to describe uploaded photos as searchable keywords. Requires the 'AI photo processing' subscription feature; photos are downscaled before being sent."
-    author: ClassVar[str] = "UrbanLens"
-
-    def get_service_defaults(self) -> dict[str, ServiceDefaults]:
-        """Rate-limit defaults for the vision-model calls."""
-        from urbanlens.dashboard.services.ai.vision import SERVICE_AI_PHOTO_KEYWORDS
-
-        return {
-            SERVICE_AI_PHOTO_KEYWORDS: ServiceDefaults(
-                display_name="AI photo keywords (vision)",
-                category=EgressCategory.AI,
-                calls_per_minute=10,
-                calls_per_day=500,
-                notes="Vision-model describe call per uploaded photo for AI-photo-processing subscribers. Costs more than text AI calls.",
-            ),
-        }
-
-    def get_photo_keyword_providers(self) -> list[PhotoKeywordProvider]:
-        """Contribute the AI vision keyword provider."""
-        return [AiVisionKeywordProvider()]
-
-
-class ClassifierKeywordProvider(PhotoKeywordProvider):
-    """Labels photos with a content classifier (Cloudflare ResNet-50)."""
-
-    slug = "photo_keywords_classifier"
-    label = "Content classifier keywords"
-    #: ``services.ai.vision.SERVICE_PHOTO_CLASSIFIER``.
-    service_key = "cloudflare_image_classifier"
-
-    def is_available_for(self, image: Image) -> bool:
-        """
-        Requires configured Cloudflare credentials, the uploader's external-APIs toggle, and this environment calling Cloudflare.
-
-        Args:
-            image: The uploaded image.
-
-        Returns:
-            True when the classifier call is allowed for this uploader (development makes none, D26).
-        """
-        from urbanlens.dashboard.services.ai.access import ai_refused_here
-        from urbanlens.dashboard.services.ai.vision import SERVICE_PHOTO_CLASSIFIER
-        from urbanlens.UrbanLens.settings.app import settings
-
-        if ai_refused_here(SERVICE_PHOTO_CLASSIFIER):
-            return False
-        profile = image.profile
-        if profile is None or not profile.external_apis_enabled:
-            return False
-        return bool(settings.cloudflare_worker_ai_endpoint and settings.cloudflare_ai_api_key)
-
-    def generate(self, image: Image) -> list[KeywordResult]:
-        """
-        Downscale the photo and classify its content into keyword labels.
-
-        Args:
-            image: The uploaded image.
-
-        Returns:
-            Scored keywords above ``CLASSIFIER_MIN_CONFIDENCE``.
-
-        Raises:
-            KeywordSourceUnavailableError: The classifier did not answer, or the photo's analysis copy could not be read.
-            RequestCancelledError: The call was refused before it was sent.
-        """
-        from urbanlens.dashboard.services.ai.vision import classify_photo
-
-        small = require_analysis_jpeg_bytes(image)
-        labels = classify_photo(small, raise_refusal=True)
-        if labels is None:
-            raise KeywordSourceUnavailableError("the image classifier did not answer")
-        results: list[KeywordResult] = []
-        for label, score in labels:
-            if score < CLASSIFIER_MIN_CONFIDENCE:
-                continue
-            for synonym in label.split(","):
-                if synonym.strip():
-                    results.append(KeywordResult(keyword=synonym.strip(), confidence=score))
-        return results
-
-
-class ClassifierKeywordsPlugin(UrbanLensPlugin):
-    """Content-classifier photo keywords (no subscription required)."""
-
-    name: ClassVar[str] = "photo_keywords_classifier"
-    verbose_name: ClassVar[str] = "Photo keywords: content classifier"
-    description: ClassVar[str] = "Classifies uploaded photos with Cloudflare Workers AI ResNet-50 and stores the labels as searchable keywords. Requires Cloudflare Workers AI credentials."
-    author: ClassVar[str] = "UrbanLens"
-
-    def get_service_defaults(self) -> dict[str, ServiceDefaults]:
-        """Rate-limit defaults for the classifier calls."""
-        from urbanlens.dashboard.services.ai.vision import SERVICE_PHOTO_CLASSIFIER
-
-        return {
-            SERVICE_PHOTO_CLASSIFIER: ServiceDefaults(
-                display_name="Photo content classifier (ResNet-50)",
-                category=EgressCategory.AI,
-                calls_per_minute=30,
-                calls_per_day=2000,
-                notes="Cloudflare Workers AI image classification per uploaded photo. Near-free per call.",
-            ),
-        }
-
-    def get_photo_keyword_providers(self) -> list[PhotoKeywordProvider]:
-        """Contribute the classifier keyword provider."""
-        return [ClassifierKeywordProvider()]
+        plugin.extend(PHOTO_KEYWORD_PROVIDERS, [MetadataKeywordProvider()])

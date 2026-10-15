@@ -3,7 +3,7 @@
  */
 
 /**
- * Cloudflare's idle cutoff is ~100s and is not configurable below an Enterprise plan, so the interval has to fit inside it with room.
+ * A common reverse-proxy idle cutoff is ~100s, so the interval has to fit inside it with room.
  */
 const HEARTBEAT_MS = 45000;
 
@@ -54,7 +54,7 @@ export interface LiveSocketOptions {
     onPermanentClose?(): void;
     /** The connection went away other than by ``close()``: a drop, or a refusal (before ``onPermanentClose``). */
     onClose?(code: number): void;
-    /** Override only for a route whose idle timeout differs - the default suits the tunnel. */
+    /** Override only for a route whose idle timeout differs - the default suits a typical proxy. */
     heartbeatMs?: number;
 }
 

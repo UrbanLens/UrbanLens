@@ -1,4 +1,4 @@
-"""A slide provider that couldn't reach its source caches nothing; one that was answered caches the answer (P214)."""
+"""A slide provider that couldn't reach its source caches nothing; one that was answered caches the answer."""
 
 from __future__ import annotations
 

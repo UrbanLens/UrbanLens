@@ -1,6 +1,6 @@
 """
 OpenHistoricalMap gateway: dated vector features via the public OHM Overpass API.
-It is a direct integration only because there is nothing yet on REData's side to swap it for."""
+It is a direct integration only because there is nothing else yet to swap it for."""
 
 from __future__ import annotations
 

@@ -72,33 +72,12 @@ def seed_articles_on_wikipedia_cache_write(sender: type[LocationCache], instance
     transaction.on_commit(_run)
 
 
-_CRIS = "cris_building_usn"
-
-#: Sources whose rows can carry a historic-register listing containing the point - the highest-ranked name.
-_REGISTER_SOURCES = frozenset({"redata_historic_registers", _CRIS})
-
-
-def _names_a_new_building(instance: LocationCache) -> bool:
-    """Whether a CRIS row names a building whose own location is not already named after it."""
-    from urbanlens.dashboard.services.locations.name_tiers import NamingScope, naming_scope
-    from urbanlens.dashboard.services.locations.naming import normalize_name_for_comparison
-
-    data = instance.data if isinstance(instance.data, dict) else {}
-    name = normalize_name_for_comparison(str(data.get("USNName") or ""))
-    if instance.source != _CRIS or not name:
-        return False
-    location = instance.location
-    if location.official_name_source == "cris" and normalize_name_for_comparison(location.official_name) == name:
-        return False
-    return naming_scope(location) == NamingScope.BUILDING
-
-
 @receiver(post_save, sender=LocationCache, dispatch_uid="location_cache_refresh_names_on_register_listing")
 def refresh_names_on_register_listing(sender: type[LocationCache], instance: LocationCache, **kwargs) -> None:
     """
-    Refresh a location's names when a register row arrives naming a listing that contains it, or a CRIS row names its building.
+    Refresh a location's names when a register row arrives naming a listing that contains it, or a row names its building.
 
-    Register and CRIS rows land from panel fetches and site passes, after the name was first chosen, so this is
+    Register rows land from panel fetches and site passes, after the name was first chosen, so this is
     what lets a listing replace an automatic name of a worse tier and a building take its own record's name.
 
     Args:
@@ -106,16 +85,18 @@ def refresh_names_on_register_listing(sender: type[LocationCache], instance: Loc
         instance: The LocationCache row that was just saved.
         **kwargs: Additional keyword arguments.
     """
-    if instance.source not in _REGISTER_SOURCES:
+    from urbanlens.dashboard.services.locations.historic_registers import register_cache_sources
+
+    if instance.source not in register_cache_sources():
         return
 
     def _run() -> None:
+        from urbanlens.dashboard.services.locations.historic_registers import names_a_new_building, register_listing_names
         from urbanlens.dashboard.services.locations.naming import update_location_name_from_external_sources
-        from urbanlens.dashboard.services.locations.register_names import register_listing_names
 
         location = instance.location
         listings = register_listing_names(location)
-        if not listings and not _names_a_new_building(instance):
+        if not listings and not names_a_new_building(instance):
             return
         for target in [location, *(_other_root_pin_locations(location) if listings else [])]:
             try:

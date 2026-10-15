@@ -1,8 +1,8 @@
 """
-Proxy and catalogue for the basemap tile layers REData publishes.
+Proxy and catalogue for the basemap tile layers a tile catalogue publishes.
 
 The fetch happens server-side for two different reasons, and only one of them is about a key.
-REData's own endpoints require its API key, which must never reach the browser. The raster layers
+The catalogue service's own endpoints require its API key, which must never reach the browser. The raster layers
 it publishes need no key at all - they are public vendor endpoints - and are proxied for privacy:
 a map page URL can encode a pin's coordinates, so which tiles a viewer asks for is which places
 they are looking at, and this site's blanket ``Referrer-Policy: no-referrer`` is what free vendor
@@ -23,12 +23,13 @@ The concurrency bound is not incidental. A viewport is ~30 tiles and the browser
 them at once, so on a cold cache the proxy can hold every request thread in the process at once,
 for as long as the upstream takes per tile. Unbounded, one map load stalls the whole site. What
 that costs now depends on which upstream the layer takes: measured on staging in September
-2026, Esri answers a satellite tile in 0.09s where REData took 0.36-0.56s for the same tile.
+2026, Esri answers a satellite tile in 0.09s where the catalogue's service took 0.36-0.56s for the same tile.
 """
 
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 from csp.decorators import csp_exempt
 from django.contrib.auth.mixins import AccessMixin, LoginRequiredMixin
@@ -38,11 +39,14 @@ from django.views import View
 
 from urbanlens.dashboard.middleware import mark_viewer_independent
 from urbanlens.dashboard.services.core import bounded_cache
-from urbanlens.dashboard.services.core.gateway import GatewayRequestError, servable_tile_type
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError, ProviderUnavailableError, servable_tile_type
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, ServiceDisabledError
 from urbanlens.dashboard.services.core.upstream_slots import UpstreamSlots as BaseUpstreamSlots
 from urbanlens.dashboard.services.security.redact import redact_tile
 from urbanlens.UrbanLens.settings.app import settings as app_settings
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.services.map.basemap_catalogue import TileCatalogue
 
 logger = logging.getLogger(__name__)
 
@@ -93,11 +97,6 @@ def _ttl_for_absence(z: int) -> int:
 #: empty answer into a permanent hole in the map.
 _NO_TILE = "__ul_no_tile__"
 
-#: REData's 400 for a layer published as a vector style rather than tiles: about the layer,
-#: not the coordinate, so not cacheable per tile; the advertising catalogue is the stale thing.
-#: Without this branch such an answer falls through to the definitive-404 path and is cached a week.
-_VECTOR_LAYER_REFUSAL = b"vector_layer_not_served"
-
 
 class UpstreamSlots(BaseUpstreamSlots):
     """The process-wide bound on how many basemap tiles may be fetched upstream at once."""
@@ -130,7 +129,7 @@ class BasemapTileCatalogueView(LoginRequiredMixin, View):
             request: The current request.
 
         Returns:
-            ``{"layers": [...]}`` - empty when REData is unconfigured or unreachable, so the map simply
+            ``{"layers": [...]}`` - empty when there is no tile catalogue or it is unreachable, so the map simply
             keeps its built-in layers.
         """
         from urbanlens.dashboard.services.map.basemap_catalogue import catalogue_for_viewer
@@ -138,14 +137,17 @@ class BasemapTileCatalogueView(LoginRequiredMixin, View):
         return JsonResponse({"layers": catalogue_for_viewer(authenticated=request.user.is_authenticated)})
 
 
-def _fetch_tile(layer: str, z: int, x: int, y: int) -> tuple[int, bytes, str]:
+def _fetch_tile(catalogue: TileCatalogue, layer: str, z: int, x: int, y: int) -> tuple[int, bytes, str]:
     """
     Fetch one uncached tile, from the vendor where that is possible.
 
-    REData needs its API key and so cannot be called from a browser, but the raster layers it
+    The catalogue's service needs its API key and so cannot be called from a browser, but the raster layers it
     publishes are keyless vendor endpoints it is itself fetching - so going through it is a second
     round trip that buys nothing. Measured on staging, it is most of the cost: 0.36-0.56s for a
     satellite tile Esri answers in 0.09s.
+
+    Args:
+        catalogue: The active tile catalogue, for a layer with no vendor endpoint.
 
     Args:
         layer: Layer id from the catalogue.
@@ -157,12 +159,11 @@ def _fetch_tile(layer: str, z: int, x: int, y: int) -> tuple[int, bytes, str]:
         ``(status_code, body, content_type)``.
     """
     from urbanlens.dashboard.services.apis.locations.basemap_vendor_tiles_gateway import BasemapVendorTilesGateway
-    from urbanlens.dashboard.services.apis.locations.redata_basemap_tiles_gateway import RedataBasemapTilesGateway
     from urbanlens.dashboard.services.map.basemap_vendors import vendor_for
 
     if vendor_for(layer) is not None:
         return BasemapVendorTilesGateway().download_tile(layer, z, x, y)
-    return RedataBasemapTilesGateway().download_tile(layer, z, x, y)
+    return catalogue.download_tile(layer, z, x, y)
 
 
 def _keep_for(response: HttpResponse, ttl: int = _TILE_CACHE_TTL) -> HttpResponse:
@@ -225,7 +226,7 @@ class BasemapTileView(AccessMixin, View):
 
     def get(self, request: HttpRequest, layer: str, z: int, x: int, y: int) -> HttpResponse:
         """
-        Serve one tile from cache or REData.
+        Serve one tile from cache or its upstream.
 
         Args:
             request: The current request.
@@ -238,11 +239,12 @@ class BasemapTileView(AccessMixin, View):
             The tile bytes, a definitive 404, an uncached 503 when the vendor could not be reached,
             or whatever a login-required view answers a signed-out visitor with.
         """
-        from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError, redata_configured
+        from urbanlens.dashboard.services.map.basemap_catalogue import active_tile_catalogue
         from urbanlens.dashboard.services.map.tile_authorisation import remember_tile_viewer, session_key_for, tile_auth_key
         from urbanlens.dashboard.services.map.tile_cache_keys import basemap_tile_cache_key
 
-        if not redata_configured():
+        catalogue = active_tile_catalogue()
+        if catalogue is None:
             return HttpResponse(status=404)
 
         cache_key = basemap_tile_cache_key(layer, z, x, y)
@@ -273,14 +275,14 @@ class BasemapTileView(AccessMixin, View):
                 # since a viewport burst asks for far more tiles than slots.
                 return HttpResponse(status=503, headers={"Retry-After": "1"})
             try:
-                status, body, content_type = _fetch_tile(layer, z, x, y)
-            except (LocationContextUnavailableError, RequestCancelledError, GatewayRequestError, OSError) as exc:
+                status, body, content_type = _fetch_tile(catalogue, layer, z, x, y)
+            except (ProviderUnavailableError, RequestCancelledError, GatewayRequestError, OSError) as exc:
                 # The exception's text is the request URL, which carries the tile's own z/x/y.
                 logger.warning("Basemap tile fetch failed for %s %s: %s", layer, redact_tile(z, x, y), type(exc).__name__)
                 if isinstance(exc, ServiceDisabledError):
                     # Still switched off while the advertising catalogue stays cached, and maps draw only
                     # what the catalogue named. Rate limits do not land here: a minute over budget is not
-                    # worth the REData call rebuilding the catalogue costs.
+                    # worth the call rebuilding the catalogue costs.
                     from urbanlens.dashboard.services.map.basemap_catalogue import forget_basemap_tile_catalogue
 
                     forget_basemap_tile_catalogue()
@@ -291,19 +293,20 @@ class BasemapTileView(AccessMixin, View):
             if resolved_type is None:
                 # Uncached: upstream answers every coordinate the same way, and viewport retries would
                 # turn one broken layer into 150 calls; uncached so a fix shows at once.
-                logger.warning("REData answered %s %s with %r, which this origin will not serve", layer, redact_tile(z, x, y), content_type)
+                logger.warning("The tile catalogue answered %s %s with %r, which this origin will not serve", layer, redact_tile(z, x, y), content_type)
                 return HttpResponse(status=404)
             # Bounded: bytes land in shared Dragonfly holding sessions/layer, which raises rather than
             # evicting when full, so one surprise must not break cache writes for everyone.
             # Helper swallows cache failure: full/unreachable Dragonfly degrades the cache, not the map.
             bounded_cache.set_if_small(cache_key, body, resolved_type, _ttl_for(z), label=f"Basemap tile {layer} {redact_tile(z, x, y)}")
             return _keep_for(HttpResponse(body, content_type=resolved_type), _browser_ttl(layer, _ttl_for(z)))
-        if status == 400 and _VECTOR_LAYER_REFUSAL in body:
-            # Catalogue named this layer raster, so it is the stale thing; per-coordinate refusal would
-            # answer 404 for a week after the layer is servable again.
+        if catalogue.refuses_as_vector(status, body):
+            # About the layer, not the coordinate, so not cacheable per tile: without this branch such an answer
+            # falls through to the definitive-404 path and is cached a week. Catalogue named this layer raster, so it
+            # is the stale thing; per-coordinate refusal would answer 404 for a week after the layer is servable again.
             from urbanlens.dashboard.services.map.basemap_catalogue import forget_basemap_tile_catalogue
 
-            logger.warning("REData now publishes %s as a vector layer; dropping the cached tile catalogue", layer)
+            logger.warning("The tile catalogue now publishes %s as a vector layer; dropping the cached tile catalogue", layer)
             forget_basemap_tile_catalogue()
             return HttpResponse(status=404)
         if status in (400, 404):

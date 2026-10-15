@@ -1,5 +1,5 @@
 """
-A pin's boundary drawing, its debug cache reset, its web-search refresh, and the old Memories photos redirect (P29).
+A pin's boundary drawing, its debug cache reset, its web-search refresh, and the old Memories photos redirect.
 
 Each asserts what the owner may do, that another user is refused with nothing changed, that anonymous is sent to log
 in, and that a malformed body is a 4xx.
@@ -18,7 +18,6 @@ from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
 
-from urbanlens.core.cache_keys import make_cache_key
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
@@ -27,6 +26,7 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, grant_subscription
 from urbanlens.dashboard.models.wiki.model import Wiki
+from urbanlens.dashboard.services.apis.locations.esri import EsriGateway
 from urbanlens.dashboard.services.pins.search_names import search_names
 from urbanlens.dashboard.services.search.pin_web_search import web_search_query
 
@@ -171,7 +171,7 @@ class PinDebugClearCacheRouteTests(_Owners):
         self.debug_entry = LocationCache.set(self.location, "wikipedia", {"x": 1})
         self.other_source = LocationCache.set(self.location, "boundary", {"x": 1})
         self.elsewhere = LocationCache.set(baker.make(Location), "wikipedia", {"x": 1})
-        self.carousel_key = make_cache_key("satellite_view_esri", "42.00000", "-73.00000")
+        self.carousel_key = EsriGateway().slide_cache_key(42.0, -73.0)
         cache.set(self.carousel_key, ["slide"], 60)
         self.addCleanup(cache.delete, self.carousel_key)
 

@@ -19,6 +19,29 @@ app.conf.update(task_track_started=True)
 app.autodiscover_tasks()
 
 
+@app.on_after_finalize.connect
+def schedule_plugin_beat_entries(**_extra) -> None:
+    """
+    Add the optional plugins' beat entries to the schedule this process runs.
+
+    Settings are read before plugins are discovered, so plugin entries are merged here, filtered for the
+    environment the way the core entries are.
+    """
+    from django.conf import settings as django_settings
+
+    from urbanlens.dashboard.plugins.points import BEAT_SCHEDULE
+    from urbanlens.UrbanLens.egress import beat_classification, scheduled_beat_entries
+    from urbanlens.UrbanLens.settings.app import settings as app_settings
+
+    plugin_entries = scheduled_beat_entries(
+        BEAT_SCHEDULE.as_dict(),
+        django_settings.EGRESS_ENVIRONMENT,
+        app_settings.background_tasks_allowlist,
+        beat_classification(),
+    )
+    app.conf.beat_schedule = {**app.conf.beat_schedule, **plugin_entries}
+
+
 @after_setup_logger.connect
 @after_setup_task_logger.connect
 def redact_worker_log_handlers(**_extra) -> None:

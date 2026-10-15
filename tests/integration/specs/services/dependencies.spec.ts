@@ -4,7 +4,6 @@
  */
 
 import { expect, test } from "../../lib/fixtures.js";
-import { env } from "../../lib/env.js";
 import { appRoutes, pinDetail } from "../../lib/routes.js";
 import { MapPage } from "../../lib/pages/map-page.js";
 
@@ -53,16 +52,5 @@ test.describe("stateful dependencies", () => {
         await page.goto(appRoutes.settings);
         expect(new URL(page.url()).pathname, "the session was lost between two requests").not.toContain("/accounts/login");
         await expect(page.locator("#nav-user-btn")).toBeVisible();
-    });
-
-    test("REData is reachable from here", async ({ request }) => {
-        test.skip(env.redataUrl === null, "Set UL_E2E_REDATA_URL to check the companion service.");
-
-        // A reachability check, not a contract test: REData is a separate
-        // application with its own suite. What matters here is that this
-        // deployment's dependency is answering at all, since a pin detail page
-        // quietly loses its parcel, permit and imagery panels when it is not.
-        const response = await request.get(env.redataUrl!, { failOnStatusCode: false });
-        expect(response.status(), `REData at ${env.redataUrl} answered ${response.status()}`).toBeLessThan(500);
     });
 });
