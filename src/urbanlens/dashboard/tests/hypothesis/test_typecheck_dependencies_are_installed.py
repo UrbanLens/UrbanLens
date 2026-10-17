@@ -31,7 +31,7 @@ import yaml
 from urbanlens.core.tests.testcase import SimpleTestCase
 
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[5]
-#: Forgejo-side only (.forgejo/ stays off the public mirror), so the tests below skip where it is absent.
+#: Forgejo-side only (.forgejo/ stays off the public mirror), so the tests below skip where .forgejo/ is absent.
 _CI_PATH = _REPO_ROOT / ".forgejo" / "workflows" / "ci.yml"
 _PACKAGE_JSON = _REPO_ROOT / "package.json"
 
@@ -73,8 +73,8 @@ def _job_running_typecheck() -> dict:
         AssertionError: No job runs it, which would make every assertion here
             vacuous rather than satisfied.
     """
-    if not _CI_PATH.is_file():
-        raise unittest.SkipTest(f"{_CI_PATH.relative_to(_REPO_ROOT)} is not in this tree")
+    if not (_REPO_ROOT / ".forgejo").is_dir():
+        raise unittest.SkipTest(".forgejo/ is Forgejo-side only and absent from this tree")
     jobs = yaml.safe_load(_CI_PATH.read_text(encoding="utf-8"))["jobs"]
     for job in jobs.values():
         if any("bun run typecheck" in str(step.get("run", "")) for step in job.get("steps", [])):
