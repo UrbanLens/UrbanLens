@@ -24,13 +24,15 @@ from __future__ import annotations
 
 import json
 import pathlib
+import unittest
 
 import yaml
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[5]
-_CI_PATH = _REPO_ROOT / ".github" / "workflows" / "ci.yml"
+#: Forgejo-side only (.forgejo/ stays off the public mirror), so the tests below skip where .forgejo/ is absent.
+_CI_PATH = _REPO_ROOT / ".forgejo" / "workflows" / "ci.yml"
 _PACKAGE_JSON = _REPO_ROOT / "package.json"
 
 
@@ -71,6 +73,8 @@ def _job_running_typecheck() -> dict:
         AssertionError: No job runs it, which would make every assertion here
             vacuous rather than satisfied.
     """
+    if not (_REPO_ROOT / ".forgejo").is_dir():
+        raise unittest.SkipTest(".forgejo/ is Forgejo-side only and absent from this tree")
     jobs = yaml.safe_load(_CI_PATH.read_text(encoding="utf-8"))["jobs"]
     for job in jobs.values():
         if any("bun run typecheck" in str(step.get("run", "")) for step in job.get("steps", [])):

@@ -1,6 +1,6 @@
 ![Urban Lens Logo](/src/urbanlens/dashboard/frontend/static/dashboard/images/logo_color-480w.webp)
 
-[![CI](https://github.com/UrbanLens/UrbanLens/actions/workflows/ci.yml/badge.svg)](https://github.com/UrbanLens/UrbanLens/actions/workflows/ci.yml) [![Security](https://github.com/UrbanLens/UrbanLens/actions/workflows/security.yml/badge.svg)](https://github.com/UrbanLens/UrbanLens/actions/workflows/security.yml)
+
 
 
 ### Map, log, and share the places worth exploring.

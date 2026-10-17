@@ -811,7 +811,7 @@ def main(argv: list[str] | None = None) -> int:
     if codeql is None:
         if args.gate or args.skip_if_missing:
             print("CodeQL CLI not found; skipping. Install with: python bin/run_codeql.py --install")
-            print("CI still runs CodeQL on pull requests (.github/workflows/security.yml).")
+            print("CI still runs CodeQL on pull requests (forge-checks/codeql).")
             return 0
         print("CodeQL CLI not found. Install with: python bin/run_codeql.py --install", file=sys.stderr)
         return 2
