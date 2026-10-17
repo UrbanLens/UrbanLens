@@ -26,7 +26,8 @@ ignored, so a tree that omits some files still passes.
 
 Usage:
     bin/check_comment_hygiene.py                    whole tree (CI)
-    bin/check_comment_hygiene.py FILE...            these files only (pre-commit)
+    bin/check_comment_hygiene.py FILE...            these files only
+    bin/check_comment_hygiene.py --staged           staged files, or the whole tree if none are staged (pre-commit)
     bin/check_comment_hygiene.py --list [FILE...]   print every violation
     bin/check_comment_hygiene.py --update-baseline  record the current counts
 """
@@ -727,24 +728,42 @@ def _given_paths(files: list[str]) -> list[str]:
     return sorted(paths)
 
 
+def _staged_paths() -> list[str]:
+    """
+    Staged files that are added, copied, modified or renamed, relative to the repository root.
+    """
+    listing = subprocess.run(["git", "-C", str(ROOT), "diff", "--cached", "--name-only", "--diff-filter=ACMR"], capture_output=True, text=True, check=True)
+    return [name for name in listing.stdout.splitlines() if name]
+
+
 def main(argv: list[str] | None = None) -> int:
     """
     Check the tree or the given files, list violations, or rewrite the baseline.
     """
     parser = argparse.ArgumentParser(description=(__doc__ or "").strip().splitlines()[0])
     parser.add_argument("files", nargs="*", help="check only these files (default: every tracked file)")
+    parser.add_argument("--staged", action="store_true", help="check the staged files, or every tracked file when none is staged")
     parser.add_argument("--list", action="store_true", help="print every violation, baselined or not")
     parser.add_argument("--update-baseline", action="store_true", help="record the current counts as the baseline")
     parser.add_argument("--allow-increase", action="store_true", help="with --update-baseline, accept a higher total")
     args = parser.parse_args(argv)
 
+    files = args.files
+    if args.staged:
+        if args.files or args.update_baseline:
+            print("--staged takes no file arguments and cannot be combined with --update-baseline.")
+            return 2
+        files = [str(ROOT / name) for name in _staged_paths()]
+        if files and not _given_paths(files):
+            return 0
+
     tracked = tracked_paths(ROOT)
-    paths = _given_paths(args.files) if args.files else tracked
+    paths = _given_paths(files) if files else tracked
     violations = scan(ROOT, paths)
     current = counts(violations)
 
     if args.update_baseline:
-        if args.files:
+        if files:
             print("--update-baseline reads the whole tree; drop the file arguments.")
             return 2
         return update_baseline(current, BASELINE, allow_increase=args.allow_increase, tracked=tracked)
@@ -759,7 +778,7 @@ def main(argv: list[str] | None = None) -> int:
     recorded = load_all_baselines()
     if _is_partial_export(ROOT):
         recorded = measured_baseline(recorded, ROOT, tracked)
-    gained, lost = compare(current, recorded, paths if args.files else None)
+    gained, lost = compare(current, recorded, paths if files else None)
     for rule, path, now, recorded in gained:
         print(f"{path}: {rule}: {now} (baseline {recorded})")
         for violation in violations:
