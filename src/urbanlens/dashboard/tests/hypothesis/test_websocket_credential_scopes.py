@@ -24,6 +24,11 @@ from urbanlens.dashboard.websocket_auth import ApiKeyAuthMiddleware
 Application = get_application_model()
 AccessToken = get_access_token_model()
 
+#: Seconds each connect, disconnect and receive may take. ``WebsocketCommunicator`` defaults every one to 1 s, and CI
+#: runs this under ``coverage`` on four xdist workers, where a handshake (key lookup, hash check, check-in lookup,
+#: group join) can be starved past that. A passing call returns as soon as it completes, so this costs nothing.
+CONNECT_WAIT = 15
+
 
 def _run(coro):
     """
@@ -136,7 +141,7 @@ class SafetyChatCredentialScopeTests(TransactionTestCase):
 
         async def _test():
             comm = self._owner_route(raw_key=raw_key)
-            connected, close_code = await comm.connect()
+            connected, close_code = await comm.connect(timeout=CONNECT_WAIT)
             self.assertFalse(connected)
             self.assertEqual(close_code, 4404)
 
@@ -148,9 +153,9 @@ class SafetyChatCredentialScopeTests(TransactionTestCase):
 
         async def _test():
             comm = self._owner_route(raw_key=raw_key)
-            connected, _ = await comm.connect()
+            connected, _ = await comm.connect(timeout=CONNECT_WAIT)
             self.assertTrue(connected)
-            await comm.disconnect()
+            await comm.disconnect(timeout=CONNECT_WAIT)
 
         _run(_test())
 
@@ -162,12 +167,12 @@ class SafetyChatCredentialScopeTests(TransactionTestCase):
 
         async def _test():
             comm = self._owner_route(raw_key=raw_key)
-            connected, _ = await comm.connect()
+            connected, _ = await comm.connect(timeout=CONNECT_WAIT)
             self.assertTrue(connected)
             await comm.send_to(text_data=json.dumps({"body": "Sent by a read-only key"}))
-            reply = json.loads(await comm.receive_from())
+            reply = json.loads(await comm.receive_from(timeout=CONNECT_WAIT))
             self.assertEqual(reply["type"], "error")
-            await comm.disconnect()
+            await comm.disconnect(timeout=CONNECT_WAIT)
 
         _run(_test())
         self.assertFalse(SafetyCheckinMessage.objects.filter(body="Sent by a read-only key").exists())
@@ -178,12 +183,12 @@ class SafetyChatCredentialScopeTests(TransactionTestCase):
 
         async def _test():
             comm = self._owner_route(raw_key=raw_key)
-            connected, _ = await comm.connect()
+            connected, _ = await comm.connect(timeout=CONNECT_WAIT)
             self.assertTrue(connected)
             await comm.send_to(text_data=json.dumps({"body": "Heading home"}))
-            echo = json.loads(await comm.receive_from())
+            echo = json.loads(await comm.receive_from(timeout=CONNECT_WAIT))
             self.assertEqual(echo["body"], "Heading home")
-            await comm.disconnect()
+            await comm.disconnect(timeout=CONNECT_WAIT)
 
         _run(_test())
 
@@ -192,12 +197,12 @@ class SafetyChatCredentialScopeTests(TransactionTestCase):
 
         async def _test():
             comm = self._owner_route(user=self.owner_user)
-            connected, _ = await comm.connect()
+            connected, _ = await comm.connect(timeout=CONNECT_WAIT)
             self.assertTrue(connected)
             await comm.send_to(text_data=json.dumps({"body": "From the browser"}))
-            echo = json.loads(await comm.receive_from())
+            echo = json.loads(await comm.receive_from(timeout=CONNECT_WAIT))
             self.assertEqual(echo["body"], "From the browser")
-            await comm.disconnect()
+            await comm.disconnect(timeout=CONNECT_WAIT)
 
         _run(_test())
 
@@ -208,12 +213,12 @@ class SafetyChatCredentialScopeTests(TransactionTestCase):
 
         async def _test():
             comm = self._contact_route(self.contact.token, raw_key=raw_key)
-            connected, _ = await comm.connect()
+            connected, _ = await comm.connect(timeout=CONNECT_WAIT)
             self.assertTrue(connected)
             await comm.send_to(text_data=json.dumps({"body": "Contact checking in"}))
-            echo = json.loads(await comm.receive_from())
+            echo = json.loads(await comm.receive_from(timeout=CONNECT_WAIT))
             self.assertEqual(echo["body"], "Contact checking in")
-            await comm.disconnect()
+            await comm.disconnect(timeout=CONNECT_WAIT)
 
         _run(_test())
 
@@ -223,7 +228,7 @@ class SafetyChatCredentialScopeTests(TransactionTestCase):
 
         async def _test():
             comm = self._contact_route(uuid.uuid4(), raw_key=raw_key)
-            connected, close_code = await comm.connect()
+            connected, close_code = await comm.connect(timeout=CONNECT_WAIT)
             self.assertFalse(connected)
             self.assertEqual(close_code, 4404)
 
@@ -237,7 +242,7 @@ class SafetyChatCredentialScopeTests(TransactionTestCase):
 
         async def _test():
             comm = self._owner_route(raw_key=raw_key)
-            connected, _ = await comm.connect()
+            connected, _ = await comm.connect(timeout=CONNECT_WAIT)
             self.assertTrue(connected)
 
             await database_sync_to_async(ApiKey.objects.filter(pk=api_key.pk).update)(revoked_at=timezone.now())
@@ -271,7 +276,7 @@ class DirectMessageCredentialScopeTests(TransactionTestCase):
 
         async def _test():
             comm = self._communicator(raw_key=raw_key)
-            connected, close_code = await comm.connect()
+            connected, close_code = await comm.connect(timeout=CONNECT_WAIT)
             self.assertFalse(connected)
             self.assertEqual(close_code, 4404)
 
@@ -283,9 +288,9 @@ class DirectMessageCredentialScopeTests(TransactionTestCase):
 
         async def _test():
             comm = self._communicator(raw_key=token)
-            connected, _ = await comm.connect()
+            connected, _ = await comm.connect(timeout=CONNECT_WAIT)
             self.assertTrue(connected)
-            await comm.disconnect()
+            await comm.disconnect(timeout=CONNECT_WAIT)
 
         _run(_test())
 
@@ -295,7 +300,7 @@ class DirectMessageCredentialScopeTests(TransactionTestCase):
 
         async def _test():
             comm = self._communicator(raw_key=token)
-            connected, close_code = await comm.connect()
+            connected, close_code = await comm.connect(timeout=CONNECT_WAIT)
             self.assertFalse(connected)
             self.assertEqual(close_code, 4404)
 
@@ -317,12 +322,12 @@ class DirectMessageCredentialScopeTests(TransactionTestCase):
 
         async def _test():
             comm = self._communicator(raw_key=token)
-            connected, _ = await comm.connect()
+            connected, _ = await comm.connect(timeout=CONNECT_WAIT)
             self.assertTrue(connected)
             await comm.send_to(text_data=json.dumps({"recipient": recipient.profile.slug, "body": "Sent read-only"}))
-            reply = json.loads(await comm.receive_from())
+            reply = json.loads(await comm.receive_from(timeout=CONNECT_WAIT))
             self.assertEqual(reply["type"], "error")
-            await comm.disconnect()
+            await comm.disconnect(timeout=CONNECT_WAIT)
 
         _run(_test())
         self.assertFalse(DirectMessage.objects.filter(body="Sent read-only").exists())
@@ -333,11 +338,11 @@ class DirectMessageCredentialScopeTests(TransactionTestCase):
 
         async def _test():
             comm = self._communicator(raw_key=token)
-            connected, _ = await comm.connect()
+            connected, _ = await comm.connect(timeout=CONNECT_WAIT)
             self.assertTrue(connected)
             await comm.send_to(text_data=json.dumps({"type": "ping"}))
             self.assertTrue(await comm.receive_nothing(timeout=0.5))
-            await comm.disconnect()
+            await comm.disconnect(timeout=CONNECT_WAIT)
 
         _run(_test())
 
@@ -346,9 +351,9 @@ class DirectMessageCredentialScopeTests(TransactionTestCase):
 
         async def _test():
             comm = self._communicator(user=self.user)
-            connected, _ = await comm.connect()
+            connected, _ = await comm.connect(timeout=CONNECT_WAIT)
             self.assertTrue(connected)
-            await comm.disconnect()
+            await comm.disconnect(timeout=CONNECT_WAIT)
 
         _run(_test())
 
@@ -359,7 +364,7 @@ class DirectMessageCredentialScopeTests(TransactionTestCase):
 
         async def _test():
             comm = self._communicator(raw_key=token)
-            connected, _ = await comm.connect()
+            connected, _ = await comm.connect(timeout=CONNECT_WAIT)
             self.assertTrue(connected)
 
             await database_sync_to_async(AccessToken.objects.filter(token=token).delete)()
@@ -395,7 +400,7 @@ class NotificationCredentialScopeTests(TransactionTestCase):
 
         async def _test():
             comm = self._communicator(raw_key=raw_key)
-            connected, close_code = await comm.connect()
+            connected, close_code = await comm.connect(timeout=CONNECT_WAIT)
             self.assertFalse(connected)
             self.assertEqual(close_code, 4404)
 
@@ -407,9 +412,9 @@ class NotificationCredentialScopeTests(TransactionTestCase):
 
         async def _test():
             comm = self._communicator(raw_key=raw_key)
-            connected, _ = await comm.connect()
+            connected, _ = await comm.connect(timeout=CONNECT_WAIT)
             self.assertTrue(connected)
-            await comm.disconnect()
+            await comm.disconnect(timeout=CONNECT_WAIT)
 
         _run(_test())
 
@@ -418,8 +423,8 @@ class NotificationCredentialScopeTests(TransactionTestCase):
 
         async def _test():
             comm = self._communicator(user=self.user)
-            connected, _ = await comm.connect()
+            connected, _ = await comm.connect(timeout=CONNECT_WAIT)
             self.assertTrue(connected)
-            await comm.disconnect()
+            await comm.disconnect(timeout=CONNECT_WAIT)
 
         _run(_test())
