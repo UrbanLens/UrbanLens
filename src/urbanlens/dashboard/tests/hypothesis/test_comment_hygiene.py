@@ -313,6 +313,78 @@ class MainOnAPartialTreeTests(SimpleTestCase):
         self.assertNotIn("plugins", output)
 
 
+class StagedTests(SimpleTestCase):
+    _BLOCK = "server {\n# one\n# two\n# three\n# four\n# five\n}\n"
+
+    def _run(self, committed: dict[str, str], staged: dict[str, str], args: list[str]) -> tuple[int, str]:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            git = [
+                "git",
+                "-C",
+                str(root),
+                "-c",
+                "user.name=test",
+                "-c",
+                "user.email=test@example.invalid",
+                "-c",
+                "commit.gpgsign=false",
+            ]
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            for name, text in committed.items():
+                (root / name).parent.mkdir(parents=True, exist_ok=True)
+                (root / name).write_text(text, encoding="utf-8")
+            subprocess.run([*git, "add", "-A"], check=True)
+            subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "base"], check=True)
+            for name, text in staged.items():
+                (root / name).parent.mkdir(parents=True, exist_ok=True)
+                (root / name).write_text(text, encoding="utf-8")
+                subprocess.run([*git, "add", name], check=True)
+            baseline_path = root / "bin" / "comment_hygiene_baseline.json"
+            baseline_path.parent.mkdir(parents=True, exist_ok=True)
+            baseline_path.write_text(json.dumps({rule: {} for rule in checker.RULES}))
+            out = io.StringIO()
+            with (
+                mock.patch.object(checker, "ROOT", root),
+                mock.patch.object(checker, "BASELINE", baseline_path),
+                contextlib.redirect_stdout(out),
+            ):
+                return checker.main(args), out.getvalue()
+
+    def test_a_staged_conf_under_a_config_directory_is_checked(self) -> None:
+        conf = "src/urbanlens/config/nginx/nginx.conf"
+        rc, output = self._run({}, {conf: self._BLOCK}, ["--staged"])
+        self.assertEqual(rc, 1)
+        self.assertIn(conf, output)
+
+    def test_nothing_staged_checks_the_whole_tree(self) -> None:
+        rc, output = self._run({"src/app.py": "# one\n# two\n# three\n# four\n# five\nx = 1\n"}, {}, ["--staged"])
+        self.assertEqual(rc, 1)
+        self.assertIn("src/app.py", output)
+
+    def test_only_the_staged_file_is_checked_when_others_are_tracked(self) -> None:
+        rc, output = self._run(
+            {"src/app.py": "# one\n# two\n# three\n# four\n# five\nx = 1\n"}, {"src/clean.py": "x = 1\n"}, ["--staged"]
+        )
+        self.assertEqual(rc, 0)
+        self.assertNotIn("src/app.py", output)
+
+    def test_staged_files_out_of_scope_check_nothing(self) -> None:
+        rc, output = self._run(
+            {"src/app.py": "# one\n# two\n# three\n# four\n# five\nx = 1\n"},
+            {"README.md": "# one\n# two\n# three\n# four\n# five\n"},
+            ["--staged"],
+        )
+        self.assertEqual(rc, 0)
+        self.assertEqual(output, "")
+
+    def test_staged_rejects_file_arguments_and_update_baseline(self) -> None:
+        for args in (["--staged", "a.py"], ["--staged", "--update-baseline"]):
+            with self.subTest(args=args):
+                rc, _ = self._run({}, {}, args)
+                self.assertEqual(rc, 2)
+
+
 class SelfTests(SimpleTestCase):
     def test_the_checker_and_these_tests_pass_their_own_rules(self) -> None:
         for path in (_CHECKER_PATH, pathlib.Path(__file__)):
