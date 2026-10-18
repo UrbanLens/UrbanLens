@@ -185,6 +185,23 @@ class BeginSessionTests(TestCase):
         assert round_ is not None
         self.assertEqual(round_.location_id, self.location.pk)
 
+    def test_beginning_drops_invitees_who_never_joined(self) -> None:
+        latecomer = _make_profile()
+        _befriend(self.host, latecomer)
+        invite_to_session(self.session, self.host, latecomer)
+        begin_session(self.session, self.host)
+        row = GameSessionParticipant.objects.get(session=self.session, profile=latecomer)
+        self.assertEqual(row.status, GameSessionParticipantStatus.LEFT)
+        self.assertFalse(
+            GameSessionParticipant.objects.active().filter(session=self.session, profile=latecomer).exists()
+        )
+        self.assertEqual(
+            GameSessionParticipant.objects.get(session=self.session, profile=self.guest).status,
+            GameSessionParticipantStatus.JOINED,
+        )
+        with pytest.raises(ParticipantNotInvitedError):
+            join_session(self.session, latecomer)
+
     def test_cannot_begin_twice(self) -> None:
         begin_session(self.session, self.host)
         with pytest.raises(SessionAlreadyStartedError):
