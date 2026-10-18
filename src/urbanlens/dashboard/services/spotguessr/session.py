@@ -423,7 +423,7 @@ def begin_session(session: GameSession, host: Profile) -> GameRound | None:
     """
     Host starts the game: locks the roster, transitions LOBBY to ACTIVE, creates round 1.
 
-    No one can join after this point (see "Multiplayer sessions" in the
+    Invited players who never joined are dropped (set LEFT). No one can join after this point (see "Multiplayer sessions" in the
     design doc).
 
     Raises:
@@ -438,6 +438,9 @@ def begin_session(session: GameSession, host: Profile) -> GameRound | None:
             raise SessionAlreadyStartedError(f"Session {session.pk} is {locked.status}, not LOBBY.")
         locked.status = GameSessionStatus.ACTIVE
         locked.save(update_fields=["status", "updated"])
+        # Invitees who never accepted are dropped with the lobby: LEFT (blank departure) takes them out of
+        # ``active()``, so they lose the HTTP views and the websocket, and out of history and results.
+        GameSessionParticipant.objects.filter(session=locked, status=GameSessionParticipantStatus.INVITED).update(status=GameSessionParticipantStatus.LEFT, updated=timezone.now())
     session.status, session.host_profile_id = locked.status, locked.host_profile_id
     round_ = get_or_create_round(session)
     if round_ is not None:

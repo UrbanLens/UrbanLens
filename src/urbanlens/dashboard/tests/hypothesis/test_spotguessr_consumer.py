@@ -87,6 +87,20 @@ class GameSessionConsumerTests(TransactionTestCase):
         self.assertTrue(connected)
         await comm.disconnect()
 
+    def test_an_invited_but_never_joined_participant_is_rejected_once_the_game_starts(self) -> None:
+        _run(self._an_invited_but_never_joined_participant_is_rejected_once_the_game_starts())
+
+    async def _an_invited_but_never_joined_participant_is_rejected_once_the_game_starts(self) -> None:
+        from asgiref.sync import sync_to_async
+
+        from urbanlens.dashboard.services.spotguessr.session import begin_session
+
+        await sync_to_async(begin_session)(self.session, self.host)
+        comm = self._communicator(self.guest.user)
+        connected, close_code = await comm.connect()
+        self.assertFalse(connected)
+        self.assertEqual(close_code, 4404)
+
     def test_a_non_participant_is_rejected(self) -> None:
         _run(self._a_non_participant_is_rejected())
 
