@@ -978,7 +978,7 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
                 # holding the request open. search_web() tries every configured provider in priority order, so one
                 # unconfigured/rate-limited provider doesn't fail the whole request.
                 search_results = call_with_deadline(
-                    lambda query=search.query: search_web(query),
+                    lambda search=search: search_web(search.query, scope=search.request_scope),
                     timeout=EXTERNAL_CALL_DEADLINE,
                     default=None,
                     name="web_search",
