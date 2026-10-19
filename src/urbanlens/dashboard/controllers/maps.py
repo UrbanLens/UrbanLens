@@ -884,6 +884,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         if not user_has_feature(request.user, SiteFeature.PLACES):
             return JsonResponse({"error": "forbidden"}, status=403)
 
+        if not request.user.profile.external_apis_enabled:
+            return JsonResponse({"places": [], "cached": False, "incomplete": [], "disabled": True})
+
         try:
             lat = float(request.GET.get("lat", ""))
             lng = float(request.GET.get("lng", ""))
@@ -939,6 +942,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         place_id = (request.GET.get("place_id") or "").strip()
         if not place_id:
             return JsonResponse({"error": "missing place_id"}, status=400)
+
+        if not request.user.profile.external_apis_enabled:
+            return JsonResponse({"error": "disabled"}, status=403)
 
         from urbanlens.dashboard.services.apis.locations import places_resolution
         from urbanlens.dashboard.services.apis.request_upstreams import PlaceDetailsUpstream
