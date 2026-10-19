@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 class GoogleMapsPhotosPanelSource(GalleryMediaSource):
     """
     Photos users have uploaded to Google Maps for a pin's location.
-    Found by coordinates only, via Places API (New) Nearby Search - never by the pin/wiki's user-given name."""
+    Found by coordinates only, via the active places provider's nearby search - never by the pin/wiki's user-given name."""
 
     key = "google_maps"
     gallery_order: ClassVar[int | None] = 100
@@ -109,14 +109,20 @@ class GooglePlaceLinkEnrichmentSource(EnrichmentSource):
 
     key: ClassVar[str] = "google_place_link"
     verbose_name: ClassVar[str] = "Google Place link"
-    service_keys: ClassVar[tuple[str, ...]] = ("google_places", "google_geocoding")
     refreshes_names: ClassVar[bool] = True
 
-    def gate(self) -> bool:
-        """Requires the unrestricted Google API key."""
-        from urbanlens.UrbanLens.settings.app import settings as app_settings
+    @property
+    def service_keys(self) -> tuple[str, ...]:
+        """The active places provider's budget, and Geocoding's, which the name chain falls back to."""
+        from urbanlens.dashboard.services.apis.locations import places_resolution
 
-        return bool(app_settings.google_unrestricted_api_key)
+        return (*(places_resolution.service_keys() or ("google_places",)), "google_geocoding")
+
+    def gate(self) -> bool:
+        """Requires an available places provider (REData, or the unrestricted Google API key)."""
+        from urbanlens.dashboard.services.apis.locations import places_resolution
+
+        return places_resolution.available()
 
     def missing_filter(self) -> Q:
         """Locations not yet linked to a GooglePlace row."""
