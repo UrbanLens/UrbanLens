@@ -876,6 +876,38 @@ _CSP_DIRECTIVES: dict[str, list[str]] = {
 }
 
 
+#: What Google's Programmable Search Element loads, per directive. Taken from the Element's own requests:
+#: cse.js (cse.google.com) pulls its UI script and look stylesheet from www.google.com/cse, and queries
+#: cse.google.com/cse/element/v1. Images are already admitted by "https:". Ads are not enabled, so the
+#: doubleclick frame hosts are deliberately absent.
+GOOGLE_PSE_CSP: dict[str, tuple[str, ...]] = {
+    "script-src": ("https://cse.google.com", "https://www.google.com"),
+    "style-src": ("https://www.google.com",),
+    "connect-src": ("https://cse.google.com",),
+}
+
+
+def allow_google_pse(directives: dict[str, list[str]], cx: str) -> list[str]:
+    """Admit the hosts Google's Programmable Search Element needs, when an engine is configured.
+
+    Args:
+        directives: The CSP directive lists, modified in place.
+        cx: The configured engine id, or empty when the Element is off.
+
+    Returns:
+        The sources admitted.
+    """
+    if not cx:
+        return []
+    admitted: list[str] = []
+    for directive, sources in GOOGLE_PSE_CSP.items():
+        for source in sources:
+            if source not in directives[directive]:
+                directives[directive].append(source)
+                admitted.append(source)
+    return admitted
+
+
 # A vendor mirror must be admitted or UL_CSP_ENFORCE drops those assets.
 def allow_vendor_mirror(directives: dict[str, list[str]], base_url: object) -> str | None:
     """
@@ -992,6 +1024,8 @@ allow_vendor_mirror(_CSP_DIRECTIVES, _app_settings.vendor_asset_base_url)
 allow_media_origin(_CSP_DIRECTIVES, UL_MEDIA_BASE_URL)
 allow_basemap_style_origins(_CSP_DIRECTIVES, _app_settings.basemap_style_base_url)
 allow_hosted_basemap_tiles(_CSP_DIRECTIVES, hosted_basemap_key(EGRESS_ENVIRONMENT, _app_settings.protomaps_api_key))
+GOOGLE_PSE_CX = _app_settings.google_pse_cx.strip()
+allow_google_pse(_CSP_DIRECTIVES, GOOGLE_PSE_CX)
 
 # Enforced unless UL_CSP_ENFORCE=false.
 CSP_ENFORCE = _app_settings.csp_enforce

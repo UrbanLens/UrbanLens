@@ -477,6 +477,16 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "while a violation that breaks a page is fixed, not a resting state."
         ),
     )
+    google_pse_cx: str = Field(
+        default="",
+        description=(
+            "Engine id (cx) of a Google Programmable Search Engine. Set it and the pin page's web-search "
+            "panel also embeds Google's Search Element, which runs in the viewer's browser from the viewer's "
+            "IP, for viewers with web search and external APIs enabled. Its results are posted back and cached "
+            "as user-provided, lower-trust results. The CSP admits Google's Element hosts only while this is "
+            "set. Leave it empty and nothing renders."
+        ),
+    )
     trusted_proxy_count: int = Field(
         default=1,
         description=(

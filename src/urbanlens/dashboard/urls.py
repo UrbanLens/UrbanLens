@@ -485,6 +485,13 @@ urlpatterns = [
                                 name="pin.web_search.refresh",
                             ),
                             path(
+                                "<slug:pin_slug>/search/user-provided/",
+                                throttled("pin.web_search.user_provided", pin.USER_SEARCH_POST_RATE, identify=account_or_address)(
+                                    pin.PinController.as_view({"post": "web_search_user_provided"}),
+                                ),
+                                name="pin.web_search.user_provided",
+                            ),
+                            path(
                                 "<slug:pin_slug>/satellite_view/",
                                 pin.PinController.as_view({"get": "satellite_view_carousell"}),
                                 name="pin.satellite_view",
