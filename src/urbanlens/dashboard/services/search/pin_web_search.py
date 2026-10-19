@@ -26,6 +26,9 @@ if TYPE_CHECKING:
 #: The ``LocationCache.source`` web-search results are cached under.
 WEB_SEARCH_SOURCE = "web_search"
 
+#: Longest ``entity_name`` the search provider accepts.
+ENTITY_NAME_MAX = 200
+
 #: Fewest results a shared pin search asks the search provider to gather before it stops.
 SHARED_MIN_RESULTS = 8
 
@@ -104,7 +107,7 @@ def request_scope_for(pin: Pin, scope: SearchScope) -> WebSearchScope:
     """
     if scope.audience:
         return WebSearchScope(audience=search_audience(pin.profile.user_id))
-    return WebSearchScope(entity=place_entity(pin.location), entity_name=scope.names[0] if scope.names else "", min_results=SHARED_MIN_RESULTS)
+    return WebSearchScope(entity=place_entity(pin.location), entity_name=scope.names[0][:ENTITY_NAME_MAX] if scope.names else "", min_results=SHARED_MIN_RESULTS)
 
 
 def web_search_query(pin: Pin, scope: SearchScope) -> str | None:

@@ -932,6 +932,19 @@ class DocumentPanelSource(LocationCachePanelSource, ABC):
         """
         return True
 
+    def readable_payload(self, data: dict, viewer_id: int | None) -> dict:
+        """
+        A cached payload as one viewer may read it, for a source whose payload holds entries the viewer is not yet owed.
+
+        Args:
+            data: The ``LocationCache`` row's ``data`` dict.
+            viewer_id: The viewer's user pk, or None when the listing is not for one viewer.
+
+        Returns:
+            ``data``, less what this viewer may not see.
+        """
+        return data
+
     def documents_ready(self, data: dict, *, site_scope: bool) -> bool:
         """
         Whether a cached payload can answer the Sources tab for a viewer of this scope.

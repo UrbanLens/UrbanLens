@@ -200,7 +200,7 @@ class ArticleSourcesView(LoginRequiredMixin, View):
         for source in document_panel_sources():
             row = source.cached_entry(driver) if isinstance(source, LocationCachePanelSource) else None
             marker = (row.data or {}).get(BROWSER_FETCH_KEY) if row is not None else None
-            if isinstance(marker, dict) and marker.get("provider") == "wikipedia":
+            if isinstance(marker, dict) and marker.get("provider") == "wikipedia" and driver.profile.user_id not in marker.get("posted_by", []):
                 provider = "wikipedia"
                 break
         if not provider or driver.effective_latitude is None or driver.effective_longitude is None:
