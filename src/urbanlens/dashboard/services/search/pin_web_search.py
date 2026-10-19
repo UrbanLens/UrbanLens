@@ -7,7 +7,7 @@ names of its own, the search cached for exactly that set (see ``services.pins.se
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
@@ -43,7 +43,7 @@ class WebSearch:
 
     scope: SearchScope
     query: str
-    request_scope: WebSearchScope | None = None
+    request_scope: WebSearchScope = field(default_factory=WebSearchScope)
 
     @property
     def query_key(self) -> str:

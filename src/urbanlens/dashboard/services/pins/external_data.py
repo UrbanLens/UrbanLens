@@ -1000,6 +1000,10 @@ class DocumentPanelSource(LocationCachePanelSource, ABC):
         return next((document for document in self.source_documents(data, site_scope=site_scope, subject=subject) if document.document_id == document_id), None)
 
 
+#: Key of a cached document payload that asks the viewer's browser to fetch a provider the upstream could not answer:
+#: ``{"provider": ..., "reason": ...}``.
+BROWSER_FETCH_KEY = "browser_fetch"
+
 #: The key of a name-built row's payload naming the names its search was built from.
 SEARCH_NAMES_KEY = "search_names"
 
