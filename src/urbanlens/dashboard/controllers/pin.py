@@ -4,11 +4,11 @@ from dataclasses import replace
 from datetime import timedelta
 import json
 import logging
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING, TypeGuard, TypeVar
 from urllib.parse import urlencode
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.contrib.auth.models import User
+from django.contrib.auth.models import AnonymousUser, User
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.db.models import Prefetch
@@ -842,9 +842,9 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
         }
 
     @staticmethod
-    def _pse_allowed(user: User) -> bool:
-        """Whether Google's Search Element may run for *user*: configured, entitled and consented."""
-        if not settings.google_pse_cx.strip() or not user_has_feature(user, SiteFeature.SEARCH):
+    def _pse_allowed(user: User | AnonymousUser) -> TypeGuard[User]:
+        """Whether Google's Search Element may run for *user*: configured, signed in, entitled and consented."""
+        if not settings.google_pse_cx.strip() or not isinstance(user, User) or not user_has_feature(user, SiteFeature.SEARCH):
             return False
         profile, _ = Profile.objects.get_or_create(user=user)
         return profile.external_apis_enabled
@@ -862,7 +862,8 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
             pin: Pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
         except Pin.DoesNotExist:
             return JsonResponse({"error": "Pin does not exist."}, status=404)
-        if not self._pse_allowed(request.user):
+        user = request.user
+        if not self._pse_allowed(user):
             return JsonResponse({"error": "Browser search results are not enabled for this account."}, status=403)
         if pin.location is None:
             return JsonResponse({"error": "Pin has no location."}, status=400)
@@ -884,7 +885,7 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
         except InvalidSubmissionError as exc:
             logger.info("Rejected browser search postback from user %s: %s", request.user.pk, exc)
             return JsonResponse({"error": "Results failed validation."}, status=400)
-        stored = store_user_provided_results(pin.location, request.user, search_name, results)
+        stored = store_user_provided_results(pin.location, user, search_name, results)
         return JsonResponse({"stored": stored})
 
     def _web_search_response(self, request: HttpRequest, pin_slug: str, *, force_refresh: bool):
