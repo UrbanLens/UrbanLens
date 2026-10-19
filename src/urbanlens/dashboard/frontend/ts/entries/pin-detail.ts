@@ -17,6 +17,7 @@ import { delegateEditInPlace } from "../shared/edit-in-place";
 import { escHtml } from "../shared/escape-html";
 import { fetchResponse, fetchText, sendJson } from "../shared/fetch-json";
 import { installExternalPanelFallbacks } from "../shared/external-panel-fallbacks";
+import { installGooglePseIn } from "../shared/google-pse";
 import { initOnboardingTour } from "../shared/onboarding-tour";
 import { PinMediaGallery } from "../shared/pin-media-gallery";
 import { installPinShareDialog } from "../shared/pin-share-dialog";
@@ -306,6 +307,9 @@ function bind(cfg: PinConfig): void {
     installAdaptivePagination();
     installPinShareDialog();
     installExternalPanelFallbacks();
+    installGooglePseIn(document);
+    // A swapped-in panel replaces its placeholder, so the swap's target is already detached; scan the page.
+    document.body.addEventListener("htmx:afterSwap", () => installGooglePseIn(document));
     const loaders = document.querySelectorAll(".media-provider-loader").length;
     new PinMediaGallery({ relevanceUrl: cfg.mediaRelevanceUrl, sortUrl: cfg.mediaSortUrl, sendToWikiUrl: cfg.mediaSendToWikiUrl }, loaders).install();
     bindNameSuggestions();

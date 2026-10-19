@@ -4422,6 +4422,29 @@ body.page-location-details .pin-detail-grid {
         }
     }
 
+    .search-result--user-provided {
+        border-left: 3px dashed var(--ul-grey-4, #ccc);
+        padding-left: .5rem;
+    }
+
+    .web-search-user-provided,
+    .web-search-pse {
+        margin-top: .75rem;
+        padding-top: .6rem;
+        border-top: 1px dashed var(--ul-grey-4, #ccc);
+
+        .web-search-subhead {
+            margin: 0 0 .2rem;
+            font-size: .85rem;
+        }
+
+        .web-search-note {
+            margin: 0 0 .5rem;
+            font-size: .75rem;
+            color: var(--ul-grey-7, #555);
+        }
+    }
+
 }
 
 // -- Pin detail layout ---------------------------------------------------------

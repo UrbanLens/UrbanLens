@@ -4,11 +4,11 @@ from dataclasses import replace
 from datetime import timedelta
 import json
 import logging
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING, TypeGuard, TypeVar
 from urllib.parse import urlencode
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.contrib.auth.models import User
+from django.contrib.auth.models import AnonymousUser, User
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.db.models import Prefetch
@@ -33,11 +33,19 @@ from urbanlens.dashboard.models.profile import Profile
 from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
-from urbanlens.dashboard.services.core.request_body import drf_data_object
+from urbanlens.dashboard.services.core.request_body import decode_json, drf_data_object
 from urbanlens.dashboard.services.locations.site_scope import rederive_pin_type
 from urbanlens.dashboard.services.locations.temporal_imagery import temporal_slider_years
 from urbanlens.dashboard.services.search.search import search_web
+from urbanlens.dashboard.services.search.user_provided_search import (
+    MAX_BODY_BYTES as USER_SEARCH_MAX_BODY_BYTES,
+    InvalidSubmissionError,
+    load_user_provided_results,
+    store_user_provided_results,
+    validate_submission,
+)
 from urbanlens.dashboard.services.security.redact import redact_coordinate
+from urbanlens.dashboard.services.security.throttle import Rate
 from urbanlens.dashboard.services.wiki.wiki_seed import seed_pin_from_cached_wikipedia
 from urbanlens.UrbanLens.settings.app import settings
 
@@ -61,6 +69,10 @@ _MEDIA_PHOTOS_PREVIEW_LIMIT = 12
 _ADAPTIVE_PAGE_BATCH_MULTIPLIER = 2
 _WEB_SEARCH_PAGE_SIZE = _WEB_SEARCH_CLIENT_PAGE_SIZE * _ADAPTIVE_PAGE_BATCH_MULTIPLIER
 _WEB_SEARCH_MIN_REFRESH_AGE = timedelta(days=1)
+
+#: Browser-found results posted back per account. A pin page posts once per search, so ten in ten minutes
+#: is far above browsing and far below a loop filling the cache with junk.
+USER_SEARCH_POST_RATE = Rate(limit=10, window_seconds=600)
 
 # Drag-to-resize bounds for the pin map.
 _MAP_HEIGHT_MIN_PX = 320
@@ -802,6 +814,80 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
         """
         return self._web_search_response(request, pin_slug, force_refresh=True)
 
+    def _pse_context(self, request: HttpRequest, pin: Pin, search_name: str, trusted_links: set[str | None]) -> dict:
+        """
+        Template context for the Programmable Search Element and the results viewers' browsers found.
+
+        The viewer's browser contacts Google, so it needs the search feature *and* their external-APIs consent;
+        an unset engine id, the article surface, or either missing leaves the context empty.
+
+        Args:
+            request: The current request.
+            pin: The viewer's pin.
+            search_name: The query the panel searched, with name and town.
+            trusted_links: Links the site's own results already show, dropped from the user-provided list.
+
+        Returns:
+            ``pse_cx``, ``pse_query``, ``pse_post_url`` and ``user_provided_results``, or ``{}``.
+        """
+        from django.urls import reverse
+
+        if request.GET.get("surface") == "article" or not self._pse_allowed(request.user):
+            return {}
+        return {
+            "pse_cx": settings.google_pse_cx.strip(),
+            "pse_query": search_name,
+            "pse_post_url": reverse("pin.web_search.user_provided", args=[pin.slug]),
+            "user_provided_results": load_user_provided_results(pin.location, search_name, {link for link in trusted_links if link}),
+        }
+
+    @staticmethod
+    def _pse_allowed(user: User | AnonymousUser) -> TypeGuard[User]:
+        """Whether Google's Search Element may run for *user*: configured, signed in, entitled and consented."""
+        if not settings.google_pse_cx.strip() or not isinstance(user, User) or not user_has_feature(user, SiteFeature.SEARCH):
+            return False
+        profile, _ = Profile.objects.get_or_create(user=user)
+        return profile.external_apis_enabled
+
+    @action(detail=True, methods=["post"])
+    def web_search_user_provided(self, request: HttpRequest, pin_slug):
+        """
+        JSON endpoint: cache results the viewer's browser found with Google's Search Element.
+
+        The payload is untrusted and other users see it afterwards: it is size-capped, field-validated,
+        reduced to plain text, and stored apart from the site's own results, flagged user-provided. The query it
+        is cached under is derived here from the pin, never taken from the client.
+        """
+        try:
+            pin: Pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
+        except Pin.DoesNotExist:
+            return JsonResponse({"error": "Pin does not exist."}, status=404)
+        user = request.user
+        if not self._pse_allowed(user):
+            return JsonResponse({"error": "Browser search results are not enabled for this account."}, status=403)
+        if pin.location is None:
+            return JsonResponse({"error": "Pin has no location."}, status=400)
+        from urbanlens.dashboard.services.search.pin_web_search import pin_web_searches
+
+        searches = pin_web_searches(pin)
+        if not searches:
+            return JsonResponse({"error": "Pin has no searchable name."}, status=400)
+        search_name = searches[0].query
+        if request.content_type != "application/json":
+            return JsonResponse({"error": "Send application/json."}, status=415)
+        declared = request.META.get("CONTENT_LENGTH") or "0"
+        if not declared.isdigit() or int(declared) > USER_SEARCH_MAX_BODY_BYTES:
+            return JsonResponse({"error": "Body too large."}, status=413)
+        try:
+            results = validate_submission(decode_json(request.body))
+        except ValueError:
+            return JsonResponse({"error": "Body is not valid JSON."}, status=400)
+        except InvalidSubmissionError as exc:
+            logger.info("Rejected browser search postback from user %s: %s", request.user.pk, exc)
+            return JsonResponse({"error": "Results failed validation."}, status=400)
+        stored = store_user_provided_results(pin.location, user, search_name, results)
+        return JsonResponse({"stored": stored})
+
     def _web_search_response(self, request: HttpRequest, pin_slug: str, *, force_refresh: bool):
         from urbanlens.dashboard.services.search.pin_web_search import annotate_results, cached_web_searches, merged_results, pin_web_searches, store_web_search
 
@@ -818,6 +904,8 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
                 return render(request, "dashboard/pages/location/web_search.html", {"pin": pin, "search_results": [], "page_obj": None})
             return HttpResponse("", status=204)
         search_name = " || ".join(search.query for search in searches)
+        # The shared search's query: the Element's prefill and the key browser-found results are cached under.
+        pse_query = searches[0].query
 
         article_surface = request.GET.get("surface") == "article"
         search_allowed = user_has_feature(request.user, SiteFeature.SEARCH)
@@ -845,7 +933,8 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
 
         if answered:
             results = merged_results((cached[search.scope.audience].data or {}).get("results", []) for search in searches)
-            if not results and not article_surface:
+            pse = self._pse_context(request, pin, pse_query, {r.get("link") for r in results})
+            if not results and not article_surface and not pse:
                 return HttpResponse("", status=204)
             page_obj = get_page(request, results, _WEB_SEARCH_PAGE_SIZE)
             return render(
@@ -857,6 +946,7 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
                     "page_obj": page_obj,
                     "adaptive_pagination": True,
                     "can_refresh": can_refresh,
+                    **pse,
                     "debug": self._debug_entry(request, "web_search", search_name, from_cache=True, count=len(results)),
                 },
             )
@@ -896,14 +986,15 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
                 return render(
                     request,
                     "dashboard/pages/location/web_search.html",
-                    {"pin": pin, "error": "Search unavailable. Please try again later."},
+                    {"pin": pin, "error": "Search unavailable. Please try again later.", **self._pse_context(request, pin, pse_query, set())},
                 )
             answers[search.scope.audience] = annotate_results(search_results)
             if location:
                 store_web_search(location, search, answers[search.scope.audience])
 
         search_results = merged_results(answers[search.scope.audience] for search in searches)
-        if not search_results and request.GET.get("surface") != "article":
+        pse = self._pse_context(request, pin, pse_query, {r.get("link") for r in search_results})
+        if not search_results and request.GET.get("surface") != "article" and not pse:
             return HttpResponse("", status=204)
 
         page_obj = get_page(request, search_results, _WEB_SEARCH_PAGE_SIZE)
@@ -916,6 +1007,7 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
                 "page_obj": page_obj,
                 "adaptive_pagination": True,
                 "can_refresh": False,
+                **pse,
                 "debug": self._debug_entry(request, "web_search", search_name, from_cache=False, count=len(search_results)),
             },
         )
