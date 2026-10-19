@@ -4422,6 +4422,11 @@ body.page-location-details .pin-detail-grid {
         }
     }
 
+    .search-result--user-provided {
+        border-left: 3px dashed var(--ul-grey-4, #ccc);
+        padding-left: .5rem;
+    }
+
     .web-search-user-provided,
     .web-search-pse {
         margin-top: .75rem;
