@@ -119,7 +119,7 @@ class GooglePlaceLinkEnrichmentSource(EnrichmentSource):
         return (*(places_resolution.service_keys() or ("google_places",)), "google_geocoding")
 
     def gate(self) -> bool:
-        """Requires an available places provider (REData, or the unrestricted Google API key)."""
+        """Requires an available places provider (any configured provider)."""
         from urbanlens.dashboard.services.apis.locations import places_resolution
 
         return places_resolution.available()
