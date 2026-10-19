@@ -29,7 +29,12 @@ USER_PROVIDED_SOURCE = "web_search_user_provided"
 
 MAX_BODY_BYTES = 32 * 1024
 MAX_RESULTS_PER_POST = 20
-MAX_STORED_RESULTS = 30
+#: Entries one account may be first to submit; its oldest uncorroborated ones go first when it posts more.
+MAX_RESULTS_PER_ACCOUNT = 10
+#: Entries one row holds; the account holding the most gives up its oldest first.
+MAX_STORED_RESULTS = 100
+#: Distinct accounts that must have submitted a URL before anyone but its submitters sees it.
+CORROBORATION_THRESHOLD = 2
 MAX_URL_LENGTH = 2048
 MAX_TITLE_LENGTH = 200
 MAX_SNIPPET_LENGTH = 500
@@ -122,46 +127,132 @@ def validate_submission(payload: object) -> list[SubmittedResult]:
     return cleaned
 
 
-def store_user_provided_results(location: Location, user: User, query_key: str, results: list[SubmittedResult]) -> int:
+def canonical_url(url: str) -> str:
     """
-    Merge validated results into the location's user-provided cache row.
+    The URL with what does not change the page dropped, so two accounts' copies of one link match.
 
-    Each stored result keeps who submitted it and when, and the row is flagged ``trust: "user_provided"``.
-    A URL already stored keeps its original submitter; a row cached for a different query is replaced.
+    Args:
+        url: A validated http(s) URL.
+
+    Returns:
+        It lower-cased in scheme and host, without ``www.``, default port, fragment or trailing slash.
+    """
+    parts = urlsplit(url)
+    host = (parts.hostname or "").lower().removeprefix("www.")
+    default_port = {"http": 80, "https": 443}.get(parts.scheme.lower())
+    if parts.port is not None and parts.port != default_port:
+        host = f"{host}:{parts.port}"
+    path = parts.path.rstrip("/")
+    return f"{parts.scheme.lower()}://{host}{path}{'?' + parts.query if parts.query else ''}"
+
+
+def _submitters(entry: dict[str, Any]) -> list[int]:
+    """Who submitted a stored entry, tolerating the earlier single-id shape."""
+    raw = entry.get("submitted_by")
+    if isinstance(raw, int):
+        return [raw]
+    return [x for x in raw if isinstance(x, int)] if isinstance(raw, list) else []
+
+
+def _enforce_caps(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    Drop the oldest entries of any account over its share, then of the heaviest account while the row is over its cap.
+
+    ``entries`` is newest first. An uncorroborated entry goes before a corroborated one of the same account.
+    """
+
+    def owner(entry: dict[str, Any]) -> int | None:
+        who = _submitters(entry)
+        return who[0] if who else None
+
+    def evict_from(account: int | None) -> None:
+        mine = [e for e in entries if owner(e) == account]
+        victim = next((e for e in reversed(mine) if len(set(_submitters(e))) < CORROBORATION_THRESHOLD), mine[-1])
+        entries.remove(victim)
+
+    for account in {owner(e) for e in entries}:
+        while sum(1 for e in entries if owner(e) == account) > MAX_RESULTS_PER_ACCOUNT:
+            evict_from(account)
+    while len(entries) > MAX_STORED_RESULTS:
+        counts: dict[int | None, int] = {}
+        for e in entries:
+            counts[owner(e)] = counts.get(owner(e), 0) + 1
+        evict_from(max(counts, key=lambda a: counts[a]))
+    return entries
+
+
+def store_user_provided_results(location: Location, user: User, query_key: str, results: list[SubmittedResult], audience: str = "") -> int:
+    """
+    Merge validated results into the user-provided cache row of one search.
+
+    Each stored result keeps who submitted it (``submitted_by``, every account that posted the same canonical
+    URL) and when it was first posted, and the row is flagged ``trust: "user_provided"``. A URL already stored
+    gains the poster as a submitter and keeps its text; a row cached for a different query is replaced. One
+    account cannot displace another's entries: it holds at most ``MAX_RESULTS_PER_ACCOUNT`` first submissions.
 
     Args:
         location: The shared Location the pin sits at.
         user: The submitting user.
-        query_key: The query the server derived for the pin, never one the client chose.
+        query_key: The ``LocationCache``-sized query the server derived for the pin, never one the client chose.
         results: Validated results.
+        audience: The search's audience; a search built from the owner's own names is read only under it.
 
     Returns:
         How many results the row holds afterwards.
     """
     now = timezone.now().isoformat()
-    fresh = [{"link": r.url, "title": r.title, "snippet": r.snippet, "submitted_by": user.pk, "submitted_at": now} for r in results]
     with transaction.atomic():
-        entry = LocationCache.objects.select_for_update().filter(location=location, source=USER_PROVIDED_SOURCE).first()
+        entry = LocationCache.objects.select_for_update().filter(location=location, source=USER_PROVIDED_SOURCE, audience=audience).first()
         existing: list[dict[str, Any]] = []
         if entry is not None and entry.query_key == query_key and not entry.is_stale:
-            existing = list(entry.data.get("results", []))
-        known = {r["link"] for r in existing}
-        merged = [r for r in fresh if r["link"] not in known] + existing
-        merged = merged[:MAX_STORED_RESULTS]
-        LocationCache.set(location, USER_PROVIDED_SOURCE, {"trust": "user_provided", "results": merged}, query_key=query_key)
+            existing = [dict(r) for r in entry.data.get("results", []) if isinstance(r, dict) and isinstance(r.get("link"), str)]
+        by_key = {canonical_url(r["link"]): r for r in existing}
+        added: list[dict[str, Any]] = []
+        for r in results:
+            known = by_key.get(canonical_url(r.url))
+            if known is not None:
+                submitters = _submitters(known)
+                if user.pk not in submitters:
+                    known["submitted_by"] = [*submitters, user.pk]
+                continue
+            fresh = {"link": r.url, "title": r.title, "snippet": r.snippet, "submitted_by": [user.pk], "submitted_at": now}
+            by_key[canonical_url(r.url)] = fresh
+            added.append(fresh)
+        merged = _enforce_caps(added + existing)
+        LocationCache.set(location, USER_PROVIDED_SOURCE, {"trust": "user_provided", "results": merged}, query_key=query_key, audience=audience)
     return len(merged)
 
 
-def load_user_provided_results(location: Location | None, query_key: str, exclude_links: set[str]) -> list[dict[str, Any]]:
-    """The fresh user-provided results for this query, minus links the trusted results already show."""
+def load_user_provided_results(location: Location | None, viewer_id: int | None, query_key: str, exclude_links: set[str], audience: str = "") -> list[dict[str, Any]]:
+    """
+    The fresh user-provided results a viewer may see for one search.
+
+    A result is shown to the accounts that submitted it, and to everyone else only once
+    ``CORROBORATION_THRESHOLD`` distinct accounts have submitted it.
+
+    Args:
+        location: The pin's Location.
+        viewer_id: The viewing user's id.
+        query_key: The truncated query key the search was stored under.
+        exclude_links: Links the site's own results already show.
+        audience: The search's audience.
+
+    Returns:
+        Display dicts with ``link``, ``title``, ``snippet`` and ``domain``.
+    """
     if location is None:
         return []
-    entry = LocationCache.get_fresh(location, USER_PROVIDED_SOURCE)
+    entry = LocationCache.get_fresh(location, USER_PROVIDED_SOURCE, audience)
     if entry is None or entry.query_key != query_key:
         return []
+    excluded = {canonical_url(link) for link in exclude_links if link.startswith(("http://", "https://"))} | exclude_links
     out = []
     for r in entry.data.get("results", []):
         link = r.get("link")
-        if isinstance(link, str) and link not in exclude_links:
-            out.append({"link": link, "title": r.get("title", ""), "snippet": r.get("snippet", ""), "domain": (urlsplit(link).hostname or "").removeprefix("www.")})
+        if not isinstance(link, str) or link in excluded or canonical_url(link) in excluded:
+            continue
+        submitters = set(_submitters(r))
+        if viewer_id not in submitters and len(submitters) < CORROBORATION_THRESHOLD:
+            continue
+        out.append({"link": link, "title": r.get("title", ""), "snippet": r.get("snippet", ""), "domain": (urlsplit(link).hostname or "").removeprefix("www.")})
     return out

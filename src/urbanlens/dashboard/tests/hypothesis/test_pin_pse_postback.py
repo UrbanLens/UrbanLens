@@ -17,8 +17,12 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, grant_subscription
 from urbanlens.dashboard.services.search.user_provided_search import (
+    MAX_RESULTS_PER_ACCOUNT,
     USER_PROVIDED_SOURCE,
     InvalidSubmissionError,
+    SubmittedResult,
+    load_user_provided_results,
+    store_user_provided_results,
     validate_submission,
 )
 from urbanlens.UrbanLens.settings.app import settings as app_settings
@@ -129,7 +133,7 @@ class PseViewTests(TestCase):
         row = LocationCache.objects.get(location=self.loc, source=USER_PROVIDED_SOURCE)
         self.assertEqual(row.data["trust"], "user_provided")
         (stored,) = row.data["results"]
-        self.assertEqual(stored["submitted_by"], self.user.pk)
+        self.assertEqual(stored["submitted_by"], [self.user.pk])
         self.assertTrue(stored["submitted_at"])
         self.assertEqual(stored["title"], "A mill")
         self.assertFalse(LocationCache.objects.filter(location=self.loc, source="web_search").exists())
@@ -212,3 +216,108 @@ class PseViewTests(TestCase):
         LocationCache.objects.all().delete()
         with patch.object(app_settings, "google_pse_cx", ""):
             self.assertEqual(self._panel().status_code, 204)
+
+
+class CrossUserVisibilityTests(TestCase):
+    """What one account posts is shown to others only once a second account corroborates it."""
+
+    def setUp(self) -> None:
+        baker.make("auth.User")
+        self.a, self.b, self.c = (baker.make("auth.User") for _ in range(3))
+        self.loc = baker.make(Location, official_name="Old Mill Factory", latitude=39.1, longitude=-84.5)
+
+    def _store(self, user, urls: list[str], query: str = "q", audience: str = "") -> None:
+        store_user_provided_results(self.loc, user, query, [SubmittedResult(u, "t", "s") for u in urls], audience)
+
+    def _links(self, viewer, query: str = "q", audience: str = "") -> list[str]:
+        return [r["link"] for r in load_user_provided_results(self.loc, viewer.pk, query, set(), audience)]
+
+    def test_submitter_sees_own_but_others_do_not(self) -> None:
+        self._store(self.a, ["https://x.example/a"])
+        self.assertEqual(self._links(self.a), ["https://x.example/a"])
+        self.assertEqual(self._links(self.b), [])
+
+    def test_second_account_corroborates_by_canonical_url(self) -> None:
+        self._store(self.a, ["https://www.x.example/a/#frag"])
+        self._store(self.b, ["https://X.example/a"])
+        self.assertEqual(len(self._links(self.c)), 1)
+        (row,) = LocationCache.objects.get(location=self.loc, source=USER_PROVIDED_SOURCE).data["results"]
+        self.assertEqual(sorted(row["submitted_by"]), sorted([self.a.pk, self.b.pk]))
+
+    def test_same_account_twice_is_not_corroboration(self) -> None:
+        self._store(self.a, ["https://x.example/a"])
+        self._store(self.a, ["https://x.example/a"])
+        self.assertEqual(self._links(self.c), [])
+
+    def test_one_account_cannot_evict_anothers_entries(self) -> None:
+        self._store(self.a, ["https://x.example/keep"])
+        for batch in range(3):
+            self._store(self.b, [f"https://y.example/{batch}/{i}" for i in range(20)])
+        row = LocationCache.objects.get(location=self.loc, source=USER_PROVIDED_SOURCE).data["results"]
+        self.assertIn("https://x.example/keep", [r["link"] for r in row])
+        self.assertEqual(sum(1 for r in row if r["submitted_by"][0] == self.b.pk), MAX_RESULTS_PER_ACCOUNT)
+
+    def test_other_query_or_audience_is_not_shown(self) -> None:
+        self._store(self.a, ["https://x.example/a"], audience="aud1")
+        self.assertEqual(self._links(self.a, audience="aud1"), ["https://x.example/a"])
+        self.assertEqual(self._links(self.a, audience=""), [])
+        self.assertEqual(self._links(self.a, query="other", audience="aud1"), [])
+
+    def test_legacy_single_id_rows_still_load(self) -> None:
+        LocationCache.set(
+            self.loc,
+            USER_PROVIDED_SOURCE,
+            {"results": [{"link": "https://x.example/a", "title": "t", "snippet": "", "submitted_by": self.a.pk}]},
+            query_key="q",
+        )
+        self.assertEqual(self._links(self.a), ["https://x.example/a"])
+        self.assertEqual(self._links(self.b), [])
+
+
+class QueryKeyAndAudienceTests(TestCase):
+    setUp = PseViewTests.setUp
+    _post = PseViewTests._post
+    _csrf = PseViewTests._csrf
+    _panel = PseViewTests._panel
+
+    def test_long_name_posts_and_loads(self) -> None:
+        self.pin.name = "Mill " + "x" * 245
+        self.pin.save()
+        self.loc.official_name = self.pin.name
+        self.loc.save()
+        self.assertEqual(self._post(GOOD).status_code, 200)
+        (row,) = LocationCache.objects.filter(source=USER_PROVIDED_SOURCE)
+        self.assertLessEqual(len(row.query_key), 255)
+        from urbanlens.dashboard.services.search.pin_web_search import pin_web_searches
+
+        searches = pin_web_searches(self.pin)
+        self.assertGreater(len(searches[0].query), 255)
+        self.assertEqual(row.query_key, searches[0].query_key)
+        self.assertIn("https://example.org/a", self._panel().content.decode())
+
+    def test_private_names_are_keyed_by_audience_not_shared(self) -> None:
+        from urbanlens.dashboard.services.search.pin_web_search import pin_web_searches
+
+        bare = baker.make(Location, latitude=40.0, longitude=-80.0)
+        other_user = baker.make("auth.User")
+        other_profile = Profile.objects.get(user=other_user)
+        mine = baker.make(Pin, location=bare, profile=self.profile, name="Grandpa's Secret Spot")
+        theirs = baker.make(Pin, location=bare, profile=other_profile, name="Different Private Name")
+        mine_search = pin_web_searches(mine)[0]
+        theirs_search = pin_web_searches(theirs)[0]
+        self.assertFalse(mine_search.scope.is_shared)
+        self.assertNotEqual(mine_search.scope.audience, theirs_search.scope.audience)
+        url = reverse("pin.web_search.user_provided", args=[mine.slug])
+        response = self.client.post(
+            url, json.dumps(GOOD), content_type="application/json", HTTP_X_CSRFTOKEN=self._csrf()
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        row = LocationCache.objects.get(location=bare, source=USER_PROVIDED_SOURCE)
+        self.assertEqual(row.audience, mine_search.scope.audience)
+        self.assertEqual(
+            load_user_provided_results(
+                bare, other_user.pk, theirs_search.query_key, set(), theirs_search.scope.audience
+            ),
+            [],
+        )
+        self.assertEqual(load_user_provided_results(bare, other_user.pk, theirs_search.query_key, set(), ""), [])

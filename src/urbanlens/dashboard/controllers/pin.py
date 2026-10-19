@@ -58,6 +58,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, StreetViewSlide
     from urbanlens.dashboard.services.pins.external_data import InfoPanelSource, LocationCachePanelSource, PanelSource, ProviderFetchResult
     from urbanlens.dashboard.services.pins.panel_probe import PanelProbe
+    from urbanlens.dashboard.services.search.pin_web_search import WebSearch
 
 logger = logging.getLogger(__name__)
 
@@ -814,7 +815,7 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
         """
         return self._web_search_response(request, pin_slug, force_refresh=True)
 
-    def _pse_context(self, request: HttpRequest, pin: Pin, search_name: str, trusted_links: set[str | None]) -> dict:
+    def _pse_context(self, request: HttpRequest, pin: Pin, search: WebSearch, trusted_links: set[str | None]) -> dict:
         """
         Template context for the Programmable Search Element and the results viewers' browsers found.
 
@@ -824,7 +825,7 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
         Args:
             request: The current request.
             pin: The viewer's pin.
-            search_name: The query the panel searched, with name and town.
+            search: The panel's first search, whose query the Element is prefilled with and whose audience scopes what viewers' browsers found.
             trusted_links: Links the site's own results already show, dropped from the user-provided list.
 
         Returns:
@@ -836,9 +837,9 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
             return {}
         return {
             "pse_cx": settings.google_pse_cx.strip(),
-            "pse_query": search_name,
+            "pse_query": search.query,
             "pse_post_url": reverse("pin.web_search.user_provided", args=[pin.slug]),
-            "user_provided_results": load_user_provided_results(pin.location, search_name, {link for link in trusted_links if link}),
+            "user_provided_results": load_user_provided_results(pin.location, request.user.pk, search.query_key, {link for link in trusted_links if link}, search.scope.audience),
         }
 
     @staticmethod
@@ -872,7 +873,6 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
         searches = pin_web_searches(pin)
         if not searches:
             return JsonResponse({"error": "Pin has no searchable name."}, status=400)
-        search_name = searches[0].query
         if request.content_type != "application/json":
             return JsonResponse({"error": "Send application/json."}, status=415)
         declared = request.META.get("CONTENT_LENGTH") or "0"
@@ -885,7 +885,7 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
         except InvalidSubmissionError as exc:
             logger.info("Rejected browser search postback from user %s: %s", request.user.pk, exc)
             return JsonResponse({"error": "Results failed validation."}, status=400)
-        stored = store_user_provided_results(pin.location, user, search_name, results)
+        stored = store_user_provided_results(pin.location, user, searches[0].query_key, results, searches[0].scope.audience)
         return JsonResponse({"stored": stored})
 
     def _web_search_response(self, request: HttpRequest, pin_slug: str, *, force_refresh: bool):
@@ -905,7 +905,7 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
             return HttpResponse("", status=204)
         search_name = " || ".join(search.query for search in searches)
         # The shared search's query: the Element's prefill and the key browser-found results are cached under.
-        pse_query = searches[0].query
+        pse_search = searches[0]
 
         article_surface = request.GET.get("surface") == "article"
         search_allowed = user_has_feature(request.user, SiteFeature.SEARCH)
@@ -933,7 +933,7 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
 
         if answered:
             results = merged_results((cached[search.scope.audience].data or {}).get("results", []) for search in searches)
-            pse = self._pse_context(request, pin, pse_query, {r.get("link") for r in results})
+            pse = self._pse_context(request, pin, pse_search, {r.get("link") for r in results})
             if not results and not article_surface and not pse:
                 return HttpResponse("", status=204)
             page_obj = get_page(request, results, _WEB_SEARCH_PAGE_SIZE)
@@ -986,14 +986,14 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
                 return render(
                     request,
                     "dashboard/pages/location/web_search.html",
-                    {"pin": pin, "error": "Search unavailable. Please try again later.", **self._pse_context(request, pin, pse_query, set())},
+                    {"pin": pin, "error": "Search unavailable. Please try again later.", **self._pse_context(request, pin, pse_search, set())},
                 )
             answers[search.scope.audience] = annotate_results(search_results)
             if location:
                 store_web_search(location, search, answers[search.scope.audience])
 
         search_results = merged_results(answers[search.scope.audience] for search in searches)
-        pse = self._pse_context(request, pin, pse_query, {r.get("link") for r in search_results})
+        pse = self._pse_context(request, pin, pse_search, {r.get("link") for r in search_results})
         if not search_results and request.GET.get("surface") != "article" and not pse:
             return HttpResponse("", status=204)
 
