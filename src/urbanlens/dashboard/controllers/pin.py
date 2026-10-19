@@ -33,7 +33,7 @@ from urbanlens.dashboard.models.profile import Profile
 from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
-from urbanlens.dashboard.services.core.request_body import drf_data_object
+from urbanlens.dashboard.services.core.request_body import decode_json, drf_data_object
 from urbanlens.dashboard.services.locations.site_scope import rederive_pin_type
 from urbanlens.dashboard.services.locations.temporal_imagery import temporal_slider_years
 from urbanlens.dashboard.services.search.search import search_web
@@ -825,7 +825,7 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
             request: The current request.
             pin: The viewer's pin.
             search_name: The query the panel searched, with name and town.
-            trusted_links: Links REData's own results already show, dropped from the user-provided list.
+            trusted_links: Links the site's own results already show, dropped from the user-provided list.
 
         Returns:
             ``pse_cx``, ``pse_query``, ``pse_post_url`` and ``user_provided_results``, or ``{}``.
@@ -855,7 +855,7 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
         JSON endpoint: cache results the viewer's browser found with Google's Search Element.
 
         The payload is untrusted and other users see it afterwards: it is size-capped, field-validated,
-        reduced to plain text, and stored apart from REData's results, flagged user-provided. The query it
+        reduced to plain text, and stored apart from the site's own results, flagged user-provided. The query it
         is cached under is derived here from the pin, never taken from the client.
         """
         try:
@@ -879,8 +879,8 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
         if not declared.isdigit() or int(declared) > USER_SEARCH_MAX_BODY_BYTES:
             return JsonResponse({"error": "Body too large."}, status=413)
         try:
-            results = validate_submission(json.loads(request.body))
-        except (ValueError, RecursionError):
+            results = validate_submission(decode_json(request.body))
+        except ValueError:
             return JsonResponse({"error": "Body is not valid JSON."}, status=400)
         except InvalidSubmissionError as exc:
             logger.info("Rejected browser search postback from user %s: %s", request.user.pk, exc)

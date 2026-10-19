@@ -3,7 +3,7 @@ Web-search results found by a viewer's own browser, posted back and cached with 
 
 The browser runs Google's Programmable Search Element, then posts what it found. Nothing in the
 payload can be verified, and other users see it afterwards, so every field is validated, reduced to
-plain text and stored apart from REData's results under its own cache source.
+plain text and stored apart from the site's own search results under its own cache source.
 """
 
 from __future__ import annotations
