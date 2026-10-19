@@ -924,7 +924,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
 
     def place_details(self, request, *args, **kwargs):
         """
-        Return Google Place details for a single place_id.
+        Return place details for a single place_id, from whichever places provider is active.
 
         Requires the Places feature (granted through an access role).
 
@@ -938,6 +938,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
 
         if not user_has_feature(request.user, SiteFeature.PLACES):
             return JsonResponse({"error": "forbidden"}, status=403)
+
+        if not request.user.profile.external_apis_enabled:
+            return JsonResponse({"error": "disabled"}, status=403)
 
         place_id = (request.GET.get("place_id") or "").strip()
         if not place_id:
