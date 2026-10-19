@@ -882,7 +882,8 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
         except (ValueError, RecursionError):
             return JsonResponse({"error": "Body is not valid JSON."}, status=400)
         except InvalidSubmissionError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            logger.info("Rejected browser search postback from user %s: %s", request.user.pk, exc)
+            return JsonResponse({"error": "Results failed validation."}, status=400)
         stored = store_user_provided_results(pin.location, request.user, search_name, results)
         return JsonResponse({"stored": stored})
 
