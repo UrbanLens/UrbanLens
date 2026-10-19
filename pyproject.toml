@@ -347,7 +347,7 @@ dev = [
     "tqdm>=4.68.3,<4.71.0",
     "types-requests~=2.33.0.20260518",
     "types-requests-oauthlib~=2.0.0.20260610",
-    "uv>=0.11.22,<0.13.0",
+    "uv>=0.11.22,<0.14.0",
     "vulture>=2.16",
 ]
 #max-complexity = 10
