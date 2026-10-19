@@ -15,6 +15,7 @@ import { labelChip, labelSuggestion, type LabelCandidate } from "../shared/add-p
 import { MapContextMenu } from "../shared/map-context-menu";
 import { pinsMetaChecker } from "../shared/pins-meta";
 import { readMapFilterResults, type MapFilterResults } from "../shared/map-filter-results";
+import { forgetPlacesMarker, placesMarkerKey } from "../shared/places-marker-key";
 import { MapLayers, setAttribution, type MapDarkMode, type MapLayersInstance } from "../shared/map-layers";
 import { LocationSearchEngine, type LocationSearchAttachOptions } from "../shared/location-search-engine";
 import { startPoller } from "../shared/poller";
@@ -2214,7 +2215,7 @@ document.getElementById("filter-form")!.addEventListener("htmx:configRequest", f
 
 // Places layer group (landmarks from external APIs, including Google Places)
 const _placesLayerGroup = L.layerGroup();
-const _placesMarkerMap = new Map<string, L.Marker>(); // _placeKey → L.Marker
+const _placesMarkerMap = new Map<string, L.Marker>(); // placesMarkerKey → L.Marker
 let _placesLayerActive = false;
 
 // Waterways + railways, including OSM lifecycle-tagged historic routes.
@@ -2778,11 +2779,6 @@ function _placeSourceLabel(source: string, dataset?: string): string {
     return (dataset && _PLACE_DATASET_LABELS[dataset]) || "Google Places";
 }
 
-/** What keys a place on the layer: its Google id, else the dataset record it came from. */
-function _placeKey(place: PlaceData): string {
-    if (place.place_id) return place.place_id;
-    return place.source_id ? `${place.place_source || place.source}:${place.source_id}` : "";
-}
 
 function _placeFallbackUrl(place: PlaceData): string {
     if (place.url) return place.url;
@@ -2883,7 +2879,7 @@ function _buildPlacesMarker(place: PlaceData): L.Marker {
                     icon: "add_location",
                     label: "Add to my map",
                     onClick: function () {
-                        openAddPinDialog(lat, lng, { defaultName: place.name, placeId: place.place_id });
+                        openAddPinDialog(lat, lng, { defaultName: place.name, placeId: place.place_id, placeKey: placesMarkerKey(place) });
                     },
                 },
                 {
@@ -2943,7 +2939,7 @@ async function _fetchAndShowPlaces(): Promise<void> {
         const data = (await resp.json()) as { places?: PlaceData[] };
         const userLatLngs = new Set([..._pinStore.values()].map((p) => `${Number.parseFloat(String(p.latitude)).toFixed(4)},${Number.parseFloat(String(p.longitude)).toFixed(4)}`));
         (data.places || []).forEach((place) => {
-            const key = _placeKey(place);
+            const key = placesMarkerKey(place);
             if (!key || _placesMarkerMap.has(key)) return;
             // Skip if user already has a pin at this location (within ~11m)
             const pKey = `${place.lat.toFixed(4)},${place.lng.toFixed(4)}`;
@@ -5361,12 +5357,14 @@ let _addPinClickMode = false;
 let _addPinMarker: L.Marker | null = null;
 let _editPinUuid: string | null = null; // null = add mode; uuid string = edit mode
 let _addPinGooglePlaceId: string | null = null; // set when adding a pin from a Places marker
+let _addPinPlaceKey: string | null = null; // the marker's _placeKey, which exists even without a Google id
 let _addPinCanonicalName: string | null = null; // canonical place name from the external marker (not user-edited)
 window._addPinCustomIconFile = null;
 
 function _resetAddPinDialog(): void {
     _editPinUuid = null;
     _addPinGooglePlaceId = null;
+    _addPinPlaceKey = null;
     _addPinCanonicalName = null;
     (document.getElementById("apdlg-addr") as HTMLInputElement).value = "";
     (document.getElementById("apdlg-lat") as HTMLInputElement).value = "";
@@ -5445,6 +5443,7 @@ interface OpenAddPinDialogOptions {
     keepMarker?: boolean;
     defaultName?: string;
     placeId?: string;
+    placeKey?: string;
 }
 
 function openAddPinDialog(lat: number | null = null, lng: number | null = null, opts: OpenAddPinDialogOptions = {}): void {
@@ -5487,6 +5486,7 @@ function openAddPinDialog(lat: number | null = null, lng: number | null = null, 
     // add-pin request.  The canonical name lets the server skip a geocoding
     // API call when creating a new Location row.
     if (placeId) _addPinGooglePlaceId = placeId;
+    if (opts.placeKey) _addPinPlaceKey = opts.placeKey;
     if (defaultName) _addPinCanonicalName = defaultName;
 
     (document.getElementById("add-pin-dialog") as HTMLDialogElement).showModal();
@@ -6098,7 +6098,7 @@ document.getElementById("apdlg-submit")!.addEventListener("click", function (thi
 
         // Capture the place_id now - it will be cleared by _resetAddPinDialog inside
         // closeAddPinDialog, so we need a local copy for the success handler.
-        const submittedPlaceId = _addPinGooglePlaceId;
+        const submittedPlaceKey = _addPinPlaceKey;
 
         this.disabled = true;
         this.textContent = "Saving...";
@@ -6132,13 +6132,7 @@ document.getElementById("apdlg-submit")!.addEventListener("click", function (thi
                 }
                 // Remove the external-source marker that the user pinned - the user's
                 // own pin now represents this place, so showing both would be redundant.
-                if (submittedPlaceId) {
-                    const gpm = _placesMarkerMap.get(submittedPlaceId);
-                    if (gpm) {
-                        _placesLayerGroup.removeLayer(gpm);
-                        _placesMarkerMap.delete(submittedPlaceId);
-                    }
-                }
+                forgetPlacesMarker(_placesMarkerMap, _placesLayerGroup, submittedPlaceKey);
             })
             .catch((err) => toastr.error("Failed to add pin: " + (err instanceof Error ? err.message : String(err))))
             .finally(() => {

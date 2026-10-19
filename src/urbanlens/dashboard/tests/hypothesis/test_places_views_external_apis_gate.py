@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest import mock
 
 from django.contrib.auth.models import User
+from django.http import HttpRequest
 from django.test import RequestFactory
 from django.urls import reverse
 from model_bakery import baker
@@ -71,7 +72,7 @@ class PlacesLayerEnabledTests(_GatedCase):
 
 
 class PinWebSearchGateTests(TestCase):
-    def _request(self, *, external_apis_enabled: bool) -> tuple[Pin, object]:
+    def _request(self, *, external_apis_enabled: bool) -> tuple[Pin, HttpRequest]:
         location = baker.make(
             Location,
             official_name="Official Test Location",
@@ -105,3 +106,22 @@ class PinWebSearchGateTests(TestCase):
             PinController().web_search(request, pin_slug=pin.slug)
 
         search_web.assert_called()
+
+    def test_a_partly_cached_pin_serves_what_is_cached_without_a_live_search(self) -> None:
+        from urbanlens.dashboard.services.search.pin_web_search import pin_web_searches, store_web_search
+
+        pin, request = self._request(external_apis_enabled=False)
+        pin.name = "User Edited Location"
+        pin.save()
+        searches = pin_web_searches(pin)
+        self.assertGreater(len(searches), 1, "a renamed pin has its own search besides the shared one")
+        store_web_search(
+            pin.location, searches[0], [{"title": "Cached hit", "link": "http://example.com/a", "snippet": "s"}]
+        )
+
+        with mock.patch("urbanlens.dashboard.controllers.pin.search_web") as search_web:
+            response = PinController().web_search(request, pin_slug=pin.slug)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Cached hit", response.content.decode())
+        search_web.assert_not_called()
