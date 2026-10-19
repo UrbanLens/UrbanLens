@@ -958,6 +958,14 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
                 {"pin": pin, "error": "Web search is not included in your access."},
             )
 
+        if not pin.profile.external_apis_enabled:
+            return render(
+                request,
+                "dashboard/pages/location/web_search.html",
+                {"pin": pin, "error": "External web search is turned off in your settings."},
+                status=403,
+            )
+
         from urbanlens.dashboard.services.core.timeout_utils import EXTERNAL_CALL_DEADLINE, call_with_deadline
 
         answers: dict[str, list[dict]] = {audience: (row.data or {}).get("results", []) for audience, row in cached.items()}
