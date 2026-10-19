@@ -187,20 +187,23 @@ class ArticleSourcesView(LoginRequiredMixin, View):
     @staticmethod
     def _browser_fetch(scope: SourcesScope) -> dict | None:
         """
-        What the viewer's browser is asked to fetch itself, because REData reports a keyless source it could not ask.
+        What the viewer's browser is asked to fetch itself, because the upstream reported a keyless source it could not ask.
 
         Only on a pin page whose owner has external services on; the browser's answer is posted to this pin.
         """
         driver = scope.driver
         if not scope.pin_slug or driver is None or not driver.profile.external_apis_enabled:
             return None
-        from urbanlens.dashboard.services.pins.external_data import LocationCachePanelSource, get_panel_source
+        from urbanlens.dashboard.services.pins.external_data import LocationCachePanelSource, document_panel_sources
 
-        source = get_panel_source("redata_reference_near")
-        row = source.cached_entry(driver) if isinstance(source, LocationCachePanelSource) else None
-        marker = (row.data or {}).get(BROWSER_FETCH_KEY) if row is not None else None
-        provider = str(marker.get("provider") or "") if isinstance(marker, dict) else ""
-        if provider != "wikipedia" or driver.effective_latitude is None or driver.effective_longitude is None:
+        provider = ""
+        for source in document_panel_sources():
+            row = source.cached_entry(driver) if isinstance(source, LocationCachePanelSource) else None
+            marker = (row.data or {}).get(BROWSER_FETCH_KEY) if row is not None else None
+            if isinstance(marker, dict) and marker.get("provider") == "wikipedia":
+                provider = "wikipedia"
+                break
+        if not provider or driver.effective_latitude is None or driver.effective_longitude is None:
             return None
         return {
             "provider": provider,

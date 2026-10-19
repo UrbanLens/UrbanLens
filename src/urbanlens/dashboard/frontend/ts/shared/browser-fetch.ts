@@ -1,7 +1,7 @@
 /**
- * Fetches a keyless source in the viewer's own browser when the server says its own quota for it is spent.
+ * Fetches a keyless source in the viewer's own browser when the server says its upstream could not answer for it.
  *
- * A browser fetch costs the server the data, so the server asks for one only when REData could not answer. What is
+ * A browser fetch costs the server the data, so the server asks for one only when its upstream could not answer. What is
  * fetched is posted back, where it is validated and kept as user-provided, less trusted than a direct query.
  */
 
@@ -67,7 +67,7 @@ async function run(el: HTMLElement): Promise<void> {
             await window.htmx?.ajax("GET", refreshUrl, { target, swap: "innerHTML" });
         }
     } catch {
-        // The panel already lists what REData answered; a viewer whose browser cannot reach Wikipedia loses nothing.
+        // The panel already lists what the server already answered; a viewer whose browser cannot reach Wikipedia loses nothing.
     }
 }
 

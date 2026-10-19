@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 #: The ``LocationCache.source`` web-search results are cached under.
 WEB_SEARCH_SOURCE = "web_search"
 
-#: Fewest results a shared pin search asks REData to gather before it stops walking its providers.
+#: Fewest results a shared pin search asks the search provider to gather before it stops.
 SHARED_MIN_RESULTS = 8
 
 
@@ -70,7 +70,7 @@ def pin_web_searches(pin: Pin) -> list[WebSearch]:
 
 def place_entity(location: Location | None) -> str:
     """
-    The place's identity in the ``<kind>:<value>`` form REData's ``entity`` takes; empty when none is known.
+    The place's identity in the ``<kind>:<value>`` form the search provider's ``entity`` takes; empty when none is known.
 
     Args:
         location: The pin's Location.
@@ -92,7 +92,7 @@ def request_scope_for(pin: Pin, scope: SearchScope) -> WebSearchScope:
     """
     What the search provider is told about one search.
 
-    The shared search names the place so REData answers it once for everyone. A search built from the pin's own names is
+    The shared search names the place so the search provider answers it once for everyone. A search built from the pin's own names is
     kept private to an opaque label of its owner: the user id itself is never sent.
 
     Args:
