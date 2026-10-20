@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from unittest import mock
 
 from django.contrib.auth.models import User
 from django.db import connection, transaction
@@ -14,16 +15,21 @@ import pytest
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.core.tests.thread_writes import DiscardsLedgerRowsFromOtherThreadsMixin
+from urbanlens.dashboard.external_api.throttling import ExternalApiRateThrottle
 from urbanlens.dashboard.models.account.model import ApiKey
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.services.geo import geo_boundary
 
 #: How much a route's query count may grow between the two dataset sizes. Two
 #: allows for an extra count/exists query that does not scale, while any genuine
 #: per-row query shows up far above it.
 _ALLOWED_GROWTH = 2
+
+#: Larger than any real ``time.monotonic()`` reading, so a failed-load mark left by an earlier test has lapsed.
+_FROZEN_MONOTONIC = 1e12
 
 _SMALL = 4
 _LARGE = 24
@@ -56,6 +62,14 @@ def _walk(patterns, inherited: tuple[str, ...] = (), namespace: str = ""):
 class RouteQueryScalingTests(DiscardsLedgerRowsFromOtherThreadsMixin, TestCase):
     def setUp(self) -> None:
         super().setUp()
+        # One key sends hundreds of requests, past the 60/minute burst cap; 429s would hide growth.
+        throttle = mock.patch.object(ExternalApiRateThrottle, "allow_request", return_value=True)
+        throttle.start()
+        self.addCleanup(throttle.stop)
+        # A failed remote GeoBoundary load stays closed 300s of monotonic time, as process state. Freeze past it.
+        clock = mock.patch.object(geo_boundary, "time", mock.Mock(monotonic=lambda: _FROZEN_MONOTONIC))
+        clock.start()
+        self.addCleanup(clock.stop)
         self.user = baker.make(User)
         self.profile = Profile.objects.get(user=self.user)
         self.client.force_login(self.user)
@@ -168,6 +182,21 @@ class RouteQueryScalingTests(DiscardsLedgerRowsFromOtherThreadsMixin, TestCase):
         names = {name for name, _, _ in self._targets()}
 
         self.assertIn("label.rows", names, "routes nested under a parameterised include are invisible again")
+
+    def test_a_failed_boundary_load_stays_closed_for_the_whole_sweep(self) -> None:
+        """The retry mark on a remote boundary must not lapse mid-sweep, or one route pays for the retry."""
+        calls: list[int] = []
+
+        def loader():
+            calls.append(1)
+            raise RuntimeError("unreachable")
+
+        boundary = geo_boundary.GeoBoundary(loader, remote=True)
+
+        boundary.contains(41.0, -71.0)
+        boundary.contains(41.0, -71.0)
+
+        self.assertEqual(len(calls), 1)
 
     def test_the_sweep_can_see_the_namespaced_external_api(self) -> None:
         """Namespaced routes were invisible until ``_walk`` tracked the prefix."""
