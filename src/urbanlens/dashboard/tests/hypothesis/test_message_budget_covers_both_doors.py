@@ -7,7 +7,6 @@ import os
 
 from asgiref.sync import async_to_sync
 from channels.db import database_sync_to_async
-from channels.testing import WebsocketCommunicator
 from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.test import override_settings
@@ -19,7 +18,7 @@ from urbanlens.dashboard.consumers import DirectMessageConsumer
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.tests.hypothesis.websocket_helpers import rows_at_least, settle
+from urbanlens.dashboard.tests.hypothesis.websocket_helpers import WebsocketCommunicator, rows_at_least, settle
 
 
 def _run(coro):

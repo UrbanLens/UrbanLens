@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import timedelta
 
 from asgiref.sync import async_to_sync
-from channels.testing import WebsocketCommunicator
 from django.contrib.auth.models import AnonymousUser, User
 from django.utils import timezone
 from model_bakery import baker
@@ -15,6 +14,7 @@ from urbanlens.core.tests.testcase import TransactionTestCase
 from urbanlens.dashboard.consumers import UserNotificationConsumer
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+from urbanlens.dashboard.tests.hypothesis.websocket_helpers import WebsocketCommunicator
 from urbanlens.dashboard.websocket_auth import ApiKeyAuthMiddleware
 
 Application = get_application_model()

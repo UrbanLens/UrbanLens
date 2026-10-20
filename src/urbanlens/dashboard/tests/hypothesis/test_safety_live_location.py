@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING
 
 from asgiref.sync import async_to_sync
 from channels.db import database_sync_to_async
-from channels.testing import WebsocketCommunicator
 from django.contrib.auth.models import AnonymousUser
 from django.utils import timezone
 from model_bakery import baker
@@ -32,6 +31,7 @@ from urbanlens.dashboard.services.visits.safety import (
     set_live_location_sharing,
     update_live_location,
 )
+from urbanlens.dashboard.tests.hypothesis.websocket_helpers import WebsocketCommunicator
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile

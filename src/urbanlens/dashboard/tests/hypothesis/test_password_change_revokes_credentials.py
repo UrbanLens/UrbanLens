@@ -10,7 +10,6 @@ from unittest import mock
 
 from asgiref.sync import async_to_sync
 from channels.db import database_sync_to_async
-from channels.testing import WebsocketCommunicator
 from django.contrib.auth.models import User
 from django.contrib.auth.tokens import default_token_generator
 from django.urls import reverse
@@ -27,6 +26,7 @@ from oauth2_provider.models import (
 
 from urbanlens.core.tests.testcase import TestCase, TransactionTestCase
 from urbanlens.dashboard.services.auth.api_keys import authenticate_api_key, generate_api_key
+from urbanlens.dashboard.tests.hypothesis.websocket_helpers import WebsocketCommunicator
 
 Application = get_application_model()
 AccessToken = get_access_token_model()

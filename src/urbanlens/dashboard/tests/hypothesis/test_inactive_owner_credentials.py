@@ -14,7 +14,6 @@ from datetime import timedelta
 import hashlib
 
 from asgiref.sync import async_to_sync
-from channels.testing import WebsocketCommunicator
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser, User
 from django.http import Http404
@@ -35,6 +34,7 @@ from urbanlens.dashboard.consumers import UserNotificationConsumer, _credential_
 from urbanlens.dashboard.controllers.media_auth import CredentialOrSessionMediaMixin
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+from urbanlens.dashboard.tests.hypothesis.websocket_helpers import WebsocketCommunicator
 from urbanlens.dashboard.websocket_auth import ApiKeyAuthMiddleware
 
 Application = get_application_model()

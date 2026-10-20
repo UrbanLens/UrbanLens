@@ -7,10 +7,10 @@ import json
 import time
 from typing import TYPE_CHECKING, Any
 
+from channels.testing import WebsocketCommunicator as ChannelsWebsocketCommunicator
+
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
-
-    from channels.testing import WebsocketCommunicator
 
     Predicate = Callable[[list[dict]], "bool | Awaitable[bool]"]
 
@@ -18,9 +18,36 @@ if TYPE_CHECKING:
 #: and a passing run never spends it - the loop leaves the moment the condition holds.
 SETTLE_WAIT = 10.0
 
+#: Seconds a connect, receive or disconnect may take when the test expects it to happen. channels defaults each to
+#: 1 s, which a loaded CI runner can starve past. A call that completes returns at once, so this costs nothing.
+EXPECTED_WAIT = 5.0
+
 #: The quiet window after the condition holds, so a trailing frame (a second echo, a late error) lands before
 #: the caller asserts rather than leaking into whatever the test does next.
 SETTLE_QUIET = 0.3
+
+
+class WebsocketCommunicator(ChannelsWebsocketCommunicator):
+    """
+    A channels ``WebsocketCommunicator`` that waits ``EXPECTED_WAIT`` for anything that *should* arrive.
+
+    Only the defaults change; a timeout the caller passes is kept. ``receive_nothing`` is left alone on purpose: its
+    short window is the "nothing arrives" assertion, and lengthening it would only slow tests down."""
+
+    async def connect(self, timeout: float = EXPECTED_WAIT) -> tuple[bool, int | str | None]:  # noqa: ASYNC109 - mirrors the channels signature
+        return await super().connect(timeout)
+
+    async def receive_output(self, timeout: float = EXPECTED_WAIT) -> dict:  # noqa: ASYNC109 - mirrors the channels signature
+        return await super().receive_output(timeout)
+
+    async def receive_from(self, timeout: float = EXPECTED_WAIT) -> str | bytes:  # noqa: ASYNC109 - mirrors the channels signature
+        return await super().receive_from(timeout)
+
+    async def receive_json_from(self, timeout: float = EXPECTED_WAIT) -> Any:  # noqa: ASYNC109 - mirrors the channels signature
+        return await super().receive_json_from(timeout)
+
+    async def disconnect(self, code: int = 1000, timeout: float = EXPECTED_WAIT) -> None:  # noqa: ASYNC109 - mirrors the channels signature
+        await super().disconnect(code, timeout)
 
 
 async def settle(

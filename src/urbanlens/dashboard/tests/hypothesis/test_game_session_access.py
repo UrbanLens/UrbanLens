@@ -12,7 +12,6 @@ import json
 
 from asgiref.sync import async_to_sync
 from channels.db import database_sync_to_async
-from channels.testing import WebsocketCommunicator
 from django.urls import reverse
 from model_bakery import baker
 import pytest
@@ -42,6 +41,7 @@ from urbanlens.dashboard.services.trivia.session import (
     leave_session,
     start_multiplayer_session,
 )
+from urbanlens.dashboard.tests.hypothesis.websocket_helpers import WebsocketCommunicator
 
 _coordinate_counter = count()
 

@@ -29,7 +29,6 @@ import time
 from unittest import mock
 
 from asgiref.sync import async_to_sync
-from channels.testing import WebsocketCommunicator
 from django.test import override_settings
 from model_bakery import baker
 
@@ -39,6 +38,7 @@ from urbanlens.core.tests.nginx_config import misplaced_directives
 from urbanlens.core.tests.testcase import SimpleTestCase, TransactionTestCase
 from urbanlens.dashboard.consumers import UserNotificationConsumer
 from urbanlens.dashboard.services.security import socket_budget
+from urbanlens.dashboard.tests.hypothesis.websocket_helpers import WebsocketCommunicator
 
 SETTING_NAME = "WEBSOCKET_MAX_SOCKETS_PER_ACCOUNT"
 

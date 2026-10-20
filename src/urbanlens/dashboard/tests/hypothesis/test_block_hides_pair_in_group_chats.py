@@ -16,7 +16,6 @@ from unittest.mock import patch
 
 from asgiref.sync import async_to_sync
 from channels.db import database_sync_to_async
-from channels.testing import WebsocketCommunicator
 from django.core.cache import cache
 from django.urls import reverse
 from django.utils import timezone
@@ -47,7 +46,7 @@ from urbanlens.dashboard.services.messaging.group_chats import (
 )
 from urbanlens.dashboard.services.social.friendship import block_profile, unblock_profile
 from urbanlens.dashboard.tasks import broadcast_channel_group_messages
-from urbanlens.dashboard.tests.hypothesis.websocket_helpers import all_of, rows_at_least, settle
+from urbanlens.dashboard.tests.hypothesis.websocket_helpers import WebsocketCommunicator, all_of, rows_at_least, settle
 
 AccessToken = get_access_token_model()
 READ_WRITE = f"{ApiKeyScope.MESSAGES_READ.value} {ApiKeyScope.MESSAGES_WRITE.value}"
