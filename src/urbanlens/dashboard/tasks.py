@@ -3427,7 +3427,7 @@ def refresh_pin_web_search(self, pin_id: int) -> int:
     for done, search in enumerate(missing):
         update_task_progress(self, current=done, total=len(missing), message="Refreshing web search...")
         try:
-            results = annotate_results(search_web(search.query))
+            results = annotate_results(search_web(search.query, scope=search.request_scope))
         except ProviderUnavailableError as exc:
             logger.warning("refresh_pin_web_search: search unavailable for pin %s, leaving it to the page: %s", pin_id, exc)
             continue

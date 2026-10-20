@@ -21,6 +21,12 @@
     <i class="material-icons spin">autorenew</i> Gathering source documents...
 </div>
 {% endif %}
+{% if browser_fetch %}
+<div class="article-sources-browser-fetch" hidden data-browser-fetch="{{ browser_fetch.provider }}"
+     data-latitude="{{ browser_fetch.latitude }}" data-longitude="{{ browser_fetch.longitude }}"
+     data-post-url="{{ browser_fetch.post_url }}"
+     data-refresh-url="{{ panel_url }}?attempt={{ next_attempt }}{% if selected %}&selected={{ selected|urlencode }}{% endif %}{{ children_qs }}"></div>
+{% endif %}
 {% if entries %}
 <div class="article-sources-layout">
 <ul class="article-source-list">

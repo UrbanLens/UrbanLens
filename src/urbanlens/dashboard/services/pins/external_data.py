@@ -932,6 +932,19 @@ class DocumentPanelSource(LocationCachePanelSource, ABC):
         """
         return True
 
+    def readable_payload(self, data: dict, viewer_id: int | None) -> dict:
+        """
+        A cached payload as one viewer may read it, for a source whose payload holds entries the viewer is not yet owed.
+
+        Args:
+            data: The ``LocationCache`` row's ``data`` dict.
+            viewer_id: The viewer's user pk, or None when the listing is not for one viewer.
+
+        Returns:
+            ``data``, less what this viewer may not see.
+        """
+        return data
+
     def documents_ready(self, data: dict, *, site_scope: bool) -> bool:
         """
         Whether a cached payload can answer the Sources tab for a viewer of this scope.
@@ -999,6 +1012,10 @@ class DocumentPanelSource(LocationCachePanelSource, ABC):
         """
         return next((document for document in self.source_documents(data, site_scope=site_scope, subject=subject) if document.document_id == document_id), None)
 
+
+#: Key of a cached document payload that asks the viewer's browser to fetch a provider the upstream could not answer:
+#: ``{"provider": ..., "reason": ...}``.
+BROWSER_FETCH_KEY = "browser_fetch"
 
 #: The key of a name-built row's payload naming the names its search was built from.
 SEARCH_NAMES_KEY = "search_names"

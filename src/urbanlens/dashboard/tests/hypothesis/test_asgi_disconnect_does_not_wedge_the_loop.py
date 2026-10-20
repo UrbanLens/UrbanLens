@@ -31,7 +31,9 @@ from urbanlens.core.tests.environment import probe_environ
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.UrbanLens import asgi
 
-VIEW_SECONDS = 0.6
+# Long enough that a wedged loop's stall (nearly the whole view) stays well above the half-second
+# scheduling stalls a loaded CI runner causes on its own.
+VIEW_SECONDS = 2.0
 DEADLOCK_SECONDS = 5.0
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[5]
 

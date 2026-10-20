@@ -28,7 +28,7 @@ class _Search(WebSearchProvider):
     def available(self) -> bool:
         return True
 
-    def search_web(self, query: str, *, max_results: int = 10) -> list[dict[str, Any]]:
+    def search_web(self, query: str, *, max_results: int = 10, scope: object = None) -> list[dict[str, Any]]:
         if self.failure is not None:
             raise self.failure
         return self.results

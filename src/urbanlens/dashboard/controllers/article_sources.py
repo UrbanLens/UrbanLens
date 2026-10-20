@@ -18,7 +18,7 @@ from django.views import View
 from urbanlens.dashboard.controllers.article import owned_pin
 from urbanlens.dashboard.services.locations.site_scope import is_site_scope
 from urbanlens.dashboard.services.media.proxied_media import media_csp
-from urbanlens.dashboard.services.pins.external_data import POLL_INTERVAL_SECONDS
+from urbanlens.dashboard.services.pins.external_data import BROWSER_FETCH_KEY, POLL_INTERVAL_SECONDS
 from urbanlens.dashboard.services.pins.source_documents import collect_source_documents, document_bytes, find_listed_document
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
@@ -161,6 +161,7 @@ class ArticleSourcesView(LoginRequiredMixin, View):
             nested=scope.nested_locations() if include_children else (),
         )
 
+        browser_fetch = self._browser_fetch(scope)
         selected = request.GET.get("selected", "")
         entries = [self._entry(scope, listed, selected) for listed in listing.documents]
         entries.extend(self._uploaded_entries(request, scope, selected))
@@ -179,8 +180,37 @@ class ArticleSourcesView(LoginRequiredMixin, View):
                 "site_scope": scope.site_scope,
                 "can_upload": bool(scope.pin_slug),
                 "children_qs": "" if include_children else "&children=0",
+                "browser_fetch": browser_fetch,
             },
         )
+
+    @staticmethod
+    def _browser_fetch(scope: SourcesScope) -> dict | None:
+        """
+        What the viewer's browser is asked to fetch itself, because the upstream reported a keyless source it could not ask.
+
+        Only on a pin page whose owner has external services on; the browser's answer is posted to this pin.
+        """
+        driver = scope.driver
+        if not scope.pin_slug or driver is None or not driver.profile.external_apis_enabled:
+            return None
+        from urbanlens.dashboard.services.pins.external_data import LocationCachePanelSource, document_panel_sources
+
+        provider = ""
+        for source in document_panel_sources():
+            row = source.cached_entry(driver) if isinstance(source, LocationCachePanelSource) else None
+            marker = (row.data or {}).get(BROWSER_FETCH_KEY) if row is not None else None
+            if isinstance(marker, dict) and marker.get("provider") == "wikipedia" and driver.profile.user_id not in marker.get("posted_by", []):
+                provider = "wikipedia"
+                break
+        if not provider or driver.effective_latitude is None or driver.effective_longitude is None:
+            return None
+        return {
+            "provider": provider,
+            "latitude": f"{float(driver.effective_latitude):.5f}",
+            "longitude": f"{float(driver.effective_longitude):.5f}",
+            "post_url": reverse("pin.browser_fetch", kwargs={"pin_slug": scope.pin_slug}),
+        }
 
     def post(self, request: HttpRequest, pin_slug: str = "", location_slug: str = "") -> HttpResponse:
         """Upload a document onto this pin and return the Sources list, using the vault upload pipeline."""
