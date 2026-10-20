@@ -12,7 +12,6 @@ import json
 
 from asgiref.sync import async_to_sync
 from channels.db import database_sync_to_async
-from channels.testing import WebsocketCommunicator
 from django.contrib.auth.models import AnonymousUser
 from model_bakery import baker
 
@@ -24,6 +23,7 @@ from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.trivia.session import TriviaConfig, kick_participant, start_multiplayer_session
+from urbanlens.dashboard.tests.hypothesis.websocket_helpers import WebsocketCommunicator
 
 _coordinate_counter = count()
 

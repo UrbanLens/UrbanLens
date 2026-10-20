@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 
 from asgiref.sync import async_to_sync
-from channels.testing import WebsocketCommunicator
 from model_bakery import baker
 
 from urbanlens.core.tests.celery_inline import broadcasts_delivered_inline
@@ -16,6 +15,7 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.spotguessr.model import SpotGuessrMode
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.services.spotguessr.session import GameConfig, start_solo_session
+from urbanlens.dashboard.tests.hypothesis.websocket_helpers import WebsocketCommunicator
 from urbanlens.dashboard.websocket_auth import CREDENTIAL_SCOPE_KEY
 
 

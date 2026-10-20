@@ -17,7 +17,6 @@ from typing import TYPE_CHECKING, Any
 
 from asgiref.sync import async_to_sync
 from channels.db import database_sync_to_async
-from channels.testing import WebsocketCommunicator
 from django.contrib.auth.models import User
 from django.test import SimpleTestCase, override_settings
 from django.urls import reverse
@@ -59,7 +58,7 @@ from urbanlens.dashboard.services.auth import webauthn as webauthn_service
 from urbanlens.dashboard.services.auth.two_factor import SESSION_WEBAUTHN_PENDING_USER
 from urbanlens.dashboard.services.core import request_body
 from urbanlens.dashboard.tests.hypothesis.external_api_helpers import DEEPLY_NESTED_JSON, ExternalApiRouteCase
-from urbanlens.dashboard.tests.hypothesis.websocket_helpers import rows_at_least, settle
+from urbanlens.dashboard.tests.hypothesis.websocket_helpers import WebsocketCommunicator, rows_at_least, settle
 
 if TYPE_CHECKING:
     from django.test.client import _MonkeyPatchedWSGIResponse as TestResponse

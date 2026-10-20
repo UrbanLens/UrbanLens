@@ -7,7 +7,6 @@ import json
 
 from asgiref.sync import async_to_sync
 from channels.db import database_sync_to_async
-from channels.testing import WebsocketCommunicator
 from django.contrib.auth.models import AnonymousUser
 from model_bakery import baker
 
@@ -21,6 +20,7 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.spotguessr.model import SpotGuessrMode
 from urbanlens.dashboard.models.subscriptions import UserSubscription
 from urbanlens.dashboard.services.spotguessr.session import GameConfig, start_multiplayer_session
+from urbanlens.dashboard.tests.hypothesis.websocket_helpers import WebsocketCommunicator
 
 _coordinate_counter = count()
 

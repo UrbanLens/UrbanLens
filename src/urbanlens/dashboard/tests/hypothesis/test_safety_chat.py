@@ -7,13 +7,13 @@ import uuid
 
 from asgiref.sync import async_to_sync
 from channels.db import database_sync_to_async
-from channels.testing import WebsocketCommunicator
 from django.contrib.auth.models import AnonymousUser
 from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TransactionTestCase
 from urbanlens.dashboard.consumers import SafetyCheckinChatConsumer
+from urbanlens.dashboard.tests.hypothesis.websocket_helpers import WebsocketCommunicator
 
 
 def _run(coro):

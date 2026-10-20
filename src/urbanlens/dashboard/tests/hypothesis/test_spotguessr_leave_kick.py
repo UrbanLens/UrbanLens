@@ -7,7 +7,6 @@ from unittest.mock import patch
 
 from asgiref.sync import async_to_sync
 from channels.db import database_sync_to_async
-from channels.testing import WebsocketCommunicator
 from django.contrib.gis.geos import Point
 from django.urls import reverse
 from model_bakery import baker
@@ -53,6 +52,7 @@ from urbanlens.dashboard.services.spotguessr.session import (
     start_multiplayer_session,
     submit_guess,
 )
+from urbanlens.dashboard.tests.hypothesis.websocket_helpers import WebsocketCommunicator
 
 _coordinate_counter = count()
 
