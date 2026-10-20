@@ -321,3 +321,16 @@ class QueryKeyAndAudienceTests(TestCase):
             [],
         )
         self.assertEqual(load_user_provided_results(bare, other_user.pk, theirs_search.query_key, set(), ""), [])
+
+
+class CorroborationRuleTests(SimpleTestCase):
+    def test_submitter_always_others_need_two_distinct_accounts(self) -> None:
+        from urbanlens.dashboard.services.search.corroboration import CORROBORATION, readable_by
+
+        self.assertEqual(CORROBORATION, 2)
+        self.assertTrue(readable_by([1], 1))
+        self.assertFalse(readable_by([1], 2))
+        self.assertFalse(readable_by([1, 1], 2))
+        self.assertTrue(readable_by([1, 3], 2))
+        self.assertFalse(readable_by([1], None))
+        self.assertTrue(readable_by([1, 3], None))

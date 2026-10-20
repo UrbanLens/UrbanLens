@@ -18,6 +18,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
+from urbanlens.dashboard.services.search.corroboration import CORROBORATION, readable_by
 
 if TYPE_CHECKING:
     from django.contrib.auth.models import User
@@ -33,8 +34,6 @@ MAX_RESULTS_PER_POST = 20
 MAX_RESULTS_PER_ACCOUNT = 10
 #: Entries one row holds; the account holding the most gives up its oldest first.
 MAX_STORED_RESULTS = 100
-#: Distinct accounts that must have submitted a URL before anyone but its submitters sees it.
-CORROBORATION_THRESHOLD = 2
 MAX_URL_LENGTH = 2048
 MAX_TITLE_LENGTH = 200
 MAX_SNIPPET_LENGTH = 500
@@ -167,7 +166,7 @@ def _enforce_caps(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
     def evict_from(account: int | None) -> None:
         mine = [e for e in entries if owner(e) == account]
-        victim = next((e for e in reversed(mine) if len(set(_submitters(e))) < CORROBORATION_THRESHOLD), mine[-1])
+        victim = next((e for e in reversed(mine) if len(set(_submitters(e))) < CORROBORATION), mine[-1])
         entries.remove(victim)
 
     for account in {owner(e) for e in entries}:
@@ -228,7 +227,7 @@ def load_user_provided_results(location: Location | None, viewer_id: int | None,
     The fresh user-provided results a viewer may see for one search.
 
     A result is shown to the accounts that submitted it, and to everyone else only once
-    ``CORROBORATION_THRESHOLD`` distinct accounts have submitted it.
+    ``CORROBORATION`` distinct accounts have submitted it.
 
     Args:
         location: The pin's Location.
@@ -251,8 +250,7 @@ def load_user_provided_results(location: Location | None, viewer_id: int | None,
         link = r.get("link")
         if not isinstance(link, str) or link in excluded or canonical_url(link) in excluded:
             continue
-        submitters = set(_submitters(r))
-        if viewer_id not in submitters and len(submitters) < CORROBORATION_THRESHOLD:
+        if not readable_by(_submitters(r), viewer_id):
             continue
         out.append({"link": link, "title": r.get("title", ""), "snippet": r.get("snippet", ""), "domain": (urlsplit(link).hostname or "").removeprefix("www.")})
     return out
