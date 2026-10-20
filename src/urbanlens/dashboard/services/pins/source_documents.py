@@ -136,6 +136,7 @@ def collect_source_documents(
     documents: list[ListedDocument] = []
     pending = False
     sources = [source for source in document_panel_sources() if panel_visible_to(viewer, source)]
+    viewer_id = viewer.pk if viewer.is_authenticated else None
     payloads = _cached_payloads(location, sources, reader)
     for source in sources:
         data = payloads.get(source.key)
@@ -145,7 +146,7 @@ def collect_source_documents(
                 continue
             if data is None:
                 continue
-        documents.extend(ListedDocument(source, document) for document in source.source_documents(data, site_scope=site_scope, subject=subject))
+        documents.extend(ListedDocument(source, document) for document in source.source_documents(source.readable_payload(data, viewer_id), site_scope=site_scope, subject=subject))
     if nested:
         listed = {(listed.source.key, listed.document.document_id) for listed in documents}
         documents.extend(document for document in nested_documents(nested, sources) if (document.source.key, document.document.document_id) not in listed)
@@ -198,7 +199,7 @@ def documents_from_payloads(payloads: Sequence[tuple[Location, DocumentPanelSour
             if location.pk not in subjects:
                 subjects[location.pk] = subject_for_location(location)
             subject = subjects[location.pk]
-        for document in source.source_documents(data, site_scope=False, subject=subject):
+        for document in source.source_documents(source.readable_payload(data, None), site_scope=False, subject=subject):
             if (source.key, document.document_id) not in seen:
                 seen.add((source.key, document.document_id))
                 documents.append(ListedDocument(source, document))
@@ -252,7 +253,7 @@ def find_listed_document(
     if not isinstance(source, DocumentPanelSource) or not panel_visible_to(viewer, source):
         return None
     data = _cached_payload(location, source)
-    document = None if data is None else source.find_document(data, document_id, site_scope=site_scope)
+    document = None if data is None else source.find_document(source.readable_payload(data, viewer.pk if viewer.is_authenticated else None), document_id, site_scope=site_scope)
     if document is not None:
         return ListedDocument(source, document)
     return next((listed for listed in nested_documents(nested, [source]) if listed.document.document_id == document_id), None)

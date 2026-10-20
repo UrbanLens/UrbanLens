@@ -510,8 +510,8 @@ class PlacesLayerForm(ProfileSettingsForm):
     places_google_enabled = forms.BooleanField(
         required=False,
         widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
-        label="Google Historical Landmarks",
-        help_text="Show cultural sites, monuments, and historic locations sourced from Google.",
+        label="Historical Landmarks",
+        help_text="Show cultural sites, monuments, and historic locations from Overture Maps, OpenStreetMap and Google.",
     )
     places_wikipedia_enabled = forms.BooleanField(
         required=False,

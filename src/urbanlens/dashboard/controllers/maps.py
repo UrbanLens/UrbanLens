@@ -924,7 +924,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
 
     def place_details(self, request, *args, **kwargs):
         """
-        Return Google Place details for a single place_id.
+        Return place details for a single place_id, from whichever places provider is active.
 
         Requires the Places feature (granted through an access role).
 

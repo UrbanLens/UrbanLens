@@ -30,7 +30,7 @@ class _FakeSearch(WebSearchProvider):
     def available(self) -> bool:
         return self.is_available
 
-    def search_web(self, query: str, *, max_results: int = 10) -> list[dict[str, Any]]:
+    def search_web(self, query: str, *, max_results: int = 10, scope: object = None) -> list[dict[str, Any]]:
         self.queries.append((query, max_results))
         if self.failure is not None:
             raise self.failure

@@ -182,7 +182,7 @@ class NearbySources:
     Which sources a caller wants.
 
     Attributes:
-        landmarks: Historical landmarks from the active places provider.
+        landmarks: Historical landmarks from the active places provider; ``source`` stays ``"google"`` as the layer's key, ``place_source`` names the dataset.
         parks: National parks.
         wikipedia: Geotagged Wikipedia articles.
     """
@@ -220,7 +220,12 @@ def _landmarks(latitude: float, longitude: float, radius: int) -> list[dict[str,
         display_name = result.get("displayName") or {}
         places.append(
             {
+                # Blank when the provider matched no Google place; "place_source" and "source_id" still identify it.
                 "place_id": result.get("id", ""),
+                "place_source": result.get("source", "google"),
+                "source_id": result.get("sourceId", ""),
+                "attribution": result.get("attribution", ""),
+                "category": result.get("category", ""),
                 "name": display_name.get("text", "") if isinstance(display_name, dict) else str(display_name),
                 "lat": place_lat,
                 "lng": place_lng,

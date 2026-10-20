@@ -931,8 +931,9 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
             cached = {}
             answered = False
 
-        if answered:
-            results = merged_results((cached[search.scope.audience].data or {}).get("results", []) for search in searches)
+        # Without consent no live search can fill a gap, so whatever is cached is the answer.
+        if answered or (cached and not pin.profile.external_apis_enabled):
+            results = merged_results((cached[search.scope.audience].data or {}).get("results", []) for search in searches if search.scope.audience in cached)
             pse = self._pse_context(request, pin, pse_search, {r.get("link") for r in results})
             if not results and not article_surface and not pse:
                 return HttpResponse("", status=204)
@@ -978,7 +979,7 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
                 # holding the request open. search_web() tries every configured provider in priority order, so one
                 # unconfigured/rate-limited provider doesn't fail the whole request.
                 search_results = call_with_deadline(
-                    lambda query=search.query: search_web(query),
+                    lambda search=search: search_web(search.query, scope=search.request_scope),
                     timeout=EXTERNAL_CALL_DEADLINE,
                     default=None,
                     name="web_search",

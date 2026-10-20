@@ -158,6 +158,23 @@ class NearbyPlacesTests(_PlacesCase):
     def _landmark(self, name: str = "Old Mill"):
         return {"id": name, "displayName": {"text": name}, "location": {"latitude": 40.0, "longitude": -74.0}}
 
+    def test_a_landmark_with_no_google_id_is_a_marker_carrying_its_dataset(self) -> None:
+        local = {
+            **self._landmark("Old Mill"),
+            "id": "",
+            "source": "osm",
+            "sourceId": "way/9",
+            "category": "ruins",
+            "attribution": "© OpenStreetMap contributors",
+        }
+        with mock.patch(_LANDMARKS, return_value=[local]), mock.patch(_WIKIPEDIA):
+            [place] = [p for p in self._nearby().json()["places"] if p["source"] == "google"]
+
+        self.assertEqual(
+            (place["place_id"], place["place_source"], place["source_id"], place["category"], place["attribution"]),
+            ("", "osm", "way/9", "ruins", "© OpenStreetMap contributors"),
+        )
+
     def test_radii_in_the_same_bucket_share_one_answer(self) -> None:
         with mock.patch(_LANDMARKS, return_value=[self._landmark()]) as landmarks, mock.patch(_WIKIPEDIA):
             self._nearby(radius="1500")

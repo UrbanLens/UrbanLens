@@ -7,12 +7,13 @@ names of its own, the search cached for exactly that set (see ``services.pins.se
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 from urbanlens.dashboard.services.pins.search_names import search_names
+from urbanlens.dashboard.services.search.search import WebSearchScope, search_audience
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
@@ -25,6 +26,12 @@ if TYPE_CHECKING:
 #: The ``LocationCache.source`` web-search results are cached under.
 WEB_SEARCH_SOURCE = "web_search"
 
+#: Longest ``entity_name`` the search provider accepts.
+ENTITY_NAME_MAX = 200
+
+#: Fewest results a shared pin search asks the search provider to gather before it stops.
+SHARED_MIN_RESULTS = 8
+
 
 @dataclass(frozen=True, slots=True)
 class WebSearch:
@@ -34,10 +41,12 @@ class WebSearch:
     Attributes:
         scope: Who may read its results, and the names it is built from.
         query: The query sent.
+        request_scope: What the search provider is told about who may read the results and which place they concern.
     """
 
     scope: SearchScope
     query: str
+    request_scope: WebSearchScope = field(default_factory=WebSearchScope)
 
     @property
     def query_key(self) -> str:
@@ -58,8 +67,47 @@ def pin_web_searches(pin: Pin) -> list[WebSearch]:
     searches = []
     for scope in search_names(pin).scopes:
         if query := web_search_query(pin, scope):
-            searches.append(WebSearch(scope, query))
+            searches.append(WebSearch(scope, query, request_scope_for(pin, scope)))
     return searches
+
+
+def place_entity(location: Location | None) -> str:
+    """
+    The place's identity in the ``<kind>:<value>`` form the search provider's ``entity`` takes; empty when none is known.
+
+    Args:
+        location: The pin's Location.
+
+    Returns:
+        ``google_cid:<cid>``, else ``google_place_id:<id>``, else ``""``.
+    """
+    if location is None:
+        return ""
+    if (cid := location.cid) is not None:
+        return f"google_cid:{int(cid)}"
+    place = location.google_place if location.google_place_id else None
+    if place is not None and place.place_id:
+        return f"google_place_id:{place.place_id}"
+    return ""
+
+
+def request_scope_for(pin: Pin, scope: SearchScope) -> WebSearchScope:
+    """
+    What the search provider is told about one search.
+
+    The shared search names the place so the search provider answers it once for everyone. A search built from the pin's own names is
+    kept private to an opaque label of its owner: the user id itself is never sent.
+
+    Args:
+        pin: The pin whose page is being rendered.
+        scope: One of the pin's search scopes.
+
+    Returns:
+        The scope to send.
+    """
+    if scope.audience:
+        return WebSearchScope(audience=search_audience(pin.profile.user_id))
+    return WebSearchScope(entity=place_entity(pin.location), entity_name=scope.names[0][:ENTITY_NAME_MAX] if scope.names else "", min_results=SHARED_MIN_RESULTS)
 
 
 def web_search_query(pin: Pin, scope: SearchScope) -> str | None:
