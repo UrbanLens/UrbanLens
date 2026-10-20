@@ -7,7 +7,6 @@ import json
 
 from asgiref.sync import async_to_sync
 from channels.db import database_sync_to_async
-from channels.testing import WebsocketCommunicator
 from django.core.cache import cache
 from django.test import override_settings
 from model_bakery import baker
@@ -22,7 +21,13 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trivia.model import TriviaSessionChatMessage
 from urbanlens.dashboard.services.trivia.session import TriviaConfig, start_multiplayer_session
-from urbanlens.dashboard.tests.hypothesis.websocket_helpers import all_of, got_frame, rows_at_least, settle
+from urbanlens.dashboard.tests.hypothesis.websocket_helpers import (
+    WebsocketCommunicator,
+    all_of,
+    got_frame,
+    rows_at_least,
+    settle,
+)
 
 # The frame budgets refill on the clock, so a consumer starved by a loaded pytest-xdist neighbour used to read as
 # 14 of 30 messages arriving.

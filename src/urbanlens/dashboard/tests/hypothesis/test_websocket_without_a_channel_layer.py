@@ -12,13 +12,13 @@ whether the browser is told so or is answered with a 500 per attempt, and whethe
 from __future__ import annotations
 
 from asgiref.sync import async_to_sync
-from channels.testing import WebsocketCommunicator
 from django.contrib.auth.models import User
 from django.test import override_settings
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TransactionTestCase
 from urbanlens.dashboard.consumers import UserNotificationConsumer
+from urbanlens.dashboard.tests.hypothesis.websocket_helpers import WebsocketCommunicator
 
 #: What the consumer closes with when this deployment cannot carry a socket at all.
 NO_CHANNEL_LAYER = 4503

@@ -10,7 +10,6 @@ import json
 from unittest.mock import patch
 
 from asgiref.sync import async_to_sync
-from channels.testing import WebsocketCommunicator
 from django.contrib.auth.models import AnonymousUser
 from django.urls import reverse
 from django.utils import timezone
@@ -36,6 +35,7 @@ from urbanlens.dashboard.services.visits.safety import (
     is_owner_or_accepted_partner,
     remove_checkin_partner,
 )
+from urbanlens.dashboard.tests.hypothesis.websocket_helpers import WebsocketCommunicator
 
 
 def _profile(**kwargs) -> Profile:

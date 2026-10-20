@@ -10,7 +10,6 @@ import sys
 from unittest import mock
 
 from asgiref.sync import async_to_sync
-from channels.testing import WebsocketCommunicator
 from django.conf import settings
 from django.core.cache import cache
 from django.test import SimpleTestCase, override_settings
@@ -21,7 +20,13 @@ from urbanlens.core.tests.testcase import TransactionTestCase
 from urbanlens.dashboard.checks import websocket_frame_cap_conflict
 from urbanlens.dashboard.consumers import SafetyCheckinChatConsumer
 from urbanlens.dashboard.models.safety.model import SafetyCheckinMessage
-from urbanlens.dashboard.tests.hypothesis.websocket_helpers import all_of, got_frame, rows_at_least, settle
+from urbanlens.dashboard.tests.hypothesis.websocket_helpers import (
+    WebsocketCommunicator,
+    all_of,
+    got_frame,
+    rows_at_least,
+    settle,
+)
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[5]
 
