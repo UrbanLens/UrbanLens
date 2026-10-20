@@ -939,9 +939,6 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         if not user_has_feature(request.user, SiteFeature.PLACES):
             return JsonResponse({"error": "forbidden"}, status=403)
 
-        if not request.user.profile.external_apis_enabled:
-            return JsonResponse({"error": "disabled"}, status=403)
-
         place_id = (request.GET.get("place_id") or "").strip()
         if not place_id:
             return JsonResponse({"error": "missing place_id"}, status=400)

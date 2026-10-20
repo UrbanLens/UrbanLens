@@ -44,8 +44,9 @@ class PlacesLayerGateTests(_GatedCase):
         with mock.patch(_LANDMARKS) as landmarks, mock.patch(_WIKIPEDIA) as wikipedia:
             response = self.client.get(reverse("map.places.nearby"), {"lat": "40.0", "lng": "-74.0", "zoom": "15"})
 
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(response.json(), {"error": "disabled"})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["disabled"])
+        self.assertEqual(response.json()["places"], [])
         landmarks.assert_not_called()
         wikipedia.assert_not_called()
 
