@@ -494,7 +494,8 @@ class AlbumReorderQueryTests(TestCase):
                 for q in ctx.captured_queries
                 if q["sql"].lstrip().upper().startswith("UPDATE") and "album_items" in q["sql"]
             ]
-            return len(re.sub(r"ARRAY\[[^\]]*\]|'\{[^}]*\}'", "[]", write))
+            # The album's own pk is inlined too, and the large album's can have one more digit (99 -> 100).
+            return len(re.sub(r"\d+", "0", re.sub(r"ARRAY\[[^\]]*\]|'\{[^}]*\}'", "[]", write)))
 
         pin, images = _pin_with_photos(3)
         small = Album.objects.create(name="Small", profile=pin.profile, parent_pin=pin, sort=AlbumSort.CUSTOM)
