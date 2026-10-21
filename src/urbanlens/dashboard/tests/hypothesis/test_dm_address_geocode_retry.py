@@ -20,6 +20,12 @@ _STREET_RESULT = {"results": [{"types": ["street_address"], "geometry": {"locati
 class GeocodeFailureTests(SimpleTestCase):
     def setUp(self) -> None:
         super().setUp()
+        patcher = mock.patch(
+            "urbanlens.dashboard.services.apis.locations.geocode_resolution.ask_shielding_geocoder",
+            return_value=(False, None),
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
         patcher = mock.patch.object(app_settings, "google_unrestricted_api_key", "test-key")
         patcher.start()
         self.addCleanup(patcher.stop)

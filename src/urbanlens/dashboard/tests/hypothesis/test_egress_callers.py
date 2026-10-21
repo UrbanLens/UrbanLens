@@ -272,6 +272,12 @@ class SlidesCarouselRefusalTests(TestCase):
 class NameChainTests(SimpleTestCase):
     """A first-party places provider failing off production is "no name for now", never a call to direct Google Geocoding."""
 
+    def setUp(self) -> None:
+        super().setUp()
+        no_geocoders = GEOCODERS.overridden([])
+        no_geocoders.__enter__()
+        self.addCleanup(no_geocoders.__exit__, None, None, None)
+
     def _run(self, environment: str) -> tuple[str | None, mock.Mock]:
         from urbanlens.dashboard.services.locations.google import (
             GoogleGeocodingNameResolver,

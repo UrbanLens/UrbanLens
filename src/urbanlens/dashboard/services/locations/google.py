@@ -46,7 +46,7 @@ class GooglePlacesNameResolver:
 
 @dataclass(frozen=True, slots=True)
 class GoogleGeocodingNameResolver:
-    """Fallback resolver using geocoded addresses: REData's reverse geocoder when one is available, otherwise Google Geocoding asked directly."""
+    """Fallback resolver using geocoded addresses: the shielding reverse geocoder when one is available, otherwise Google Geocoding asked directly."""
 
     @property
     def direct(self) -> bool:

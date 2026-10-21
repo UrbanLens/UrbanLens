@@ -100,7 +100,7 @@ class NominatimGeocoder(GeocodeProvider):
 
 def ask_shielding_geocoder[T](question: Callable[[GeocodeProvider], T]) -> tuple[bool, T | None]:
     """
-    Put a question to the first available geocoder that shields direct providers (REData), if there is one.
+    Put a question to the first available geocoder that shields direct providers, if there is one.
 
     Args:
         question: Called with that provider; returns its answer.

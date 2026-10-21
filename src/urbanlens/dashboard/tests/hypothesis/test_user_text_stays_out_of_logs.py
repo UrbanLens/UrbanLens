@@ -51,6 +51,15 @@ class AFailedSearchTests(SimpleTestCase):
 class ADirectMessageMentionTests(SimpleTestCase):
     """A direct message's text is the most private thing the app holds."""
 
+    def setUp(self) -> None:
+        super().setUp()
+        patcher = mock.patch(
+            "urbanlens.dashboard.services.apis.locations.geocode_resolution.ask_shielding_geocoder",
+            return_value=(False, None),
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def _message(self, body: str) -> DirectMessage:
         return DirectMessage(pk=7, body=body)
 

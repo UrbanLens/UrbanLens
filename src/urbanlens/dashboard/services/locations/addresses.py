@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 def ensure_location_address(location: Location | None) -> bool:
     """
     Populate address fields on a Location that has coordinates but no street data.
-    Asks REData's reverse geocoder when one is available, else the Google Geocoding API (with GeocodedLocation as an intermediate cache), then writes the parsed components back to the Location row so the next request reads directly from the DB with no API call.
+    Asks the shielding reverse geocoder when one is available, else the Google Geocoding API (with GeocodedLocation as an intermediate cache), then writes the parsed components back to the Location row so the next request reads directly from the DB with no API call.
 
     Args:
         location: The location to backfill; no-ops when None or already addressed.
@@ -54,11 +54,13 @@ def ensure_location_address(location: Location | None) -> bool:
         except Exception as exc:
             if not is_source_outage(exc):
                 raise
-            outages.append(exc)
-        # A geocoder that answered without a county (REData's Google provider) still leaves OSM to fill it.
+            # Only the street's source can lose the street; OpenStreetMap failing after it answered only costs a county.
+            if backfill is not _openstreetmap_admin_address or not written:
+                outages.append(exc)
+        # A geocoder that answered without a county (a Google-backed one) still leaves OSM to fill it.
         if written and location.administrative_area_level_2:
             break
-    if outages and not written:
+    if outages:
         raise outages[0]
     return written
 

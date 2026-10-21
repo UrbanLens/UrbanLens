@@ -81,6 +81,15 @@ class GeocodeCacheTests(TestCase):
 
 
 class PlaceNameLookupTests(TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        patcher = mock.patch(
+            "urbanlens.dashboard.services.apis.locations.geocode_resolution.ask_shielding_geocoder",
+            return_value=(False, None),
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_a_failed_name_lookup_asks_google_once(self) -> None:
         """The resolver chain already ends with Google Geocoding; the service asked it again when the chain found nothing."""
         from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService

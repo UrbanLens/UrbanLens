@@ -16,6 +16,15 @@ from urbanlens.dashboard.services.apis.locations.google.place_info import Google
 class GooglePlaceServiceTests(TestCase):
     """GooglePlaceService deduplicates API results by coordinate pair."""
 
+    def setUp(self) -> None:
+        super().setUp()
+        patcher = mock.patch(
+            "urbanlens.dashboard.services.apis.locations.geocode_resolution.ask_shielding_geocoder",
+            return_value=(False, None),
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_same_coordinates_reuse_single_row(self) -> None:
         service = GooglePlaceService()
         first = service.get_or_create_for_coordinates("40.0", "-74.0", place_name="Steel Mill", fetch_if_missing=False)

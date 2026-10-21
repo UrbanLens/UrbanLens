@@ -141,6 +141,12 @@ class AddressBackfillOutageTests(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
+        patcher = mock.patch(
+            "urbanlens.dashboard.services.apis.locations.geocode_resolution.ask_shielding_geocoder",
+            return_value=(False, None),
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.location = baker.make(Location, latitude=41.7321, longitude=-73.9262, route=None, locality=None)
 
     def _enrich(self, *, geocode: dict, admin: dict) -> None:
