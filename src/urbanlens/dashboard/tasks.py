@@ -3784,6 +3784,21 @@ def hard_delete_expired_accounts() -> int:
         release_lock(_HARD_DELETE_LOCK_CACHE_KEY, _lock_token)
 
 
+@shared_task(soft_time_limit=110, time_limit=130, queue=Queue.INTERACTIVE)
+def load_state_boundary(state_abbr: str) -> None:
+    """
+    Resolve one state's boundary into the shared cache, so a page view's panel gate can read it without a request.
+
+    Scheduled by ``external_data.gate_allows`` when a gate met a boundary nobody had loaded yet.
+
+    Args:
+        state_abbr: Two-letter USPS state abbreviation.
+    """
+    from urbanlens.dashboard.services.geo.geo_boundary import state_boundary
+
+    _ = state_boundary(state_abbr).geometry
+
+
 # No autoretry: run_panel_fetch owns the failure policy, and Celery retries
 # would race the poll-driven re-scheduling. Time limits align with FLIGHT_TTL_SECONDS.
 @shared_task(soft_time_limit=110, time_limit=130, queue=Queue.INTERACTIVE)

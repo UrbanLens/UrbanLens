@@ -443,7 +443,7 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
             return self._photos_media_preview(request, pin_slug)
 
         from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
-        from urbanlens.dashboard.services.pins.external_data import GalleryMediaSource, get_panel_source, panel_visible_to
+        from urbanlens.dashboard.services.pins.external_data import GalleryMediaSource, gate_allows, get_panel_source, panel_visible_to
 
         panel = get_panel_source(source)
         if not isinstance(panel, GalleryMediaSource):
@@ -464,7 +464,7 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
         if not location:
             return HttpResponse(status=204)
 
-        if not panel.gate(pin):
+        if not gate_allows(panel, pin):
             return HttpResponse(status=204)
 
         cached = panel.cached_entry(pin)
@@ -1530,7 +1530,7 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
         from urbanlens.dashboard.models.wiki.model import Wiki
         from urbanlens.dashboard.plugins.builtin.parcel_buildings import child_pin_rows, match_buildings_to_children, unpinned_building_child_rows
         from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_CACHE_SOURCE
-        from urbanlens.dashboard.services.pins.external_data import get_panel_source
+        from urbanlens.dashboard.services.pins.external_data import gate_allows, get_panel_source
         from urbanlens.dashboard.services.pins.pin_restructure import missing_buildings, property_polygon
 
         try:
@@ -1548,7 +1548,7 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
         unpinned_count = 0
         debug = None
         cached = None
-        if panel is not None and panel.gate(pin):
+        if panel is not None and gate_allows(panel, pin):
             cached = LocationCache.get_fresh(pin.location, PARCEL_BUILDINGS_CACHE_SOURCE)
             if cached is None:
                 pending = self._pending_panel(request, pin, PARCEL_BUILDINGS_CACHE_SOURCE)
@@ -1633,7 +1633,7 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
         Returns:
             The panel, its placeholder, a 204 when there is nothing to show, or a 404.
         """
-        from urbanlens.dashboard.services.pins.external_data import InfoPanelSource, PanelPlacement, get_panel_source, panel_sources, panels_shown_in
+        from urbanlens.dashboard.services.pins.external_data import InfoPanelSource, PanelPlacement, gate_allows, get_panel_source, panel_sources, panels_shown_in
 
         panel = get_panel_source(panel_key)
         if not isinstance(panel, InfoPanelSource) or (in_building_card and not panel.building_level):
@@ -1659,7 +1659,7 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
         if companions:
             return self._render_merged_panel(request, pin, [panel, *companions], section_id=section_id, in_tab=in_tab, nested=in_building_card or in_tab)
 
-        if not panel.gate(pin):
+        if not gate_allows(panel, pin):
             return HttpResponse(status=204)
 
         cached = panel.cached_entry(pin)
