@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 def ensure_location_address(location: Location | None) -> bool:
     """
     Populate address fields on a Location that has coordinates but no street data.
-    Calls the Google Geocoding API (with GeocodedLocation as an intermediate cache), then writes the parsed components back to the Location row so the next request reads directly from the DB with no API call.
+    Asks REData's reverse geocoder when one is available, else the Google Geocoding API (with GeocodedLocation as an intermediate cache), then writes the parsed components back to the Location row so the next request reads directly from the DB with no API call.
 
     Args:
         location: The location to backfill; no-ops when None or already addressed.
@@ -44,7 +44,7 @@ def ensure_location_address(location: Location | None) -> bool:
 
     outages: list[Exception] = []
     written = False
-    backfills: tuple[Callable[[Location, float, float], bool], ...] = (_google_address, _openstreetmap_admin_address)
+    backfills: tuple[Callable[[Location, float, float], bool], ...] = (_geocoded_address, _openstreetmap_admin_address)
     for backfill in backfills:
         try:
             written = backfill(location, lat, lng)
@@ -101,6 +101,37 @@ def _openstreetmap_admin_address(location: Location, lat: float, lng: float) -> 
         "administrative_area_level_2": admin.get("county") or "",
         "zipcode": (admin.get("postcode") or "")[:10],
         "country": admin.get("country") or "",
+    }
+    update_fields = [field for field, value in values.items() if value and not getattr(location, field)]
+    for field in update_fields:
+        setattr(location, field, values[field])
+    if update_fields:
+        location.save(update_fields=update_fields)
+    return bool(update_fields)
+
+
+def _geocoded_address(location: Location, lat: float, lng: float) -> bool:
+    """
+    Fill the address from the shielding geocoder's reverse geocode, else Google's; False when there is no answer.
+
+    Raises:
+        Exception: Neither could be asked (see ``is_source_outage``).
+    """
+    from urbanlens.dashboard.services.apis.locations import geocode_resolution
+
+    asked, reverse = geocode_resolution.ask_shielding_geocoder(lambda provider: provider.reverse_geocode(lat, lng))
+    if not asked:
+        return _google_address(location, lat, lng)
+    if reverse is None:
+        return False
+    values = {
+        "street_number": reverse.house_number,
+        "route": reverse.street,
+        "locality": reverse.locality,
+        "administrative_area_level_1": reverse.region,
+        "administrative_area_level_2": reverse.county,
+        "zipcode": reverse.postal_code[:10],
+        "country": reverse.country,
     }
     update_fields = [field for field, value in values.items() if value and not getattr(location, field)]
     for field in update_fields:

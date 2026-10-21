@@ -3,13 +3,33 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 import logging
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.services.core.gateway import ProviderUnavailableError
 from urbanlens.dashboard.services.security.redact import redact_coordinate, redact_text
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class ReverseGeocode:
+    """What a geocoder knows about the place at a coordinate; blank where it knows nothing."""
+
+    name: str = ""
+    display_name: str = ""
+    place_type: str = ""
+    house_number: str = ""
+    street: str = ""
+    locality: str = ""
+    county: str = ""
+    region: str = ""
+    postal_code: str = ""
+    country: str = ""
 
 
 class GeocodeProvider(ABC):
@@ -45,6 +65,24 @@ class GeocodeProvider(ABC):
             ProviderUnavailableError: The provider could not answer, so the question went unasked.
         """
 
+    def reverse_geocode(self, latitude: float, longitude: float) -> ReverseGeocode | None:
+        """
+        The place at a coordinate, for a provider that answers this; None when it does not or found nothing.
+
+        Raises:
+            ProviderUnavailableError: The provider could not answer, so the question went unasked.
+        """
+        return None
+
+    def street_geocode(self, address: str) -> tuple[float, float] | None:
+        """
+        Resolve an address to coordinates only when the match is at street level or finer, for a provider that answers this.
+
+        Raises:
+            ProviderUnavailableError: The provider could not answer, so the question went unasked.
+        """
+        return None
+
 
 class NominatimGeocoder(GeocodeProvider):
     """Direct OpenStreetMap Nominatim, held to its shared budget."""
@@ -58,6 +96,36 @@ class NominatimGeocoder(GeocodeProvider):
     def geocode(self, address: str) -> tuple[float | None, float | None]:
         """See :func:`nominatim_geocode`."""
         return nominatim_geocode(address)
+
+
+def ask_shielding_geocoder[T](question: Callable[[GeocodeProvider], T]) -> tuple[bool, T | None]:
+    """
+    Put a question to the first available geocoder that shields direct providers (REData), if there is one.
+
+    Args:
+        question: Called with that provider; returns its answer.
+
+    Returns:
+        ``(True, answer)`` once it was asked, the answer being None when it found nothing; ``(False, None)`` when no
+        shielding geocoder is available or it could not answer on production, where the caller may ask its own provider.
+
+    Raises:
+        ProviderUnavailableError: The shielding geocoder could not answer, off production, where the direct fallback is not asked.
+    """
+    from urbanlens.dashboard.plugins.points import GEOCODERS
+    from urbanlens.dashboard.services.core.egress import direct_fallback_permitted
+
+    provider = next((candidate for candidate in GEOCODERS if candidate.shields_direct and candidate.available()), None)
+    if provider is None:
+        return False, None
+    try:
+        return True, question(provider)
+    except ProviderUnavailableError as exc:
+        if not direct_fallback_permitted():
+            logger.info("%s geocode unavailable (%s); not falling back to a direct provider off production", provider.key, exc.reason)
+            raise
+        logger.warning("%s geocode failed, asking the direct provider: %s", provider.key, exc.reason)
+        return False, None
 
 
 def geocode_address(address: str) -> tuple[float | None, float | None]:

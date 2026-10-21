@@ -274,9 +274,21 @@ def _geocode_address(address: str) -> tuple[float, float] | None:
 
     Raises:
         OSError: The geocoder could not be reached or answered with an error status (``requests.RequestException`` is one), so ``tasks.detect_dm_address_mentions`` retries rather than recording "no match"."""
+    from urbanlens.dashboard.services.apis.locations import geocode_resolution
     from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
-    from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+    from urbanlens.dashboard.services.core.gateway import GatewayRequestError, ProviderUnavailableError
+    from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError
     from urbanlens.UrbanLens.settings.app import settings as app_settings
+
+    try:
+        asked, street = geocode_resolution.ask_shielding_geocoder(lambda provider: provider.street_geocode(address))
+    except ImpossibleInputError:
+        return None
+    except ProviderUnavailableError:
+        # Not chained: the original error may quote the candidate, which is the user's DM text.
+        raise ConnectionError("The shielding geocoder could not answer") from None
+    if asked:
+        return street if street is not None and _valid_coordinates(*street) else None
 
     try:
         if not app_settings.google_unrestricted_api_key:
