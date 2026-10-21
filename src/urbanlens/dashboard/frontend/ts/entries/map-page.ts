@@ -2997,7 +2997,8 @@ async function _showPlaceInfoPanel(place: PlaceData): Promise<void> {
         if (resp.status === 403) {
             const refusal = (await resp.json().catch(() => null)) as { error?: string } | null;
             if (refusal?.error === "disabled") {
-                if (bodyEl) bodyEl.innerHTML = `<em>External services are off. <a href="${escHtml(MAP_CFG.urls.settingsExternalServices)}">Open External Services settings</a></em>`;
+                const settingsUrl = escHtml(MAP_CFG.urls.settingsExternalServices);
+                if (bodyEl) bodyEl.innerHTML = `<em>External services are off. <a href="${settingsUrl}">Open External Services settings</a></em>`;
                 return;
             }
         }
