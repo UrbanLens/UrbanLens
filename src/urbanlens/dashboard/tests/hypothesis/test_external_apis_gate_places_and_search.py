@@ -74,7 +74,13 @@ class PinWebSearchOptOutTests(_OptedOutCase):
             response = self.client.get(reverse("pin.web_search", args=[self.pin.slug]))
         search.assert_not_called()
         self.assertEqual(response.status_code, 403)
-        self.assertIn("turned off", response.content.decode())
+        self.assertIn("External services are off.", response.content.decode())
+        self.assertIn("#external-api-settings-section", response.content.decode())
+
+    def test_the_article_news_tab_gets_the_card_in_a_swappable_response(self) -> None:
+        response = self.client.get(reverse("pin.web_search", args=[self.pin.slug]), {"surface": "article"})
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("External services are off.", response.content.decode())
 
     def test_the_search_still_runs_when_enabled(self) -> None:
         self.profile.external_apis_enabled = True

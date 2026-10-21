@@ -81,6 +81,7 @@ def _urls() -> dict[str, str]:
         "pinBulkUndo": reverse("pin.bulk_undo"),
         "pinParentSearch": reverse("pin.parent_search"),
         "savedFiltersCounts": reverse("saved_filters.counts"),
+        "settingsExternalServices": reverse("settings.view") + "#external-api-settings-section",
         "settingsSaveMapDarkMode": reverse("settings.save_map_dark_mode"),
         "settingsSaveMapPosition": reverse("settings.save_map_position"),
     }

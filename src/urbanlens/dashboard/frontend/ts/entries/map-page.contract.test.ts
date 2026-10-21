@@ -106,3 +106,13 @@ describe("map-page's requests leave their controls usable when they fail", () =>
         expect(failureHandler(body)).toMatch(/toastr\.error\(/);
     });
 });
+
+describe("map-page's place details panel", () => {
+    test("answers the External Services refusal with the settings link, not a generic failure", () => {
+        const panel = source.slice(source.indexOf("async function _showPlaceInfoPanel"));
+        expect(panel).toContain("resp.status === 403");
+        expect(panel).toContain('refusal?.error === "disabled"');
+        expect(panel).toContain("External services are off.");
+        expect(panel).toContain("MAP_CFG.urls.settingsExternalServices");
+    });
+});
