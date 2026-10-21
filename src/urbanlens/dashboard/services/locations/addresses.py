@@ -47,7 +47,7 @@ def ensure_location_address(location: Location | None) -> bool:
     backfills: tuple[Callable[[Location, float, float], bool], ...] = (_geocoded_address, _openstreetmap_admin_address)
     for backfill in backfills:
         try:
-            written = backfill(location, lat, lng)
+            written = backfill(location, lat, lng) or written
         except ImpossibleInputError:
             # Nothing was sent, and no source can answer this point: this backfill wrote nothing.
             continue
@@ -55,9 +55,10 @@ def ensure_location_address(location: Location | None) -> bool:
             if not is_source_outage(exc):
                 raise
             outages.append(exc)
-        if written:
+        # A geocoder that answered without a county (REData's Google provider) still leaves OSM to fill it.
+        if written and location.administrative_area_level_2:
             break
-    if outages:
+    if outages and not written:
         raise outages[0]
     return written
 

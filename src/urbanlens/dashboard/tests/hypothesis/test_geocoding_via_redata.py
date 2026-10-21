@@ -21,6 +21,7 @@ _GOOGLE = "urbanlens.dashboard.services.apis.locations.google.geocoding.GoogleGe
 _GOOGLE_NAME = "urbanlens.dashboard.services.locations.google.GoogleGeocodingGateway"
 _PERMITTED = "urbanlens.dashboard.services.core.egress.direct_fallback_permitted"
 _KEY = "urbanlens.UrbanLens.settings.app.settings.google_unrestricted_api_key"
+_NOMINATIM = "urbanlens.dashboard.services.apis.locations.nominatim.NominatimGateway"
 
 _HOUSE = {
     "name": "",
@@ -131,6 +132,27 @@ class AddressBackfillTests(TestCase):
         self.assertEqual((location.street_number, location.route, location.locality), ("12", "Mill Street", "Beacon"))
         self.assertEqual((location.administrative_area_level_2, location.zipcode), ("Dutchess County", "12508"))
 
+    def test_a_reverse_geocode_without_a_county_leaves_openstreetmap_to_fill_it(self) -> None:
+        location = self._location()
+        no_county = {**_HOUSE, "attributes": {}}
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(_REDATA, _redata(no_county)),
+            mock.patch(_GOOGLE) as google,
+            mock.patch(_NOMINATIM) as nominatim,
+        ):
+            nominatim.return_value.reverse_geocode_admin.return_value = {
+                "county": "Dutchess County",
+                "city": "City of Beacon",
+            }
+            self.assertTrue(ensure_location_address(location))
+        google.assert_not_called()
+        location.refresh_from_db()
+        self.assertEqual(
+            (location.route, location.locality, location.administrative_area_level_2),
+            ("Mill Street", "Beacon", "Dutchess County"),
+        )
+
     def test_unconfigured_it_asks_google_as_before(self) -> None:
         location = self._location()
         body = {
@@ -138,8 +160,14 @@ class AddressBackfillTests(TestCase):
                 {"address_components": [{"long_name": "Mill Street", "short_name": "Mill St", "types": ["route"]}]}
             ]
         }
-        with mock.patch(_CONFIGURED, return_value=False), mock.patch(_KEY, "key"), mock.patch(_GOOGLE) as google:
+        with (
+            mock.patch(_CONFIGURED, return_value=False),
+            mock.patch(_KEY, "key"),
+            mock.patch(_GOOGLE) as google,
+            mock.patch(_NOMINATIM) as nominatim,
+        ):
             google.return_value.geocode_coordinates.return_value = body
+            nominatim.return_value.reverse_geocode_admin.return_value = None
             self.assertTrue(ensure_location_address(location))
         google.return_value.geocode_coordinates.assert_called_once()
 
