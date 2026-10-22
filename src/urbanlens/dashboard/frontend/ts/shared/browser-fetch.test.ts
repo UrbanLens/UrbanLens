@@ -80,6 +80,9 @@ const COMMONS = {
         geosearch: [
             { pageid: 21, title: "File:Mill.jpg", lat: 41.73, lon: -73.93 },
             { pageid: 22, title: "File:No coordinates.jpg" },
+            { pageid: 23, title: "File:Annual report.pdf", lat: 41.73, lon: -73.93 },
+            { pageid: 24, title: "File:Interview.ogg", lat: 41.73, lon: -73.93 },
+            { pageid: 25, title: "File:Plan.SVG", lat: 41.73, lon: -73.93 },
         ],
     },
 };
@@ -119,7 +122,10 @@ describe("browser fetch of Commons and Overpass", () => {
 
     test("Commons is searched for files, in the file namespace", async () => {
         const found = await fetchCommonsNear("41.73000", "-73.93000");
-        expect(found).toEqual([{ title: "File:Mill.jpg", pageid: 21, lat: 41.73, lon: -73.93 }]);
+        expect(found).toEqual([
+            { title: "File:Mill.jpg", pageid: 21, lat: 41.73, lon: -73.93 },
+            { title: "File:Plan.SVG", pageid: 25, lat: 41.73, lon: -73.93 },
+        ]);
         expect(calls[0]?.url).toContain("gsnamespace=6");
     });
 
@@ -177,7 +183,11 @@ describe("browser fetch of Commons and Overpass", () => {
         installBrowserFetch();
         await settle();
         const post = calls.find((c) => c.url === "/p/browser-fetch/");
-        expect(JSON.parse(String(post?.init?.body))).toEqual({ provider: "wikimedia_commons", results: [{ title: "File:Mill.jpg", pageid: 21, lat: 41.73, lon: -73.93 }] });
+        expect(JSON.parse(String(post?.init?.body))).toEqual({ provider: "wikimedia_commons", results: [
+                { title: "File:Mill.jpg", pageid: 21, lat: 41.73, lon: -73.93 },
+                { title: "File:Plan.SVG", pageid: 25, lat: 41.73, lon: -73.93 },
+            ],
+        });
         expect(window.htmx?.ajax).toHaveBeenCalledWith("GET", "/p/media/?browser_fetched=1", { target: document.querySelector("#media-gallery-grid"), swap: "beforeend" });
     });
 

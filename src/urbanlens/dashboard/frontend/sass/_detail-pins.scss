@@ -729,7 +729,8 @@
     flex-shrink: 0;
 }
 
-.parcel-building--unpinned {
+.parcel-building--unpinned,
+.parcel-building--browser {
     .parcel-building-name,
     .parcel-building-number {
         opacity: .75;

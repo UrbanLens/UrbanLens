@@ -17,6 +17,10 @@ const SEARCH_RADIUS_METERS = 1000;
 const MAX_RESULTS = 20;
 /** The Commons namespace of files. */
 const COMMONS_FILE_NAMESPACE = "6";
+/** The file namespace also holds PDFs, audio and video, so more are asked for than are kept. */
+const COMMONS_SEARCH_LIMIT = "50";
+/** The file types the server builds a thumbnail for (plugins/redata/services/browser_fallback.py). */
+export const COMMONS_IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "gif", "webp", "svg"]);
 /** The server accepts at most this many buildings and outline points per post (plugins/redata/services/browser_fallback.py). */
 const MAX_BUILDINGS = 150;
 const MAX_RING_POINTS = 200;
@@ -62,7 +66,7 @@ const attempted = new Set<string>();
 const JSON_INIT: FetchInit = { headers: { Accept: "application/json" }, __ulReported: true };
 
 /** The pages a MediaWiki site's geosearch places within a kilometre of a point. */
-async function geosearch(api: string, latitude: string, longitude: string, extra: Record<string, string> = {}): Promise<WikipediaArticle[]> {
+async function geosearch(api: string, latitude: string, longitude: string, extra: Record<string, string> = {}, keep: (title: string) => boolean = () => true): Promise<WikipediaArticle[]> {
     const params = new URLSearchParams({
         action: "query",
         list: "geosearch",
@@ -79,7 +83,7 @@ async function geosearch(api: string, latitude: string, longitude: string, extra
     const body = (await response.json()) as GeosearchResponse;
     const found: WikipediaArticle[] = [];
     for (const raw of body.query?.geosearch ?? []) {
-        if (typeof raw.title === "string" && Number.isInteger(raw.pageid) && typeof raw.lat === "number" && typeof raw.lon === "number") {
+        if (typeof raw.title === "string" && keep(raw.title) && Number.isInteger(raw.pageid) && typeof raw.lat === "number" && typeof raw.lon === "number") {
             found.push({ title: raw.title, pageid: raw.pageid as number, lat: raw.lat, lon: raw.lon });
         }
         if (found.length >= MAX_RESULTS) break;
@@ -92,9 +96,15 @@ export function fetchWikipediaNear(latitude: string, longitude: string): Promise
     return geosearch(WIKIPEDIA_API, latitude, longitude);
 }
 
+/** Whether a Commons file title names an image. */
+export function isCommonsImage(title: string): boolean {
+    const dot = title.lastIndexOf(".");
+    return dot > 0 && COMMONS_IMAGE_EXTENSIONS.has(title.slice(dot + 1).toLowerCase());
+}
+
 /** The Commons files placed within a kilometre of a point, as Commons' own geosearch lists them. */
 export function fetchCommonsNear(latitude: string, longitude: string): Promise<CommonsFile[]> {
-    return geosearch(COMMONS_API, latitude, longitude, { gsnamespace: COMMONS_FILE_NAMESPACE });
+    return geosearch(COMMONS_API, latitude, longitude, { gsnamespace: COMMONS_FILE_NAMESPACE, gslimit: COMMONS_SEARCH_LIMIT }, isCommonsImage);
 }
 
 /** The body of a response, or null when it is longer than `limit` bytes (checked as it arrives, not trusted from a header). */
@@ -181,7 +191,7 @@ export function parseOverpassBuildings(text: string): OsmBuilding[] {
  */
 export async function fetchOverpassBuildings(polygon: string): Promise<OsmBuilding[]> {
     if (!/^[-0-9. ]+$/.test(polygon)) return [];
-    const query = `[out:json][timeout:25];(way(poly:"${polygon}")["building"];relation(poly:"${polygon}")["type"="multipolygon"]["building"];);out tags geom bb;`;
+    const query = `[out:json][timeout:25];(way(poly:"${polygon}")["building"];relation(poly:"${polygon}")["type"="multipolygon"]["building"];);out tags geom;`;
     const init: FetchInit = {
         method: "POST",
         headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },

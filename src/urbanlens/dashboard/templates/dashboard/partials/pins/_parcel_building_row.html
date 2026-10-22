@@ -1,5 +1,6 @@
 {% comment %}One building in the "Buildings on this Property" list. A building a child pin covers opens its card in place.{% endcomment %}
-<li class="parcel-building{% if not row.child_name %} parcel-building--unpinned{% endif %}">
+{% comment %}A building a viewer's browser found (source osm_browser) is listed to read and nothing else: it is not in the list that pinning and import act on.{% endcomment %}
+<li class="parcel-building{% if row.source == 'osm_browser' and not row.child_name %} parcel-building--browser{% elif not row.child_name %} parcel-building--unpinned{% endif %}">
     {% if row.opens_in_place %}
     <details class="parcel-building-opens" hx-get="{% url 'pin.child_building' row.child_slug %}" hx-trigger="toggle once"
              hx-target="find .parcel-building-card" hx-swap="innerHTML" hx-disinherit="*">

@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 
 from urbanlens.dashboard.services.core.rate_limiter import ExternalCallForbiddenError, external_calls_forbidden
 from urbanlens.dashboard.services.geo.geo_boundary import BoundaryNotLoadedError, remote_loading_deferred
-from urbanlens.dashboard.services.pins.external_data import cached_entries, fetch_blocked
+from urbanlens.dashboard.services.pins.external_data import cached_entries, fetch_blocked, pending_browser_fetch
 from urbanlens.dashboard.services.pins.search_names import names_remembered
 
 if TYPE_CHECKING:
@@ -80,7 +80,8 @@ def _gallery_is_empty(source: GalleryMediaSource, pin: Pin, applies: bool | None
         return fetch_blocked(source, pin)
     if pin.location is None:
         return True
-    return not source.media_items(source.for_viewer(entry.data or {}, pin.profile, pin.location))
+    # A gallery whose source asks the viewer's browser for tiles is not empty: nothing would ask it if it were left out.
+    return not (source.media_items(source.for_viewer(entry.data or {}, pin.profile, pin.location)) or pending_browser_fetch(entry.data, pin.profile.user_id))
 
 
 def _guarded(key: str, pin: Pin, decide: Callable[[], bool]) -> bool:

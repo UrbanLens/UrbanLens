@@ -554,6 +554,18 @@ class ParcelBuildingsPanelSource(LocationCachePanelSource):
         """Whether the parcel lookup found any building."""
         return bool(data and data.get("buildings"))
 
+    def shows(self, pin: Pin, data: dict) -> bool:
+        """
+        Whether the card has buildings to list, or is asking this viewer's browser for some.
+
+        An empty list that asks for OpenStreetMap must still be drawn, or the browser is never asked; so must one a browser
+        has since filled, for the viewer who is owed what it found.
+        """
+        from urbanlens.dashboard.services.pins.external_data import pending_browser_fetch
+
+        user_id = pin.profile.user_id
+        return self.has_content(data) or pending_browser_fetch(data, user_id) == "overpass" or bool(browser_provided_buildings(data, user_id))
+
     def always_shows(self, pin: Pin) -> bool:
         """A pin with child pins lists them here whatever the parcel lookup found."""
         return pin.detail_pins.exists()
