@@ -6,6 +6,12 @@
       data-debug-cache="{{ debug.from_cache|yesno:'hit,miss' }}"
       data-debug-count="{{ debug.count }}"></span>
 {% endif %}
+{% if browser_fetch %}
+<div class="media-browser-fetch" hidden data-browser-fetch="{{ browser_fetch.provider }}"
+     data-latitude="{{ browser_fetch.latitude }}" data-longitude="{{ browser_fetch.longitude }}"
+     data-post-url="{{ browser_fetch.post_url }}" data-refresh-url="{{ browser_fetch.refresh_url }}"
+     data-refresh-target="#media-gallery-grid" data-refresh-swap="beforeend"></div>
+{% endif %}
 {% for entry in rendered_items %}
 {% with item=entry.item %}
 <div class="media-item{% if entry.is_relevant == False %} media-item--not-relevant{% elif entry.is_relevant == True %} media-item--relevant{% endif %}"

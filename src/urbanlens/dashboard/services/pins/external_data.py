@@ -1018,6 +1018,52 @@ class DocumentPanelSource(LocationCachePanelSource, ABC):
 #: ``{"provider": ..., "reason": ...}``.
 BROWSER_FETCH_KEY = "browser_fetch"
 
+#: Key of a cached payload holding what browsers posted back for it, apart from the upstream's own results.
+USER_PROVIDED_KEY = "user_provided"
+TRUST_USER_PROVIDED = "user_provided"
+
+#: The keyless sources a browser may be asked to fetch.
+BROWSER_FETCH_PROVIDERS = frozenset({"wikipedia", "wikimedia_commons", "overpass"})
+
+
+def browser_fetch_marker(provider: str, reason: str) -> dict[str, Any]:
+    """The marker a cached payload carries to ask the viewer's browser to fetch ``provider``."""
+    return {BROWSER_FETCH_KEY: {"provider": provider, "reason": reason}}
+
+
+def browser_provided_only(raw: dict, readable: dict, results_key: str) -> dict:
+    """
+    ``readable`` less every result a browser did not provide, for a refresh that adds only what was just posted.
+
+    Args:
+        raw: The cached payload, whose ``user_provided`` list names the browser-provided results by ``url``.
+        readable: The payload as the viewer may read it (a source's ``for_viewer``).
+        results_key: The key of ``readable`` holding the results.
+
+    Returns:
+        ``readable`` with only the results whose ``url`` a browser provided.
+    """
+    urls = {str(row.get("url")) for row in raw.get(USER_PROVIDED_KEY) or [] if isinstance(row, dict)}
+    return {**readable, results_key: [row for row in readable.get(results_key) or [] if isinstance(row, dict) and str(row.get("url")) in urls]}
+
+
+def pending_browser_fetch(data: dict | None, user_id: int | None) -> str:
+    """
+    The provider a cached payload asks ``user_id``'s browser to fetch, or ``""``.
+
+    Args:
+        data: A ``LocationCache`` row's payload.
+        user_id: The viewer's user pk.
+
+    Returns:
+        The provider tag when the payload asks for a known source and this user has not yet answered, else ``""``.
+    """
+    marker = (data or {}).get(BROWSER_FETCH_KEY)
+    if not isinstance(marker, dict) or marker.get("provider") not in BROWSER_FETCH_PROVIDERS or user_id in marker.get("posted_by", []):
+        return ""
+    return str(marker["provider"])
+
+
 #: The key of a name-built row's payload naming the names its search was built from.
 SEARCH_NAMES_KEY = "search_names"
 

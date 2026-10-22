@@ -28,11 +28,15 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+#: The ``source`` of a building record a viewer's browser found and posted back; the panel labels it as such.
+BROWSER_OSM_SOURCE = "osm_browser"
+
 #: Human-readable labels for the public sources' own reporting systems, for the per-row source chip. A plugin's
 #: provider labels its own (``BuildingRecordProvider.source_labels``).
 SOURCE_LABELS: dict[str, str] = {
     "overpass": "OpenStreetMap",
     "osm": "OpenStreetMap",
+    BROWSER_OSM_SOURCE: "OpenStreetMap (found by a viewer's browser)",
     "microsoft_buildings": "Microsoft Buildings",
     "google_open_buildings": "Google Open Buildings",
 }
@@ -197,6 +201,61 @@ def _overpass_buildings(location: Location) -> list[dict[str, Any]]:
         if is_source_outage(exc):
             raise
         return []
+
+
+#: The most vertices of the parcel outline sent to a browser to query Overpass with.
+MAX_QUERY_RING_POINTS = 300
+
+
+def overpass_poly_clause(polygon: GEOSGeometry) -> str:
+    """
+    The parcel's outline as an Overpass ``poly:`` filter, for the viewer's browser to query with.
+
+    Args:
+        polygon: The parcel boundary (WGS-84); a MultiPolygon is queried by its largest part, as the server does.
+
+    Returns:
+        ``"lat lon lat lon ..."`` of at most :data:`MAX_QUERY_RING_POINTS` points, or ``""`` when there is no usable ring.
+    """
+    from django.contrib.gis.geos import MultiPolygon, Polygon
+
+    largest = max(polygon, key=lambda part: part.area) if isinstance(polygon, MultiPolygon) and len(polygon) else polygon
+    if not isinstance(largest, Polygon) or largest.empty:
+        return ""
+    tolerance = 0.0
+    while len(largest.exterior_ring.coords) > MAX_QUERY_RING_POINTS and tolerance < 0.01:
+        tolerance = tolerance * 2 or 0.000005
+        simpler = largest.simplify(tolerance, preserve_topology=True)
+        if isinstance(simpler, Polygon) and not simpler.empty:
+            largest = simpler
+    ring = largest.exterior_ring.coords
+    return "" if len(ring) > MAX_QUERY_RING_POINTS else " ".join(f"{lat:.6f} {lon:.6f}" for lon, lat in ring)
+
+
+def browser_provided_buildings(data: dict, viewer_id: int | None) -> list[dict[str, Any]]:
+    """
+    The buildings a browser found that this viewer is owed, less any the list already holds.
+
+    Nothing a browser posts can be checked, so a submitter sees their own and anyone else only a building enough distinct
+    accounts submitted. They are shown in the panel and nowhere else: not in ``buildings``, so nothing that acts on the list
+    (nesting, importing) reads them.
+
+    Args:
+        data: The cached parcel list payload.
+        viewer_id: The viewer's user pk.
+
+    Returns:
+        Building records.
+    """
+    from urbanlens.dashboard.services.pins.external_data import USER_PROVIDED_KEY
+    from urbanlens.dashboard.services.search.corroboration import readable_by
+
+    known = {(b.get("osm_type"), b.get("osm_id")) for b in data.get("buildings") or [] if isinstance(b, dict) and b.get("osm_id")}
+    return [
+        {key: value for key, value in held.items() if key not in {"submitters", "submitted_at"}}
+        for held in data.get(USER_PROVIDED_KEY) or []
+        if isinstance(held, dict) and readable_by(held.get("submitters", []), viewer_id) and (held.get("osm_type"), held.get("osm_id")) not in known
+    ]
 
 
 class OverpassBuildingRecords(BuildingRecordProvider):

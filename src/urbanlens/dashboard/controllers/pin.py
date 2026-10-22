@@ -443,7 +443,7 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
             return self._photos_media_preview(request, pin_slug)
 
         from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
-        from urbanlens.dashboard.services.pins.external_data import GalleryMediaSource, gate_allows, get_panel_source, panel_visible_to
+        from urbanlens.dashboard.services.pins.external_data import GalleryMediaSource, browser_provided_only, gate_allows, get_panel_source, panel_visible_to
 
         panel = get_panel_source(source)
         if not isinstance(panel, GalleryMediaSource):
@@ -481,7 +481,12 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
             MediaRelevance.objects.for_gallery(profile, location, source).values_list("item_key", "is_relevant"),
         )
         kept = {key for key, is_relevant in relevance.items() if is_relevant}
-        items = panel.gallery_items(panel.for_viewer(cached.data or {}, profile, location), subject_for_pin(pin), kept=kept)
+        readable = panel.for_viewer(cached.data or {}, profile, location)
+        browser_fetched = request.GET.get("browser_fetched") == "1"
+        if browser_fetched:
+            # Only what a browser just posted, for the page to add to the tiles it already shows.
+            readable = browser_provided_only(cached.data or {}, readable, panel.media_results_key)
+        items = panel.gallery_items(readable, subject_for_pin(pin), kept=kept)
         # The remote page_url stays the "Open source" link regardless, so the original is never lost.
         local_images = local_images_for_gallery_items(location, source, [item.url for item in items])
         pictures = panel.pictures(items)
@@ -508,8 +513,38 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
             "source_label": panel.gallery_label,
             "members_media": panel.members_media,
             "debug": self._debug_entry(request, source, cached.query_key, from_cache=True, count=len(items)),
+            "browser_fetch": None if browser_fetched else self._browser_fetch_request(request, pin, cached.data or {}),
         }
         return render(request, "dashboard/partials/pins/pin_media_items.html", context)
+
+    @staticmethod
+    def _browser_fetch_request(request: HttpRequest, pin: Pin, data: dict) -> dict | None:
+        """
+        What the viewer's browser is asked to fetch for this gallery source, because its upstream could not be asked.
+
+        Args:
+            request: The gallery request; the browser's answer refreshes this same URL.
+            pin: The pin being viewed.
+            data: The source's cached payload.
+
+        Returns:
+            The element's attributes, or None when the payload asks for nothing, this viewer already answered, or the pin
+            has external services off.
+        """
+        from django.urls import reverse
+
+        from urbanlens.dashboard.services.pins.external_data import pending_browser_fetch
+
+        provider = pending_browser_fetch(data, request.user.pk)
+        if not provider or not pin.profile.external_apis_enabled or pin.effective_latitude is None or pin.effective_longitude is None:
+            return None
+        return {
+            "provider": provider,
+            "latitude": f"{float(pin.effective_latitude):.5f}",
+            "longitude": f"{float(pin.effective_longitude):.5f}",
+            "post_url": reverse("pin.browser_fetch", kwargs={"pin_slug": pin.slug}),
+            "refresh_url": f"{request.path}?browser_fetched=1",
+        }
 
     def _photos_media_preview(self, request: HttpRequest, pin_slug: str):
         """
@@ -1529,7 +1564,13 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.models.pin.model import PinType
         from urbanlens.dashboard.models.wiki.model import Wiki
-        from urbanlens.dashboard.plugins.builtin.parcel_buildings import child_pin_rows, match_buildings_to_children, unpinned_building_child_rows
+        from urbanlens.dashboard.plugins.builtin.parcel_buildings import (
+            BROWSER_OSM_SOURCE,
+            browser_provided_buildings,
+            child_pin_rows,
+            match_buildings_to_children,
+            unpinned_building_child_rows,
+        )
         from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_CACHE_SOURCE
         from urbanlens.dashboard.services.pins.external_data import gate_allows, get_panel_source
         from urbanlens.dashboard.services.pins.pin_restructure import missing_buildings, property_polygon
@@ -1559,8 +1600,10 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
         if cached is not None:
             buildings = (cached.data or {}).get("buildings") or []
             descendants = list(pin.descendants().select_related("location__wiki"))
-            external_rows, unmatched = match_buildings_to_children(buildings, descendants, url_for=url_for, boundary_polygon=property_polygon(pin))
-            if any(not row["child_uuid"] for row in external_rows):
+            # What a browser found is listed with the rest but is never the list's own: nothing below acts on it.
+            browser_found = browser_provided_buildings(cached.data or {}, request.user.pk)
+            external_rows, unmatched = match_buildings_to_children([*buildings, *browser_found], descendants, url_for=url_for, boundary_polygon=property_polygon(pin))
+            if any(not row["child_uuid"] and row.get("source") != BROWSER_OSM_SOURCE for row in external_rows):
                 from urbanlens.dashboard.services.pins.auto_nest import request_sweep
 
                 request_sweep(pin)
@@ -1573,7 +1616,11 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
             building_slugs = {marker.slug for marker in descendants if marker.pin_type == PinType.BUILDING and marker.slug} | {row["child_slug"] for row in external_rows if row["child_slug"]}
         else:
             building_slugs = {child.slug for child in children if child.pin_type == PinType.BUILDING and child.slug}
+        browser_fetch = self._parcel_browser_fetch(pin, cached.data if cached is not None else None, request.user.pk)
         if not rows and not child_rows:
+            # Nothing to list yet, but the browser is asked for the buildings: only its request is drawn, until it answers.
+            if browser_fetch:
+                return render(request, "dashboard/partials/pins/_parcel_buildings_browser_fetch.html", {"browser_fetch": browser_fetch})
             return HttpResponse(status=204)
 
         for row in (*rows, *child_rows):
@@ -1592,8 +1639,42 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
                 "has_wiki": Wiki.objects.get_for_location(pin.location) is not None,
                 "unpinned_count": unpinned_count,
                 "debug": debug,
+                "browser_fetch": browser_fetch,
             },
         )
+
+    @staticmethod
+    def _parcel_browser_fetch(pin: Pin, data: dict | None, user_id: int) -> dict | None:
+        """
+        What the viewer's browser is asked to fetch for the Buildings panel: OpenStreetMap, when Overpass could not be asked.
+
+        Args:
+            pin: The pin whose parcel is listed.
+            data: The cached parcel list payload, if any.
+            user_id: The viewer's user pk.
+
+        Returns:
+            The element's attributes, or None when the list asks for nothing, the viewer already answered, external
+            services are off, or the pin has no parcel outline to query inside.
+        """
+        from django.urls import reverse
+
+        from urbanlens.dashboard.plugins.builtin.parcel_buildings import overpass_poly_clause
+        from urbanlens.dashboard.services.pins.external_data import pending_browser_fetch
+        from urbanlens.dashboard.services.places.scope import parcel_polygon_for_location
+
+        if pending_browser_fetch(data, user_id) != "overpass" or not pin.profile.external_apis_enabled:
+            return None
+        polygon = parcel_polygon_for_location(pin.location)
+        clause = overpass_poly_clause(polygon) if polygon is not None else ""
+        if not clause:
+            return None
+        return {
+            "provider": "overpass",
+            "polygon": clause,
+            "post_url": reverse("pin.browser_fetch", kwargs={"pin_slug": pin.slug}),
+            "refresh_url": reverse("pin.parcel_buildings", kwargs={"pin_slug": pin.slug}),
+        }
 
     def panel_info(self, request: HttpRequest, pin_slug: str, panel_key: str):
         """

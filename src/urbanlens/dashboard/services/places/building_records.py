@@ -25,6 +25,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+#: The keyless source the viewer's browser may be asked to fetch in place of the building-record chain's OpenStreetMap read.
+OVERPASS = "overpass"
+
 
 class BuildingSourceRef(TypedDict):
     """One source that references a building."""
@@ -92,10 +95,13 @@ class BuildingsAnswer:
     Attributes:
         buildings: The records, empty when it found none.
         unanswered_sources: Sources the provider asked and could not hear from, so the list is a floor.
+        browser_fetch: Why the viewer's browser should fetch the keyless source ``overpass`` itself - its budget is nearly
+            spent though it did answer - or ``""``. A source in ``unanswered_sources`` asks the browser too.
     """
 
     buildings: list[dict[str, Any]]
     unanswered_sources: tuple[str, ...] = ()
+    browser_fetch: str = ""
 
 
 class BuildingRecordProvider(ABC):
@@ -216,6 +222,7 @@ class _Run:
 
     partial: list[str] = field(default_factory=list)
     outages: dict[str, Exception] = field(default_factory=dict)
+    browser_reason: str = ""
 
     def asked[T](self, provider: BuildingRecordProvider, ask: Callable[[], T], default: T) -> T:
         """What ``ask`` returns, or ``default`` with the provider's outage noted; any other failure propagates."""
@@ -230,9 +237,12 @@ class _Run:
     def marked(self, payload: dict[str, Any]) -> dict[str, Any]:
         """The payload, marked partial when a source was unheard from, so the cache keeps it only briefly."""
         from urbanlens.dashboard.models.cache.location_cache import UNANSWERED_SOURCES_KEY
+        from urbanlens.dashboard.services.pins.external_data import browser_fetch_marker
 
         unanswered = [*self.partial, *self.outages]
-        return {**payload, UNANSWERED_SOURCES_KEY: unanswered} if unanswered else payload
+        marked = {**payload, UNANSWERED_SOURCES_KEY: unanswered} if unanswered else payload
+        reason = self.browser_reason or ("unavailable" if OVERPASS in unanswered else "")
+        return {**marked, **browser_fetch_marker(OVERPASS, reason)} if reason else marked
 
 
 def fetch_parcel_buildings(location: Location) -> dict[str, Any]:
@@ -258,6 +268,7 @@ def fetch_parcel_buildings(location: Location) -> dict[str, Any]:
     for provider in (provider for provider in asked if provider.primary):
         answer = run.asked(provider, lambda provider=provider: provider.buildings_on_parcel(location), BuildingsAnswer([]))
         run.partial.extend(answer.unanswered_sources)
+        run.browser_reason = run.browser_reason or answer.browser_fetch
         if answer.buildings:
             return run.marked({"buildings": _with_supplements(provider, answer.buildings, asked, location, run), "provider": provider.tag})
 
@@ -266,7 +277,7 @@ def fetch_parcel_buildings(location: Location) -> dict[str, Any]:
         return run.marked(supplemented)
     if run.outages:
         raise next(iter(run.outages.values()))
-    return run.marked({"buildings": []}) if run.partial else {}
+    return run.marked({"buildings": []}) if run.partial or run.browser_reason else {}
 
 
 def _parcel_polygon(location: Location) -> GEOSGeometry | None:

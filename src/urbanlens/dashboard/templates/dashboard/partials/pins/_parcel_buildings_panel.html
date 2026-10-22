@@ -8,6 +8,11 @@
           data-debug-cache="{{ debug.from_cache|yesno:'hit,miss' }}"
           data-debug-count="{{ debug.count }}"></span>
     {% endif %}
+    {% if browser_fetch %}
+    <div class="parcel-buildings-browser-fetch" hidden data-browser-fetch="{{ browser_fetch.provider }}"
+         data-polygon="{{ browser_fetch.polygon }}" data-post-url="{{ browser_fetch.post_url }}"
+         data-refresh-url="{{ browser_fetch.refresh_url }}" data-refresh-target="#parcel-buildings-section" data-refresh-swap="outerHTML"></div>
+    {% endif %}
     <div class="card-header">
         <i class="material-symbols-outlined">{{ icon }}</i>
         <h3>{{ title }}</h3>
