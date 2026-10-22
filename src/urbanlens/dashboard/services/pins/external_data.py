@@ -18,6 +18,7 @@ from urbanlens.dashboard.services.core.gateway import UpstreamBusyError, is_sour
 from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError
 from urbanlens.dashboard.services.core.rate_limiter import EnvironmentRefusedError, RateLimitExceededError, RequestCancelledError, ServiceDisabledError
 from urbanlens.dashboard.services.core.task_limits import SOFT_TIME_LIMIT_ERRORS
+from urbanlens.dashboard.services.geo.geo_boundary import BoundaryNotLoadedError, remote_loading_deferred
 from urbanlens.dashboard.services.pins.search_names import SHARED_SCOPE, search_names
 
 if TYPE_CHECKING:
@@ -1810,7 +1811,7 @@ def cached_entries(pin: Pin, sources: Sequence[LocationCachePanelSource]) -> dic
 
 def gate_allows(source: PanelSource, pin: Pin) -> bool:
     """
-    Whether *source* applies to *pin*, treating a raising gate as "no".
+    Whether *source* applies to *pin*, treating a raising gate as "no", and never making a request to find out.
     Per-panel surfaces survive that on their own (one HTMX request, one panel), but any surface that evaluates *every* source in one pass would answer with no panels at all rather than one fewer.
 
     Args:
@@ -1820,10 +1821,29 @@ def gate_allows(source: PanelSource, pin: Pin) -> bool:
     Returns:
         The source's own ``gate`` result, or False when it raised."""
     try:
-        return bool(source.gate(pin))
+        with remote_loading_deferred():
+            return bool(source.gate(pin))
+    except BoundaryNotLoadedError as exc:
+        _load_boundary_later(exc.state_abbr)
+        return False
     except Exception:
         logger.exception("Panel source %s raised from gate(); treating as not applicable", getattr(source, "key", source))
         return False
+
+
+def _load_boundary_later(state_abbr: str | None) -> None:
+    """Have a worker resolve a boundary a page view's gate found unloaded, once at a time, so the next view can read it."""
+    if state_abbr is None:
+        return
+    key = f"geo_boundary:loading:{state_abbr}"
+    token = acquire_lock(key, FLIGHT_TTL_SECONDS)
+    if token is None:
+        return
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.tasks import load_state_boundary
+
+    if safely_enqueue_task(load_state_boundary, state_abbr, queue=Queue.INTERACTIVE, durable=False) is None:
+        release_lock(key, token)
 
 
 def panel_readiness(pin: Pin, sources: Iterable[PanelSource] | None = None, *, require_content: bool = True) -> dict[str, bool]:

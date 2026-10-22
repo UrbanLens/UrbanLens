@@ -35,7 +35,16 @@ _REMOTE_LOADING_DEFERRED: ContextVar[bool] = ContextVar("geo_boundary_remote_loa
 
 
 class BoundaryNotLoadedError(LookupError):
-    """A remote boundary was asked about before it was resolved, while resolving it was deferred."""
+    """
+    A remote boundary was asked about before it was resolved, while resolving it was deferred.
+
+    Attributes:
+        state_abbr: The state whose boundary is missing, when it is one, so a caller can have it loaded elsewhere.
+    """
+
+    def __init__(self, state_abbr: str | None = None) -> None:
+        super().__init__(state_abbr)
+        self.state_abbr = state_abbr
 
 
 @contextmanager
@@ -43,7 +52,8 @@ def remote_loading_deferred() -> Iterator[None]:
     """
     Make an unresolved remote boundary raise :class:`BoundaryNotLoadedError` instead of fetching itself.
 
-    For a caller that must answer from what is already known, such as the Private Pin page's panel probe.
+    For a caller that must answer from what is already known, such as a page view evaluating a panel's gate. A boundary
+    already in the shared cache still resolves; only the outbound request is refused.
     """
     token = _REMOTE_LOADING_DEFERRED.set(True)
     try:
@@ -78,16 +88,16 @@ class GeoBoundary:
             The boundary geometry, or None when it is unresolved or unavailable.
 
         Raises:
-            BoundaryNotLoadedError: It is remote, unresolved, and inside :func:`remote_loading_deferred`.
+            BoundaryNotLoadedError: Its loader needs the network, inside :func:`remote_loading_deferred`.
         """
         if self._loaded:
             return self._cached
         if self._retry_after is not None and time.monotonic() < self._retry_after:
             return None
-        if self.remote and _REMOTE_LOADING_DEFERRED.get():
-            raise BoundaryNotLoadedError
         try:
             self._cached = self._loader()
+        except BoundaryNotLoadedError:
+            raise
         except Exception:
             # TODO: Catch specific exceptions
             logger.warning(
@@ -224,6 +234,8 @@ def state_boundary(state_abbr: str) -> GeoBoundary:
         cache_key = f"geo_boundary:state:{state_abbr.upper()}"
         rings_payload = cache.get(cache_key)
         if rings_payload is None:
+            if _REMOTE_LOADING_DEFERRED.get():
+                raise BoundaryNotLoadedError(state_abbr.upper())
             geometry = CensusTigerwebGateway().get_state_boundary(state_abbr)
             if geometry is None:
                 return None
