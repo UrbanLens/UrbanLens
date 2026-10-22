@@ -80,6 +80,15 @@ class BestPolygonFromGeometryTests(SimpleTestCase):
 class PlaceNameResolverChainTests(SimpleTestCase):
     """Resolver chains skip empty/sentinel names and stop at the first useful name."""
 
+    def setUp(self) -> None:
+        super().setUp()
+        patcher = mock.patch(
+            "urbanlens.dashboard.services.apis.locations.geocode_resolution.ask_shielding_geocoder",
+            return_value=(False, None),
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     @given(name=st.text(min_size=1, max_size=80).filter(is_meaningful_name))
     @hyp_settings(max_examples=25)
     def test_returns_first_meaningful_name(self, name: str) -> None:

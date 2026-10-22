@@ -26,6 +26,15 @@ _ADMIN = {
 
 
 class NominatimAddressFallbackTests(TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        patcher = mock.patch(
+            "urbanlens.dashboard.services.apis.locations.geocode_resolution.ask_shielding_geocoder",
+            return_value=(False, None),
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def _address(self, admin: dict | None) -> Location:
         location = baker.make(Location, latitude=41.73266, longitude=-73.92736, route=None, locality=None)
         with (

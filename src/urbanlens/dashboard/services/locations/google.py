@@ -4,18 +4,23 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
-from typing import ClassVar, Protocol
+from typing import Protocol
 
 import requests
 
-from urbanlens.dashboard.services.apis.locations import places_resolution
+from urbanlens.dashboard.plugins.points import GEOCODERS
+from urbanlens.dashboard.services.apis.locations import geocode_resolution, places_resolution
 from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
+from urbanlens.dashboard.services.core.gateway import ProviderUnavailableError
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 from urbanlens.dashboard.services.security.redact import redact_coordinate
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
+
+#: Geocoder place types naming the surroundings (a town, a county, a postcode) rather than the pinned place.
+_AREA_PLACE_TYPES = frozenset({"administrative", "boundary", "city", "town", "village", "hamlet", "suburb", "neighbourhood", "quarter", "municipality", "county", "state", "region", "postcode", "country"})
 
 
 class PlaceNameResolver(Protocol):
@@ -41,11 +46,22 @@ class GooglePlacesNameResolver:
 
 @dataclass(frozen=True, slots=True)
 class GoogleGeocodingNameResolver:
-    """Fallback resolver using Google Geocoding addresses, asked directly."""
+    """Fallback resolver using geocoded addresses: the shielding reverse geocoder when one is available, otherwise Google Geocoding asked directly."""
 
-    direct: ClassVar[bool] = True
+    @property
+    def direct(self) -> bool:
+        """Whether this asks Google with this deployment's own key rather than a shielding geocoder."""
+        return not any(provider.shields_direct and provider.available() for provider in GEOCODERS)
 
     def resolve(self, latitude: float, longitude: float) -> str | None:
+        try:
+            asked, reverse = geocode_resolution.ask_shielding_geocoder(lambda provider: provider.reverse_geocode(latitude, longitude))
+        except ProviderUnavailableError:
+            return None
+        if asked:
+            if reverse is None or reverse.place_type in _AREA_PLACE_TYPES:
+                return None
+            return reverse.display_name or reverse.name or None
         try:
             return GoogleGeocodingGateway(api_key=settings.google_unrestricted_api_key).get_place_name(latitude, longitude)
         except (OSError, ValueError, requests.RequestException, RequestCancelledError) as exc:
