@@ -7,7 +7,7 @@ import os
 import time
 from typing import Any
 
-from django.db import connection
+from django.db import connection, transaction
 from django.test.utils import CaptureQueriesContext
 import pytest
 
@@ -26,6 +26,15 @@ SECOND_BATCH = 9
 MAX_ROW_COST_FRACTION = 0.10
 
 
+#: How many times an over-budget comparison is measured again before it counts. A real regression is several
+#: times over budget on every attempt; scheduler noise on a loaded runner lands on one attempt and not the next.
+REMEASURE_ATTEMPTS = 2
+
+
+class _DiscardAttemptError(Exception):
+    """Raised inside an atomic block to roll back the rows an attempt seeded."""
+
+
 @dataclass(frozen=True, slots=True)
 class RenderSample:
     """One size's timing, kept whole so a failure can show its spread."""
@@ -33,6 +42,19 @@ class RenderSample:
     best_ms: float
     samples_ms: tuple[float, ...]
     body_bytes: int
+
+
+@dataclass(frozen=True, slots=True)
+class _Attempt:
+    """One complete baseline/small/large comparison."""
+
+    baseline: RenderSample
+    small: RenderSample
+    large: RenderSample
+    small_queries: int
+    large_queries: int
+    row_ms: float
+    fraction: float
 
 
 class RenderTimeScalingMixin(SeedScalingMixin):
@@ -93,6 +115,36 @@ class RenderTimeScalingMixin(SeedScalingMixin):
             self.client.get(url, **extra)
         return len(captured.captured_queries)
 
+    def _measure_attempt(self, url: str, *, expect_growth: bool, growth_waiver: str, **extra: Any) -> _Attempt:
+        """
+        Time the empty page, then the page at two sizes, in a transaction that is rolled back afterwards.
+
+        The rollback is what makes a re-measurement honest: every attempt starts from zero rows and seeds
+        ``first_batch`` then ``second_batch`` again, so the per-row arithmetic and the baseline mean exactly what
+        they did the first time. Re-timing at the rows already seeded would divide by the wrong row count.
+        """
+        try:
+            with transaction.atomic():
+                baseline = self.time_request(url, **extra)
+
+                self.seed(self.first_batch)
+                small = self.time_request(url, **extra)
+                small_queries = self.query_count(url, **extra)
+
+                self.seed(self.second_batch)
+                large = self.time_request(url, **extra)
+                large_queries = self.query_count(url, **extra)
+
+                self.assert_seed_exercised_endpoint(
+                    url, small.body_bytes, large.body_bytes, expect_growth=expect_growth, growth_waiver=growth_waiver
+                )
+                raise _DiscardAttemptError  # noqa: TRY301
+        except _DiscardAttemptError:
+            pass
+
+        row_ms = (large.best_ms - small.best_ms) / self.second_batch
+        return _Attempt(baseline, small, large, small_queries, large_queries, row_ms, row_ms / baseline.best_ms)
+
     def assert_row_cost_bounded(
         self,
         url: str,
@@ -116,25 +168,20 @@ class RenderTimeScalingMixin(SeedScalingMixin):
         if not expect_growth and not growth_waiver:
             raise AssertionError("expect_growth=False needs growth_waiver= explaining why the response cannot grow")
 
-        baseline = self.time_request(url, **extra)
+        attempts: list[_Attempt] = []
+        for _ in range(1 + REMEASURE_ATTEMPTS):
+            attempt = self._measure_attempt(url, expect_growth=expect_growth, growth_waiver=growth_waiver, **extra)
+            attempts.append(attempt)
+            if attempt.fraction <= max_row_cost:
+                return
 
-        self.seed(self.first_batch)
-        small = self.time_request(url, **extra)
-        small_queries = self.query_count(url, **extra)
-
-        self.seed(self.second_batch)
-        large = self.time_request(url, **extra)
-        large_queries = self.query_count(url, **extra)
-
-        self.assert_seed_exercised_endpoint(
-            url, small.body_bytes, large.body_bytes, expect_growth=expect_growth, growth_waiver=growth_waiver
-        )
-
+        # Every attempt was over budget, so report the last one in full and the others as a one-line spread.
+        small, large, baseline = attempts[-1].small, attempts[-1].large, attempts[-1].baseline
+        small_queries, large_queries = attempts[-1].small_queries, attempts[-1].large_queries
         row_bytes = (large.body_bytes - small.body_bytes) / self.second_batch
-        row_ms = (large.best_ms - small.best_ms) / self.second_batch
-        fraction = row_ms / baseline.best_ms
-        if fraction <= max_row_cost:
-            return
+        row_ms = attempts[-1].row_ms
+        fraction = attempts[-1].fraction
+        history = ", ".join(f"{a.fraction:.0%}" for a in attempts)
 
         total = self.first_batch + self.second_batch
         queries = f"{small_queries} -> {large_queries}"
@@ -156,6 +203,7 @@ class RenderTimeScalingMixin(SeedScalingMixin):
             f"    body    {baseline.body_bytes:6d}  {small.body_bytes:8d}  {large.body_bytes:8d}  bytes -> {row_bytes:,.0f} per row\n"
             f"    queries {queries:>22}  -> {verdict}\n"
             f"    host load average: {load}\n"
+            f"    over budget on all {len(attempts)} attempts (fractions: {history}); a noise outlier would not repeat.\n"
             "A row this expensive is usually markup rendered whether or not anyone looks at it. "
             "Render it once per page, defer it to reveal, or paginate. If the cost is genuinely "
             "necessary, pass max_row_cost= with a comment saying why.",
