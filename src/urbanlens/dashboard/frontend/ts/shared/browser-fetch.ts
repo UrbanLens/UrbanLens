@@ -19,9 +19,9 @@ const MAX_RESULTS = 20;
 const COMMONS_FILE_NAMESPACE = "6";
 /** The file namespace also holds PDFs, audio and video, so more are asked for than are kept. */
 const COMMONS_SEARCH_LIMIT = "50";
-/** The file types the server builds a thumbnail for (plugins/redata/services/browser_fallback.py). */
+/** The file types the server builds a thumbnail for. */
 export const COMMONS_IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "gif", "webp", "svg"]);
-/** The server accepts at most this many buildings and outline points per post (plugins/redata/services/browser_fallback.py). */
+/** The server accepts at most this many buildings and outline points per post. */
 const MAX_BUILDINGS = 150;
 const MAX_RING_POINTS = 200;
 /** An Overpass answer larger than this is dropped unread: a parcel's buildings are a few hundred kilobytes at most. */

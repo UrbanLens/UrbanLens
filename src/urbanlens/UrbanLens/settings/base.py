@@ -842,7 +842,7 @@ _CSP_DIRECTIVES: dict[str, list[str]] = {
         # Unproxied browser geocoding and inline place summaries.
         "https://nominatim.openstreetmap.org",
         "https://en.wikipedia.org",
-        # Keyless sources the browser fetches itself when REData's budget for them is spent (frontend/ts/shared/browser-fetch.ts).
+        # Keyless sources the browser fetches itself when the upstream's budget for them is spent (frontend/ts/shared/browser-fetch.ts).
         "https://commons.wikimedia.org",
         "https://overpass-api.de",
         "https://maps.googleapis.com",
