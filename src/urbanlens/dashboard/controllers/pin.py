@@ -1644,7 +1644,7 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
         )
 
     @staticmethod
-    def _parcel_browser_fetch(pin: Pin, data: dict | None, user_id: int) -> dict | None:
+    def _parcel_browser_fetch(pin: Pin, data: dict | None, user_id: int | None) -> dict | None:
         """
         What the viewer's browser is asked to fetch for the Buildings panel: OpenStreetMap, when Overpass could not be asked.
 
