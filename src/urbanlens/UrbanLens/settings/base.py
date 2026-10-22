@@ -842,6 +842,9 @@ _CSP_DIRECTIVES: dict[str, list[str]] = {
         # Unproxied browser geocoding and inline place summaries.
         "https://nominatim.openstreetmap.org",
         "https://en.wikipedia.org",
+        # Keyless sources the browser fetches itself when the upstream's budget for them is spent (frontend/ts/shared/browser-fetch.ts).
+        "https://commons.wikimedia.org",
+        "https://overpass-api.de",
         "https://maps.googleapis.com",
         # MapLibre fetches the tiles Leaflet draws as <img>, so these mirror img-src's tile hosts.
         "https://server.arcgisonline.com",

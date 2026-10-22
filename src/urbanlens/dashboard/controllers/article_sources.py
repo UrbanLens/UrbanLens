@@ -18,7 +18,7 @@ from django.views import View
 from urbanlens.dashboard.controllers.article import owned_pin
 from urbanlens.dashboard.services.locations.site_scope import is_site_scope
 from urbanlens.dashboard.services.media.proxied_media import media_csp
-from urbanlens.dashboard.services.pins.external_data import BROWSER_FETCH_KEY, POLL_INTERVAL_SECONDS
+from urbanlens.dashboard.services.pins.external_data import POLL_INTERVAL_SECONDS, pending_browser_fetch
 from urbanlens.dashboard.services.pins.source_documents import collect_source_documents, document_bytes, find_listed_document
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
@@ -199,8 +199,7 @@ class ArticleSourcesView(LoginRequiredMixin, View):
         provider = ""
         for source in document_panel_sources():
             row = source.cached_entry(driver) if isinstance(source, LocationCachePanelSource) else None
-            marker = (row.data or {}).get(BROWSER_FETCH_KEY) if row is not None else None
-            if isinstance(marker, dict) and marker.get("provider") == "wikipedia" and driver.profile.user_id not in marker.get("posted_by", []):
+            if row is not None and pending_browser_fetch(row.data, driver.profile.user_id) == "wikipedia":
                 provider = "wikipedia"
                 break
         if not provider or driver.effective_latitude is None or driver.effective_longitude is None:

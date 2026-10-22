@@ -1,0 +1,6 @@
+{% comment %}The Buildings panel before it has anything to list: only the request for the viewer's browser to fetch OpenStreetMap.{% endcomment %}
+<div id="parcel-buildings-section" class="parcel-buildings-pending" hidden>
+    <div data-browser-fetch="{{ browser_fetch.provider }}"
+         data-polygon="{{ browser_fetch.polygon }}" data-post-url="{{ browser_fetch.post_url }}"
+         data-refresh-url="{{ browser_fetch.refresh_url }}" data-refresh-target="#parcel-buildings-section" data-refresh-swap="outerHTML"></div>
+</div>
