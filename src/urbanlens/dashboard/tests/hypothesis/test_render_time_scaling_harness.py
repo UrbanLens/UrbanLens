@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from unittest import mock
+
 from django.test import override_settings
 from model_bakery import baker
 import pytest
 
 from urbanlens.core.tests.query_scaling import QueryScalingMixin
-from urbanlens.core.tests.render_scaling import RenderTimeScalingMixin
+from urbanlens.core.tests.render_scaling import REMEASURE_ATTEMPTS, RenderSample, RenderTimeScalingMixin
 from urbanlens.core.tests.scaling import SeedScalingMixin
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.achievements.model import Achievement
@@ -105,3 +107,57 @@ class SeedThatDoesNothingTests(RenderTimeScalingMixin, TestCase):
     def test_waiving_growth_without_a_reason_is_refused(self) -> None:
         with pytest.raises(AssertionError, match="growth_waiver"):
             self.assert_row_cost_bounded("/cheap/", expect_growth=False)
+
+
+def _sample(ms: float, body_bytes: int) -> RenderSample:
+    return RenderSample(best_ms=ms, samples_ms=(ms,), body_bytes=body_bytes)
+
+
+#: One attempt's three timings (baseline, small, large). Per-row cost is (large - small) / 9, over a 10 ms baseline.
+_QUIET = [_sample(10.0, 1000), _sample(10.5, 1300), _sample(11.0, 2200)]  # 0.06 ms/row = 0.6% of the page
+_OUTLIER = [_sample(10.0, 1000), _sample(10.5, 1300), _sample(21.0, 2200)]  # 1.17 ms/row = 12% of the page
+_EXPENSIVE = [_sample(10.0, 1000), _sample(11.0, 1300), _sample(60.0, 2200)]  # 5.4 ms/row = 54% of the page
+
+
+@override_settings(ROOT_URLCONF=_URLCONF)
+class RemeasureOutlierTests(_AchievementSeedMixin, RenderTimeScalingMixin, TestCase):
+    """A noise outlier must not fail the build; a consistent overrun must. Timing is mocked, so nothing sleeps."""
+
+    def _run(self, attempts: list[list[RenderSample]]) -> mock.Mock:
+        timings = mock.Mock(side_effect=[sample for attempt in attempts for sample in attempt])
+        with mock.patch.object(self, "time_request", timings):
+            self.assert_row_cost_bounded("/cheap/")
+        return timings
+
+    def test_a_transient_outlier_passes_when_a_remeasurement_is_within_budget(self) -> None:
+        timings = self._run([_OUTLIER, _QUIET])
+        self.assertEqual(timings.call_count, 6, "the over-budget attempt is measured again, then stops")
+
+    def test_a_second_outlier_still_passes_on_the_last_attempt(self) -> None:
+        timings = self._run([_OUTLIER, _OUTLIER, _QUIET])
+        self.assertEqual(timings.call_count, 9)
+
+    def test_a_consistent_overrun_fails_and_reports_every_attempt(self) -> None:
+        attempts = [_EXPENSIVE] * (1 + REMEASURE_ATTEMPTS)
+        with pytest.raises(AssertionError) as raised:
+            self._run(attempts)
+        message = str(raised.value)
+        self.assertIn(f"all {1 + REMEASURE_ATTEMPTS} attempts", message)
+        self.assertIn("54%, 54%, 54%", message)
+
+    def test_an_in_budget_page_is_measured_once(self) -> None:
+        timings = self._run([_QUIET])
+        self.assertEqual(timings.call_count, 3)
+
+    def test_remeasuring_starts_from_zero_rows_each_time(self) -> None:
+        """The per-row arithmetic divides by second_batch, so each attempt must reseed from nothing."""
+        counts: list[int] = []
+        real_seed = self.seed_rows
+
+        def counting_seed(count: int) -> None:
+            counts.append(Achievement.objects.count())
+            real_seed(count)
+
+        with mock.patch.object(self, "seed_rows", counting_seed):
+            self._run([_OUTLIER, _QUIET])
+        self.assertEqual(counts, [0, self.first_batch, 0, self.first_batch])
