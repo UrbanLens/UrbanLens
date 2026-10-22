@@ -79,7 +79,7 @@
     {% elif error %}
     <div class="view-unavailable">
         <i class="material-symbols-outlined">wifi_off</i>
-        <span>{{ error }}</span>
+        <span>{% if external_off %}{% include "dashboard/partials/ui/_external_services_off.html" %}{% else %}{{ error }}{% endif %}</span>
     </div>
     {% else %}
     <div class="view-unavailable">

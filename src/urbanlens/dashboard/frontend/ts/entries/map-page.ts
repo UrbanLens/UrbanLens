@@ -104,6 +104,7 @@ interface MapPageUrls {
     pinBulkUndo: string;
     pinParentSearch: string;
     savedFiltersCounts: string;
+    settingsExternalServices: string;
     settingsSaveMapDarkMode: string;
     settingsSaveMapPosition: string;
 }
@@ -2993,6 +2994,14 @@ async function _showPlaceInfoPanel(place: PlaceData): Promise<void> {
     if (bodyEl) bodyEl.innerHTML = '<span class="place-info-loading">Loading...</span>';
     try {
         const resp = await fetchResponse(`${MAP_CFG.urls.mapPlacesDetails}?place_id=${encodeURIComponent(place.place_id || "")}`, { headers: { "X-Requested-With": "XMLHttpRequest" } });
+        if (resp.status === 403) {
+            const refusal = (await resp.json().catch(() => null)) as { error?: string } | null;
+            if (refusal?.error === "disabled") {
+                const settingsUrl = escHtml(MAP_CFG.urls.settingsExternalServices);
+                if (bodyEl) bodyEl.innerHTML = `<em>External services are off. <a href="${settingsUrl}">Open External Services settings</a></em>`;
+                return;
+            }
+        }
         if (!resp.ok) throw new Error();
         const data = (await resp.json()) as { place?: PlaceData };
         const d = data.place || ({} as PlaceData);

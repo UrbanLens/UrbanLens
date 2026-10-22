@@ -963,8 +963,9 @@ class PinController(PinPanelViewMixin, LoginRequiredMixin, GenericViewSet):
             return render(
                 request,
                 "dashboard/pages/location/web_search.html",
-                {"pin": pin, "error": "External web search is turned off in your settings."},
-                status=403,
+                {"pin": pin, "error": "External web search is turned off in your settings.", "external_off": True},
+                # htmx swaps a 403 only where the panel opts in (the pin page's card); the article tab has no such hook.
+                status=200 if article_surface else 403,
             )
 
         from urbanlens.dashboard.services.core.timeout_utils import EXTERNAL_CALL_DEADLINE, call_with_deadline

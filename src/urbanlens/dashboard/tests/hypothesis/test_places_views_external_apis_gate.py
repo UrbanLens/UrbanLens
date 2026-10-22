@@ -98,7 +98,7 @@ class PinWebSearchGateTests(TestCase):
             response = PinController().web_search(request, pin_slug=pin.slug)
 
         self.assertEqual(response.status_code, 403)
-        self.assertIn("turned off in your settings", response.content.decode())
+        self.assertIn("External services are off.", response.content.decode())
         search_web.assert_not_called()
 
     def test_a_search_is_made_when_the_user_allows_external_services(self) -> None:
