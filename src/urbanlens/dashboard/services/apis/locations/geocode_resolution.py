@@ -32,9 +32,31 @@ class ReverseGeocode:
     country: str = ""
 
 
+@dataclass(frozen=True, slots=True)
+class StreetViewCoverage:
+    """Whether street-level imagery exists near a point, and the panorama that would be drawn."""
+
+    available: bool
+    pano_id: str = ""
+    capture_date: str = ""
+    latitude: float | None = None
+    longitude: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class StreetViewPicture:
+    """One street-level picture and the panorama it shows."""
+
+    content: bytes
+    pano_id: str = ""
+    capture_date: str = ""
+    latitude: float | None = None
+    longitude: float | None = None
+
+
 class GeocodeProvider(ABC):
     """
-    One source of forward geocoding.
+    One source of forward geocoding, and of the map-service lookups a geocoder's own account also answers.
 
     Attributes:
         key: Short identifier, for logs.
@@ -83,6 +105,44 @@ class GeocodeProvider(ABC):
         """
         return None
 
+    def street_view_service_keys(self) -> tuple[str, ...]:
+        """Rate-limiter service keys one :meth:`street_view_picture` spends."""
+        return ()
+
+    def satellite_service_keys(self) -> tuple[str, ...]:
+        """Rate-limiter service keys one :meth:`satellite_picture` spends."""
+        return ()
+
+    def street_view_coverage(self, latitude: float, longitude: float) -> StreetViewCoverage | None:
+        """
+        Whether street-level imagery exists at a coordinate.
+
+        Raises:
+            NotImplementedError: The provider does not answer this, which :func:`ask_shielding_geocoder` reads as not asked.
+            ProviderUnavailableError: The provider could not answer, so the question went unasked.
+        """
+        raise NotImplementedError
+
+    def street_view_picture(self, latitude: float, longitude: float) -> StreetViewPicture | None:
+        """
+        The nearest street-level picture of a coordinate; None when there is none.
+
+        Raises:
+            NotImplementedError: The provider does not answer this, which :func:`ask_shielding_geocoder` reads as not asked.
+            ProviderUnavailableError: The provider could not answer, so the question went unasked.
+        """
+        raise NotImplementedError
+
+    def satellite_picture(self, latitude: float, longitude: float) -> bytes | None:
+        """
+        A satellite picture centred on a coordinate; None when there is none.
+
+        Raises:
+            NotImplementedError: The provider does not answer this, which :func:`ask_shielding_geocoder` reads as not asked.
+            ProviderUnavailableError: The provider could not answer, so the question went unasked.
+        """
+        raise NotImplementedError
+
 
 class NominatimGeocoder(GeocodeProvider):
     """Direct OpenStreetMap Nominatim, held to its shared budget."""
@@ -96,6 +156,21 @@ class NominatimGeocoder(GeocodeProvider):
     def geocode(self, address: str) -> tuple[float | None, float | None]:
         """See :func:`nominatim_geocode`."""
         return nominatim_geocode(address)
+
+
+def shielded() -> bool:
+    """Whether a shielding geocoder is available, so map-service lookups go to it rather than to Google with this deployment's own key."""
+    from urbanlens.dashboard.plugins.points import GEOCODERS
+
+    return any(provider.shields_direct and provider.available() for provider in GEOCODERS)
+
+
+def shielding_service_keys(keys: Callable[[GeocodeProvider], tuple[str, ...]]) -> tuple[str, ...]:
+    """The service keys the first available shielding geocoder spends on a lookup; empty when there is none."""
+    from urbanlens.dashboard.plugins.points import GEOCODERS
+
+    provider = next((candidate for candidate in GEOCODERS if candidate.shields_direct and candidate.available()), None)
+    return keys(provider) if provider is not None else ()
 
 
 def ask_shielding_geocoder[T](question: Callable[[GeocodeProvider], T]) -> tuple[bool, T | None]:
@@ -120,6 +195,8 @@ def ask_shielding_geocoder[T](question: Callable[[GeocodeProvider], T]) -> tuple
         return False, None
     try:
         return True, question(provider)
+    except NotImplementedError:
+        return False, None
     except ProviderUnavailableError as exc:
         if not direct_fallback_permitted():
             logger.info("%s geocode unavailable (%s); not falling back to a direct provider off production", provider.key, exc.reason)

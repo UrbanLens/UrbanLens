@@ -21,6 +21,7 @@ import requests
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.api_call_log.model import ApiCallLog
 from urbanlens.dashboard.models.api_rate_limit import ApiRateLimit
+from urbanlens.dashboard.plugins.points import GEOCODERS
 from urbanlens.dashboard.services.core import rate_limiter
 from urbanlens.UrbanLens.environments.meta import EnvironmentTypes
 
@@ -36,6 +37,9 @@ def _google_says(status: str) -> mock.Mock:
 class _StreetViewCheckCase(TestCase):
     def setUp(self) -> None:
         super().setUp()
+        no_geocoders = GEOCODERS.overridden([])
+        no_geocoders.__enter__()
+        self.addCleanup(no_geocoders.__exit__, None, None, None)
         cache.clear()
         baker.make(User)  # the first user is auto-promoted to site admin
         self.user = baker.make(User)

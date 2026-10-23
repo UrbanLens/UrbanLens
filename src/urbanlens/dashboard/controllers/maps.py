@@ -27,7 +27,7 @@ from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.services.apis.locations.google.street_view_metadata import GoogleStreetViewMetadataGateway
 from urbanlens.dashboard.services.core.colors import clean_color
 from urbanlens.dashboard.services.core.counters import Outage
-from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError, ProviderUnavailableError
 from urbanlens.dashboard.services.core.icons import clean_icon
 from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError
 from urbanlens.dashboard.services.core.json_safety import safe_json_for_script
@@ -422,6 +422,32 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         # coordinates to Google - a user who turned off External Services must not trigger that call.
         if not request.user.profile.external_apis_enabled:
             return JsonResponse({"available": False, "reason": "disabled"})
+
+        from django.core.cache import cache
+
+        from urbanlens.core.cache_keys import make_cache_key
+        from urbanlens.dashboard.services.apis.locations import geocode_resolution
+        from urbanlens.dashboard.services.apis.locations.base import external_data_cache_seconds
+        from urbanlens.dashboard.services.apis.locations.google.street_view_metadata import COORDINATE_DECIMALS
+
+        # Cached per rounded point, so a right-click storm on one spot asks once; the direct path keeps its own entry.
+        cache_key = make_cache_key("street_view_coverage", f"{round(lat, COORDINATE_DECIMALS):.{COORDINATE_DECIMALS}f}", f"{round(lng, COORDINATE_DECIMALS):.{COORDINATE_DECIMALS}f}")
+        cached = cache.get(cache_key)
+        if isinstance(cached, bool):
+            return JsonResponse({"available": cached})
+        try:
+            asked, coverage = geocode_resolution.ask_shielding_geocoder(lambda provider: provider.street_view_coverage(lat, lng))
+        except ImpossibleInputError:
+            return JsonResponse({"available": False})
+        except RequestCancelledError:
+            return JsonResponse({"available": False, "reason": "refused"})
+        except ProviderUnavailableError as exc:
+            logger.warning("Street View coverage check failed: %s", exc.reason)
+            return JsonResponse({"available": False, "reason": "error"})
+        if asked:
+            available = coverage is not None and coverage.available
+            cache.set(cache_key, available, external_data_cache_seconds())
+            return JsonResponse({"available": available})
 
         # Server-to-server call - must use the unrestricted key.
         api_key = settings.google_unrestricted_api_key

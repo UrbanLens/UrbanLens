@@ -14,6 +14,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.api_call_log.model import ApiCallLog
+from urbanlens.dashboard.plugins.points import GEOCODERS
 from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
 from urbanlens.dashboard.services.apis.locations.google.places import GooglePlacesGateway
 from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError, InputRejection
@@ -165,6 +166,9 @@ class NominatimTests(TestCase):
 class StreetViewTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
+        no_geocoders = GEOCODERS.overridden([])
+        no_geocoders.__enter__()
+        self.addCleanup(no_geocoders.__exit__, None, None, None)
         cache.clear()
 
     def test_a_coverage_probe_of_null_island_never_reaches_google(self) -> None:
