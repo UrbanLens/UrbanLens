@@ -6,6 +6,7 @@ import logging
 from typing import TYPE_CHECKING, Self
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.markup.meta import MARKUP_MAP_HOSTS
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.markup.model import CustomLayer, MarkupMap, PinMarkup  # noqa: F401 - mypy needs these; ruff does not
@@ -70,19 +71,8 @@ class MarkupMapQuerySet(abstract.FrontendDashboardQuerySet["MarkupMap"]):
         return self.filter(cloned_from=source)
 
     def unattached(self) -> Self:
-        """
-        Maps not linked from any host model (drafts / leftovers).
-
-        Returns:
-            Maps with no safety check-in, comment, trip comment, or visit
-            pointing at them.
-        """
-        return self.filter(
-            safety_checkins__isnull=True,
-            comments__isnull=True,
-            trip_comments__isnull=True,
-            visits__isnull=True,
-        )
+        """Maps no host links to (drafts / leftovers); see ``MARKUP_MAP_HOSTS``."""
+        return self.filter(**{f"{host.relation}__isnull": True for host in MARKUP_MAP_HOSTS})
 
 
 _MarkupMapManagerBase = abstract.FrontendDashboardManager.from_queryset(MarkupMapQuerySet)

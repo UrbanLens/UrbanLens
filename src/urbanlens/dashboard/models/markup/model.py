@@ -22,7 +22,7 @@ from django.db.models import (
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES
-from urbanlens.dashboard.models.markup.meta import CUSTOM_LAYER_ICON_CHOICES, MapLayerMode, MarkupType, SecurityIndicatorType, normalize_layer_mode
+from urbanlens.dashboard.models.markup.meta import CUSTOM_LAYER_ICON_CHOICES, MARKUP_MAP_HOSTS, MapLayerMode, MarkupType, SecurityIndicatorType, normalize_layer_mode
 from urbanlens.dashboard.models.markup.queryset import CustomLayerManager, MarkupMapManager, PinMarkupManager
 from urbanlens.dashboard.services.core.colors import sanitize_hex_color, sanitize_optional_color
 from urbanlens.dashboard.services.core.text_limits import MAX_MARKUP_LABEL_LENGTH
@@ -62,7 +62,7 @@ class MarkupMap(abstract.FrontendDashboardModel):
     """
     A standalone, reusable map view with user-drawn markup on it.
     A MarkupMap owns a saved viewport (centre, zoom, base layer, borders overlay) plus a set of :class:`PinMarkup` items (``items`` related name).
-    Other models attach a map by holding a nullable FK to it - safety check-ins (``SafetyCheckin.markup_map``), comments (``Comment.markup_map`` / ``TripComment.markup_map``), and pin visits (``PinVisit.markup_map``) - so a map can exist before its host does (e.g. drawn on the check-in creation page and linked once the check-in is created) and can be reused or managed independently on the Memories > Maps page.
+    Other models attach a map by holding a nullable FK to it (every one is listed in ``markup.meta.MARKUP_MAP_HOSTS``) - so a map can exist before its host does (e.g. drawn on the check-in creation page and linked once the check-in is created) and can be reused or managed independently on the Memories > Maps page.
 
     Attributes:
         uuid: Stable public identifier (used in URLs).
@@ -194,39 +194,18 @@ class MarkupMap(abstract.FrontendDashboardModel):
         Return the first host object this map is attached to, if any.
 
         Returns:
-            Tuple of (kind, instance) where kind is one of ``safety_checkin``
-            / ``comment`` / ``trip_comment`` / ``visit``, or None when the map
-            is unattached (a draft).
+            Tuple of (kind, instance), kind from ``MARKUP_MAP_HOSTS``, or None when the map is an
+            unattached draft. Exclusive hosts win over a secondary check-in reference.
         """
-        checkin = self._first_attached_row("safety_checkins")
-        if checkin is not None:
-            return ("safety_checkin", checkin)
-        comment = self._first_attached_row("comments", "pin", "wiki__location")
-        if comment is not None:
-            return ("comment", comment)
-        trip_comment = self._first_attached_row("trip_comments", "trip")
-        if trip_comment is not None:
-            return ("trip_comment", trip_comment)
-        visit = self._first_attached_row("visits", "pin")
-        if visit is not None:
-            return ("visit", visit)
-        # Secondary (many-to-many) safety check-in attachments, checked last since a map
-        # attached this way is meant to be reusable across hosts, unlike the exclusive
-        # relations above - see SafetyCheckin.markup_maps.
-        attached_checkin = self._first_attached_row("attached_safety_checkins")
-        if attached_checkin is not None:
-            return ("safety_checkin", attached_checkin)
+        for host in MARKUP_MAP_HOSTS:
+            row = self._first_attached_row(host.relation, *host.select_related)
+            if row is not None:
+                return (host.kind, row)
         return None
 
     @property
     def is_attached(self) -> bool:
-        """
-        Whether any host model currently links to this map.
-
-        Returns:
-            True when a safety check-in, comment, trip comment, or visit
-            references this map.
-        """
+        """Whether any host in ``MARKUP_MAP_HOSTS`` links to this map; the inverse of ``unattached()``."""
         return self.attachment is not None
 
     @property
@@ -235,18 +214,9 @@ class MarkupMap(abstract.FrontendDashboardModel):
         Return every host object currently attached to this map.
 
         Returns:
-            List of (kind, instance) tuples, kind one of ``safety_checkin``
-            / ``comment`` / ``trip_comment`` / ``visit`` / ``direct_message``.
+            List of (kind, instance) tuples, kind from ``MARKUP_MAP_HOSTS``.
         """
-        results: list[tuple[str, Any]] = [
-            *(("safety_checkin", checkin) for checkin in self._attached_rows("safety_checkins")),
-            *(("safety_checkin", checkin) for checkin in self._attached_rows("attached_safety_checkins")),
-            *(("comment", comment) for comment in self._attached_rows("comments", "pin", "wiki__location")),
-            *(("trip_comment", trip_comment) for trip_comment in self._attached_rows("trip_comments", "trip")),
-            *(("visit", visit) for visit in self._attached_rows("visits", "pin")),
-            *(("direct_message", message) for message in self._attached_rows("direct_messages", "sender__user", "recipient__user")),
-        ]
-        return results
+        return [(host.kind, row) for host in MARKUP_MAP_HOSTS for row in self._attached_rows(host.relation, *host.select_related)]
 
     def to_snapshot(self) -> dict:
         """

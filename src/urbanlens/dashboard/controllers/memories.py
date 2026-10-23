@@ -116,8 +116,7 @@ def _attachment_label_url(kind: str, host: Any, *, markup_map: MarkupMap) -> tup
     Resolve a human label and link for one (kind, host) attachment entry.
 
     Args:
-        kind: One of ``safety_checkin`` / ``comment`` / ``trip_comment`` / ``visit`` /
-        ``direct_message``.
+        kind: A ``MarkupMapHost.kind``.
         host: The attached instance matching *kind*.
         markup_map: The map being described - only needed to tell which side of a ``direct_message`` is
         "the other person" (this map's owner sent it, so the...
@@ -140,6 +139,12 @@ def _attachment_label_url(kind: str, host: Any, *, markup_map: MarkupMap) -> tup
     if kind == "direct_message":
         recipient = host.recipient if host.sender_id == markup_map.profile_id else host.sender
         return f"Direct message to {recipient.username}", reverse("messages.conversation", args=[recipient.slug])
+    if kind == "pin_share":
+        return f"Pin shared with {host.to_profile.username}", reverse("memories.sharing.sent")
+    if kind == "pin_list":
+        return f"List: {host.name}", reverse("lists.detail", args=[host.slug])
+    if kind == "custom_field_reference" and host.pin_id:
+        return f"{host.field.name} on {host.pin.effective_name}", reverse("pin.details", args=[host.pin.slug])
     return None, None
 
 
@@ -1033,6 +1038,9 @@ class MemoriesMapsView(LoginRequiredMixin, View):
         Returns:
             Rendered Maps page listing every markup map the user created.
         """
+        from urbanlens.dashboard.models.custom_fields.model import CustomFieldValue
+        from urbanlens.dashboard.models.pin_share.model import PinShare
+
         profile, _ = Profile.objects.get_or_create(user=request.user)
         maps = (
             MarkupMap.objects.for_profile(profile)
@@ -1043,6 +1051,9 @@ class MemoriesMapsView(LoginRequiredMixin, View):
             .prefetch_related(Prefetch("trip_comments", queryset=TripComment.objects.select_related("trip")))
             .prefetch_related(Prefetch("visits", queryset=PinVisit.objects.select_related("pin__location__wiki")))
             .prefetch_related(Prefetch("direct_messages", queryset=DirectMessage.objects.select_related("sender__user", "recipient__user")))
+            .prefetch_related(Prefetch("pin_share_attachments", queryset=PinShare.objects.select_related("to_profile__user")))
+            .prefetch_related("pin_list")
+            .prefetch_related(Prefetch("custom_field_references", queryset=CustomFieldValue.objects.select_related("field", "pin__location__wiki")))
             .order_by("-updated")
         )
         # Sliced before any card is built: `_card` calls `to_snapshot()`, so an
