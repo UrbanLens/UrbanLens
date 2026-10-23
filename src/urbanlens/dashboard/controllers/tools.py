@@ -128,10 +128,6 @@ class ToolsIndexView(LoginRequiredMixin, View):
         )
 
 
-#: Must outlive the export task's own hard limit (CELERY_TASK_TIME_LIMIT, 3600s),
-#: or a second export could start while the first is still copying photos.
-_EXPORT_GUARD_TTL = 60 * 75
-
 #: Statuses that mean the job is over, whichever way it went. Read off the writers in
 #: `services/import_export/export.py` and `tasks.py`, which use exactly "running", "done" and "error" - a
 #: guessed vocabulary here would leave the guard held for the whole TTL after a successful export.
@@ -167,14 +163,14 @@ class ExportStartView(LoginRequiredMixin, View):
 
         email_to_user = bool(request.POST.get("email_export"))
 
-        from urbanlens.dashboard.services.import_export.export import export_guard_key
+        from urbanlens.dashboard.services.import_export.export import export_guard_key, export_guard_ttl
 
         # Claimed before anything is created, so a double-click cannot get two exports past a read-then-write
         # check. An export copies every photo the account owns, twice, onto the shared media volume. Held by the
         # job's own id from the start, so a task that ends before this view returns still finds its claim to release.
         job_id = str(uuid.uuid4())
         guard = export_guard_key(request.user.pk)
-        if not single_flight.claim(guard, _EXPORT_GUARD_TTL, token=job_id):
+        if not single_flight.claim(guard, export_guard_ttl(), token=job_id):
             return render(
                 request,
                 "dashboard/partials/tools/export_progress.html",

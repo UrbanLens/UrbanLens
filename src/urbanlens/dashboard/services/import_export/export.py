@@ -40,6 +40,9 @@ logger = logging.getLogger(__name__)
 
 EXPORT_TTL_SECONDS = 3600
 
+#: How far an export's claim outlives the task's hard limit: covers its OSError retries' backoff.
+_EXPORT_GUARD_MARGIN_SECONDS = 60 * 15
+
 #: Largest export ZIP that gets attached to the "your export is ready" email
 #: directly; anything bigger gets a download link instead, so the
 #: email never blows past typical mailbox attachment limits.
@@ -88,6 +91,30 @@ def export_guard_key(user_id: int | None) -> str:
     if user_id is None:
         raise ValueError("an export guard needs an authenticated user")
     return f"ul:single-flight:export:{user_id}"
+
+
+def export_guard_ttl() -> int:
+    """
+    How long an export's claim survives unrefreshed.
+
+    The press claims it and :func:`run_export` refreshes it as it starts, so it outlives a run that lasts the task's
+    hard limit wherever the queue wait ended.
+
+    Returns:
+        Seconds.
+    """
+    from django.conf import settings as django_settings
+
+    return int(django_settings.CELERY_TASK_TIME_LIMIT) + _EXPORT_GUARD_MARGIN_SECONDS
+
+
+def _hold_export_guard(user_id: int, job_id: str) -> None:
+    """Refresh *job_id*'s claim at the start of a run, unless a newer export took the expired claim meanwhile."""
+    from urbanlens.dashboard.services.core import single_flight
+
+    guard = export_guard_key(user_id)
+    if single_flight.holder(guard) in {None, job_id}:
+        single_flight.adopt(guard, job_id, export_guard_ttl())
 
 
 def release_export_guard(user_id: int | None, job_id: str) -> None:
@@ -171,6 +198,7 @@ def run_export(user_id: int, export_types: list[str], export_dir_path: str, base
 
     User = get_user_model()
     resolved_job_id = job_id or pathlib.Path(export_dir_path).name
+    _hold_export_guard(user_id, resolved_job_id)
 
     # Nothing below raises out of here: an export that ended without releasing its claim locks the account out of
     # exporting until the claim expires, and a status left at "pending" spins until then.
