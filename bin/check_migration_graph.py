@@ -32,8 +32,10 @@ def check() -> int:
     tracked = _tracked_paths()
     problems: list[str] = []
     scanned = 0
-    #: app label -> {migration name: names it depends on within the same app}
-    graph: dict[str, dict[str, set[str]]] = {}
+    #: migrations package -> {migration name: names it depends on within the same app}. Keyed by package, not app
+    #: label: a plugin can keep a second, separate history for an app (legacy_history), which Django loads instead
+    #: of the app's own, never alongside it.
+    graph: dict[pathlib.Path, dict[str, set[str]]] = {}
 
     directories = sorted({path.parent for path in pathlib.Path("src").rglob("migrations/*.py")})
     for directory in directories:
@@ -51,23 +53,23 @@ def check() -> int:
             block = _DEPENDENCIES_BLOCK.search(path.read_text(encoding="utf-8"))
             if block is None:
                 continue
-            graph.setdefault(app_label, {}).setdefault(path.stem, set())
+            graph.setdefault(directory, {}).setdefault(path.stem, set())
             for dependency_app, dependency_name in _DEPENDENCY.findall(block.group(1)):
                 # Cross-app dependencies point at Django's own or a third party's
                 # migrations, which are installed rather than committed here.
                 if dependency_app != app_label:
                     continue
-                graph[app_label][path.stem].add(dependency_name)
+                graph[directory][path.stem].add(dependency_name)
                 if dependency_name not in on_disk:
                     problems.append(f"{path}: depends on {dependency_app}.{dependency_name}, which exists nowhere on disk")
                 elif dependency_name not in committed:
                     problems.append(f"{path}: depends on {dependency_app}.{dependency_name}, which git is NOT tracking - a fresh checkout raises NodeNotFoundError")
 
-    for app_label, migrations in graph.items():
+    for directory, migrations in graph.items():
         depended_on = {name for parents in migrations.values() for name in parents}
         leaves = sorted(set(migrations) - depended_on)
         if len(leaves) > 1:
-            problems.append(f"{app_label}: the migration graph has {len(leaves)} leaves ({', '.join(leaves)}) - Django refuses to migrate a branched graph; run `makemigrations --merge`")
+            problems.append(f"{directory}: the migration graph has {len(leaves)} leaves ({', '.join(leaves)}) - Django refuses to migrate a branched graph; run `makemigrations --merge`")
 
     if problems:
         print(f"Migration graph problems ({len(problems)}):")

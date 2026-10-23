@@ -63,6 +63,13 @@ interface MapPoint {
     hidden_from_others?: boolean;
 }
 
+/** A marker without a list number: a stop hidden from the other members, a completed stop, or a child trip's stop. */
+const UNNUMBERED_MARKER_HTML = {
+    hidden: '<span class="trip-map-marker-num trip-map-marker-num--ghost"><i class="material-icons" style="font-size:13px;line-height:1">visibility_off</i></span>',
+    completed: '<span class="trip-map-marker-num trip-map-marker-num--ghost"><i class="material-icons" style="font-size:13px;line-height:1">check</i></span>',
+    childTrip: '<span class="trip-map-marker-num trip-map-marker-num--ghost"><i class="material-icons" style="font-size:13px;line-height:1">link</i></span>',
+} as const;
+
 interface ChildTripResult {
     uuid: string;
     name: string;
@@ -312,12 +319,11 @@ class TripMap {
     private marker(pt: MapPoint): L.Marker {
         const isChildTrip = !!pt.child_trip;
         const className = `trip-map-marker${pt.status === "proposed" ? " trip-map-marker--proposed" : ""}${isChildTrip ? " trip-map-marker--child-trip" : ""}`;
-        const glyph = (name: string): string => `<span class="trip-map-marker-num trip-map-marker-num--ghost"><i class="material-icons" style="font-size:13px;line-height:1">${name}</i></span>`;
         let numHtml: string;
         if (pt.index != null) numHtml = `<span class="trip-map-marker-num">${escHtml(pt.index)}</span>`;
-        else if (pt.hidden_from_others) numHtml = glyph("visibility_off");
-        else if (pt.status === "completed") numHtml = glyph("check");
-        else numHtml = glyph("link");
+        else if (pt.hidden_from_others) numHtml = UNNUMBERED_MARKER_HTML.hidden;
+        else if (pt.status === "completed") numHtml = UNNUMBERED_MARKER_HTML.completed;
+        else numHtml = UNNUMBERED_MARKER_HTML.childTrip;
         const icon = L.divIcon({ className, html: numHtml, iconSize: [28, 28], iconAnchor: [14, 14], popupAnchor: [0, -16] });
 
         // Built as nodes: the label is another member's text.
