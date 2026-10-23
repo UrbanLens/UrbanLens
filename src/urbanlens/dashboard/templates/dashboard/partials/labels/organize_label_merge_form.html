@@ -44,7 +44,7 @@
             {% for candidate in candidates %}
             <li class="tag-dialog-item" data-name="{{ candidate.name|lower }}">
                 <label class="tag-dialog-btn">
-                    <input type="radio" name="target_label_id" value="{{ candidate.id }}" class="tag-dialog-choice">
+                    <input type="radio" name="target_label_id" value="{{ candidate.id }}" class="tag-dialog-choice"{% if candidate.id == suggested_target_id %} checked{% endif %}>
                     <span class="tag-dialog-icon">
                         {% if candidate.custom_icon and not candidate.icon_is_overridden %}
                         <img src="{{ candidate.custom_icon.url }}" alt="" style="width:16px;height:16px;object-fit:cover;border-radius:50%">
@@ -76,7 +76,7 @@
     </div>
 
     <div class="tag-form-actions">
-        <button type="submit" id="merge-submit-btn" data-enabled-by="merge-target-list" disabled class="btn btn--primary">
+        <button type="submit" id="merge-submit-btn" data-enabled-by="merge-target-list"{% if not suggested_target_id %} disabled{% endif %} class="btn btn--primary">
             <i class="material-icons" style="font-size:1rem;vertical-align:middle;">merge</i>
             Merge
         </button>

@@ -77,7 +77,7 @@ export interface OrgTabManagerConfig {
     };
 }
 
-interface CardData {
+export interface CardData {
     id: string;
     name: string;
     color: string;
@@ -85,6 +85,19 @@ interface CardData {
     pinCount: string;
     customIcon?: string;
     locationCount?: string;
+}
+
+/**
+ * The label a merge should keep by default: one with an icon, then the one on the most pins, then the first selected.
+ */
+export function bestMergeSurvivor(cards: CardData[]): string | null {
+    const hasIcon = (card: CardData): number => (card.customIcon || card.icon ? 1 : 0);
+    const pins = (card: CardData): number => Number.parseInt(card.pinCount, 10) || 0;
+    let best: CardData | null = null;
+    for (const card of cards) {
+        if (!best || hasIcon(card) > hasIcon(best) || (hasIcon(card) === hasIcon(best) && pins(card) > pins(best))) best = card;
+    }
+    return best?.id ?? null;
 }
 
 /**
@@ -131,7 +144,7 @@ export class OrgTabManager {
             void this.withCardsFor(ids, () => {
                 this.selected = new Set(ids.map(String));
                 this.syncSelectionUi();
-                this.mergeTargetId = Array.from(this.selected)[0]!;
+                this.mergeTargetId = this.bestSelectedSurvivor();
                 this.renderMergeDialog();
                 (document.getElementById(this.cfg.mergeDialog.dialogId) as HTMLDialogElement).showModal();
             });
@@ -285,7 +298,7 @@ export class OrgTabManager {
         };
         window._orgBulk.merge = () => {
             if (this.selected.size < 2) return;
-            this.mergeTargetId = Array.from(this.selected)[0]!;
+            this.mergeTargetId = this.bestSelectedSurvivor();
             this.renderMergeDialog();
             (document.getElementById(this.cfg.mergeDialog.dialogId) as HTMLDialogElement).showModal();
         };
@@ -729,6 +742,10 @@ export class OrgTabManager {
         if (iconCurrent) iconCurrent.innerHTML = renderIconGlyphHtml(icon);
         if (icon && iconGrid) iconGrid.querySelector(`[data-icon="${icon}"]`)?.classList.add("selected");
         else iconGrid?.querySelector(".icon-picker-none")?.classList.add("selected");
+    }
+
+    private bestSelectedSurvivor(): string | null {
+        return bestMergeSurvivor(Array.from(this.selected, (id) => this.getCardData(id)));
     }
 
     private renderMergeDialog(): void {

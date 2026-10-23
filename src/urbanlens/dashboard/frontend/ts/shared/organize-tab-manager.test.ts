@@ -5,7 +5,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 
 import { LabelRelPicker } from "./label-rel-picker";
-import { OrgTabManager, type OrgTabManagerConfig } from "./organize-tab-manager";
+import { bestMergeSurvivor, type CardData, OrgTabManager, type OrgTabManagerConfig } from "./organize-tab-manager";
 
 const CFG: OrgTabManagerConfig = {
     ns: "tag",
@@ -194,5 +194,29 @@ describe("OrgTabManager bulk edit dialog", () => {
         wired(CFG);
         document.getElementById("red")!.click();
         expect((document.getElementById("tag-bulk-color-nochange") as HTMLInputElement).checked).toBe(false);
+    });
+});
+
+describe("bestMergeSurvivor", () => {
+    const card = (id: string, overrides: Partial<CardData> = {}): CardData => ({ id, name: id, color: "", icon: "", pinCount: "0", ...overrides });
+
+    test("prefers a label with an icon over one on more pins", () => {
+        expect(bestMergeSurvivor([card("plain", { pinCount: "40" }), card("iconic", { icon: "🏥", pinCount: "2" })])).toBe("iconic");
+    });
+
+    test("a custom icon counts as an icon", () => {
+        expect(bestMergeSurvivor([card("plain", { pinCount: "40" }), card("custom", { customIcon: "/media/x.png" })])).toBe("custom");
+    });
+
+    test("among labels alike in icon, the one on the most pins wins", () => {
+        expect(bestMergeSurvivor([card("a", { icon: "⭐", pinCount: "3" }), card("b", { icon: "⭐", pinCount: "12" }), card("c", { pinCount: "99" })])).toBe("b");
+    });
+
+    test("a tie keeps the first selected", () => {
+        expect(bestMergeSurvivor([card("first", { pinCount: "5" }), card("second", { pinCount: "5" })])).toBe("first");
+    });
+
+    test("nothing selected has no survivor", () => {
+        expect(bestMergeSurvivor([])).toBeNull();
     });
 });

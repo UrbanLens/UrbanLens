@@ -45,6 +45,7 @@ from urbanlens.dashboard.services.labels.merge import (
     TargetLabelNotFoundError,
     UnownedSourceLabelError,
     merge_labels,
+    suggested_merge_target,
 )
 from urbanlens.dashboard.services.labels.organize_rows import ROWS_LOADED_HEADER, RowsCursor, organize_page_size, organize_rows_more, organize_rows_page, organize_rows_queryset
 from urbanlens.dashboard.services.labels.uniqueness import find_conflicting_label, label_conflict_message
@@ -377,10 +378,15 @@ def _new_candidate_oob_html(request: HttpRequest, label: Label, ns: str) -> str:
 
 
 def _merge_form_ctx(cfg: _KindConfig, label: Label, candidates: QuerySet[Label]) -> dict:
-    """Build template context for organize_label_merge_form.html."""
+    """Build template context for organize_label_merge_form.html, with the likeliest duplicate listed first and chosen."""
+    rows = list(candidates)
+    suggested = suggested_merge_target(label, rows)
+    if suggested is not None:
+        rows = [suggested, *(row for row in rows if row.pk != suggested.pk)]
     return {
         "label": label,
-        "candidates": candidates,
+        "candidates": rows,
+        "suggested_target_id": suggested.pk if suggested else None,
         "kind": cfg.display_kind,
         "label_url_kind": cfg.url_kind,
         "rows_target": cfg.rows_target,

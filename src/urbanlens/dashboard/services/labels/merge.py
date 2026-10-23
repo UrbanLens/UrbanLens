@@ -5,7 +5,9 @@ Three real bugs in the controller versions are fixed rather than carried over:""
 from __future__ import annotations
 
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 import logging
+import re
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -13,12 +15,42 @@ from django.db import transaction
 from urbanlens.dashboard.models.labels.meta import KIND_MEDIA, KIND_USER
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Iterable, Sequence
 
     from urbanlens.dashboard.models.labels.model import Label
     from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
+
+
+#: How alike two normalised names must be for one label to be offered as the other's duplicate.
+_DUPLICATE_NAME_SIMILARITY = 0.8
+
+
+def _comparable_name(name: str) -> str:
+    """A label name reduced to what tells duplicates apart: letters and digits, case-folded, singular."""
+    letters = re.sub(r"[\W_]+", "", name.casefold())
+    return re.sub(r"(es|s)$", "", letters) if len(letters) > 3 else letters
+
+
+def suggested_merge_target(source: Label, candidates: Iterable[Label]) -> Label | None:
+    """
+    The candidate *source* most likely duplicates, or None when no name is close enough to suggest one.
+
+    Among near-duplicates, one with an icon wins, then the one on the most pins (``pin_count``, where annotated).
+    """
+    source_name = _comparable_name(source.name)
+    if not source_name:
+        return None
+
+    def is_duplicate(candidate: Label) -> bool:
+        name = _comparable_name(candidate.name)
+        return bool(name) and (name == source_name or SequenceMatcher(None, name, source_name).ratio() >= _DUPLICATE_NAME_SIMILARITY)
+
+    duplicates = [candidate for candidate in candidates if is_duplicate(candidate)]
+    if not duplicates:
+        return None
+    return max(duplicates, key=lambda label: (bool(label.icon or label.custom_icon), getattr(label, "pin_count", 0) or 0))
 
 
 class LabelMergeError(Exception):
