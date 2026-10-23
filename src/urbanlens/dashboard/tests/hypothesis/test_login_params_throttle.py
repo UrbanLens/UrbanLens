@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from unittest import mock
+
 from django.core.cache import cache
 from django.urls import resolve, reverse
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.controllers.e2ee import LOGIN_PARAMS_RATE
+from urbanlens.dashboard.services.security import throttle
 
 
 class LoginParamsThrottleTests(TestCase):
@@ -14,6 +17,11 @@ class LoginParamsThrottleTests(TestCase):
         super().setUp()
         cache.clear()
         self.addCleanup(cache.clear)
+        # One fixed window for the whole test: a slow run that crossed a window boundary started a fresh budget.
+        window = throttle._window_start(LOGIN_PARAMS_RATE)
+        patcher = mock.patch.object(throttle, "_window_start", return_value=window)
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def _ask(self, identifier: str, address: str) -> int:
         return self.client.get(
