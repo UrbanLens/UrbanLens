@@ -39,8 +39,9 @@ class GoogleMapsPlugin(UrbanLensPlugin):
                     category=EgressCategory.BILLED,
                     calls_per_minute=20,
                     calls_per_day=200,
-                    # Static Maps and Street View Static are 10,000 a month free each; nothing else on the account calls either.
+                    # Static Maps and Street View Static are 10,000 a month free each; another service on the account bills the same two SKUs and takes the other 0.5.
                     free_tier_per_calendar_month=10_000,
+                    free_tier_allotment=0.4,
                     notes="Static Maps and Street View Static: 10,000 free a month each, then billed per call. The coverage probes before a Street View image are counted here too, though Google does not bill them.",
                 ),
                 "google_street_view_metadata": ServiceDefaults(

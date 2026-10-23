@@ -9,7 +9,7 @@ from django.db.models import Exists, OuterRef, Q
 import requests
 
 from urbanlens.dashboard.models.images.model import ImageSource
-from urbanlens.dashboard.services.core.gateway import GatewayRequestError, is_source_outage
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError, ProviderUnavailableError, is_source_outage
 from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError
 from urbanlens.dashboard.services.locations.enrichment import EnrichmentSource
 
@@ -212,32 +212,46 @@ class StreetViewEnrichmentSource(_BackfillMarkerSource):
 
     key: ClassVar[str] = "street_view_photo"
     verbose_name: ClassVar[str] = "Street View photo"
-    service_keys: ClassVar[tuple[str, ...]] = ("google_maps",)
     marker_source: ClassVar[str] = "street_view_backfill"
 
+    @property
+    def service_keys(self) -> tuple[str, ...]:
+        """The shielding geocoder's budgets when one answers, else Google's."""
+        from urbanlens.dashboard.services.apis.locations import geocode_resolution
+
+        return geocode_resolution.shielding_service_keys(lambda provider: provider.street_view_service_keys()) or ("google_maps",)
+
     def gate(self) -> bool:
-        """Requires the unrestricted Google API key."""
+        """Requires a shielding geocoder or the unrestricted Google API key."""
+        from urbanlens.dashboard.services.apis.locations import geocode_resolution
         from urbanlens.UrbanLens.settings.app import settings as app_settings
 
-        return bool(app_settings.google_unrestricted_api_key)
+        return geocode_resolution.shielded() or bool(app_settings.google_unrestricted_api_key)
 
     def enrich(self, location: Location) -> bool:
         """Fetch and store one Street View Static image for ``location``, if coverage exists."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.services.apis.locations import geocode_resolution
         from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
         from urbanlens.UrbanLens.settings.app import settings as app_settings
 
-        gateway = GoogleMapsGateway(api_key=app_settings.google_unrestricted_api_key or "")
+        lat, lng = float(location.latitude), float(location.longitude)
         found = False
         try:
-            content, _capture_date, _pano_lat, _pano_lng = gateway.get_street_view_single(float(location.latitude), float(location.longitude))
-        except (ValueError, requests.exceptions.RequestException, ImpossibleInputError) as exc:
+            asked, picture = geocode_resolution.ask_shielding_geocoder(lambda provider: provider.street_view_picture(lat, lng))
+            if asked:
+                content = picture.content if picture else None
+            else:
+                gateway = GoogleMapsGateway(api_key=app_settings.google_unrestricted_api_key or "")
+                content, _capture_date, _pano_lat, _pano_lng = gateway.get_street_view_single(lat, lng)
+        except (ValueError, requests.exceptions.RequestException, ImpossibleInputError, ProviderUnavailableError) as exc:
             if is_source_outage(exc):
                 raise
             logger.info("Street View unavailable for location=%s: %s", location.pk, exc)
         else:
-            found = True
-            _save_enriched_image(location, content, source=ImageSource.GOOGLE_STREET_VIEW, caption="Street View", max_dimension=_STATIC_IMAGE_MAX_DIMENSION)
+            found = content is not None
+            if content is not None:
+                _save_enriched_image(location, content, source=ImageSource.GOOGLE_STREET_VIEW, caption="Street View", max_dimension=_STATIC_IMAGE_MAX_DIMENSION)
 
         LocationCache.set(location, self.marker_source, {"found": found})
         return True
@@ -248,25 +262,35 @@ class SatelliteEnrichmentSource(_BackfillMarkerSource):
 
     key: ClassVar[str] = "satellite_photo"
     verbose_name: ClassVar[str] = "Satellite photo"
-    service_keys: ClassVar[tuple[str, ...]] = ("google_maps",)
     marker_source: ClassVar[str] = "satellite_backfill"
 
+    @property
+    def service_keys(self) -> tuple[str, ...]:
+        """The shielding geocoder's budgets when one answers, else Google's."""
+        from urbanlens.dashboard.services.apis.locations import geocode_resolution
+
+        return geocode_resolution.shielding_service_keys(lambda provider: provider.satellite_service_keys()) or ("google_maps",)
+
     def gate(self) -> bool:
-        """Requires the unrestricted Google API key."""
+        """Requires a shielding geocoder or the unrestricted Google API key."""
+        from urbanlens.dashboard.services.apis.locations import geocode_resolution
         from urbanlens.UrbanLens.settings.app import settings as app_settings
 
-        return bool(app_settings.google_unrestricted_api_key)
+        return geocode_resolution.shielded() or bool(app_settings.google_unrestricted_api_key)
 
     def enrich(self, location: Location) -> bool:
         """Fetch and store one satellite image for ``location``, if the request succeeds."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.services.apis.locations import geocode_resolution
         from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
         from urbanlens.UrbanLens.settings.app import settings as app_settings
 
-        gateway = GoogleMapsGateway(api_key=app_settings.google_unrestricted_api_key or "")
+        lat, lng = float(location.latitude), float(location.longitude)
         try:
-            content = gateway.get_satellite_image_bytes(float(location.latitude), float(location.longitude))
-        except (requests.exceptions.RequestException, ImpossibleInputError) as exc:
+            asked, content = geocode_resolution.ask_shielding_geocoder(lambda provider: provider.satellite_picture(lat, lng))
+            if not asked:
+                content = GoogleMapsGateway(api_key=app_settings.google_unrestricted_api_key or "").get_satellite_image_bytes(lat, lng)
+        except (requests.exceptions.RequestException, ImpossibleInputError, ProviderUnavailableError) as exc:
             if is_source_outage(exc):
                 raise
             logger.info("Satellite image unavailable for location=%s: %s", location.pk, exc)

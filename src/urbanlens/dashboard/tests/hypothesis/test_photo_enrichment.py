@@ -18,7 +18,7 @@ from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.images.model import Image, ImageSource, MediaKind
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.plugins.points import PLACES_PROVIDERS
+from urbanlens.dashboard.plugins.points import GEOCODERS, PLACES_PROVIDERS
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
 from urbanlens.dashboard.services.apis.locations.places_resolution import GooglePlacesProvider, PhotoNotFoundError
 from urbanlens.dashboard.services.core.gateway import GatewayRateLimitedError
@@ -268,6 +268,10 @@ class StreetViewEnrichmentSourceTests(TestCase):
     """StreetViewEnrichmentSource - single static Street View image backfill."""
 
     def setUp(self) -> None:
+        super().setUp()
+        no_geocoders = GEOCODERS.overridden([])
+        no_geocoders.__enter__()
+        self.addCleanup(no_geocoders.__exit__, None, None, None)
         self.source = photo_enrichment.StreetViewEnrichmentSource()
 
     def test_gate_requires_the_unrestricted_google_key(self) -> None:
@@ -321,6 +325,10 @@ class SatelliteEnrichmentSourceTests(TestCase):
     """SatelliteEnrichmentSource - single static satellite image backfill."""
 
     def setUp(self) -> None:
+        super().setUp()
+        no_geocoders = GEOCODERS.overridden([])
+        no_geocoders.__enter__()
+        self.addCleanup(no_geocoders.__exit__, None, None, None)
         self.source = photo_enrichment.SatelliteEnrichmentSource()
 
     def test_enrich_saves_an_image_when_available(self) -> None:
