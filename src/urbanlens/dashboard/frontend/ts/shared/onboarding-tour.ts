@@ -33,6 +33,8 @@ export function initOnboardingTour(config: OnboardingTourConfig): void {
     const sessionKey = `${config.prefix}_later`;
     // The card currently on screen, if any - tracked so a tab change (or any other retryEvent) can tell whether it's still relevant, not.
     let activeCard: OnboardingCard | null = null;
+    // Set once the user closes a card, so the next one waits for another page view rather than appearing in its place.
+    let restingThisPage = false;
 
     function dismissed(id: string): boolean {
         try {
@@ -106,6 +108,7 @@ export function initOnboardingTour(config: OnboardingTourConfig): void {
         host.appendChild(el);
         el.querySelector(".js-onboarding-action")?.addEventListener("click", () => {
             dismiss(card.id);
+            restingThisPage = true;
             clear();
             card.action();
         });
@@ -117,11 +120,12 @@ export function initOnboardingTour(config: OnboardingTourConfig): void {
         );
         el.querySelector(".js-onboarding-dismiss")?.addEventListener("click", () => {
             dismiss(card.id);
+            restingThisPage = true;
             clear();
         });
     }
     function tryShow(): void {
-        if (laterSet()) return;
+        if (laterSet() || restingThisPage) return;
         // Re-validate the card already on screen (if any) instead of just leaving it up indefinitely.
         if (activeCard && (!activeCard.ready() || !isCardTargetVisible(activeCard))) clear();
         if (document.querySelector(".page-onboarding-card")) return;
@@ -141,6 +145,7 @@ export function initOnboardingTour(config: OnboardingTourConfig): void {
         } catch {
             /* storage unavailable - ignore */
         }
+        restingThisPage = false;
         tryShow();
     }
     document.addEventListener("ul:tour-restart", (event) => {
