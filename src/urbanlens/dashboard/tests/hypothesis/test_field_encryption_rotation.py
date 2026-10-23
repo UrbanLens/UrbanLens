@@ -130,12 +130,17 @@ class FailSoftTests(SimpleTestCase):
             with self.assertLogs("urbanlens.dashboard.models.fields", level="ERROR"):
                 self.assertEqual(field.from_db_value(ciphertext, None, None), "")
 
-    def test_fail_soft_nullable_field_returns_none(self) -> None:
+    def test_fail_soft_nullable_field_reads_empty_and_keeps_its_ciphertext(self) -> None:
+        """``None`` cannot carry the ciphertext, so a nullable field degrades to an empty string that does."""
         ciphertext = self._undecryptable()
         with using_keys(NEW_KEY):
             field = EncryptedTextField(null=True, blank=True, fail_soft=True)
             with self.assertLogs("urbanlens.dashboard.models.fields", level="ERROR"):
-                self.assertIsNone(field.from_db_value(ciphertext, None, None))
+                degraded = field.from_db_value(ciphertext, None, None)
+            self.assertEqual(field.get_prep_value(degraded), ciphertext)
+
+        self.assertEqual(degraded, "")
+        self.assertIsInstance(degraded, UndecryptableValue)
 
     def test_fail_soft_survives_deconstruct(self) -> None:
         # Without this the flag would not reach migrations and would silently
@@ -199,8 +204,7 @@ class FailSoftSaveRoundTripTests(TestCase):
     """
     A real model save during a key-mismatch window must leave the row recoverable.
 
-    ``phone_number`` rather than ``bio`` because preservation covers only string-defaulted fields; see
-    ``UndecryptableValue`` and ``test_nullable_fail_soft_field_is_still_destroyed_by_a_save`` below."""
+    Covers a string-defaulted field (``phone_number``) and a nullable one (``bio``)."""
 
     def test_unrelated_save_does_not_destroy_an_unreadable_value(self) -> None:
         with using_keys(OLD_KEY):
@@ -220,8 +224,7 @@ class FailSoftSaveRoundTripTests(TestCase):
         with using_keys(NEW_KEY, [OLD_KEY]):
             self.assertEqual(Profile.objects.get(pk=profile.pk).phone_number, "+15551234567")
 
-    def test_nullable_fail_soft_field_is_still_destroyed_by_a_save(self) -> None:
-        """Documents the known limit, so it fails loudly if the gap is ever closed."""
+    def test_unrelated_save_does_not_destroy_an_unreadable_nullable_value(self) -> None:
         with using_keys(OLD_KEY):
             profile: Profile = baker.make(User).profile
             Profile.objects.filter(pk=profile.pk).update(bio="written under the old key")
@@ -229,11 +232,11 @@ class FailSoftSaveRoundTripTests(TestCase):
         with using_keys(NEW_KEY):
             with self.assertLogs("urbanlens.dashboard.models.fields", level="ERROR"):
                 stranded = Profile.objects.get(pk=profile.pk)
-                self.assertIsNone(stranded.bio)
+                self.assertEqual(stranded.bio, "")
             stranded.save()
 
         with using_keys(NEW_KEY, [OLD_KEY]):
-            self.assertIsNone(Profile.objects.get(pk=profile.pk).bio)
+            self.assertEqual(Profile.objects.get(pk=profile.pk).bio, "written under the old key")
 
 
 class EncryptionKeyStrengthValidatorTests(SimpleTestCase):
@@ -315,7 +318,7 @@ class RotateFieldEncryptionCommandTests(TestCase):
         # The real check that nothing was written: dropping the old key now
         # leaves the value unreadable, which would not be true had it rotated.
         with using_keys(NEW_KEY), self.assertLogs("urbanlens.dashboard.models.fields", level="ERROR"):
-            self.assertIsNone(Profile.objects.get(pk=profile.pk).bio)
+            self.assertIsInstance(Profile.objects.get(pk=profile.pk).bio, UndecryptableValue)
 
     def test_reports_rows_no_key_can_decrypt(self) -> None:
         with using_keys(OLD_KEY):
