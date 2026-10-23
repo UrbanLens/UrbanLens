@@ -394,22 +394,24 @@ def build_activity_rows(trip: Trip, viewer: Profile, *, include_legs: bool = Tru
             "rsvp_is_override": act.id in activity_rsvp_overrides,
             "trip_rsvp": trip_rsvp,
             "can_manage": viewer_has_joined and (act.added_by_id == viewer.id or viewer_is_organizer),
-            "effective_location_hidden": act.location_hidden or (act.id in viewer_hidden),
+            "effective_location_hidden": act.id in viewer_hidden,
+            # The adder still sees a stop they hid from the map, marked so they know the others do not.
+            "hidden_from_others": act.location_hidden and act.added_by_id == viewer.id,
             # Already-masked display values, so no template can leak the place by reaching past the
             # guard for `act.location` or `effective_title`.
             # The panel did exactly that: it swapped the visible label for "Secret Location" and
             # then emitted the real name and slug into the row's own data attributes and the RSVP
-            "display_title": masked_activity_title(act, hidden=act.location_hidden or (act.id in viewer_hidden)),
+            "display_title": masked_activity_title(act, hidden=act.id in viewer_hidden),
             # The stored title, for the edit dialog and the API's ``title``: blank when it names a place this viewer
             # may not see.
-            "display_own_title": shown_activity_title(act, hidden=act.location_hidden or (act.id in viewer_hidden)),
-            "display_location_name": "" if (act.location_hidden or act.id in viewer_hidden) else (act.location.display_name if act.location else ""),
-            "display_location_ref": "" if (act.location_hidden or act.id in viewer_hidden) else (act.location.slug if act.location else ""),
+            "display_own_title": shown_activity_title(act, hidden=act.id in viewer_hidden),
+            "display_location_name": "" if (act.id in viewer_hidden) else (act.location.display_name if act.location else ""),
+            "display_location_ref": "" if (act.id in viewer_hidden) else (act.location.slug if act.location else ""),
             # A linked child trip's name/uuid are exactly the kind of identifying information a
             # hidden location is trying to withhold, so they follow the same mask - never read
             # act.child_trip directly in a template.
-            "display_child_trip_name": "" if (act.location_hidden or act.id in viewer_hidden) else (act.child_trip.name if act.child_trip else ""),
-            "display_child_trip_uuid": "" if (act.location_hidden or act.id in viewer_hidden) else (str(act.child_trip.uuid) if act.child_trip else ""),
+            "display_child_trip_name": "" if (act.id in viewer_hidden) else (act.child_trip.name if act.child_trip else ""),
+            "display_child_trip_uuid": "" if (act.id in viewer_hidden) else (str(act.child_trip.uuid) if act.child_trip else ""),
             # Tested on the loaded relation rather than ``pin_id`` so the
             # ownership check below is provably reached with a real Pin.
             "pin_slug": act.pin.slug if (act.pin is not None and act.pin.profile_id == viewer.id) else None,

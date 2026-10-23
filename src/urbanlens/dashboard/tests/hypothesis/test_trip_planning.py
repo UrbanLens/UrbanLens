@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.urls import reverse
 from model_bakery import baker
@@ -148,7 +149,8 @@ class ActivitiesPanelLegTests(TestCase):
 
     def test_hidden_location_stops_produce_no_leg(self) -> None:
         self._seed_leg_cache()
-        TripActivity.objects.filter(pk=self.act_b.pk).update(location_hidden=True)
+        # Added by another member: a stop's own adder still sees it, and its leg.
+        TripActivity.objects.filter(pk=self.act_b.pk).update(location_hidden=True, added_by=baker.make(User).profile)
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "trip-activity-leg")

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from urbanlens.dashboard.models.trips.model import TripActivity
 from urbanlens.dashboard.services.trips.trip_access import has_joined
-from urbanlens.dashboard.services.trips.trip_activities import activity_queryset
+from urbanlens.dashboard.services.trips.trip_activities import activity_queryset, compute_activity_index_map
 from urbanlens.dashboard.services.trips.trip_legs import activity_coords
 from urbanlens.dashboard.services.trips.trip_visibility import viewer_hidden_activity_ids
 
@@ -28,11 +28,11 @@ def build_trip_map_points(trip: Trip, viewer: Profile, *, include_past: bool = F
         Marker dicts in itinerary order, ready to serialize as-is."""
     activities = list(activity_queryset(trip))
 
-    # Activities viewer-hidden due to the adder's privacy setting.
     viewer_hidden_map = viewer_hidden_activity_ids(activities, viewer)
+    # The activity list's numbers, which every member shares, so a marker reads the same as its row and as "#N" in a comment.
+    index_map = compute_activity_index_map(activities)
 
     points: list[dict[str, Any]] = []
-    index = 1
     seen_child_acts: set[int] = set()
 
     for act in activities:
@@ -41,11 +41,11 @@ def build_trip_map_points(trip: Trip, viewer: Profile, *, include_past: bool = F
 
         coords = activity_coords(act)
 
-        if coords and not act.location_hidden and act.id not in viewer_hidden_map:
+        if coords and act.id not in viewer_hidden_map:
             label = act.effective_title
             points.append(
                 {
-                    "index": index,
+                    "index": index_map.get(act.id),
                     "activity_id": act.id,
                     "label": label,
                     "lat": coords[0],
@@ -53,9 +53,9 @@ def build_trip_map_points(trip: Trip, viewer: Profile, *, include_past: bool = F
                     "status": act.status,
                     "scheduled_at": act.scheduled_at.isoformat() if act.scheduled_at else None,
                     "draggable": True,
+                    "hidden_from_others": act.location_hidden,
                 },
             )
-            index += 1
 
         # Include child trip's activities as ghost markers - only for a viewer who actually belongs
         # to the child trip.

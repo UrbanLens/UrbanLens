@@ -69,7 +69,7 @@
                 data-act-child-trip-uuid="{{ item.display_child_trip_uuid }}"
                 data-act-child-trip-name="{{ item.display_child_trip_name }}"
                 data-act-status="{{ act.status }}"
-                data-act-location-hidden="{{ item.effective_location_hidden|yesno:'true,false' }}"
+                {% if item.can_manage %}data-act-location-hidden="{{ act.location_hidden|yesno:'true,false' }}"{% endif %}
                 data-act-can-manage="{{ item.can_manage|yesno:'true,false' }}"
                 data-edit-url="{% url 'trips.activity.edit' trip.slug act.id %}"
                 data-delete-url="{% url 'trips.activity.delete' trip.slug act.id %}"
@@ -86,6 +86,8 @@
                 <div class="trip-activity-icon">
                     {% if item.effective_location_hidden %}
                     <i class="material-symbols-outlined">visibility_off</i>
+                    {% elif item.hidden_from_others %}
+                    <i class="material-symbols-outlined" title="Hidden from the other members' map">visibility_off</i>
                     {% elif act.location %}
                     <i class="material-symbols-outlined">place</i>
                     {% else %}

@@ -59,6 +59,8 @@ interface MapPoint {
     scheduled_at: string | null;
     draggable: boolean;
     child_trip?: boolean;
+    /** The viewer added this stop and hid it from the other members' map. */
+    hidden_from_others?: boolean;
 }
 
 interface ChildTripResult {
@@ -310,10 +312,12 @@ class TripMap {
     private marker(pt: MapPoint): L.Marker {
         const isChildTrip = !!pt.child_trip;
         const className = `trip-map-marker${pt.status === "proposed" ? " trip-map-marker--proposed" : ""}${isChildTrip ? " trip-map-marker--child-trip" : ""}`;
-        const numHtml =
-            pt.index != null
-                ? `<span class="trip-map-marker-num">${escHtml(pt.index)}</span>`
-                : '<span class="trip-map-marker-num trip-map-marker-num--ghost"><i class="material-icons" style="font-size:13px;line-height:1">link</i></span>';
+        const glyph = (name: string): string => `<span class="trip-map-marker-num trip-map-marker-num--ghost"><i class="material-icons" style="font-size:13px;line-height:1">${name}</i></span>`;
+        let numHtml: string;
+        if (pt.index != null) numHtml = `<span class="trip-map-marker-num">${escHtml(pt.index)}</span>`;
+        else if (pt.hidden_from_others) numHtml = glyph("visibility_off");
+        else if (pt.status === "completed") numHtml = glyph("check");
+        else numHtml = glyph("link");
         const icon = L.divIcon({ className, html: numHtml, iconSize: [28, 28], iconAnchor: [14, 14], popupAnchor: [0, -16] });
 
         // Built as nodes: the label is another member's text.
@@ -325,6 +329,11 @@ class TripMap {
             const when = document.createElement("small");
             when.textContent = new Date(pt.scheduled_at).toLocaleString();
             popup.append(document.createElement("br"), when);
+        }
+        if (pt.hidden_from_others) {
+            const note = document.createElement("small");
+            note.textContent = "Only you see this on the map";
+            popup.append(document.createElement("br"), note);
         }
         return L.marker([pt.lat, pt.lng], { icon, draggable: !isChildTrip && pt.draggable }).bindPopup(popup);
     }
