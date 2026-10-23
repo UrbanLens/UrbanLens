@@ -1,4 +1,4 @@
-from typing import overload
+from typing import NamedTuple, overload
 
 from urbanlens.dashboard.models.abstract.choices import TextChoices
 
@@ -95,3 +95,34 @@ CUSTOM_LAYER_ICON_CHOICES = [
     ("water", "Water"),
     ("landscape", "Landscape"),
 ]
+
+
+class MarkupMapHost(NamedTuple):
+    """One reverse relation through which a host model attaches a :class:`MarkupMap`."""
+
+    relation: str
+    kind: str
+    select_related: tuple[str, ...] = ()
+
+
+#: Hosts that hold a map as their own: a map linked from any of them is not a draft, so it cannot be
+#: adopted by another host. A new FK to MarkupMap belongs here or in the secondary list below.
+EXCLUSIVE_MARKUP_MAP_HOSTS: tuple[MarkupMapHost, ...] = (
+    MarkupMapHost("safety_checkins", "safety_checkin"),
+    MarkupMapHost("comments", "comment", ("pin", "wiki__location")),
+    MarkupMapHost("trip_comments", "trip_comment", ("trip",)),
+    MarkupMapHost("visits", "visit", ("pin",)),
+    MarkupMapHost("direct_messages", "direct_message", ("sender__user", "recipient__user")),
+    MarkupMapHost("pin_share_attachments", "pin_share", ("to_profile__user",)),
+    MarkupMapHost("pin_list", "pin_list"),
+)
+
+#: Hosts that reference a map without owning it (``SafetyCheckin.markup_maps``, a map-reference
+#: custom field). They still make it attached, since adopting a reference map as a check-in's route
+#: would show it to emergency contacts it was never meant for.
+SECONDARY_MARKUP_MAP_HOSTS: tuple[MarkupMapHost, ...] = (
+    MarkupMapHost("attached_safety_checkins", "safety_checkin"),
+    MarkupMapHost("custom_field_references", "custom_field_reference", ("field", "pin")),
+)
+
+MARKUP_MAP_HOSTS: tuple[MarkupMapHost, ...] = EXCLUSIVE_MARKUP_MAP_HOSTS + SECONDARY_MARKUP_MAP_HOSTS

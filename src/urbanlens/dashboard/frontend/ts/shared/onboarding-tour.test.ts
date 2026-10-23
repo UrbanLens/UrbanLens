@@ -86,4 +86,21 @@ describe("the onboarding tour", () => {
         expect(localStorage.getItem(`${PREFIX}_step-two_dismissed`)).toBeNull();
         expect(document.querySelector(".page-onboarding-card h2")?.textContent).toBe("Step two");
     });
+
+    test("closing one card does not bring up the next on the same page", async () => {
+        // Its own host and targets: tours started by earlier tests in this file are still listening.
+        document.body.innerHTML = '<div id="rest-host"></div><div id="rest-one"></div><div id="rest-two"></div>';
+        const cards = [card({ target: "#rest-one" }), card({ id: "step-two", target: "#rest-two", title: "Step two" })];
+        initOnboardingTour({ prefix: PREFIX, hostSelector: "#rest-host", cards, initialDelayMs: 0 });
+        for (let attempt = 0; attempt < 200 && !document.querySelector(".js-onboarding-dismiss"); attempt += 1) {
+            await new Promise((resolve) => setTimeout(resolve, 1));
+        }
+
+        document.querySelector<HTMLButtonElement>(".js-onboarding-dismiss")?.click();
+        document.body.dispatchEvent(new Event("htmx:afterSettle"));
+        await new Promise((resolve) => setTimeout(resolve, 300));
+
+        expect(document.querySelector("#rest-host .page-onboarding-card")).toBeNull();
+        expect(localStorage.getItem(`${PREFIX}_step-two_dismissed`)).toBeNull();
+    });
 });

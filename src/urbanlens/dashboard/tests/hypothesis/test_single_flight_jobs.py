@@ -170,6 +170,49 @@ class TheExportButtonTests(TestCase):
             self.assertEqual(self._export_calls(enqueue), 2, "one account's export blocked another account's")
 
 
+class TheExportRunTests(TestCase):
+    """The claim must cover the whole run, however long the export waited in the queue first."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        cache.clear()
+        self.user = baker.make(User)
+        self.guard = f"ul:single-flight:export:{self.user.pk}"
+        self.export_dir = tempfile.mkdtemp(prefix="ul_export_guard_")
+        self.addCleanup(shutil.rmtree, self.export_dir, ignore_errors=True)
+
+    def _run(self, job_id: str) -> list[str | None]:
+        """Run the export with its steps stubbed, returning who held the claim while they ran."""
+        from urbanlens.dashboard.services.import_export import export
+
+        held: list[str | None] = []
+        with (
+            mock.patch.object(
+                export, "_run_export_steps", side_effect=lambda *_a, **_k: held.append(single_flight.holder(self.guard))
+            ),
+            mock.patch.object(export, "schedule_export_cleanup"),
+        ):
+            export.run_export(self.user.pk, ["pins"], self.export_dir, "https://example.test", job_id=job_id)
+        return held
+
+    def test_a_claim_that_expired_in_the_queue_is_taken_back_for_the_run(self) -> None:
+        self.assertEqual(self._run("job-1"), ["job-1"])
+
+    def test_the_run_refreshes_the_claim_for_the_whole_hard_limit(self) -> None:
+        from urbanlens.dashboard.services.import_export.export import export_guard_ttl
+
+        single_flight.claim(self.guard, 60, token="job-1")
+        with mock.patch.object(single_flight, "adopt", wraps=single_flight.adopt) as adopt:
+            self._run("job-1")
+        adopt.assert_called_once_with(self.guard, "job-1", export_guard_ttl())
+        self.assertGreater(export_guard_ttl(), settings.CELERY_TASK_TIME_LIMIT)
+
+    def test_a_newer_export_keeps_the_claim_it_took(self) -> None:
+        single_flight.claim(self.guard, 60, token="job-2")
+        self.assertEqual(self._run("job-1"), ["job-2"])
+        self.assertEqual(single_flight.holder(self.guard), "job-2", "an older run released a newer export's claim")
+
+
 class TheImportButtonTests(TestCase):
     """An import extracts, scans and writes a whole archive, up to 500 MB of it, on a sandbox worker slot."""
 

@@ -214,6 +214,7 @@ def _set_location(body: dict[str, Any], location: str | None, *, owns_event: boo
 
 def _location_withheld(activity: TripActivity, hidden_activity_ids: Collection[int] | None) -> bool:
     """Whether the exporting viewer may not see *activity*'s location."""
+    # The adder's own hidden stop is shown to them in the app, but not written to a calendar outside it.
     return activity.location_hidden or (hidden_activity_ids is not None and activity.pk in hidden_activity_ids)
 
 

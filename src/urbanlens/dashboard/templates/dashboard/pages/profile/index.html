@@ -61,9 +61,9 @@
     {% endif %}
 
     {# -- Stats row ----------------------------------------------------------- #}
-    {% if profile.user != request.user %}
+    {% if profile.user != request.user %}{% if common_pin_count or trips_in_common or shared_visited %}
     <div class="profile-stats-row">
-        {# Viewing another user - show only mutual/shared stats #}
+        {# Viewing another user - only what you share, and nothing at all when you share nothing #}
         {% if common_pin_count %}
         {% if can_view_common_pins %}
         <a href="{% url 'profile.common_pins' profile.slug %}" class="profile-stat profile-stat--highlight profile-stat--link ul-section" title="See which locations you've both pinned">
@@ -89,14 +89,8 @@
             <span class="stat-label">Visited Together</span>
         </div>
         {% endif %}
-        {% if not common_pin_count and not trips_in_common and not shared_visited %}
-        <div class="profile-stat ul-section">
-            <span class="stat-value">-</span>
-            <span class="stat-label">Nothing in Common Yet</span>
-        </div>
-        {% endif %}
     </div>
-    {% endif %}
+    {% endif %}{% endif %}
 
     {# -- Social links -------------------------------------------------------- #}
     {# Same chip display for owner and visitor - adding/removing links is the Edit Profile page's job (profile_social_links.html), not this. #}

@@ -13,6 +13,8 @@ MIGRATIONS_DIR = Path(migrations_package.__file__).resolve().parent
 #: Migrations whose ``noop`` reverses were read and judged correct, with why.
 REVIEWED: dict[str, str] = {
     "0001_initial.py": "seed_rows - a new install's starting rows; reversing 0001 drops the tables they are in.",
+    "0002_describe_seeded_labels.py": "describe_seeded_labels - fills empty label descriptions with plain text the "
+    "previous code already reads and edits; there is nothing to undo, and clearing them could erase a user's edit.",
 }
 
 

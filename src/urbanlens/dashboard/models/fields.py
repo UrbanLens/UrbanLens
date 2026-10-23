@@ -125,12 +125,10 @@ class UndecryptableValue(str):
     """
     A ``fail_soft`` read that could not be decrypted, carrying its ciphertext.
 
-    Subclasses ``str`` so consumers see the field default while the original ciphertext rides
-    along in :attr:`ciphertext`, letting :meth:`EncryptedTextField.get_prep_value` write it
-    back unchanged instead of overwriting recoverable data with the default on the next save.
-
-    Only covers string defaults; prefer ``blank=True, default=""`` over ``null=True`` for new
-    ``fail_soft`` content fields.
+    Subclasses ``str`` so consumers see the field default (``""`` for a nullable field) while the
+    original ciphertext rides along in :attr:`ciphertext`, letting
+    :meth:`EncryptedTextField.get_prep_value` write it back unchanged instead of overwriting
+    recoverable data with the default on the next save.
     """
 
     __slots__ = ("ciphertext",)
@@ -178,9 +176,6 @@ class EncryptedTextField(TextField):
       until the user reconnects, since the value is re-obtainable from the provider.
     - **User-authored content** sets ``fail_soft=True``: there is no external copy, so the row
       degrades to its default rather than raising (see :class:`UndecryptableValue`).
-
-    Declare new ``fail_soft`` content fields as ``blank=True, default=""`` rather than
-    ``null=True`` so a later ``save()`` preserves the ciphertext.
     """
 
     def __init__(self, *args: Any, fail_soft: bool = False, **kwargs: Any) -> None:
@@ -238,8 +233,8 @@ class EncryptedTextField(TextField):
 
         Returns:
             The decrypted plaintext, the original falsy value unchanged, or -
-            when ``fail_soft`` is set and no key could decrypt it - the field's
-            default.
+            when ``fail_soft`` is set and no key could decrypt it - an
+            :class:`UndecryptableValue` equal to the field's string default.
 
         Raises:
             InvalidToken: When the stored ciphertext cannot be decrypted with
@@ -260,11 +255,9 @@ class EncryptedTextField(TextField):
                     self.name,
                 )
                 # The ciphertext travels with the default so a later save writes the original bytes
-                # back (see UndecryptableValue); nullable fields still degrade to plain None.
+                # back (see UndecryptableValue). None cannot carry it, so a nullable field reads "".
                 default = self.get_default()
-                if isinstance(default, str):
-                    return UndecryptableValue(default, value)
-                return default
+                return UndecryptableValue(default if isinstance(default, str) else "", value)
             raise InvalidToken(f"Could not decrypt {model_name}.{self.name} - field_encryption_key may have changed.") from None
 
 

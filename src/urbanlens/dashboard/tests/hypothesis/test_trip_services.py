@@ -330,19 +330,26 @@ class BuildTripMapPointsInvariantTests(TestCase):
 
     def test_hidden_and_uncoordinated_activities_produce_no_point(self) -> None:
         """Skipping is total - not a point with null coordinates."""
-        self._add_activity(order=0, located=True, hidden=True, status=TripActivity.STATUS_PROPOSED)
+        hidden = self._add_activity(order=0, located=True, hidden=True, status=TripActivity.STATUS_PROPOSED)
         self._add_activity(order=1, located=False, hidden=False, status=TripActivity.STATUS_PROPOSED)
+        TripActivity.objects.filter(pk=hidden.pk).update(added_by=baker.make(User).profile)
         self.assertEqual(build_trip_map_points(self.trip, self.viewer), [])
 
+    def test_the_adder_of_a_hidden_stop_gets_an_unnumbered_point_marked_as_such(self) -> None:
+        self._add_activity(order=0, located=True, hidden=True, status=TripActivity.STATUS_PROPOSED)
+        [point] = build_trip_map_points(self.trip, self.viewer)
+        self.assertIsNone(point["index"])
+        self.assertTrue(point["hidden_from_others"])
+
     def test_completed_activities_appear_only_with_include_past(self) -> None:
-        """The past is opt-in, and opting in does not break the numbering."""
+        """The past is opt-in, and a completed stop's marker carries no number, as its row in the list does not."""
         self._add_activity(order=0, located=True, hidden=False, status=TripActivity.STATUS_COMPLETED)
         self._add_activity(order=1, located=True, hidden=False, status=TripActivity.STATUS_PROPOSED)
         without_past = build_trip_map_points(self.trip, self.viewer)
         with_past = build_trip_map_points(self.trip, self.viewer, include_past=True)
         self.assertEqual(len(without_past), 1)
         self.assertEqual(len(with_past), 2)
-        self.assertEqual([point["index"] for point in with_past], [1, 2])
+        self.assertEqual([point["index"] for point in with_past], [None, 1])
 
     def test_a_child_trips_stops_are_ghost_markers(self) -> None:
         """Nested trips contribute context markers, once each, never numbered."""

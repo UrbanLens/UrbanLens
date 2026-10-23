@@ -7,7 +7,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
-from urbanlens.dashboard.models.profile.model import VisibilityChoice
+from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
 
 
@@ -93,11 +93,11 @@ class ChildTripGhostMarkerVisibilityTests(TestCase):
             child_trip=self.child_trip,
         )
 
-    def _child_activity(self, *, location_hidden: bool, name: str) -> TripActivity:
+    def _child_activity(self, *, location_hidden: bool, name: str, added_by: Profile | None = None) -> TripActivity:
         location = baker.make(Location, official_name=name, latitude=41.0, longitude=-75.0)
         return TripActivity.objects.create(
             trip=self.child_trip,
-            added_by=self.profile,
+            added_by=added_by or self.profile,
             title=name,
             location=location,
             location_hidden=location_hidden,
@@ -113,7 +113,7 @@ class ChildTripGhostMarkerVisibilityTests(TestCase):
         self.assertTrue(any("Visible Child Stop" in label for label in labels))
 
     def test_hidden_child_activity_is_excluded_from_ghost_markers(self) -> None:
-        self._child_activity(location_hidden=True, name="Secret Child Stop")
+        self._child_activity(location_hidden=True, name="Secret Child Stop", added_by=baker.make("auth.User").profile)
 
         response = self.client.get(reverse("trips.map_data", args=[self.trip.slug]))
 

@@ -586,7 +586,7 @@ class TripActivityTests(_TripApiTestCase):
 
     def test_hidden_location_omits_coordinates_entirely(self) -> None:
         """A hidden location must be null, not merely flagged."""
-        TripActivity.objects.filter(pk=self.activity.pk).update(location_hidden=True)
+        TripActivity.objects.filter(pk=self.activity.pk).update(location_hidden=True, added_by=baker.make(User).profile)
         response = self._get("external_api:trips.activities", self.trip.slug)
         row = response.json()["results"][0]
         self.assertTrue(row["location_hidden"])
@@ -601,7 +601,12 @@ class TripActivityTests(_TripApiTestCase):
         property instead of the row's already-masked ``display_title``."""
         pin = Pin.objects.create(profile=self.profile, location=self.location, name="My Secret Cabin")
         activity = TripActivity.objects.create(
-            trip=self.trip, location=self.location, pin=pin, added_by=self.profile, title="", location_hidden=True
+            trip=self.trip,
+            location=self.location,
+            pin=pin,
+            added_by=baker.make(User).profile,
+            title="",
+            location_hidden=True,
         )
 
         response = self._get("external_api:trips.activities", self.trip.slug)
@@ -621,7 +626,7 @@ class TripActivityTests(_TripApiTestCase):
         activity = TripActivity.objects.create(
             trip=self.trip,
             location=self.location,
-            added_by=self.profile,
+            added_by=baker.make(User).profile,
             title="Secret stop",
             location_hidden=True,
             child_trip=child,

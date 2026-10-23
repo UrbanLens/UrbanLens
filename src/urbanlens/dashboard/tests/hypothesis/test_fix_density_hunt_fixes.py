@@ -152,18 +152,21 @@ class HiddenActivityLocationTests(TestCase):
         self.assertIn("{{ item.display_title }}", panel)
         self.assertIn('data-act-location-name="{{ item.display_location_name }}"', panel)
 
-    def test_the_hidden_flag_itself_reflects_the_effective_answer(self) -> None:
+    def test_the_hidden_flag_reaches_only_the_edit_dialog(self) -> None:
         """
-        It emitted the raw `location_hidden`, so a viewer hidden by the
-        owner's *visibility setting* was told the location was not hidden."""
+        The attribute prefills the edit dialog's "hide location" box, so it carries the stop's own flag, and only to
+        a member who may edit the stop: the effective answer would have a save hide a stop the owner's visibility
+        setting merely withholds from this viewer."""
         from pathlib import Path
 
         panel = Path("src/urbanlens/dashboard/templates/dashboard/partials/trips/trip_activities_panel.html").read_text(
             encoding="utf-8"
         )
 
-        self.assertIn('data-act-location-hidden="{{ item.effective_location_hidden', panel)
-        self.assertNotIn("act.location_hidden", panel)
+        self.assertIn(
+            """{% if item.can_manage %}data-act-location-hidden="{{ act.location_hidden|yesno:'true,false' }}"{% endif %}""",
+            panel,
+        )
 
 
 def _png_bytes() -> bytes:

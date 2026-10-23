@@ -12,6 +12,7 @@ from model_bakery import baker
 
 from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
+from urbanlens.dashboard.models.markup.meta import MARKUP_MAP_HOSTS
 from urbanlens.dashboard.models.markup.model import MarkupMap, PinMarkup
 from urbanlens.dashboard.services.map.map_snapshot import (
     default_markup_map_title,
@@ -316,6 +317,53 @@ class UnattachedQuerySetTests(TestCase):
         pin = baker.make("dashboard.Pin", profile=self.profile)
         baker.make("dashboard.PinVisit", pin=pin, visited_at=timezone.now(), markup_map=markup_map)
         self.assertNotIn(markup_map, MarkupMap.objects.unattached())
+
+    def _host_fields(self, kind: str) -> dict[str, object]:
+        """Fields a host row needs beyond the map, for hosts whose constraints baker cannot guess."""
+        pin = baker.make("dashboard.Pin", profile=self.profile)
+        other = baker.make("auth.User").profile
+        return {
+            "safety_checkin": {"profile": self.profile, "checkin_by": timezone.now() + dt.timedelta(hours=3)},
+            "comment": {"pin": pin, "profile": self.profile},
+            "visit": {"pin": pin, "visited_at": timezone.now()},
+            "direct_message": {"sender": self.profile, "recipient": other},
+            "pin_share": {"pin": pin, "from_profile": self.profile, "to_profile": other},
+            "pin_list": {"profile": self.profile},
+            "custom_field_reference": {"pin": pin, "field": baker.make("dashboard.CustomField", profile=self.profile)},
+        }.get(kind, {})
+
+    def test_every_host_makes_a_map_attached(self) -> None:
+        """unattached() and is_attached agree for every host, so no host's map can be adopted as a draft."""
+        for host in MARKUP_MAP_HOSTS:
+            with self.subTest(relation=host.relation):
+                markup_map = MarkupMap.objects.create(profile=self.profile)
+                field = MarkupMap._meta.get_field(host.relation).field
+                if field.many_to_many:
+                    getattr(baker.make(field.model, **self._host_fields(host.kind)), field.name).add(markup_map)
+                else:
+                    baker.make(field.model, **self._host_fields(host.kind), **{field.name: markup_map})
+
+                self.assertNotIn(markup_map, MarkupMap.objects.unattached())
+                self.assertTrue(markup_map.is_attached)
+                self.assertEqual([kind for kind, _row in markup_map.attachments], [host.kind])
+
+    def test_unattached_and_is_attached_agree_on_a_draft(self) -> None:
+        markup_map = MarkupMap.objects.create(profile=self.profile)
+        self.assertIn(markup_map, MarkupMap.objects.unattached())
+        self.assertFalse(markup_map.is_attached)
+
+
+class MarkupMapHostRegistryTests(SimpleTestCase):
+    """Every relation pointing at MarkupMap is either a host or deliberately not one."""
+
+    #: Relations that point at a map without attaching it: its own items and clones, shares of the
+    #: map itself, provenance of a detected share, and custom field values whose subject is the map.
+    NOT_HOSTS = frozenset({"items", "clones", "shares", "detected_pin_shares", "custom_field_values"})
+
+    def test_every_reverse_relation_is_classified(self) -> None:
+        relations = {rel.get_accessor_name() for rel in MarkupMap._meta.related_objects}
+        hosts = {host.relation for host in MARKUP_MAP_HOSTS}
+        self.assertEqual(relations - self.NOT_HOSTS, hosts)
 
 
 class MarkupMapEndpointTests(TestCase):

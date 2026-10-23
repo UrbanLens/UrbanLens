@@ -11,53 +11,53 @@ if TYPE_CHECKING:
 
 # Default category definitions mirror the keys in services/labels/keyword_patterns.py so that
 # auto-categorisation can match against labels the user actually owns.
-# Each entry carries an icon (emoji), a hex color, and an optional display order.
+# Each entry carries an icon (emoji), a hex color, a description shown on the Organize page, and an optional display order.
 DEFAULT_CATEGORIES: list[dict] = [
-    {"name": "Amusement Park", "icon": "🎢", "color": "#FF9800"},
-    {"name": "Asylum", "icon": "🏚️", "color": "#673AB7"},
-    {"name": "Bank", "icon": "🏦", "color": "#FFC107"},
-    {"name": "Bridge", "icon": "🌉", "color": "#607D8B"},
-    {"name": "Cave", "icon": "🪨", "color": "#795548"},
-    {"name": "Castle", "icon": "🏰", "color": "#9C27B0"},
-    {"name": "Church", "icon": "⛪", "color": "#3F51B5"},
-    {"name": "Factory", "icon": "🏭", "color": "#607D8B"},
-    {"name": "Fire Tower", "icon": "🗼", "color": "#FF9800"},
-    {"name": "Graveyard", "icon": "🪦", "color": "#607D8B"},
-    {"name": "Hospital", "icon": "🏥", "color": "#2196F3"},
-    {"name": "Hotel", "icon": "🏨", "color": "#FFC107"},
-    {"name": "House", "icon": "🏠", "color": "#8BC34A"},
-    {"name": "Laboratory", "icon": "🔬", "color": "#00BCD4"},
-    {"name": "Mall", "icon": "🏬", "color": "#E91E63"},
-    {"name": "Mansion", "icon": "🏡", "color": "#4CAF50"},
-    {"name": "Monument", "icon": "🗽", "color": "#9E9E9E"},
-    {"name": "Morgue", "icon": "💀", "color": "#795548"},
-    {"name": "Park", "icon": "🏞️", "color": "#4CAF50"},
-    {"name": "Parking", "icon": "🅿️", "color": "#607D8B"},
-    {"name": "Power Plant", "icon": "⚡", "color": "#FF5722"},
-    {"name": "Prison", "icon": "🔒", "color": "#F44336"},
-    {"name": "Resort", "icon": "🌴", "color": "#FFEB3B"},
-    {"name": "Ruins", "icon": "🏛️", "color": "#795548"},
-    {"name": "School", "icon": "🏫", "color": "#03A9F4"},
-    {"name": "Stadium", "icon": "🏟️", "color": "#4CAF50"},
-    {"name": "Theater", "icon": "🎭", "color": "#9C27B0"},
-    {"name": "Train Station", "icon": "🚉", "color": "#607D8B"},
-    {"name": "Tunnel", "icon": "🕳️", "color": "#9E9E9E"},
+    {"name": "Amusement Park", "icon": "🎢", "color": "#FF9800", "description": "Theme parks, fairgrounds and water parks, with their rides and midways."},
+    {"name": "Asylum", "icon": "🏚️", "color": "#673AB7", "description": "Psychiatric hospitals, state schools and sanatoriums."},
+    {"name": "Bank", "icon": "🏦", "color": "#FFC107", "description": "Banks, vaults and old financial buildings."},
+    {"name": "Bridge", "icon": "🌉", "color": "#607D8B", "description": "Road, rail and foot bridges, trestles and viaducts."},
+    {"name": "Cave", "icon": "🪨", "color": "#795548", "description": "Natural caves, grottoes and mines."},
+    {"name": "Castle", "icon": "🏰", "color": "#9C27B0", "description": "Castles, forts and fortified houses."},
+    {"name": "Church", "icon": "⛪", "color": "#3F51B5", "description": "Churches, chapels, temples and other places of worship."},
+    {"name": "Factory", "icon": "🏭", "color": "#607D8B", "description": "Mills, plants, foundries, warehouses and other industrial sites."},
+    {"name": "Fire Tower", "icon": "🗼", "color": "#FF9800", "description": "Fire lookout towers and other watch towers."},
+    {"name": "Graveyard", "icon": "🪦", "color": "#607D8B", "description": "Cemeteries, graveyards and mausoleums."},
+    {"name": "Hospital", "icon": "🏥", "color": "#2196F3", "description": "Hospitals, clinics and medical centres."},
+    {"name": "Hotel", "icon": "🏨", "color": "#FFC107", "description": "Hotels, motels, inns and lodges."},
+    {"name": "House", "icon": "🏠", "color": "#8BC34A", "description": "Homes, farmhouses and other residences."},
+    {"name": "Laboratory", "icon": "🔬", "color": "#00BCD4", "description": "Research labs, test facilities and observatories."},
+    {"name": "Mall", "icon": "🏬", "color": "#E91E63", "description": "Shopping malls, department stores and retail plazas."},
+    {"name": "Mansion", "icon": "🏡", "color": "#4CAF50", "description": "Estates, manors and other grand houses."},
+    {"name": "Monument", "icon": "🗽", "color": "#9E9E9E", "description": "Memorials, statues and landmark structures."},
+    {"name": "Morgue", "icon": "💀", "color": "#795548", "description": "Morgues, funeral homes and crematoriums."},
+    {"name": "Park", "icon": "🏞️", "color": "#4CAF50", "description": "Parks, gardens and other outdoor public spaces."},
+    {"name": "Parking", "icon": "🅿️", "color": "#607D8B", "description": "Places to park nearby, or parking structures worth visiting."},
+    {"name": "Power Plant", "icon": "⚡", "color": "#FF5722", "description": "Power stations, substations, dams and other utilities."},
+    {"name": "Prison", "icon": "🔒", "color": "#F44336", "description": "Prisons, jails, reformatories and detention centres."},
+    {"name": "Resort", "icon": "🌴", "color": "#FFEB3B", "description": "Resorts, spas, camps and holiday complexes."},
+    {"name": "Ruins", "icon": "🏛️", "color": "#795548", "description": "Remains of a structure, from foundations to standing shells."},
+    {"name": "School", "icon": "🏫", "color": "#03A9F4", "description": "Schools, colleges and universities."},
+    {"name": "Stadium", "icon": "🏟️", "color": "#4CAF50", "description": "Stadiums, arenas, racetracks and sports grounds."},
+    {"name": "Theater", "icon": "🎭", "color": "#9C27B0", "description": "Theatres, cinemas, opera houses and music halls."},
+    {"name": "Train Station", "icon": "🚉", "color": "#607D8B", "description": "Railway stations, depots, yards and roundhouses."},
+    {"name": "Tunnel", "icon": "🕳️", "color": "#9E9E9E", "description": "Tunnels, drains, sewers and other underground passages."},
 ]
 DEFAULT_TAGS: list[dict] = [
-    {"name": "Notable", "icon": "⭐", "color": "#FFC107", "order": 50},
-    {"name": "Graffiti", "icon": "🎨", "color": "#E91E63", "order": 40},
-    {"name": "Photography", "icon": "📷", "color": "#2196F3", "order": 30},
-    {"name": "Dangerous", "icon": "⚠️", "color": "#F44336", "order": 20},
-    {"name": "Popular", "icon": "🔥", "color": "#FF5722", "order": 10},
+    {"name": "Notable", "icon": "⭐", "color": "#FFC107", "order": 50, "description": "Somewhere worth a special trip."},
+    {"name": "Graffiti", "icon": "🎨", "color": "#E91E63", "order": 40, "description": "Known for its graffiti or street art."},
+    {"name": "Photography", "icon": "📷", "color": "#2196F3", "order": 30, "description": "Good for photographs."},
+    {"name": "Dangerous", "icon": "⚠️", "color": "#F44336", "order": 20, "description": "Has real hazards: unstable structure, hazardous materials, or other risks."},
+    {"name": "Popular", "icon": "🔥", "color": "#FF5722", "order": 10, "description": "Busy and well known, so expect other visitors."},
 ]
 # A small starter set of media labels (kind='media') - these help the user find
 # their own photos/videos/documents via the main site search; they have no
 # effect on pin icons or map filtering, unlike tag/category/status labels.
 DEFAULT_MEDIA_LABELS: list[dict] = [
-    {"name": "Interior", "icon": "🏠", "color": "#4CAF50", "order": 40},
-    {"name": "Exterior", "icon": "🌳", "color": "#8BC34A", "order": 30},
-    {"name": "Document", "icon": "📄", "color": "#607D8B", "order": 20},
-    {"name": "Video", "icon": "🎥", "color": "#9C27B0", "order": 10},
+    {"name": "Interior", "icon": "🏠", "color": "#4CAF50", "order": 40, "description": "Taken inside."},
+    {"name": "Exterior", "icon": "🌳", "color": "#8BC34A", "order": 30, "description": "Taken outside."},
+    {"name": "Document", "icon": "📄", "color": "#607D8B", "order": 20, "description": "Scans of documents, plans, signs or papers."},
+    {"name": "Video", "icon": "🎥", "color": "#9C27B0", "order": 10, "description": "Video footage."},
 ]
 
 # Parent → child relationships established after all categories are created.
@@ -88,20 +88,20 @@ def create_default_tags(sender: type[Profile], instance: Profile, created: bool,
     from urbanlens.dashboard.plugins.points import LABELS_SEEDED
 
     status_defaults = [
-        {"name": "Visited", "icon": "✅", "color": "#4CAF50", "order": 100, "is_protected": True},
+        {"name": "Visited", "icon": "✅", "color": "#4CAF50", "order": 100, "is_protected": True, "description": "Places you have been."},
         # Protected like its four siblings: the "To Visit" saved filter every
         # new profile gets is built on this label, so deleting it would leave
         # that filter quietly matching the wrong thing.
-        {"name": "Want to Go", "icon": "⭐", "color": "#2196F3", "order": 90, "is_protected": True},
-        {"name": "Active", "icon": "🟢", "color": "#009688", "order": 80, "is_protected": True},
-        {"name": "Abandoned", "icon": "🏚️", "color": "#FF9800", "order": 70, "is_protected": True},
-        {"name": "Demolished", "icon": "💀", "color": "#795548", "order": 60, "is_protected": True},
+        {"name": "Want to Go", "icon": "⭐", "color": "#2196F3", "order": 90, "is_protected": True, "description": "Places you would like to visit."},
+        {"name": "Active", "icon": "🟢", "color": "#009688", "order": 80, "is_protected": True, "description": "Still in use, occupied or open."},
+        {"name": "Abandoned", "icon": "🏚️", "color": "#FF9800", "order": 70, "is_protected": True, "description": "Disused and left empty."},
+        {"name": "Demolished", "icon": "💀", "color": "#795548", "order": 60, "is_protected": True, "description": "Torn down or otherwise gone."},
     ]
     people_defaults = [
-        {"name": "Preservation", "icon": "🌿", "color": "#4CAF50", "order": 40},
-        {"name": "Vandalism", "icon": "⚠️", "color": "#F44336", "order": 30},
-        {"name": "Photography", "icon": "📷", "color": "#2196F3", "order": 20},
-        {"name": "Influencer", "icon": "📣", "color": "#9C27B0", "order": 10},
+        {"name": "Preservation", "icon": "🌿", "color": "#4CAF50", "order": 40, "description": "People working to preserve or document places."},
+        {"name": "Vandalism", "icon": "⚠️", "color": "#F44336", "order": 30, "description": "People known to damage or deface places."},
+        {"name": "Photography", "icon": "📷", "color": "#2196F3", "order": 20, "description": "Photographers."},
+        {"name": "Influencer", "icon": "📣", "color": "#9C27B0", "order": 10, "description": "People with a public following who may draw crowds to a place."},
     ]
     total = len(DEFAULT_CATEGORIES)
     category_defaults = [{**cat, "order": total - i} for i, cat in enumerate(DEFAULT_CATEGORIES)]

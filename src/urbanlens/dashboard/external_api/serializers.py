@@ -2769,6 +2769,8 @@ class TripActivitySerializer(ExtensibleSerializer):
     longitude = serializers.SerializerMethodField()
     #: The *effective* value - the activity's own flag OR this viewer's gate.
     location_hidden = serializers.BooleanField(source="effective_location_hidden", read_only=True)
+    #: True when the caller added this activity and hid its location from the other members.
+    hidden_from_others = serializers.BooleanField(read_only=True)
     #: Present only when the linked pin belongs to the requesting caller.
     pin_slug = serializers.CharField(read_only=True, allow_null=True)
     child_trip_uuid = serializers.SerializerMethodField()

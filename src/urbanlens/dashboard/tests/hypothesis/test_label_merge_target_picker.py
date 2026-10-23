@@ -68,3 +68,29 @@ class LabelMergeTargetPickerTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "No other tag to merge into.")
+
+    def test_a_near_duplicate_is_listed_first_and_chosen(self) -> None:
+        source = baker.make(Label, profile=self.profile, kind="tag", name="hospitals")
+        baker.make(Label, profile=self.profile, kind="tag", name="Asylum", icon="🏚️")
+        plain = baker.make(Label, profile=self.profile, kind="tag", name="Hospital ", icon="")
+        iconic = baker.make(Label, profile=self.profile, kind="tag", name="Hospital", icon="🏥")
+
+        html = self.client.get(
+            reverse("label.merge", kwargs={"label_kind": "tag", "label_id": source.id})
+        ).content.decode()
+
+        self.assertIn(f'value="{iconic.id}" class="tag-dialog-choice" checked', html)
+        self.assertNotIn(f'value="{plain.id}" class="tag-dialog-choice" checked', html)
+        self.assertLess(html.index(f'value="{iconic.id}"'), html.index(f'value="{plain.id}"'))
+        self.assertIn('data-enabled-by="merge-target-list" class=', html)
+
+    def test_nothing_is_chosen_when_no_name_is_close(self) -> None:
+        source = baker.make(Label, profile=self.profile, kind="tag", name="Rooftop")
+        baker.make(Label, profile=self.profile, kind="tag", name="Hospital", icon="🏥")
+
+        html = self.client.get(
+            reverse("label.merge", kwargs={"label_kind": "tag", "label_id": source.id})
+        ).content.decode()
+
+        self.assertNotIn("checked", html)
+        self.assertIn('data-enabled-by="merge-target-list" disabled', html)
