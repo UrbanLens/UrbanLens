@@ -19,8 +19,10 @@ from urbanlens.dashboard.services.apis.locations.geocode_resolution import (
     GeocodeProvider,
     StreetViewCoverage,
     StreetViewPicture,
+    ask_shielding_geocoder,
 )
 from urbanlens.dashboard.services.core.gateway import ProviderUnavailableError
+from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
 from urbanlens.dashboard.services.photos import photo_enrichment
 from urbanlens.dashboard.tests.hypothesis.test_photo_enrichment import _MEDIA_ROOT, _jpeg_bytes
 
@@ -123,6 +125,67 @@ class StreetViewCheckTests(_ShieldedCase):
         with mock.patch(_KEY, "key"), mock.patch(_PERMITTED, return_value=True), mock.patch(_GOOGLE_METADATA) as google:
             google.return_value.has_imagery.return_value = True
             self.assertEqual(self.check(), {"available": True})
+
+    def test_a_right_click_storm_on_one_spot_asks_the_shield_once(self) -> None:
+        shield = _Shield(coverage=StreetViewCoverage(available=True, pano_id="p"))
+        self.shield(shield)
+        with mock.patch.object(shield, "street_view_coverage", wraps=shield.street_view_coverage) as asked:
+            for _ in range(5):
+                self.assertEqual(self.check(), {"available": True})
+        self.assertEqual(asked.call_count, 1)
+
+    def test_a_refusal_by_the_limiter_is_refused_not_a_server_error(self) -> None:
+        self.shield(_Shield(failure=RateLimitExceededError("shield_street_view", "limit")))
+        self.assertEqual(self.check(), {"available": False, "reason": "refused"})
+
+    def test_an_outage_is_not_cached(self) -> None:
+        shield = _Shield(failure=ProviderUnavailableError("down"))
+        self.shield(shield)
+        with mock.patch(_PERMITTED, return_value=False):
+            self.check()
+            shield.failure = None
+            shield.coverage = StreetViewCoverage(available=True)
+            self.assertEqual(self.check(), {"available": True})
+
+
+class UnansweredQuestionTests(_ShieldedCase):
+    def test_a_provider_that_does_not_implement_a_lookup_was_not_asked(self) -> None:
+        class _Geocoder(_Shield):
+            def street_view_coverage(self, latitude: float, longitude: float) -> StreetViewCoverage | None:
+                raise NotImplementedError
+
+        self.shield(_Geocoder())
+        self.assertEqual(
+            ask_shielding_geocoder(lambda provider: provider.street_view_coverage(1.0, 2.0)), (False, None)
+        )
+
+
+@override_settings(MEDIA_ROOT=_MEDIA_ROOT)
+class NoFallbackKeyTests(_ShieldedCase):
+    """On production with the shield down and no Google key, the question goes unasked and no marker retires the location."""
+
+    def _run(
+        self, source: photo_enrichment.StreetViewEnrichmentSource | photo_enrichment.SatelliteEnrichmentSource
+    ) -> Location:
+        self.shield(_Shield(failure=ProviderUnavailableError("down")))
+        location = baker.make(Location, latitude="42.333333", longitude="-73.333333", google_place=None)
+        with (
+            mock.patch(_PERMITTED, return_value=True),
+            mock.patch(_KEY, ""),
+            self.assertRaises(ProviderUnavailableError),
+        ):
+            source.enrich(location)
+        return location
+
+    def test_street_view_writes_no_marker(self) -> None:
+        source = photo_enrichment.StreetViewEnrichmentSource()
+        location = self._run(source)
+        self.assertFalse(LocationCache.objects.filter(location=location, source=source.marker_source).exists())
+
+    def test_satellite_writes_no_marker(self) -> None:
+        source = photo_enrichment.SatelliteEnrichmentSource()
+        location = self._run(source)
+        self.assertFalse(LocationCache.objects.filter(location=location, source=source.marker_source).exists())
 
 
 @override_settings(MEDIA_ROOT=_MEDIA_ROOT)

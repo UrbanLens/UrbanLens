@@ -207,6 +207,20 @@ class PlacePhotoEnrichmentSource(_BackfillMarkerSource):
         return True
 
 
+def _require_fallback_key() -> None:
+    """
+    Refuse the direct Google fallback after a shielding geocoder failed, when this install has no key for it.
+
+    Raises:
+        ProviderUnavailableError: The shielding geocoder could not answer and there is no key, so the question went unasked and no marker may retire the location.
+    """
+    from urbanlens.dashboard.services.apis.locations import geocode_resolution
+    from urbanlens.UrbanLens.settings.app import settings as app_settings
+
+    if geocode_resolution.shielded() and not app_settings.google_unrestricted_api_key:
+        raise ProviderUnavailableError("No shielding geocoder answered and no Google key is set.")
+
+
 class StreetViewEnrichmentSource(_BackfillMarkerSource):
     """Backfills a single static Street View image, wiki-attached and resized to WebP."""
 
@@ -242,6 +256,7 @@ class StreetViewEnrichmentSource(_BackfillMarkerSource):
             if asked:
                 content = picture.content if picture else None
             else:
+                _require_fallback_key()
                 gateway = GoogleMapsGateway(api_key=app_settings.google_unrestricted_api_key or "")
                 content, _capture_date, _pano_lat, _pano_lng = gateway.get_street_view_single(lat, lng)
         except (ValueError, requests.exceptions.RequestException, ImpossibleInputError, ProviderUnavailableError) as exc:
@@ -289,6 +304,7 @@ class SatelliteEnrichmentSource(_BackfillMarkerSource):
         try:
             asked, content = geocode_resolution.ask_shielding_geocoder(lambda provider: provider.satellite_picture(lat, lng))
             if not asked:
+                _require_fallback_key()
                 content = GoogleMapsGateway(api_key=app_settings.google_unrestricted_api_key or "").get_satellite_image_bytes(lat, lng)
         except (requests.exceptions.RequestException, ImpossibleInputError, ProviderUnavailableError) as exc:
             if is_source_outage(exc):

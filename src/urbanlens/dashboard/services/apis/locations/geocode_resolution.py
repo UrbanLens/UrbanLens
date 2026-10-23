@@ -115,30 +115,33 @@ class GeocodeProvider(ABC):
 
     def street_view_coverage(self, latitude: float, longitude: float) -> StreetViewCoverage | None:
         """
-        Whether street-level imagery exists at a coordinate, for a provider that answers this; None when it does not.
+        Whether street-level imagery exists at a coordinate.
 
         Raises:
+            NotImplementedError: The provider does not answer this, which :func:`ask_shielding_geocoder` reads as not asked.
             ProviderUnavailableError: The provider could not answer, so the question went unasked.
         """
-        return None
+        raise NotImplementedError
 
     def street_view_picture(self, latitude: float, longitude: float) -> StreetViewPicture | None:
         """
-        The nearest street-level picture of a coordinate, for a provider that answers this; None when there is none.
+        The nearest street-level picture of a coordinate; None when there is none.
 
         Raises:
+            NotImplementedError: The provider does not answer this, which :func:`ask_shielding_geocoder` reads as not asked.
             ProviderUnavailableError: The provider could not answer, so the question went unasked.
         """
-        return None
+        raise NotImplementedError
 
     def satellite_picture(self, latitude: float, longitude: float) -> bytes | None:
         """
-        A satellite picture centred on a coordinate, for a provider that answers this; None when it does not.
+        A satellite picture centred on a coordinate; None when there is none.
 
         Raises:
+            NotImplementedError: The provider does not answer this, which :func:`ask_shielding_geocoder` reads as not asked.
             ProviderUnavailableError: The provider could not answer, so the question went unasked.
         """
-        return None
+        raise NotImplementedError
 
 
 class NominatimGeocoder(GeocodeProvider):
@@ -192,6 +195,8 @@ def ask_shielding_geocoder[T](question: Callable[[GeocodeProvider], T]) -> tuple
         return False, None
     try:
         return True, question(provider)
+    except NotImplementedError:
+        return False, None
     except ProviderUnavailableError as exc:
         if not direct_fallback_permitted():
             logger.info("%s geocode unavailable (%s); not falling back to a direct provider off production", provider.key, exc.reason)
