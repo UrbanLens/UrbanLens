@@ -24,7 +24,7 @@ from urbanlens.dashboard.external_api.serializers_device_scans import (
 )
 from urbanlens.dashboard.external_api.views import ExternalApiView
 from urbanlens.dashboard.models.account.model import ApiKeyScope
-from urbanlens.dashboard.models.device_scan.model import WikiDeviceMarker
+from urbanlens.dashboard.models.device_scan.model import DeviceScanUpload, ScanUploadStatus, WikiDeviceMarker
 from urbanlens.dashboard.services.core.celery import safely_enqueue_task
 from urbanlens.dashboard.services.device_scan.ingestion import ingest_scan_upload
 from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_locations
@@ -69,7 +69,19 @@ class DeviceScanUploadView(ExternalApiView):
 
             safely_enqueue_task(process_device_scan_upload, upload.pk)
 
-        if created:
+        should_enqueue = created
+        if not created and upload.status == ScanUploadStatus.FAILED:
+            should_enqueue = bool(
+                DeviceScanUpload.objects.filter(pk=upload.pk, status=ScanUploadStatus.FAILED).update(
+                    status=ScanUploadStatus.PENDING,
+                    error="",
+                    claimed_at=None,
+                )
+            )
+        elif not created and upload.status == ScanUploadStatus.PENDING:
+            should_enqueue = True
+
+        if should_enqueue:
             transaction.on_commit(_enqueue)
 
         return Response({"upload_uuid": str(upload.uuid)}, status=202)
