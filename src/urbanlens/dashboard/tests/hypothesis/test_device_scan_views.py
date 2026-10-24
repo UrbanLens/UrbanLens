@@ -21,6 +21,7 @@ from urbanlens.dashboard.models.device_scan.model import (
     DeviceSignalReading,
     MarkerStatus,
     ScannedDevice,
+    ScanUploadStatus,
     WikiDeviceMarker,
 )
 from urbanlens.dashboard.models.location.model import Location
@@ -184,6 +185,101 @@ class UploadPersistenceTests(_DeviceScanApiTestCase):
         self.assertIsNone(upload.profile_id)
         # Still fully processed/stored - the setting only affects attribution.
         self.assertEqual(DeviceScanEntry.objects.count(), 1)
+
+    def test_idempotent_replay_of_failed_upload_requeues_processing(self) -> None:
+        payload = _valid_payload()
+        payload["client_session_uuid"] = "scan-batch-1"
+
+        with patch(_ENQUEUE), self.captureOnCommitCallbacks(execute=True):
+            first = self.client.post(
+                reverse(_UPLOAD_URL),
+                payload,
+                content_type="application/json",
+                **_bearer(self.write_key),
+            )
+
+        upload = DeviceScanUpload.objects.get(uuid=first.json()["upload_uuid"])
+        DeviceScanUpload.objects.filter(pk=upload.pk).update(
+            status=ScanUploadStatus.FAILED,
+            error="boom",
+            claimed_at=timezone.now(),
+        )
+
+        with patch(_ENQUEUE) as enqueue, self.captureOnCommitCallbacks(execute=True):
+            replay = self.client.post(
+                reverse(_UPLOAD_URL),
+                payload,
+                content_type="application/json",
+                **_bearer(self.write_key),
+            )
+
+        self.assertEqual(replay.status_code, HTTPStatus.ACCEPTED)
+        self.assertEqual(replay.json()["upload_uuid"], str(upload.uuid))
+        enqueue.assert_called_once()
+        self.assertEqual(enqueue.call_args.args[1], upload.pk)
+        upload.refresh_from_db()
+        self.assertEqual(upload.status, ScanUploadStatus.PENDING)
+        self.assertEqual(upload.error, "")
+        self.assertIsNone(upload.claimed_at)
+        self.assertEqual(DeviceScanUpload.objects.count(), 1)
+
+    def test_idempotent_replay_of_processed_upload_does_not_enqueue_again(self) -> None:
+        payload = _valid_payload()
+        payload["client_session_uuid"] = "scan-batch-2"
+
+        with patch(_ENQUEUE), self.captureOnCommitCallbacks(execute=True):
+            first = self.client.post(
+                reverse(_UPLOAD_URL),
+                payload,
+                content_type="application/json",
+                **_bearer(self.write_key),
+            )
+
+        upload = DeviceScanUpload.objects.get(uuid=first.json()["upload_uuid"])
+        DeviceScanUpload.objects.filter(pk=upload.pk).update(status=ScanUploadStatus.PROCESSED)
+
+        with patch(_ENQUEUE) as enqueue, self.captureOnCommitCallbacks(execute=True):
+            replay = self.client.post(
+                reverse(_UPLOAD_URL),
+                payload,
+                content_type="application/json",
+                **_bearer(self.write_key),
+            )
+
+        self.assertEqual(replay.status_code, HTTPStatus.ACCEPTED)
+        self.assertEqual(replay.json()["upload_uuid"], str(upload.uuid))
+        enqueue.assert_not_called()
+        self.assertEqual(DeviceScanUpload.objects.count(), 1)
+
+    def test_idempotent_replay_of_processing_upload_does_not_enqueue_again(self) -> None:
+        payload = _valid_payload()
+        payload["client_session_uuid"] = "scan-batch-3"
+
+        with patch(_ENQUEUE), self.captureOnCommitCallbacks(execute=True):
+            first = self.client.post(
+                reverse(_UPLOAD_URL),
+                payload,
+                content_type="application/json",
+                **_bearer(self.write_key),
+            )
+
+        upload = DeviceScanUpload.objects.get(uuid=first.json()["upload_uuid"])
+        DeviceScanUpload.objects.filter(pk=upload.pk).update(status=ScanUploadStatus.PROCESSING)
+
+        with patch(_ENQUEUE) as enqueue, self.captureOnCommitCallbacks(execute=True):
+            replay = self.client.post(
+                reverse(_UPLOAD_URL),
+                payload,
+                content_type="application/json",
+                **_bearer(self.write_key),
+            )
+
+        self.assertEqual(replay.status_code, HTTPStatus.ACCEPTED)
+        self.assertEqual(replay.json()["upload_uuid"], str(upload.uuid))
+        enqueue.assert_not_called()
+        upload.refresh_from_db()
+        self.assertEqual(upload.status, ScanUploadStatus.PROCESSING)
+        self.assertEqual(DeviceScanUpload.objects.count(), 1)
 
 
 class NearbyDeviceMarkersVisibilityTests(_DeviceScanApiTestCase):
