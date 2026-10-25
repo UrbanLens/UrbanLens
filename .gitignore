@@ -70,6 +70,3 @@ sample_data/Google Takeout.csv
 docs/_build/
 docs/api/
 /.claude/worktrees/
-
-# Repowise local index: rebuilt per machine (docs/TOOLING.md)
-/.repowise/
