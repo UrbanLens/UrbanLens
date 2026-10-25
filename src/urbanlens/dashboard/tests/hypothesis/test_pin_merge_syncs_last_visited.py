@@ -10,7 +10,7 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.visits.model import PinVisit
+from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.pins.pin_merge import merge_pins
 
 
@@ -57,3 +57,18 @@ class PinMergeSyncsLastVisitedTests(TestCase):
         merged = merge_pins(survivor, loser, self.profile)
 
         self.assertIsNone(merged.last_visited)
+
+    def test_same_day_geolocation_visits_are_folded(self) -> None:
+        survivor = baker.make(Pin, profile=self.profile, last_visited=None)
+        loser = baker.make(Pin, profile=self.profile, last_visited=None)
+        morning = self.now.replace(hour=8, minute=0, second=0, microsecond=0)
+        evening = morning.replace(hour=20)
+        baker.make(PinVisit, pin=survivor, source=VisitSource.GEOLOCATION, visited_at=morning)
+        baker.make(PinVisit, pin=loser, source=VisitSource.GEOLOCATION, visited_at=evening)
+
+        merged = merge_pins(survivor, loser, self.profile)
+
+        visits = list(PinVisit.objects.filter(pin=survivor, source=VisitSource.GEOLOCATION))
+        self.assertEqual(len(visits), 1)
+        self.assertEqual(visits[0].visited_at, evening)
+        self.assertEqual(merged.last_visited, evening)
