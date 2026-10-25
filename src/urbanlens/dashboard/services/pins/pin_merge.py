@@ -7,8 +7,10 @@ import collections
 from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING
+from zoneinfo import ZoneInfo
 
 from django.db import IntegrityError, transaction
+from django.db.models.functions import TruncDate
 
 from urbanlens.dashboard.models.album.model import Album
 from urbanlens.dashboard.models.auto_removals.model import PinAutoRemoval
@@ -30,10 +32,11 @@ from urbanlens.dashboard.models.pin_suggestions.model import PinSuggestion
 from urbanlens.dashboard.models.property_owner.model import PinPropertySale
 from urbanlens.dashboard.models.reviews.model import Review
 from urbanlens.dashboard.models.trips.model import TripActivity
-from urbanlens.dashboard.models.visits.model import PinVisit
+from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+    from datetime import date
 
     from django.db.models import Model
 
@@ -43,6 +46,8 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
+
+_UTC = ZoneInfo("UTC")
 
 
 class UnresolvedMergeConflictError(ValueError):
@@ -471,6 +476,67 @@ def _merge_albums(survivor: Pin, loser: Pin) -> None:
         taken.add(album.slug)
 
 
+def _fold_duplicate_visit(target: PinVisit, duplicate: PinVisit) -> None:
+    """Collapse a loser geolocation visit into the survivor's same-day row."""
+    target.participants.add(*duplicate.participants.all())
+    duplicate.external_participants.update(visit=target)
+    duplicate.images.update(visit=target)
+    duplicate.suggestions_sent.update(origin_visit=target)
+    duplicate.merge_suggestions.update(existing_visit=target)
+
+    update_fields = []
+    if duplicate.visited_at > target.visited_at:
+        target.visited_at = duplicate.visited_at
+        update_fields.append("visited_at")
+    if not target.notes and duplicate.notes:
+        target.notes = duplicate.notes
+        update_fields.append("notes")
+    if target.markup_map_id is None and duplicate.markup_map_id is not None:
+        target.markup_map_id = duplicate.markup_map_id
+        update_fields.append("markup_map")
+    if target.route_id is None and duplicate.route_id is not None:
+        target.route_id = duplicate.route_id
+        update_fields.append("route")
+    if target.tentative and not duplicate.tentative:
+        target.tentative = False
+        update_fields.append("tentative")
+    if update_fields:
+        target.save(update_fields=[*update_fields, "updated"])
+    duplicate.delete()
+
+
+def _geolocation_visit_days(pin: Pin) -> dict[int, date]:
+    """UTC day keyed by geolocation visit id for a pin."""
+    rows = (
+        PinVisit.objects.filter(pin=pin, source=VisitSource.GEOLOCATION)
+        .annotate(day=TruncDate("visited_at", tzinfo=_UTC))
+        .values_list("pk", "day")
+    )
+    return dict(rows)
+
+
+def _merge_visits(survivor: Pin, loser: Pin) -> None:
+    """Move visits across, folding geolocation rows that share the survivor's UTC day."""
+    survivor_days = _geolocation_visit_days(survivor)
+    survivor_geolocation: dict[date, PinVisit] = {}
+    for visit in PinVisit.objects.filter(pk__in=survivor_days).order_by("id"):
+        survivor_geolocation.setdefault(survivor_days[visit.pk], visit)
+
+    loser_days = _geolocation_visit_days(loser)
+    loser_geolocation = list(PinVisit.objects.filter(pk__in=loser_days).prefetch_related("participants").order_by("id"))
+    for visit in loser_geolocation:
+        day = loser_days[visit.pk]
+        existing = survivor_geolocation.get(day)
+        if existing is None:
+            visit.pin = survivor
+            visit.save(update_fields=["pin", "updated"])
+            survivor_geolocation[day] = visit
+        else:
+            _fold_duplicate_visit(existing, visit)
+
+    PinVisit.objects.filter(pin=loser).update(pin=survivor)
+
+
 def merge_pins(survivor: Pin, loser: Pin, profile: Profile, resolutions: dict[str, int] | None = None) -> Pin:
     """Merge loser into survivor: reassign every relation, resolve every conflict, delete loser.
 
@@ -526,7 +592,7 @@ def merge_pins(survivor: Pin, loser: Pin, profile: Profile, resolutions: dict[st
         _merge_image_attachments(survivor, loser)
         _merge_floorplan_marker(survivor, loser)
 
-        PinVisit.objects.filter(pin=loser).update(pin=survivor)
+        _merge_visits(survivor, loser)
         Image.objects.filter(pin=loser).update(pin=survivor)
         PinLink.objects.filter(pin=loser).update(pin=survivor)
         PinPropertySale.objects.filter(pin=loser).update(pin=survivor)
@@ -546,8 +612,8 @@ def merge_pins(survivor: Pin, loser: Pin, profile: Profile, resolutions: dict[st
 
         loser.delete()
 
-        # last_visited is a denormalized copy of the newest PinVisit, and the visits above moved
-        # across via update(), which fires no signal.
+        # last_visited is a denormalized copy of the newest PinVisit, and the visits above are
+        # moved or folded without the usual creation signal.
         # Recomputing also saves the survivor, which is what refreshes its cached map payload - the
         # merge has no other invalidation despite the survivor gaining visits, images and labels.
         from urbanlens.dashboard.services.visits.visits import sync_last_visited
