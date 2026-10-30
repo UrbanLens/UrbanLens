@@ -47,6 +47,16 @@ def _0049_noop(apps, schema_editor):
     pass
 
 
+def _0032_preserve_album_manual_order(apps, schema_editor):
+    Album = apps.get_model("dashboard", "Album")
+    Album.objects.filter(manual_order=True).update(sort="custom")
+
+
+def _0032_restore_album_manual_order(apps, schema_editor):
+    Album = apps.get_model("dashboard", "Album")
+    Album.objects.filter(sort="custom").update(manual_order=True)
+
+
 def _0052__backfill(apps, schema_editor):
     """Record the historical award and flag existing reverts.
 
@@ -554,6 +564,7 @@ class Migration(migrations.Migration):
             options={"db_table": "dashboard_photo_metadata_conflict", "indexes": [models.Index(fields=["profile", "status"], name="idx_photo_meta_profile_status")]},
         ),
         migrations.AddField(model_name="album", name="sort", field=models.CharField(choices=[("uploaded", "Date uploaded"), ("taken", "Date taken"), ("name", "Name"), ("custom", "Custom")], default="uploaded", max_length=20)),
+        migrations.RunPython(_0032_preserve_album_manual_order, _0032_restore_album_manual_order),
         migrations.RemoveField(model_name="album", name="manual_order"),
         migrations.AlterField(model_name="albumitem", name="order", field=models.IntegerField(blank=True, default=None, null=True)),
         migrations.AddField(model_name="undoaction", name="kind", field=models.CharField(choices=[("delete", "Delete"), ("mutate", "Mutate")], default="delete", max_length=12)),
