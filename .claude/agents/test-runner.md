@@ -9,10 +9,13 @@ color: green
 
 From the repo root (or the worktree you are given):
 
-- **Default:** for the test paths the caller named, with a database name no other session uses:
-  `UL_TEST_DB_NAME=test_<unique> wp testsum -- bin/host_pytest.sh --reuse-db -q -p no:cacheprovider <paths>`.
-  If the caller named no paths, say so and stop.
-- **"full":** `wp testsum -- bun run test:full` (pre-commit, ruff, mypy, the TypeScript tests, then the whole suite).
+- **Python test paths:** with a database name no other session uses (quote it):
+  `UL_TEST_DB_NAME='test_<unique>' wp testsum -- bin/host_pytest.sh --reuse-db -q -p no:cacheprovider <paths>`.
+  If a test opens its own Redis or Postgres socket, use `wp testsum -- bash bin/run_tests.sh <paths>` instead.
+- **TypeScript tests** (paths under `src/urbanlens/dashboard/frontend/ts`): `wp testsum -- bun test --isolate <paths>`.
+  Browser tests (`.../frontend/browser`): `wp testsum -- bun test --timeout 60000 <paths>`.
+- If the caller named no paths, say so and stop.
+- **"full":** `wp testsum -- bun run test:full` (pre-commit, `check`, `typecheck`, the TypeScript and perf tests, then the whole suite). It does not run `bun run lint` (ruff check and mypy); run that separately if asked for lint.
 
 `wp testsum` prints the result already summarized: one line on a pass; on a failure, each
 failing test's name, file:line and message, or the last lines of whatever check failed.
