@@ -233,7 +233,9 @@ def move_pin_to_coordinates(pin: Pin, latitude: float, longitude: float) -> None
 
     before_lat, before_lng = float(pin.effective_latitude), float(pin.effective_longitude)
     pin.location = location
-    pin.save(update_fields=["location", "updated"])
+    # A move re-points the subject at whatever the new point resolves to now (None when unplaced).
+    pin.subject_place_id = location.place_id
+    pin.save(update_fields=["location", "subject_place", "updated"])
     from urbanlens.dashboard.services.undo.mutations import stash_pin_move
 
     stash_pin_move(pin, before_lat=before_lat, before_lng=before_lng, after_lat=latitude, after_lng=longitude)
