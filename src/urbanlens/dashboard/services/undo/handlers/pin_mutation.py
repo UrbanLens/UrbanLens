@@ -31,7 +31,7 @@ def _pin(pin_id: int, profile: Profile) -> Pin:
     return pin
 
 
-def _move(pin: Pin, latitude: float, longitude: float) -> None:
+def _move(pin: Pin, latitude: float, longitude: float, subject_id: int | None = None, *, restore_subject: bool = False) -> None:
     from urbanlens.dashboard.services.pins.pin_edit import PinMoveError, move_pin_to_coordinates
 
     try:
@@ -39,6 +39,13 @@ def _move(pin: Pin, latitude: float, longitude: float) -> None:
     except PinMoveError:
         logger.info("Undo/redo move of pin %s rejected: another root pin holds the target location", pin.pk)
         _expired("This move can't be replayed: another pin now occupies that exact location.")
+    if restore_subject:
+        from urbanlens.dashboard.models.place.model import Place
+
+        # The place may have been deleted since (the FK is SET_NULL): then the re-derived subject stands.
+        if subject_id is None or Place.objects.filter(pk=subject_id).exists():
+            Pin.objects.filter(pk=pin.pk).update(subject_place_id=subject_id)
+            pin.subject_place_id = subject_id
 
 
 def _apply_fields(pin: Pin, fields: dict[str, Any]) -> None:
@@ -61,7 +68,7 @@ class PinMutationUndoHandler(MutationUndoHandler):
         op = payload.get("op")
         pin = _pin(payload["pin_id"], profile)
         if op == "move":
-            _move(pin, float(payload["before_lat"]), float(payload["before_lng"]))
+            _move(pin, float(payload["before_lat"]), float(payload["before_lng"]), payload.get("before_subject_id"), restore_subject="before_subject_id" in payload)
             return
         if op == "fields":
             _apply_fields(pin, payload.get("before") or {})
@@ -90,7 +97,7 @@ class PinMutationUndoHandler(MutationUndoHandler):
         op = payload.get("op")
         pin = _pin(payload["pin_id"], profile)
         if op == "move":
-            _move(pin, float(payload["after_lat"]), float(payload["after_lng"]))
+            _move(pin, float(payload["after_lat"]), float(payload["after_lng"]), payload.get("after_subject_id"), restore_subject="after_subject_id" in payload)
             return
         if op == "fields":
             _apply_fields(pin, payload.get("after") or {})

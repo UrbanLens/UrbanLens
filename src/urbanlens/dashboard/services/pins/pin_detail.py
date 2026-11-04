@@ -76,12 +76,14 @@ def build_pin_detail(pin: Pin, profile: Profile) -> dict[str, Any]:
     # Every wiki-scoped endpoint resolves through services.wiki.wiki_access.resolve_visible_wiki,
     # which takes a *Location* slug/uuid - so this, not wiki_slug below, is what a client feeds to
     # /wikis/{location_slug}/.
-    payload["location_slug"] = wiki.location.ensure_slug() if wiki is not None and wiki.location_id else pin.location.ensure_slug()
+    payload["location_slug"] = pin.location.ensure_slug()
+    # Another user's Location is only read, never given a slug here: null when it has none.
+    payload["primary_wiki_location_slug"] = (wiki.location.slug or None) if wiki is not None and wiki.location_id else None
     # Informational only: Wiki.slug is an independent field from the Location's
     # slug and is NOT accepted by any wiki route. Kept for clients that already
     # read it (and for display), but it must never be used for navigation.
     payload["wiki_slug"] = wiki.slug if wiki is not None and wiki.slug else None
-    payload["related_wikis"] = [{"name": related.name, "location_slug": related.location.ensure_slug()} for related in wikis.related if related.location_id]
+    payload["related_wikis"] = [{"name": related.name, "location_slug": related.location.slug or None} for related in wikis.related if related.location_id]
     cover_photo = pin.cover_photo
     payload["cover_photo_url"] = cover_photo.file_url if cover_photo is not None else None
     payload["boundary"] = _boundary_geojson(pin)

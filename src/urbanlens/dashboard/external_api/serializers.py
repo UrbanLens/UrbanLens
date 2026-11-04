@@ -454,6 +454,10 @@ class PinDetailSerializer(SyncPinSerializer):
     #: Informational only. ``Wiki.slug`` is independent of the Location slug and
     #: is not accepted by any wiki route; use ``location_slug`` to navigate.
     wiki_slug = serializers.CharField(read_only=True, allow_null=True)
+    #: Location slug of the pin's primary wiki (``wiki_slug`` names it); null when there is none or its Location has no slug yet.
+    primary_wiki_location_slug = serializers.CharField(read_only=True, allow_null=True)
+    #: Other wikis in the pin's domain the caller can open, as ``{name, location_slug}``.
+    related_wikis = serializers.ListField(child=serializers.DictField(), read_only=True)
     cover_photo_url = serializers.CharField(read_only=True, allow_null=True)
     #: GeoJSON geometry: the property outline, or a building's own footprint when the pin is one building
     #: of several on its property.

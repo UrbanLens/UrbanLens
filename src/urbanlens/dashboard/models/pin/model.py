@@ -696,7 +696,7 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
         """
         from urbanlens.dashboard.services.pins.primary_wiki import primary_wiki_for_pin
 
-        return primary_wiki_for_pin(self, self.profile).primary
+        return primary_wiki_for_pin(self, self.profile, primary_only=True).primary
 
     @property
     def effective_name(self) -> str:

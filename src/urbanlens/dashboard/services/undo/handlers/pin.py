@@ -8,6 +8,7 @@ from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.place.model import Place
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.media.held_upload import queue_held_upload
@@ -78,6 +79,7 @@ class PinUndoHandler(UndoHandler):
             "location_id": pin.location_id,
             "profile_id": pin.profile_id,
             "wiki_id": pin.wiki_id,
+            "subject_place_id": pin.subject_place_id,
             "parent_pin_old_pk": pin.parent_pin_id,
             "label_ids": list(pin.labels.values_list("id", flat=True)),
             # Image.pin is SET_NULL, so deleting a pin detaches its photos rather than destroying
@@ -187,6 +189,9 @@ class PinUndoHandler(UndoHandler):
         # afterwards, and would be a root pin in the meantime. Repeated passes rather
         # than a sort, so an arbitrarily deep hierarchy in one batch still resolves.
         pending = list(payload)
+        # A subject place deleted meanwhile (the FK is SET_NULL) restores as none; save() then re-derives it from the location.
+        wanted_subjects = {entry.get("subject_place_id") for entry in payload} - {None}
+        subject_ids = {pk: pk for pk in Place.objects.filter(pk__in=wanted_subjects).values_list("pk", flat=True)}
         while pending:
             progressed = False
             deferred: list[dict[str, Any]] = []
@@ -200,6 +205,7 @@ class PinUndoHandler(UndoHandler):
                     location_id=entry["location_id"],
                     profile_id=entry["profile_id"],
                     wiki_id=entry["wiki_id"],
+                    subject_place_id=subject_ids.get(entry.get("subject_place_id") or 0),
                     parent_pin_id=parent_pk,
                     **entry["fields"],
                 )
