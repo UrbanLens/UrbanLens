@@ -4864,16 +4864,25 @@ def refresh_trust_signals_range(start_pk: int, end_pk: int) -> int:
     """
     Rebuild the signals row of every profile with ``start_pk <= pk <= end_pk``.
 
-    Idempotent: rows are replaced, never accumulated.
+    Idempotent: rows are replaced, never accumulated. A profile with no activity in 90 days whose row is
+    younger than ``UL_TRUST_DORMANT_REFRESH_DAYS`` is skipped.
 
     Returns:
         How many profiles were rebuilt.
     """
+    from datetime import timedelta
+
+    from django.conf import settings
+    from django.utils import timezone
+
     from urbanlens.dashboard.models.profile import Profile
+    from urbanlens.dashboard.models.trust_signals import ProfileTrustSignals
     from urbanlens.dashboard.services.trust import compute_signals
 
+    dormant_cutoff = timezone.now() - timedelta(days=settings.UL_TRUST_DORMANT_REFRESH_DAYS)
+    skip = set(ProfileTrustSignals.objects.filter(profile_id__gte=start_pk, profile_id__lte=end_pk, active_days_90=0, computed_at__gte=dormant_cutoff).values_list("profile_id", flat=True))
     rebuilt = 0
-    for profile in Profile.objects.filter(pk__gte=start_pk, pk__lte=end_pk).iterator(chunk_size=200):
+    for profile in Profile.objects.filter(pk__gte=start_pk, pk__lte=end_pk).exclude(pk__in=skip).iterator(chunk_size=200):
         compute_signals(profile)
         rebuilt += 1
     return rebuilt

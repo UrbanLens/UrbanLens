@@ -895,7 +895,8 @@ GOOGLE_PSE_CSP: dict[str, tuple[str, ...]] = {
 
 
 def allow_google_pse(directives: dict[str, list[str]], cx: str) -> list[str]:
-    """Admit the hosts Google's Programmable Search Element needs, when an engine is configured.
+    """
+    Admit the hosts Google's Programmable Search Element needs, when an engine is configured.
 
     Args:
         directives: The CSP directive lists, modified in place.
@@ -1510,15 +1511,21 @@ LOGGING = {
 
 # Real-user and independence gates (ADR35 section 5; services/trust). Start strict; tune from production distributions.
 # Scores are 0-1. Never surface them or the signals behind them to another user.
+# Callers evaluate the checks in Celery tasks, never in request handlers: a stale row recomputes inline.
 #: Minimum real-user score for ``is_real_user``.
-UL_TRUST_REAL_USER_THRESHOLD = float(os.getenv("UL_TRUST_REAL_USER_THRESHOLD", "0.75"))
-#: Profiles with fewer pins than this have no usable geography for the independence check.
+UL_TRUST_REAL_USER_THRESHOLD = float(os.getenv("UL_TRUST_REAL_USER_THRESHOLD", "0.6"))
+#: Profiles with fewer (mature) pins than this have no usable geography for the independence check.
 UL_TRUST_MIN_PINS_FOR_GEOGRAPHY = int(os.getenv("UL_TRUST_MIN_PINS_FOR_GEOGRAPHY", "5"))
 #: The real-user score a profile without usable geography must reach instead of the Jaccard test.
-UL_TRUST_NO_GEOGRAPHY_THRESHOLD = float(os.getenv("UL_TRUST_NO_GEOGRAPHY_THRESHOLD", "0.9"))
-#: Two profiles are independent when the Jaccard overlap of their pin cells is below this.
-UL_TRUST_MAX_CELL_JACCARD = float(os.getenv("UL_TRUST_MAX_CELL_JACCARD", "0.2"))
+UL_TRUST_NO_GEOGRAPHY_THRESHOLD = float(os.getenv("UL_TRUST_NO_GEOGRAPHY_THRESHOLD", "0.8"))
+#: Two profiles are independent only when the Jaccard overlap of their pin cells is below this.
+UL_TRUST_MAX_CELL_JACCARD = float(os.getenv("UL_TRUST_MAX_CELL_JACCARD", "0.5"))
 #: How much an accepted friendship raises ``UL_TRUST_MAX_CELL_JACCARD`` for that pair. It only ever loosens the check.
 UL_TRUST_FRIENDSHIP_JACCARD_BONUS = float(os.getenv("UL_TRUST_FRIENDSHIP_JACCARD_BONUS", "0.05"))
+#: Accounts created closer together than this must both be older than ``UL_TRUST_BOTH_ESTABLISHED_DAYS`` to count as independent.
+UL_TRUST_MIN_CREATION_GAP_DAYS = int(os.getenv("UL_TRUST_MIN_CREATION_GAP_DAYS", "30"))
+UL_TRUST_BOTH_ESTABLISHED_DAYS = int(os.getenv("UL_TRUST_BOTH_ESTABLISHED_DAYS", "180"))
 #: Cached signals older than this many seconds are recomputed on read.
-UL_TRUST_SIGNALS_MAX_AGE_SECONDS = int(os.getenv("UL_TRUST_SIGNALS_MAX_AGE_SECONDS", str(24 * 3600)))
+UL_TRUST_SIGNALS_MAX_AGE_SECONDS = int(os.getenv("UL_TRUST_SIGNALS_MAX_AGE_SECONDS", str(36 * 3600)))
+#: The nightly refresh skips a profile with no activity in 90 days while its row is younger than this.
+UL_TRUST_DORMANT_REFRESH_DAYS = int(os.getenv("UL_TRUST_DORMANT_REFRESH_DAYS", "7"))
