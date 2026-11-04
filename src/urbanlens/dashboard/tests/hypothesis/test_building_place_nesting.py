@@ -139,9 +139,13 @@ class BuildingPlaceNestingTests(TestCase):
         for place in created.values():
             self.assertEqual(place.parent_id, self.parcel.pk)
 
-    def test_no_parcel_creates_nothing(self) -> None:
-        """A building place with no parcel has no domain to join."""
-        self.assertEqual(ensure_building_places(None, [{"ref": "a", "geometry": _square(0.2, 0.2, 0.1)}]), {})
+    def test_no_parcel_creates_top_level_footprint_places(self) -> None:
+        created = ensure_building_places(
+            None, [{"ref": "a", "geometry": _square(0.2, 0.2, 0.1), "sources": [{"source": "overture"}]}]
+        )
+        self.assertEqual(len(created), 1)
+        self.assertIsNone(created[0].parent_id)
+        self.assertEqual(created[0].evidence, "footprint")
 
 
 class DistinctRecordsStayDistinctTests(TestCase):

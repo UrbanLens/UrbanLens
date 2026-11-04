@@ -63,10 +63,18 @@ class PlaceQuerySet(abstract.DashboardQuerySet["Place"]):
     def containing_point(self, point: Point) -> Self:
         """
         Resolvable places whose official geometry contains a coordinate.
-        Ordered most-specific first: smallest area wins.
+        Ordered most-specific first: an official or footprint place beats any synthetic one whatever its size, and within each of those two groups the smallest area wins.
         A building footprint is always smaller than the parcel enclosing it, so area ordering subsumes "deepest in the containment tree" without needing to walk it, and it stays deterministic for two unrelated parcels that overlap through bad county geometry.
         """
-        return self.resolvable().filter(geometry__contains=point).order_by("area_sqm", "pk")
+        return self.resolvable().filter(geometry__contains=point).most_specific_first()
+
+    def most_specific_first(self) -> Self:
+        """Order strong evidence (official, footprint) before synthetic, then smallest area, then pk."""
+        from django.db.models import Case, IntegerField, Value, When
+
+        from urbanlens.dashboard.models.place.model import STRONG_EVIDENCE
+
+        return self.annotate(evidence_rank=Case(When(evidence__in=STRONG_EVIDENCE, then=Value(0)), default=Value(1), output_field=IntegerField())).order_by("evidence_rank", "area_sqm", "pk")
 
 
 _PlaceManagerBase = abstract.DashboardManager.from_queryset(PlaceQuerySet)

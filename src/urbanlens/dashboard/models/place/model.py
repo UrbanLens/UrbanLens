@@ -89,6 +89,23 @@ class PlaceStatus(TextChoices):
     SUPERSEDED = "superseded", "Superseded"
 
 
+class PlaceEvidence(TextChoices):
+    """
+    How strong the evidence is that a Place's geometry describes a real thing.
+    ``OFFICIAL`` and ``FOOTPRINT`` are strong and always outrank the synthetic tiers when a coordinate resolves, whatever their size.
+    """
+
+    OFFICIAL = "official", "Official"
+    FOOTPRINT = "footprint", "Building footprint"
+    STANDIN = "standin", "Stand-in"
+    ANCHORED = "anchored", "Anchored"
+    PROVISIONAL = "provisional", "Provisional"
+
+
+#: Evidence tiers that resolution prefers over every other, regardless of area.
+STRONG_EVIDENCE: tuple[str, ...] = (PlaceEvidence.OFFICIAL, PlaceEvidence.FOOTPRINT)
+
+
 class GrantReason(TextChoices):
     """Why a profile holds access that containment can no longer prove."""
 
@@ -108,6 +125,7 @@ class Place(abstract.DashboardModel):
         parent: The containing or aggregating place, if any.
         parent_relation: How it is attached (see :class:`PlaceRelation`).
         status: Whether it still describes the ground (see :class:`PlaceStatus`).
+        evidence: How strong the evidence for its geometry is (see :class:`PlaceEvidence`).
         geometry: Official boundary. Written **only** by the provider chain and
             boundary voting - there is no user-writable path, which is what
             makes "user-drawn shapes can never widen access" structural rather
@@ -126,6 +144,7 @@ class Place(abstract.DashboardModel):
 
     kind = CharField(max_length=20, choices=PlaceKind.choices, default=PlaceKind.PARCEL)
     status = CharField(max_length=20, choices=PlaceStatus.choices, default=PlaceStatus.CURRENT)
+    evidence = CharField(max_length=20, choices=PlaceEvidence.choices, default=PlaceEvidence.OFFICIAL)
 
     # Human-readable label for admin and logs only. The community-facing name
     # lives on Wiki; this is never rendered to users.
