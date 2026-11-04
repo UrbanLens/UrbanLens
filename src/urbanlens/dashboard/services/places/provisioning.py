@@ -256,6 +256,26 @@ def provision_outcome_for_coordinate(location: Location, *, name: str | None = N
     return ProvisionOutcome(place=standing_on, deferred=list(resolved.deferred), retry_after=resolved.retry_after, backs_off=resolved.backs_off)
 
 
+def _probe_neighbours(location: Location, previous: Place, new_parcel_polygon: MultiPolygon, known: list[MultiPolygon]) -> list[MultiPolygon]:
+    """Ask the provider chain about the domain's locations that fall outside the new outline, at most :data:`MAX_SUBDIVISION_PROBES` times."""
+    from urbanlens.dashboard.models.location.model import Location as LocationModel
+    from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain
+
+    found: list[MultiPolygon] = []
+    probes = 0
+    neighbours = LocationModel.objects.filter(place__domain_root_id=previous.domain_root_id).exclude(pk=location.pk).exclude(point__within=new_parcel_polygon).annotate(distance=Distance("point", location.point)).order_by("distance")
+    for other in neighbours.iterator():
+        if any(successor.contains(other.point) for successor in [*known, *found]):
+            continue
+        if probes >= MAX_SUBDIVISION_PROBES:
+            break
+        probes += 1
+        chain_result = BoundaryProviderChain().get_boundaries(float(other.latitude), float(other.longitude), name=other.official_name or None)
+        if chain_result.property_polygon is not None and not any(candidate.equals(chain_result.property_polygon) for candidate in [*known, *found]):
+            found.append(chain_result.property_polygon)
+    return found
+
+
 def detect_subdivision(location: Location, new_parcel_polygon: MultiPolygon | None) -> Place | None:
     """
     Only the shrink case is detected from a single coordinate: the provider now returns a much smaller parcel here than the one on record, which means the rest of the old parcel became something else.
@@ -266,8 +286,6 @@ def detect_subdivision(location: Location, new_parcel_polygon: MultiPolygon | No
 
     Returns:
         The superseded place, or None when nothing was subdivided."""
-    from urbanlens.dashboard.models.location.model import Location as LocationModel
-    from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain
     from urbanlens.dashboard.services.places import splits
 
     previous = location.place.parcel if (location.place_id and location.place is not None) else None
@@ -280,23 +298,16 @@ def detect_subdivision(location: Location, new_parcel_polygon: MultiPolygon | No
         return None
 
     successors = [new_parcel_polygon]
-    probes = 0
-    neighbours = LocationModel.objects.filter(place__domain_root_id=previous.domain_root_id).exclude(pk=location.pk).exclude(point__within=new_parcel_polygon).annotate(distance=Distance("point", location.point)).order_by("distance")
-    for other in neighbours.iterator():
-        if any(successor.contains(other.point) for successor in successors):
-            continue
-        if probes >= MAX_SUBDIVISION_PROBES:
-            break
-        probes += 1
-        chain_result = BoundaryProviderChain().get_boundaries(float(other.latitude), float(other.longitude), name=other.official_name or None)
-        if chain_result.property_polygon is not None and not any(candidate.equals(chain_result.property_polygon) for candidate in successors):
-            successors.append(chain_result.property_polygon)
-
     if not heavy:
-        if not splits.looks_like_a_split(previous, new_parcel_polygon, seen=successors[1:]):
-            return None
-        stored = splits.newer_parcels_over(previous, previous.geometry.difference(new_parcel_polygon))
+        # Stored parcels first: when they explain the remainder no provider needs asking.
+        if not splits.looks_like_a_split(previous, new_parcel_polygon):
+            successors += _probe_neighbours(location, previous, new_parcel_polygon, successors)
+            if not splits.looks_like_a_split(previous, new_parcel_polygon, seen=successors[1:]):
+                return None
+        stored = splits.candidate_parcels(previous, new_parcel_polygon)
         successors.extend(geometry for geometry in stored if not any(candidate.equals(geometry) for candidate in successors))
+    else:
+        successors += _probe_neighbours(location, previous, new_parcel_polygon, successors)
     if len(successors) < 2:
         return None
     return splits.process_split(previous, successors)

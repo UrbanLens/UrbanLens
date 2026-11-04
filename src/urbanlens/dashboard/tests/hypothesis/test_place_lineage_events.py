@@ -98,6 +98,46 @@ class MildShrinkTests(_OldParcelCase):
     def test_a_parcel_seen_in_the_same_refresh_counts(self) -> None:
         self.assertTrue(looks_like_a_split(self.old, _strip(0, 0.6), seen=[_strip(0.6, 1.0)]))
 
+    def test_another_providers_overlapping_neighbour_is_no_split_grant_or_reparent(self) -> None:
+        neighbour = self.remainder_parcel(0.55, 1.0)
+        Place.objects.filter(pk=neighbour.pk).update(provider="other")
+        self.assertFalse(looks_like_a_split(self.old, _strip(0, 0.6)))
+        with mock.patch(_CHAIN):
+            self.assertIsNone(provisioning.detect_subdivision(self.pin.location, _strip(0, 0.6)))
+        neighbour.refresh_from_db()
+        self.assertIsNone(neighbour.parent_id)
+        self.assertFalse(PlaceAccessGrant.objects.exists())
+
+    def test_a_neighbour_overlapping_the_new_outline_is_not_the_remainder(self) -> None:
+        self.remainder_parcel(0.4, 1.0)
+        self.assertFalse(looks_like_a_split(self.old, _strip(0, 0.6)))
+
+    def test_a_neighbour_that_already_has_a_parent_is_untouched(self) -> None:
+        site = make_place(PlaceKind.PARCEL, _strip(2, 3), name="Site")
+        neighbour = self.remainder_parcel()
+        Place.objects.filter(pk=neighbour.pk).update(parent=site)
+        self.assertFalse(looks_like_a_split(self.old, _strip(0, 0.6)))
+        neighbour.refresh_from_db()
+        self.assertEqual(neighbour.parent_id, site.pk)
+
+    def test_a_neighbour_whose_domain_has_strangers_pins_is_skipped(self) -> None:
+        neighbour = self.remainder_parcel()
+        pin_on(baker.make(User).profile, neighbour, lat=SOUTH + SIZE / 2, lng=WEST + SIZE * 0.8)
+        self.assertFalse(looks_like_a_split(self.old, _strip(0, 0.6)))
+
+    def test_the_pieces_must_rebuild_most_of_the_old_outline(self) -> None:
+        self.remainder_parcel(0.6, 0.85)
+        self.assertTrue(looks_like_a_split(self.old, _strip(0, 0.6)))
+        self.assertFalse(looks_like_a_split(self.old, _strip(0, 0.5), seen=[_strip(0.5, 0.75)]))
+
+    def test_a_stored_remainder_means_no_provider_is_asked(self) -> None:
+        self.remainder_parcel()
+        other = pin_on(self.holder, self.old, lat=SOUTH + SIZE / 2, lng=WEST + SIZE * 0.9)
+        self.assertTrue(other.location.place_id)
+        with mock.patch(_CHAIN) as chain:
+            provisioning.detect_subdivision(self.pin.location, _strip(0, 0.6))
+        chain.assert_not_called()
+
     def test_a_shrink_under_34_percent_still_splits_alone(self) -> None:
         self.assertTrue(looks_like_a_split(self.old, _strip(0, 0.2)))
         with mock.patch(_CHAIN):

@@ -16,7 +16,7 @@ from urbanlens.dashboard.services.places.lineage_events import LineageEvent, Lin
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from django.contrib.gis.geos import GEOSGeometry, MultiPolygon
+    from django.contrib.gis.geos import MultiPolygon
 
 logger = logging.getLogger(__name__)
 
@@ -61,19 +61,59 @@ def is_mild_shrink(place: Place, new_geometry: MultiPolygon | None) -> bool:
     return ratio is not None and (1 - SPLIT_SHRINK_RATIO) <= ratio < SPLIT_KEEP_CEILING
 
 
-def newer_parcels_over(place: Place, area: GEOSGeometry) -> list[MultiPolygon]:
-    """Outlines of plausible current parcels, other than ``place``, that touch ``area`` and were created since ``place``'s geometry was recorded."""
+#: Most of a covering parcel's area that may lie inside the new outline. A neighbour that overlaps it is a different parcel, not the rest of this one.
+SPLIT_OVERLAP_TOLERANCE = 0.05
+
+#: How much of the old outline the new outline plus the covering parcels must rebuild.
+SPLIT_REBUILD_RATIO = 0.8
+
+
+def candidate_parcels(place: Place, new_geometry: MultiPolygon) -> list[MultiPolygon]:
+    """
+    Outlines of stored parcels that could be the rest of ``place``.
+
+    A candidate is a plausible CURRENT root parcel from the same provider, created since ``place``'s
+    geometry was recorded, essentially disjoint from the new outline. One whose domain holds pins
+    from anyone who did not hold ``place`` is skipped and logged: re-parenting it would hand strangers access.
+    The geometry is overwritten in place, so a remainder parcel that only appears on a later refresh is never
+    seen here; append-only geometry versions (UL-362) would close that.
+    """
+    from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.places.lineage_events import holders_of
+
+    if place.geometry is None:
+        return []
+    remainder = place.geometry.difference(new_geometry)
+    if remainder.empty:
+        return []
     since = place.geometry_generated_at or place.created
-    return [
-        other.geometry
-        for other in Place.objects.filter(kind=PlaceKind.PARCEL, status=PlaceStatus.CURRENT, geometry__intersects=area, created__gt=since).exclude(pk=place.pk)
-        if other.geometry is not None and is_plausible_area(other.kind, other.area_sqm)
-    ]
+    queryset = Place.objects.filter(
+        kind=PlaceKind.PARCEL,
+        status=PlaceStatus.CURRENT,
+        geometry__intersects=remainder,
+        created__gt=since,
+        provider=place.provider,
+        parent__isnull=True,
+    ).exclude(pk=place.pk)
+    holders: set[int] | None = None
+    geometries: list[MultiPolygon] = []
+    for other in queryset:
+        if other.geometry is None or not is_plausible_area(other.kind, other.area_sqm) or other.geometry.area <= 0:
+            continue
+        if other.geometry.intersection(new_geometry).area / other.geometry.area > SPLIT_OVERLAP_TOLERANCE:
+            continue
+        if holders is None:
+            holders = holders_of([place], timezone.now())
+        if Pin.objects.filter(location__place__domain_root_id=other.domain_root_id).exclude(profile_id__in=holders).exists():
+            logger.info("split candidate %s skipped: its domain has pins from outside place %s", other.pk, place.pk)
+            continue
+        geometries.append(other.geometry)
+    return geometries
 
 
 def remainder_is_covered(place: Place, new_geometry: MultiPolygon, seen: Iterable[MultiPolygon] = ()) -> bool:
     """
-    Whether the part of the old outline the new one no longer holds is mostly another current parcel.
+    Whether the part of the old outline the new one no longer holds is another current parcel.
 
     Args:
         place: The parcel being refreshed.
@@ -81,19 +121,22 @@ def remainder_is_covered(place: Place, new_geometry: MultiPolygon, seen: Iterabl
         seen: Parcel outlines returned in the same refresh.
 
     Returns:
-        True when at least :data:`SPLIT_REMAINDER_COVERAGE` of the remainder is covered by ``seen`` or by
-        a plausible current parcel created since ``place``'s geometry was recorded.
+        True when :func:`candidate_parcels` and ``seen`` cover at least :data:`SPLIT_REMAINDER_COVERAGE` of the
+        remainder and, with the new outline, rebuild at least :data:`SPLIT_REBUILD_RATIO` of the old one.
     """
     if place.geometry is None:
         return False
     remainder = place.geometry.difference(new_geometry)
     if remainder.empty or remainder.area <= 0:
         return False
-    candidates = [*newer_parcels_over(place, remainder), *seen]
+    candidates = [*candidate_parcels(place, new_geometry), *seen]
     if not candidates:
         return False
-    covered = remainder.intersection(GeometryCollection(*candidates).unary_union)
-    return (covered.area / remainder.area) >= SPLIT_REMAINDER_COVERAGE
+    union = GeometryCollection(*candidates).unary_union
+    if (remainder.intersection(union).area / remainder.area) < SPLIT_REMAINDER_COVERAGE:
+        return False
+    rebuilt = place.geometry.intersection(new_geometry.union(union))
+    return (rebuilt.area / place.geometry.area) >= SPLIT_REBUILD_RATIO
 
 
 def looks_like_a_split(place: Place, new_geometry: MultiPolygon | None, seen: Iterable[MultiPolygon] = ()) -> bool:
