@@ -42,7 +42,14 @@ class DuplicateCoordinatesError(PinCreationError):
 
 
 class DuplicatePropertyError(PinCreationError):
-    """This profile already has a root pin on this property/location."""
+    """
+    This profile already has a root pin on this property/location.
+
+    Attributes:
+        existing_pin_uuid: The caller's own pin that holds the property, so a client can offer to add the new pin as a building on it.
+    """
+
+    existing_pin_uuid: str | None = None
 
 
 class PinParentNotFoundError(PinCreationError):
@@ -254,8 +261,11 @@ def create_pin_for_profile(
     # The property is the domain root: a point on one of its buildings resolves onto the building's place.
     if new_parent is None and location.place is not None:
         property_id = location.place.domain_root_id or location.place_id
-        if Pin.objects.root_pins().filter(profile=profile, location__place__domain_root_id=property_id).exists():
-            raise DuplicatePropertyError("Duplicate root pin on this property.")
+        existing = Pin.objects.root_pins().filter(profile=profile, location__place__domain_root_id=property_id).order_by("created", "pk").first()
+        if existing is not None:
+            error = DuplicatePropertyError("Duplicate root pin on this property.")
+            error.existing_pin_uuid = str(existing.uuid)
+            raise error
 
     # The chosen location, plus any property this coordinate could plausibly mean instead - so a
     # caller can still treat "more than one" as "there is a real choice here".

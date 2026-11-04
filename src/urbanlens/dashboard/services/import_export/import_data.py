@@ -473,6 +473,12 @@ def _run_import_steps(profile: Any, data_dir: str, result: ImportResult, job_sta
         report_progress = _make_step_progress_reporter(job_status, key, step_start, step_end)
         importer(profile, data_dir, result, pin_uuid_map=pin_uuid_map, label_uuid_map=label_uuid_map, report_progress=report_progress)
 
+    from urbanlens.dashboard.services.pins.property_nesting import nest_duplicate_roots, summary_warning
+
+    nested_warning = summary_warning(nest_duplicate_roots(profile_id=profile.pk))
+    if nested_warning:
+        result.warnings.append(nested_warning)
+
 
 def _store_deferred_files(profile: Any, data_dir: str, result: ImportResult, deferred: DeferredFiles, job_status: ImportJobStatus) -> None:
     """

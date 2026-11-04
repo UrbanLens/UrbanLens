@@ -784,7 +784,14 @@ class PinsView(ExternalApiView):
             return Response({"error": "You already have a pin at these exact coordinates."}, status=400)
         except DuplicatePropertyError as exc:
             logger.info("external API pin creation rejected: %s", exc)
-            return Response({"error": "You already have a pin on this property."}, status=400)
+            return Response(
+                {
+                    "error": "You already have a pin on this property. Add it as a building on your pin instead.",
+                    "code": "duplicate_property",
+                    "existing_pin_uuid": exc.existing_pin_uuid,
+                },
+                status=400,
+            )
         except PinParentNotFoundError as exc:
             logger.info("external API pin creation rejected: %s", exc)
             return Response({"error": "No such pin to set as parent."}, status=400)

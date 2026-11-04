@@ -429,7 +429,8 @@ class PinDetachChildView(LoginRequiredMixin, View):
             return HttpResponse("You already have a top-level pin at this exact location. Move this child pin slightly before detaching it.", status=400)
         logger.info("User %s detached child pin %s from parent %s", request.user.id, pin.id, pin.parent_pin_id)
         pin.parent_pin = None
-        pin.save(update_fields=["parent_pin", "updated"])
+        pin.parenting_is_manual = True
+        pin.save(update_fields=["parent_pin", "parenting_is_manual", "updated"])
         response = HttpResponse("", status=200)
         response["HX-Refresh"] = "true"
         return response

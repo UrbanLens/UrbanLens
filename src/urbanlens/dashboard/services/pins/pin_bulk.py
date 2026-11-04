@@ -154,7 +154,8 @@ def bulk_merge_under(target: Pin, sources: Sequence[Pin]) -> BulkMergeResult:
     with transaction.atomic(), deferring_child_boundary_refits():
         if promote:
             target.parent_pin = None
-            target.save(update_fields=["parent_pin", "updated"])
+            target.parenting_is_manual = True
+            target.save(update_fields=["parent_pin", "parenting_is_manual", "updated"])
         for source in candidates:
             try:
                 reparent_pin(source, target)

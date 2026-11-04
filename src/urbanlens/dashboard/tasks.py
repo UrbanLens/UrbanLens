@@ -3391,7 +3391,10 @@ def run_scheduled_enrichment(self) -> dict:
         return {"skipped": "already_running"}
     try:
         update_task_progress(self, current=0, total=1, message="Enriching locations...")
-        summary = run_enrichment_cycle()
+        from urbanlens.dashboard.services.pins.property_nesting import deferring_property_nesting
+
+        with deferring_property_nesting():
+            summary = run_enrichment_cycle()
         update_task_progress(self, current=1, total=1, message="Enrichment cycle complete")
         return summary
     except SOFT_TIME_LIMIT_ERRORS:

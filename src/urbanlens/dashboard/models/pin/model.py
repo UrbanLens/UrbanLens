@@ -113,6 +113,10 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
     import_source = CharField(max_length=20, choices=PinImportSource.choices, null=True, blank=True)
     import_key = CharField(max_length=255, null=True, blank=True)
 
+    #: Exempt from automatic nesting: the user chose this pin's place in the hierarchy (promote, detach, keep children, swap with parent).
+    #: See services.pins.property_nesting. Rows that predate the field default to True.
+    parenting_is_manual = BooleanField(default=False)
+
     # User's custom label. None = show location.display_name instead (see effective_name).
     name = CharField(max_length=255, null=True, blank=True)
     icon = CharField(max_length=255, null=True, blank=True)
@@ -429,7 +433,9 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
                 else:
                     other_root = Pin.objects.root_pins().filter(profile_id=self.profile_id, location_id=child.location_id).exclude(pk=child.pk).first()
                     child.parent_pin_id = other_root.pk if other_root is not None else None
-                child.save(update_fields=["parent_pin", "updated"])
+                if child.parent_pin_id is None:
+                    child.parenting_is_manual = True
+                child.save(update_fields=["parent_pin", "parenting_is_manual", "updated"])
                 promoted += 1
         return promoted
 
@@ -462,8 +468,9 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
         else:
             self.parent_pin_id = grandparent_id
 
+        self.parenting_is_manual = True
         with transaction.atomic():
-            self.save(update_fields=["parent_pin", "updated"])
+            self.save(update_fields=["parent_pin", "parenting_is_manual", "updated"])
             old_parent.parent_pin = self
             old_parent.save(update_fields=["parent_pin", "updated"])
 
