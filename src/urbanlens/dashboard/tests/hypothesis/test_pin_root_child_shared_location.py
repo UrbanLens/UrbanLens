@@ -93,3 +93,58 @@ class RootChildSharedLocationTests(TestCase):
         ordered = list(Pin.objects.filter(profile=self.profile, location=self.location).preferring_root())
 
         self.assertEqual([pin.pk for pin in ordered], [self.root.pk, self.child.pk, second_child.pk])
+
+    def test_swap_to_top_level_refits_the_new_parents_boundary(self) -> None:
+        from unittest import mock
+
+        with mock.patch("urbanlens.dashboard.services.geo.child_pin_boundaries.refit_child_pin_boundary") as refit:
+            self.child.swap_with_parent()
+
+        refitted = {call.args[0] for call in refit.call_args_list}
+        self.assertIn(self.child.pk, refitted)
+        self.assertIn(self.root.pk, refitted)
+
+    def test_swap_integrity_error_from_a_concurrent_root_is_a_conflict(self) -> None:
+        from unittest import mock
+
+        from django.db import IntegrityError
+
+        other_root = baker.make(
+            Pin, profile=self.profile, location=baker.make(Location, latitude=43.5, longitude=-74.5)
+        )
+        sub = baker.make(Pin, profile=self.profile, location=self.location, parent_pin=other_root)
+        real_save = Pin.save
+
+        def racing_save(pin, *args, **kwargs):
+            if pin.pk == sub.pk:
+                # A concurrent request lands a root here between the check and the write.
+                Pin.objects.filter(pk=other_root.pk).update(location=self.location)
+                raise IntegrityError("db_pin_unique_location_per_profile")
+            return real_save(pin, *args, **kwargs)
+
+        with mock.patch.object(Pin, "save", racing_save), self.assertRaises(SwapLocationConflictError):
+            sub.swap_with_parent()
+
+    def test_deleting_a_parent_keeps_two_children_at_its_point(self) -> None:
+        from urbanlens.dashboard.services.pins.pin_edit import delete_pin
+
+        second = baker.make(Pin, profile=self.profile, location=self.location, parent_pin=self.root)
+
+        delete_pin(self.root, children_mode="keep")
+
+        roots = Pin.objects.root_pins().filter(profile=self.profile, location=self.location)
+        self.assertEqual(roots.count(), 1)
+        remaining = Pin.objects.filter(pk__in=[self.child.pk, second.pk])
+        self.assertEqual(remaining.count(), 2)
+        survivor = roots.get()
+        self.assertEqual({p.parent_pin_id for p in remaining if p.pk != survivor.pk}, {survivor.pk})
+
+    def test_import_match_ignores_a_child_pin_at_the_location(self) -> None:
+        lonely = baker.make(Location, latitude=44.0, longitude=-75.0)
+        child_only = baker.make(Pin, profile=self.profile, location=lonely, parent_pin=self.root)
+
+        pin, created = Pin.objects.get_nearby_or_create(44.0, -75.0, self.profile)
+
+        self.assertTrue(created)
+        self.assertNotEqual(pin.pk, child_only.pk)
+        self.assertIsNone(pin.parent_pin_id)

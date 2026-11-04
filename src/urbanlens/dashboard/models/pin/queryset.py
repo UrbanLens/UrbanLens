@@ -505,8 +505,8 @@ class PinManager(_PinManagerBase["Pin"]):
 
             location, _ = Location.objects.get_nearby_or_create(latitude, longitude, threshold_meters=threshold_meters)
 
-        # Include child pins when deduping; a root pin and a child may share the Location, so prefer the root, then the oldest.
-        existing_pin = self.filter(location=location, profile=profile).preferring_root().first()
+        # Match root pins only: a child at this Location is a detail of another pin, not the place the importer is adding.
+        existing_pin = self.root_pins().filter(location=location, profile=profile).first()
         if existing_pin is not None:
             return existing_pin, False
 
@@ -514,7 +514,7 @@ class PinManager(_PinManagerBase["Pin"]):
             pin = self.create(location=location, profile=profile, **defaults)
         except IntegrityError:
             # Concurrent insert won the race; return that row.
-            existing_pin = self.filter(location=location, profile=profile).preferring_root().first()
+            existing_pin = self.root_pins().filter(location=location, profile=profile).first()
             if existing_pin is not None:
                 return existing_pin, False
             raise

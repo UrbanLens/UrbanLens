@@ -449,22 +449,33 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
             raise ValueError("This pin has no parent to swap with.")
         grandparent_id = old_parent.parent_pin_id
 
-        if grandparent_id is None:
-            # The old parent is a root now but is about to become this pin's child, so it doesn't count.
-            if Pin.objects.root_pins().filter(profile_id=self.profile_id, location_id=self.location_id).exclude(pk__in=[self.pk, old_parent.pk]).exists():
-                raise SwapLocationConflictError("Can't complete the swap - you already have a top-level pin at this pin's own location.")
-            self.parent_pin = None
-        else:
-            self.parent_pin_id = grandparent_id
+        from django.db import IntegrityError
 
-        with transaction.atomic():
-            if grandparent_id is None:
-                # Demote the old parent first: this pin may share its Location, and two top-level pins can't.
-                # Raw update because the transient state (each the other's parent) must not run save() side effects.
-                Pin.objects.filter(pk=old_parent.pk).update(parent_pin_id=self.pk)
-            self.save(update_fields=["parent_pin", "updated"])
-            old_parent.parent_pin = self
-            old_parent.save(update_fields=["parent_pin", "updated"])
+        from urbanlens.dashboard.services.geo.child_pin_boundaries import request_child_boundary_refit
+
+        conflict_message = "Can't complete the swap - you already have a top-level pin at this pin's own location."
+        try:
+            with transaction.atomic():
+                if grandparent_id is None:
+                    # The old parent is a root now but is about to become this pin's child, so it doesn't count.
+                    if Pin.objects.root_pins().filter(profile_id=self.profile_id, location_id=self.location_id).exclude(pk__in=[self.pk, old_parent.pk]).exists():
+                        raise SwapLocationConflictError(conflict_message)
+                    self.parent_pin = None
+                    # Demote the old parent first: this pin may share its Location, and two top-level pins can't.
+                    # Raw update because the transient state (each the other's parent) must not run save() side effects.
+                    Pin.objects.filter(pk=old_parent.pk).update(parent_pin_id=self.pk)
+                else:
+                    self.parent_pin_id = grandparent_id
+                self.save(update_fields=["parent_pin", "updated"])
+                old_parent.parent_pin = self
+                old_parent.save(update_fields=["parent_pin", "updated"])
+                # The raw update above bypassed the pre_save receiver that tracks the old parent.
+                request_child_boundary_refit(self.pk)
+                request_child_boundary_refit(old_parent.pk)
+        except IntegrityError as exc:
+            if Pin.objects.root_pins().filter(profile_id=self.profile_id, location_id=self.location_id).exclude(pk__in=[self.pk, old_parent.pk]).exists():
+                raise SwapLocationConflictError(conflict_message) from exc
+            raise
 
         return old_parent
 
