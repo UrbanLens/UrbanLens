@@ -1520,8 +1520,15 @@ UL_TRUST_MIN_PINS_FOR_GEOGRAPHY = int(os.getenv("UL_TRUST_MIN_PINS_FOR_GEOGRAPHY
 UL_TRUST_NO_GEOGRAPHY_THRESHOLD = float(os.getenv("UL_TRUST_NO_GEOGRAPHY_THRESHOLD", "0.8"))
 #: Two profiles are independent only when the Jaccard overlap of their pin cells is below this.
 UL_TRUST_MAX_CELL_JACCARD = float(os.getenv("UL_TRUST_MAX_CELL_JACCARD", "0.5"))
-#: How much an accepted friendship raises ``UL_TRUST_MAX_CELL_JACCARD`` for that pair. It only ever loosens the check.
-UL_TRUST_FRIENDSHIP_JACCARD_BONUS = float(os.getenv("UL_TRUST_FRIENDSHIP_JACCARD_BONUS", "0.05"))
+#: The raised Jaccard limit for a pair with an accepted friendship at least ``UL_TRUST_FRIENDSHIP_MIN_AGE_DAYS`` old. It only ever loosens the check.
+UL_TRUST_FRIENDSHIP_JACCARD_LIMIT = float(os.getenv("UL_TRUST_FRIENDSHIP_JACCARD_LIMIT", "0.7"))
+#: A friendship counts only once it is this old.
+UL_TRUST_FRIENDSHIP_MIN_AGE_DAYS = int(os.getenv("UL_TRUST_FRIENDSHIP_MIN_AGE_DAYS", "30"))
+#: Hard floors for ``is_real_user``, whatever the score: account age and distinct ISO weeks with meaningful activity in the last 90 days.
+UL_TRUST_MIN_AGE_DAYS = int(os.getenv("UL_TRUST_MIN_AGE_DAYS", "30"))
+UL_TRUST_MIN_ACTIVE_WEEKS = int(os.getenv("UL_TRUST_MIN_ACTIVE_WEEKS", "3"))
+#: Only pins created within this window feed the independence cells, so a move to a new city fades the old one.
+UL_TRUST_CELL_WINDOW_DAYS = int(os.getenv("UL_TRUST_CELL_WINDOW_DAYS", "730"))
 #: Accounts created closer together than this must both be older than ``UL_TRUST_BOTH_ESTABLISHED_DAYS`` to count as independent.
 UL_TRUST_MIN_CREATION_GAP_DAYS = int(os.getenv("UL_TRUST_MIN_CREATION_GAP_DAYS", "30"))
 UL_TRUST_BOTH_ESTABLISHED_DAYS = int(os.getenv("UL_TRUST_BOTH_ESTABLISHED_DAYS", "180"))

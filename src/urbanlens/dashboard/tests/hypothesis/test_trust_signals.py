@@ -14,6 +14,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard import tasks
 from urbanlens.dashboard.models.achievements.model import ProfileActivityDay
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
+from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trust_signals import ProfileTrustSignals
@@ -50,13 +51,14 @@ def _pins(profile: Profile, center: tuple[float, float], count: int, *, age_days
     return pins
 
 
-def _active(profile: Profile, days: int, kind: str = "pin") -> None:
+def _weeks(profile: Profile, weeks: int, kind: str = "pin") -> None:
+    """One meaningful day in each of ``weeks`` consecutive ISO weeks, ending this week."""
     today = timezone.localdate()
-    for i in range(days):
-        ProfileActivityDay.objects.get_or_create(profile=profile, kind=kind, day=today - timedelta(days=i))
+    for i in range(weeks):
+        ProfileActivityDay.objects.get_or_create(profile=profile, kind=kind, day=today - timedelta(weeks=i))
 
 
-def _visits(pin, source: str, count: int) -> None:
+def _visit_days(pin, source: str, count: int) -> None:
     for i in range(count):
         baker.make(
             "dashboard.PinVisit",
@@ -67,72 +69,128 @@ def _visits(pin, source: str, count: int) -> None:
         )
 
 
+def _metro_pins(profile: Profile, count: int, *, age_days: int = 30) -> list:
+    """Pins spread over three geohash-5 cells (about 5 km each) around LA."""
+    pins = []
+    for i in range(3):
+        pins += _pins(profile, (LA[0] + i * 0.06, LA[1]), count // 3 + (1 if i < count % 3 else 0), age_days=age_days)
+    return pins
+
+
+def _clear_activity(profile: Profile) -> None:
+    ProfileActivityDay.objects.filter(profile=profile).delete()
+
+
+def _befriend(a: Profile, b: Profile, *, age_days: int = 60) -> None:
+    friendship = baker.make("dashboard.Friendship", from_profile=a, to_profile=b, status=FriendshipStatus.ACCEPTED)
+    Friendship.objects.filter(pk=friendship.pk).update(updated=timezone.now() - timedelta(days=age_days))
+
+
 class RealUserTests(TestCase):
-    def test_regional_explorer_passes_without_visits(self) -> None:
+    def test_one_metro_year_old_account_with_recorded_visits_passes(self) -> None:
         profile = _profile(age_days=365)
-        _pins(profile, LA, 25)
-        _pins(profile, (34.5, -118.0), 25)
-        ProfileActivityDay.objects.filter(profile=profile).delete()
-        _active(profile, 12)
+        pins = _metro_pins(profile, 10)
+        _clear_activity(profile)
+        _weeks(profile, 4)
+        _visit_days(pins[0], VisitSource.MANUAL, 4)
         self.assertTrue(is_real_user(profile))
         self.assertTrue(signals_for(profile).is_real_user)
 
-    def test_dormant_account_with_login_days_and_fresh_pins_fails(self) -> None:
-        profile = _profile(age_days=180)
-        _pins(profile, LA, 5, age_days=1)
-        _pins(profile, NY, 5, age_days=1)
-        ProfileActivityDay.objects.filter(profile=profile).delete()
-        _active(profile, 30, kind="login")
-        self.assertFalse(is_real_user(profile))
-
-    def test_one_day_account_with_maxed_visits_fails(self) -> None:
-        profile = _profile(age_days=1)
-        pins = _pins(profile, LA, 12)
-        _active(profile, 1)
-        for source in (VisitSource.GEOLOCATION, VisitSource.PHOTO, VisitSource.MANUAL):
-            _visits(pins[0], source, 10)
-        self.assertFalse(is_real_user(profile))
-
-    def test_fresh_account_fails(self) -> None:
-        profile = _profile(age_days=1)
-        _pins(profile, LA, 3, age_days=0)
-        _active(profile, 2)
-        self.assertFalse(is_real_user(profile))
-
-    def test_visits_can_qualify_a_younger_account(self) -> None:
-        profile = _profile(age_days=120)
-        pins = _pins(profile, LA, 12)
-        _pins(profile, NY, 2)
-        _active(profile, 12)
-        _visits(pins[0], VisitSource.GEOLOCATION, 2)
+    def test_light_long_standing_user_passes_without_visits(self) -> None:
+        profile = _profile(age_days=365)
+        _metro_pins(profile, 15)
+        _clear_activity(profile)
+        _weeks(profile, 3)
         self.assertTrue(is_real_user(profile))
 
-    def test_recorded_visits_are_capped_below_a_device_visit(self) -> None:
-        base = {"account_age_days": 10, "active_days_90": 5, "pin_count": 5, "region_count": 1}
-        many_recorded = real_user_score(ProfileTrustSignals(recorded_visits=50, **base))
-        one_device = real_user_score(ProfileTrustSignals(device_track_visits=1, **base))
-        self.assertLess(many_recorded, one_device)
+    def test_dormant_aged_account_with_forged_geolocation_visits_fails_on_the_floor(self) -> None:
+        profile = _profile(age_days=180)
+        pins = _metro_pins(profile, 10)
+        _clear_activity(profile)
+        _visit_days(pins[0], VisitSource.GEOLOCATION, 4)
+        signals = signals_for(profile)
+        self.assertEqual(signals.active_weeks_90, 0)
+        self.assertFalse(is_real_user(profile))
 
-    def test_vouching_counts_only_friends_stored_as_real(self) -> None:
-        real, fake, me = _profile(), _profile(), _profile()
-        ProfileTrustSignals.objects.create(profile=real, computed_at=timezone.now(), is_real_user=True)
-        ProfileTrustSignals.objects.create(profile=fake, computed_at=timezone.now(), is_real_user=False)
-        for friend in (real, fake):
+    def test_login_only_weeks_do_not_count(self) -> None:
+        profile = _profile(age_days=365)
+        _metro_pins(profile, 10)
+        _clear_activity(profile)
+        _weeks(profile, 8, kind="login")
+        self.assertFalse(is_real_user(profile))
+
+    def test_young_account_maxed_everywhere_else_fails(self) -> None:
+        profile = _profile(age_days=20)
+        pins = _metro_pins(profile, 12, age_days=15)
+        _clear_activity(profile)
+        _weeks(profile, 6)
+        _visit_days(pins[0], VisitSource.PHOTO, 5)
+        signals = signals_for(profile)
+        self.assertGreaterEqual(real_user_score(signals), 0.6)
+        self.assertFalse(is_real_user(profile))
+
+    def test_fresh_pins_do_not_count(self) -> None:
+        profile = _profile(age_days=365)
+        _metro_pins(profile, 12, age_days=1)
+        self.assertEqual(signals_for(profile).pin_count, 0)
+
+    def test_one_cluster_of_pins_does_not_fill_spread(self) -> None:
+        profile = _profile(age_days=365)
+        _pins(profile, LA, 12)
+        self.assertEqual(signals_for(profile).spread_cells, 1)
+
+    def test_visits_are_capped_and_claims_count_less_than_photos(self) -> None:
+        base = {"account_age_days": 10, "active_weeks_90": 1}
+        claims = real_user_score(ProfileTrustSignals(claim_visit_days=50, **base))
+        capped = real_user_score(ProfileTrustSignals(claim_visit_days=4, **base))
+        photos = real_user_score(ProfileTrustSignals(photo_visit_days=2, **base))
+        self.assertEqual(claims, capped)
+        self.assertEqual(capped, photos)
+        self.assertLess(
+            real_user_score(ProfileTrustSignals(claim_visit_days=1, **base)),
+            real_user_score(ProfileTrustSignals(photo_visit_days=1, **base)),
+        )
+
+    def test_trusted_friend_needs_an_old_friendship_with_a_qualifying_base_score(self) -> None:
+        me, good, young_friendship, weak = (_profile() for _ in range(4))
+        now = timezone.now()
+        for friend, score in ((good, 0.9), (young_friendship, 0.9), (weak, 0.2)):
+            ProfileTrustSignals.objects.create(
+                profile=friend, computed_at=now, base_score=score, account_age_days=400, active_weeks_90=6
+            )
             baker.make("dashboard.Friendship", from_profile=me, to_profile=friend, status=FriendshipStatus.ACCEPTED)
-        self.assertEqual(compute_signals(me).vouch_count, 1)
+        Friendship.objects.update(updated=now - timedelta(days=60))
+        Friendship.objects.filter(to_profile=young_friendship).update(updated=now - timedelta(days=5))
+        self.assertEqual(compute_signals(me).trusted_friend_count, 1)
 
-    def test_signals_count_visits_pins_and_cells(self) -> None:
+    def test_trusted_friend_count_does_not_feed_back(self) -> None:
+        a, b = _profile(), _profile()
+        baker.make("dashboard.Friendship", from_profile=a, to_profile=b, status=FriendshipStatus.ACCEPTED)
+        Friendship.objects.update(updated=timezone.now() - timedelta(days=60))
+        for _ in range(2):
+            compute_signals(a)
+            compute_signals(b)
+        self.assertEqual(ProfileTrustSignals.objects.get(profile=a).trusted_friend_count, 0)
+
+    def test_signals_count_visit_days_pins_and_cells(self) -> None:
         profile = _profile()
         pins = _pins(profile, LA, 12)
         _pins(profile, LA, 3, age_days=1)
-        _visits(pins[0], VisitSource.GEOLOCATION, 1)
-        _visits(pins[0], VisitSource.PHOTO, 1)
+        _visit_days(pins[0], VisitSource.GEOLOCATION, 1)
+        _visit_days(pins[0], VisitSource.PHOTO, 1)
         row = compute_signals(profile)
-        self.assertEqual((row.device_track_visits, row.photo_visits, row.recorded_visits), (1, 1, 0))
+        self.assertEqual((row.claim_visit_days, row.photo_visit_days), (1, 1))
         self.assertEqual(row.pin_count, 12)
-        self.assertEqual(row.region_count, 1)
         self.assertGreaterEqual(len(row.pin_cells), 1)
         self.assertTrue(all(len(c) == 6 for c in row.pin_cells))
+
+    def test_old_pins_fall_out_of_the_cell_window(self) -> None:
+        profile = _profile()
+        _pins(profile, NY, 6, age_days=900)
+        _pins(profile, LA, 6, age_days=30)
+        row = compute_signals(profile)
+        self.assertEqual(row.pin_count, 12)
+        self.assertEqual(len(row.pin_cells), 1)
 
 
 @override_settings(UL_TRUST_MIN_PINS_FOR_GEOGRAPHY=5)
@@ -171,19 +229,20 @@ class IndependenceTests(TestCase):
             _pins(a, centers[0], 8)
             _pins(b, centers[1], 8)
             before = are_independent(a, b)
-            baker.make("dashboard.Friendship", from_profile=a, to_profile=b, status=FriendshipStatus.ACCEPTED)
+            _befriend(a, b)
             self.assertTrue(are_independent(a, b) or not before)
 
-    def test_friendship_can_loosen_a_borderline_pair(self) -> None:
+    def test_established_friendship_loosens_a_borderline_pair_a_new_one_does_not(self) -> None:
         a, b = _profile(), _profile()
         _pins(a, LA, 8)
         _pins(a, NY, 1)
         _pins(b, LA, 8)
-        _pins(b, SEATTLE, 1)
-        with override_settings(UL_TRUST_MAX_CELL_JACCARD=0.3, UL_TRUST_FRIENDSHIP_JACCARD_BONUS=0.1):
-            self.assertFalse(are_independent(a, b))
-            baker.make("dashboard.Friendship", from_profile=a, to_profile=b, status=FriendshipStatus.ACCEPTED)
-            self.assertTrue(are_independent(a, b))
+        # Jaccard is 1/2 here: at the strict limit, under the friendship limit.
+        self.assertFalse(are_independent(a, b))
+        _befriend(a, b, age_days=5)
+        self.assertFalse(are_independent(a, b))
+        Friendship.objects.update(updated=timezone.now() - timedelta(days=60))
+        self.assertTrue(are_independent(a, b))
 
     def test_accounts_registered_days_apart_fail_unless_both_established(self) -> None:
         a, b = _profile(age_days=100), _profile(age_days=98)
@@ -199,13 +258,21 @@ class IndependenceTests(TestCase):
         _pins(far_b, NY, 8)
         self.assertTrue(are_independent(far_a, far_b))
 
-    def test_shared_invitation_chain_fails(self) -> None:
-        inviter, a, b = _profile(), _profile(), _profile()
+    def test_invitation_links_fail_only_while_the_younger_account_is_under_180_days(self) -> None:
+        for ages, expected in (((400, 400), True), ((400, 100), False)):
+            inviter, a, b = _profile(), _profile(age_days=ages[0]), _profile(age_days=ages[1])
+            _pins(a, LA, 8)
+            _pins(b, NY, 8)
+            for invitee in (a, b):
+                baker.make("dashboard.FriendInvitation", inviter=inviter, invitee=invitee, accepted_at=timezone.now())
+            self.assertEqual(are_independent(a, b), expected)
+
+    def test_direct_invitation_fails_a_young_pair(self) -> None:
+        a, b = _profile(age_days=100), _profile(age_days=20)
         _pins(a, LA, 8)
         _pins(b, NY, 8)
         self.assertTrue(are_independent(a, b))
-        for invitee in (a, b):
-            baker.make("dashboard.FriendInvitation", inviter=inviter, invitee=invitee, accepted_at=timezone.now())
+        baker.make("dashboard.FriendInvitation", inviter=a, invitee=b, accepted_at=timezone.now())
         self.assertFalse(are_independent(a, b))
 
     def test_sparse_profile_needs_the_higher_bar(self) -> None:
@@ -213,6 +280,8 @@ class IndependenceTests(TestCase):
         _pins(sparse, LA, 2)
         _pins(other, NY, 8)
         self.assertFalse(are_independent(sparse, other))
+        _weeks(sparse, 3)
+        compute_signals(sparse)
         with override_settings(UL_TRUST_NO_GEOGRAPHY_THRESHOLD=0.0):
             self.assertTrue(are_independent(sparse, other))
 
@@ -248,9 +317,9 @@ class NightlyRefreshTests(TestCase):
         profiles = [_profile() for _ in range(3)]
         _pins(profiles[0], LA, 4)
         for profile in profiles:
-            _active(profile, 1)
+            _weeks(profile, 1)
         lo, hi = min(p.pk for p in profiles), max(p.pk for p in profiles)
-        fields = ("profile_id", "pin_count", "pin_cells", "active_days_90", "is_real_user")
+        fields = ("profile_id", "pin_count", "pin_cells", "active_weeks_90", "is_real_user")
         first = tasks.refresh_trust_signals_range(lo, hi)
         snapshot = list(ProfileTrustSignals.objects.order_by("profile_id").values_list(*fields))
         second = tasks.refresh_trust_signals_range(lo, hi)
@@ -260,7 +329,7 @@ class NightlyRefreshTests(TestCase):
     def test_dormant_profile_with_a_fresh_row_is_skipped(self) -> None:
         profile = _profile()
         ProfileActivityDay.objects.filter(profile=profile).delete()
-        ProfileTrustSignals.objects.create(profile=profile, computed_at=timezone.now(), active_days_90=0)
+        ProfileTrustSignals.objects.create(profile=profile, computed_at=timezone.now(), active_weeks_90=0)
         self.assertEqual(tasks.refresh_trust_signals_range(profile.pk, profile.pk), 0)
         ProfileTrustSignals.objects.filter(profile=profile).update(computed_at=timezone.now() - timedelta(days=30))
         self.assertEqual(tasks.refresh_trust_signals_range(profile.pk, profile.pk), 1)

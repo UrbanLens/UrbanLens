@@ -4880,7 +4880,7 @@ def refresh_trust_signals_range(start_pk: int, end_pk: int) -> int:
     from urbanlens.dashboard.services.trust import compute_signals
 
     dormant_cutoff = timezone.now() - timedelta(days=settings.UL_TRUST_DORMANT_REFRESH_DAYS)
-    skip = set(ProfileTrustSignals.objects.filter(profile_id__gte=start_pk, profile_id__lte=end_pk, active_days_90=0, computed_at__gte=dormant_cutoff).values_list("profile_id", flat=True))
+    skip = set(ProfileTrustSignals.objects.filter(profile_id__gte=start_pk, profile_id__lte=end_pk, active_weeks_90=0, computed_at__gte=dormant_cutoff).values_list("profile_id", flat=True))
     rebuilt = 0
     for profile in Profile.objects.filter(pk__gte=start_pk, pk__lte=end_pk).exclude(pk__in=skip).iterator(chunk_size=200):
         compute_signals(profile)

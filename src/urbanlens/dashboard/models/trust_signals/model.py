@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from django.db.models import CASCADE, BooleanField, DateTimeField, JSONField, OneToOneField, PositiveIntegerField
+from django.db.models import CASCADE, BooleanField, DateTimeField, FloatField, JSONField, OneToOneField, PositiveIntegerField
 
 from urbanlens.dashboard.models import abstract
 
@@ -20,29 +20,29 @@ class ProfileTrustSignals(abstract.DashboardModel):
         profile: Whose signals these are.
         computed_at: When the row was last rebuilt.
         account_age_days: Days since the profile was created.
-        active_days_90: Distinct days in the last 90 with a meaningful action (a login alone does not count).
+        active_weeks_90: Distinct ISO weeks in the last 90 days containing a meaningful action (a login alone does not count).
         pin_count: Pins at least 14 days old; fresh pins are cheap to scatter.
-        pin_cells: Geohash-6 cells (about 1 km) of those pins, most pinned first, capped at 64.
-        region_count: Distinct geohash-4 cells (about 40 km) among those pins.
-        vouch_count: Accepted friends whose own row said they were real users when it was last computed.
-        is_real_user: The verdict at ``computed_at``; read by other profiles' vouching, so there is no recursion.
-        device_track_visits: Visits recorded by the device's own location track.
-        photo_visits: Visits inferred from photos with GPS and time.
-        recorded_visits: Visits the user (or an import) merely asserts.
+        pin_cells: Geohash-6 cells (about 1 km) of pins from the last ``UL_TRUST_CELL_WINDOW_DAYS`` days, most pinned first, capped at 64.
+        spread_cells: Distinct geohash-5 cells (about 5 km) among the mature pins.
+        trusted_friend_count: Friends of at least 30 days whose ``base_score`` cleared the threshold at their last computation.
+        base_score: The real-user score without the trusted-friend part, which is what the trusted-friend count reads, so it never feeds back on itself.
+        is_real_user: The verdict at ``computed_at``; informational; the trusted-friend count reads only base_score.
+        claim_visit_days: Days with a visit the user or a client merely asserts (geolocation post, journal, import, trip, friend's journal).
+        photo_visit_days: Days with a visit inferred from a photo with GPS and time.
     """
 
     profile = OneToOneField("dashboard.Profile", on_delete=CASCADE, related_name="trust_signals")
     computed_at = DateTimeField()
     account_age_days = PositiveIntegerField(default=0)
-    active_days_90 = PositiveIntegerField(default=0)
+    active_weeks_90 = PositiveIntegerField(default=0)
     pin_count = PositiveIntegerField(default=0)
     pin_cells = JSONField(default=list)
-    region_count = PositiveIntegerField(default=0)
-    vouch_count = PositiveIntegerField(default=0)
+    spread_cells = PositiveIntegerField(default=0)
+    trusted_friend_count = PositiveIntegerField(default=0)
+    base_score = FloatField(default=0.0)
     is_real_user = BooleanField(default=False)
-    device_track_visits = PositiveIntegerField(default=0)
-    photo_visits = PositiveIntegerField(default=0)
-    recorded_visits = PositiveIntegerField(default=0)
+    claim_visit_days = PositiveIntegerField(default=0)
+    photo_visit_days = PositiveIntegerField(default=0)
 
     if TYPE_CHECKING:
         profile_id: int
