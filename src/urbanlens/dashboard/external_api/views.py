@@ -1590,8 +1590,8 @@ class VisitSuggestionsView(ExternalApiView):
         # A root pin and a child can share a Location; the root, then the oldest, stands for it.
         pins_by_location: dict[int, Pin] = {}
         if location_ids:
-            for pin in Pin.objects.filter(profile=profile, location_id__in=location_ids).select_related("location").preferring_root():
-                pins_by_location.setdefault(pin.location_id, pin)
+            for loc_pin in Pin.objects.filter(profile=profile, location_id__in=location_ids).select_related("location").preferring_root():
+                pins_by_location.setdefault(loc_pin.location_id, loc_pin)
 
         payload = []
         for suggestion in suggestions:
