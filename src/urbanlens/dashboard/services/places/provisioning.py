@@ -271,7 +271,12 @@ def detect_subdivision(location: Location, new_parcel_polygon: MultiPolygon | No
     from urbanlens.dashboard.services.places import splits
 
     previous = location.place.parcel if (location.place_id and location.place is not None) else None
-    if previous is None or new_parcel_polygon is None or not splits.looks_like_a_split(previous, new_parcel_polygon):
+    if previous is None or new_parcel_polygon is None:
+        return None
+    ratio = splits.shrink_ratio(previous, new_parcel_polygon)
+    heavy = ratio is not None and ratio < (1 - splits.SPLIT_SHRINK_RATIO)
+    # A mild shrink only counts once the missing part turns up as another parcel; a stored one is enough.
+    if not heavy and not splits.is_mild_shrink(previous, new_parcel_polygon):
         return None
 
     successors = [new_parcel_polygon]
@@ -287,6 +292,11 @@ def detect_subdivision(location: Location, new_parcel_polygon: MultiPolygon | No
         if chain_result.property_polygon is not None and not any(candidate.equals(chain_result.property_polygon) for candidate in successors):
             successors.append(chain_result.property_polygon)
 
+    if not heavy:
+        if not splits.looks_like_a_split(previous, new_parcel_polygon, seen=successors[1:]):
+            return None
+        stored = splits.newer_parcels_over(previous, previous.geometry.difference(new_parcel_polygon))
+        successors.extend(geometry for geometry in stored if not any(candidate.equals(geometry) for candidate in successors))
     if len(successors) < 2:
         return None
     return splits.process_split(previous, successors)

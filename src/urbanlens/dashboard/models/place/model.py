@@ -93,7 +93,9 @@ class GrantReason(TextChoices):
     """Why a profile holds access that containment can no longer prove."""
 
     GRANDFATHERED_BACKFILL = "backfill", "Held before places existed"
-    GRANDFATHERED_SPLIT = "split", "Held the split family - originally, or by earning every current member"
+    GRANDFATHERED_SPLIT = "split", "Held the parcel when it was subdivided"
+    GRANDFATHERED_LINEAGE = "lineage", "Held a place when it was merged or reclassified"
+    EARNED_FAMILY = "earned_family", "Pinned every current member of a split family"
     GRANDFATHERED_ENGAGEMENT = "engagement", "Viewed the wiki or shared content to it while access was held"
 
 
@@ -250,7 +252,7 @@ class Place(abstract.DashboardModel):
 class PlaceAccessGrant(abstract.DashboardModel):
     """
     Materialised access that containment can no longer prove.
-    Written by four callers, all through ``PlaceAccessGrantManager`` rather than a public "grant access" API surface:
+    Written by lineage events (``services.places.lineage_events``), earned split families, engagement and the backfill, all through ``PlaceAccessGrantManager`` rather than a public "grant access" API surface:
 
     Attributes:
         profile: Who holds the access.

@@ -5,13 +5,18 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from django.contrib.gis.geos import GeometryCollection
 from django.db import transaction
+from django.utils import timezone
 
-from urbanlens.dashboard.models.place.model import Place, PlaceAccessGrant, PlaceKind, PlaceRelation, PlaceStatus, is_plausible_area
+from urbanlens.dashboard.models.place.model import Place, PlaceKind, PlaceRelation, PlaceStatus, is_plausible_area
 from urbanlens.dashboard.services.places import lineage, resolution
+from urbanlens.dashboard.services.places.lineage_events import LineageEvent, LineageEventKind, handle_lineage_event
 
 if TYPE_CHECKING:
-    from django.contrib.gis.geos import MultiPolygon
+    from collections.abc import Iterable
+
+    from django.contrib.gis.geos import GEOSGeometry, MultiPolygon
 
 logger = logging.getLogger(__name__)
 
@@ -22,27 +27,95 @@ logger = logging.getLogger(__name__)
 SPLIT_SHRINK_RATIO = 0.66
 
 
-def looks_like_a_split(place: Place, new_geometry: MultiPolygon | None) -> bool:
+#: A shrink that keeps more than this is a boundary nudge, whatever else is nearby.
+SPLIT_KEEP_CEILING = 0.9
+
+#: How much of the area that went missing has to be covered by another current parcel before a mild
+#: shrink counts as a subdivision.
+SPLIT_REMAINDER_COVERAGE = 0.5
+
+
+def shrink_ratio(place: Place, new_geometry: MultiPolygon | None) -> float | None:
+    """
+    How much of a parcel's area the refreshed outline keeps.
+
+    Returns:
+        New area over old, or None when the comparison is not meaningful (not a parcel, no geometry,
+        or an implausibly large parcel: that shrink is a correction, and a split would grandfather
+        its holders into every successor).
+    """
+    if place.kind != PlaceKind.PARCEL or place.geometry is None or new_geometry is None or not is_plausible_area(place.kind, place.area_sqm):
+        return None
+    try:
+        previous, current = place.geometry.area, new_geometry.area
+    except (AttributeError, TypeError):
+        return None
+    if previous <= 0:
+        return None
+    return current / previous
+
+
+def is_mild_shrink(place: Place, new_geometry: MultiPolygon | None) -> bool:
+    """Whether the outline kept between the heavy-shrink threshold and :data:`SPLIT_KEEP_CEILING` of its area."""
+    ratio = shrink_ratio(place, new_geometry)
+    return ratio is not None and (1 - SPLIT_SHRINK_RATIO) <= ratio < SPLIT_KEEP_CEILING
+
+
+def newer_parcels_over(place: Place, area: GEOSGeometry) -> list[MultiPolygon]:
+    """Outlines of plausible current parcels, other than ``place``, that touch ``area`` and were created since ``place``'s geometry was recorded."""
+    since = place.geometry_generated_at or place.created
+    return [
+        other.geometry
+        for other in Place.objects.filter(kind=PlaceKind.PARCEL, status=PlaceStatus.CURRENT, geometry__intersects=area, created__gt=since).exclude(pk=place.pk)
+        if other.geometry is not None and is_plausible_area(other.kind, other.area_sqm)
+    ]
+
+
+def remainder_is_covered(place: Place, new_geometry: MultiPolygon, seen: Iterable[MultiPolygon] = ()) -> bool:
+    """
+    Whether the part of the old outline the new one no longer holds is mostly another current parcel.
+
+    Args:
+        place: The parcel being refreshed.
+        new_geometry: Its refreshed outline.
+        seen: Parcel outlines returned in the same refresh.
+
+    Returns:
+        True when at least :data:`SPLIT_REMAINDER_COVERAGE` of the remainder is covered by ``seen`` or by
+        a plausible current parcel created since ``place``'s geometry was recorded.
+    """
+    if place.geometry is None:
+        return False
+    remainder = place.geometry.difference(new_geometry)
+    if remainder.empty or remainder.area <= 0:
+        return False
+    candidates = [*newer_parcels_over(place, remainder), *seen]
+    if not candidates:
+        return False
+    covered = remainder.intersection(GeometryCollection(*candidates).unary_union)
+    return (covered.area / remainder.area) >= SPLIT_REMAINDER_COVERAGE
+
+
+def looks_like_a_split(place: Place, new_geometry: MultiPolygon | None, seen: Iterable[MultiPolygon] = ()) -> bool:
     """
     Whether refreshed geometry suggests this parcel was subdivided.
 
     Args:
         place: The parcel whose geometry is being refreshed.
         new_geometry: What the provider now returns for the same coordinate.
+        seen: Other parcel outlines returned in the same refresh.
 
     Returns:
-        True when the parcel has shrunk past :data:`SPLIT_SHRINK_RATIO`. Never for an implausibly large
-        parcel: that shrink is a correction, and a split would grandfather its holders into every successor.
+        True when the parcel has shrunk past :data:`SPLIT_SHRINK_RATIO`, or kept less than
+        :data:`SPLIT_KEEP_CEILING` of its area with the remainder mostly covered by another current parcel.
+        A pin falling outside the new outline is deliberately not a signal: it is what GPS noise at a parcel edge looks like.
     """
-    if place.kind != PlaceKind.PARCEL or place.geometry is None or new_geometry is None or not is_plausible_area(place.kind, place.area_sqm):
+    ratio = shrink_ratio(place, new_geometry)
+    if ratio is None or new_geometry is None:
         return False
-    try:
-        previous, current = place.geometry.area, new_geometry.area
-    except (AttributeError, TypeError):
-        return False
-    if previous <= 0:
-        return False
-    return (current / previous) < (1 - SPLIT_SHRINK_RATIO)
+    if ratio < (1 - SPLIT_SHRINK_RATIO):
+        return True
+    return ratio < SPLIT_KEEP_CEILING and remainder_is_covered(place, new_geometry, seen)
 
 
 @transaction.atomic
@@ -58,12 +131,7 @@ def process_split(place: Place, successors: list[MultiPolygon]) -> Place:
         The superseded place."""
     from urbanlens.dashboard.services.places.provisioning import upsert_place
 
-    holders = set(
-        Place.objects.filter(pk=place.pk).values_list("locations__pins__profile_id", flat=True),
-    ) | set(
-        Place.objects.filter(domain_root_id=place.domain_root_id).values_list("locations__pins__profile_id", flat=True),
-    )
-    holders.discard(None)
+    learned_at = timezone.now()
 
     children: list[Place] = []
     for geometry in successors:
@@ -94,14 +162,13 @@ def process_split(place: Place, successors: list[MultiPolygon]) -> Place:
             lineage.set_parent(building, new_home, PlaceRelation.PART_OF)
 
     # Snapshot before re-resolution moves anyone: after this, containment can
-    # no longer prove what these profiles already had. Covers the whole
-    # family (place + every successor), not just place - see module docstring.
-    PlaceAccessGrant.objects.snapshot_family(holders, place)
+    # no longer prove what these profiles already had.
+    handle_lineage_event(LineageEvent(LineageEventKind.SPLIT, [place], children, learned_at))
 
     for child in children:
         if child.geometry is not None:
             resolution.resolve_locations_in(child.geometry)
     lineage.refresh_derived_flags([place.pk, *[child.pk for child in children]])
 
-    logger.info("process_split: place %s superseded by %s successors; %s grants snapshotted", place.pk, len(children), len(holders))
+    logger.info("process_split: place %s superseded by %s successors", place.pk, len(children))
     return place
