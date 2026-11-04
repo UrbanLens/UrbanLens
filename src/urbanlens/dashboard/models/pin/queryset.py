@@ -35,6 +35,13 @@ class PinQuerySet(abstract.PublicDashboardQuerySet["Pin"], TreeQuerySetMixin):
         """Return only top-level pins (excludes personal detail pins)."""
         return self.filter(parent_pin__isnull=True)
 
+    def preferring_root(self) -> Self:
+        """
+        Order root pins before child pins, then oldest first.
+        Where several of a profile's pins share a Location, ``.first()`` on this picks the one standing for the user's own place.
+        """
+        return self.order_by(F("parent_pin_id").asc(nulls_first=True), "created", "pk")
+
     def tree_root_id(self, pin_id: int) -> int:
         """
         The top of *pin_id*'s ``parent_pin`` chain, in one recursive query.
@@ -498,8 +505,8 @@ class PinManager(_PinManagerBase["Pin"]):
 
             location, _ = Location.objects.get_nearby_or_create(latitude, longitude, threshold_meters=threshold_meters)
 
-        # Include child pins when deduping; prefer root pins as merge target.
-        existing_pin = self.filter(location=location, profile=profile).order_by(F("parent_pin_id").asc(nulls_first=True)).first()
+        # Include child pins when deduping; a root pin and a child may share the Location, so prefer the root, then the oldest.
+        existing_pin = self.filter(location=location, profile=profile).preferring_root().first()
         if existing_pin is not None:
             return existing_pin, False
 
@@ -507,7 +514,7 @@ class PinManager(_PinManagerBase["Pin"]):
             pin = self.create(location=location, profile=profile, **defaults)
         except IntegrityError:
             # Concurrent insert won the race; return that row.
-            existing_pin = self.filter(location=location, profile=profile).order_by(F("parent_pin_id").asc(nulls_first=True)).first()
+            existing_pin = self.filter(location=location, profile=profile).preferring_root().first()
             if existing_pin is not None:
                 return existing_pin, False
             raise

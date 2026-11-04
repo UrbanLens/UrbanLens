@@ -90,6 +90,10 @@ PIN_TYPE_ICONS: dict[str, str] = {
 }
 
 
+class SwapLocationConflictError(ValueError):
+    """Swapping would leave two top-level pins of one profile at one Location."""
+
+
 class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel, abstract.AddressableModel, abstract.LabelledModel):
     """A user's personal record for a physical location. A Pin belongs to exactly one Profile (user)."""
 
@@ -401,6 +405,8 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
         Move this pin's direct children up one level, without deleting this pin.
         Children move to this pin's own parent, or become top-level pins if this pin has none.
 
+        A child at this pin's own Location stays put when this pin is top-level: promoting it would leave two top-level pins at one Location, which ``db_pin_unique_location_per_profile`` forbids.
+
         Returns:
             The number of children actually promoted.
         """
@@ -431,7 +437,7 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
             The former parent pin, now this pin's child.
 
         Raises:
-            ValueError: This pin has no parent, or (only when the former
+            SwapLocationConflictError: (only when the former
                 parent had no parent of its own, i.e. this pin would become
                 a new top-level pin) this pin's own Location already has a
                 top-level pin for this profile - the one-root-pin-per-
@@ -444,13 +450,18 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
         grandparent_id = old_parent.parent_pin_id
 
         if grandparent_id is None:
-            if Pin.objects.root_pins().filter(profile_id=self.profile_id, location_id=self.location_id).exclude(pk=self.pk).exists():
-                raise ValueError("Can't complete the swap - you already have a top-level pin at this pin's own location.")
+            # The old parent is a root now but is about to become this pin's child, so it doesn't count.
+            if Pin.objects.root_pins().filter(profile_id=self.profile_id, location_id=self.location_id).exclude(pk__in=[self.pk, old_parent.pk]).exists():
+                raise SwapLocationConflictError("Can't complete the swap - you already have a top-level pin at this pin's own location.")
             self.parent_pin = None
         else:
             self.parent_pin_id = grandparent_id
 
         with transaction.atomic():
+            if grandparent_id is None:
+                # Demote the old parent first: this pin may share its Location, and two top-level pins can't.
+                # Raw update because the transient state (each the other's parent) must not run save() side effects.
+                Pin.objects.filter(pk=old_parent.pk).update(parent_pin_id=self.pk)
             self.save(update_fields=["parent_pin", "updated"])
             old_parent.parent_pin = self
             old_parent.save(update_fields=["parent_pin", "updated"])

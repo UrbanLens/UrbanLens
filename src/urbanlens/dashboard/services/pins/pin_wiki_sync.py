@@ -172,7 +172,7 @@ def pull_children_from_wiki(parent_pin: Pin) -> int:
     Returns:
         How many child pins were created."""
     from urbanlens.dashboard.models.wiki.model import Wiki
-    from urbanlens.dashboard.services.pins.pin_creation import PinCreationError, resolve_child_pin_location
+    from urbanlens.dashboard.services.pins.pin_creation import PinCreationError, resolve_unclaimed_child_pin_location
 
     wiki = Wiki.objects.get_for_location(parent_pin.location)
     if wiki is None:
@@ -192,7 +192,7 @@ def pull_children_from_wiki(parent_pin: Pin) -> int:
                 unmatched_pins.remove(existing)
                 continue
             try:
-                location = resolve_child_pin_location(parent_pin.profile, cw.latitude, cw.longitude)
+                location = resolve_unclaimed_child_pin_location(parent_pin.profile, cw.latitude, cw.longitude)
             except PinCreationError:
                 # The owner already has a pin on that exact point, so this child wiki is in fact
                 # already covered - _find_existing_match just didn't recognise it (no building
