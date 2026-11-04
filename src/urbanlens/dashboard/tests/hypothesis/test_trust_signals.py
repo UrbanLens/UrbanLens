@@ -17,7 +17,13 @@ from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trust_signals import ProfileTrustSignals
 from urbanlens.dashboard.models.visits.model import VisitSource
-from urbanlens.dashboard.services.trust import are_independent, compute_signals, is_real_user, signals_for
+from urbanlens.dashboard.services.trust import (
+    are_independent,
+    compute_signals,
+    is_real_user,
+    real_user_score,
+    signals_for,
+)
 
 _offsets = itertools.count(1)
 LA = (34.05, -118.24)
@@ -73,19 +79,33 @@ class RealUserTests(TestCase):
     def test_established_account_passes(self) -> None:
         self.assertTrue(is_real_user(_established(LA)))
 
-    def test_recorded_visits_alone_cannot_carry_the_score(self) -> None:
+    def test_long_lived_active_spread_account_passes_without_visits(self) -> None:
         profile = _profile(age_days=400)
-        pins = _pins(profile, LA, 12)
+        for center in (LA, NY, (47.6, -122.3), (41.88, -87.63)):
+            _pins(profile, center, 3)
         _active(profile, 30)
-        for i in range(20):
-            baker.make(
-                "dashboard.PinVisit",
-                pin=pins[0],
-                source=VisitSource.MANUAL,
-                visited_at=timezone.now() - timedelta(days=i),
-                tentative=False,
-            )
+        self.assertTrue(is_real_user(profile))
+
+    def test_fresh_account_fails_whatever_visits_it_claims(self) -> None:
+        profile = _profile(age_days=1)
+        pins = _pins(profile, LA, 12)
+        _active(profile, 2)
+        for source in (VisitSource.GEOLOCATION, VisitSource.PHOTO, VisitSource.MANUAL):
+            for i in range(10):
+                baker.make(
+                    "dashboard.PinVisit",
+                    pin=pins[i],
+                    source=source,
+                    visited_at=timezone.now() - timedelta(days=i + 1),
+                    tentative=False,
+                )
         self.assertFalse(is_real_user(profile))
+
+    def test_recorded_visits_are_capped_below_a_device_visit(self) -> None:
+        base = {"account_age_days": 10, "active_days_90": 5, "pin_count": 5, "pin_cells": ["a"]}
+        many_recorded = real_user_score(ProfileTrustSignals(recorded_visits=50, **base))
+        one_device = real_user_score(ProfileTrustSignals(device_track_visits=1, **base))
+        self.assertLess(many_recorded, one_device)
 
     def test_signals_count_visits_by_kind_and_cells(self) -> None:
         profile = _established(LA)

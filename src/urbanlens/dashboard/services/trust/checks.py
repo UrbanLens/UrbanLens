@@ -25,21 +25,27 @@ _PHOTO_WEIGHT = 2.0
 _RECORDED_WEIGHT = 0.5
 _RECORDED_CAP = 1.0
 _VISITS_FULL = 6.0
-#: Component weights: age, active days, pins, verified visits.
-_WEIGHTS = (1.0, 2.0, 1.0, 2.0)
+#: Distinct pin cells at which geographic spread stops adding.
+_SPREAD_FULL_CELLS = 4
+#: Component weights: age, active days, pins, geographic spread, verified visits.
+#: Age and consistent use carry the most, so visits are one route to a pass, not the only one,
+#: and a fresh account cannot reach the threshold on pins, spread and visits alone.
+_WEIGHTS = (3.0, 2.0, 1.0, 1.0, 1.5)
 
 
 def real_user_score(signals: ProfileTrustSignals) -> float:
     """
-    Weighted 0-1 score of how much the signals look like a real, engaged person.
+        Weighted 0-1 score of how much the signals look like a real, engaged person.
+    Account age, consistent use, pin count and geographic spread can qualify a profile without any verified visit; verified visits (device track over photo over recorded) add to them but cannot rescue a fresh account.
 
-    Never show it to another user.
+        Never show it to another user.
     """
     visit_points = min(signals.recorded_visits * _RECORDED_WEIGHT, _RECORDED_CAP) + signals.device_track_visits * _DEVICE_WEIGHT + signals.photo_visits * _PHOTO_WEIGHT
     parts = (
         min(signals.account_age_days / _AGE_FULL_DAYS, 1.0),
         min(signals.active_days_90 / _ACTIVE_DAYS_FULL, 1.0),
         min(signals.pin_count / _PINS_FULL, 1.0),
+        min(len(signals.pin_cells) / _SPREAD_FULL_CELLS, 1.0),
         min(visit_points / _VISITS_FULL, 1.0),
     )
     return sum(w * p for w, p in zip(_WEIGHTS, parts, strict=True)) / sum(_WEIGHTS)
