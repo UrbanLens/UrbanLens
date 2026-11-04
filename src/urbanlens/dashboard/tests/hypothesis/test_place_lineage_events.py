@@ -126,8 +126,7 @@ class MildShrinkTests(_OldParcelCase):
         self.assertFalse(looks_like_a_split(self.old, _strip(0, 0.6)))
 
     def test_the_pieces_must_rebuild_most_of_the_old_outline(self) -> None:
-        self.remainder_parcel(0.6, 0.85)
-        self.assertTrue(looks_like_a_split(self.old, _strip(0, 0.6)))
+        self.assertTrue(looks_like_a_split(self.old, _strip(0, 0.6), seen=[_strip(0.6, 0.85)]))
         self.assertFalse(looks_like_a_split(self.old, _strip(0, 0.5), seen=[_strip(0.5, 0.75)]))
 
     def test_a_stored_remainder_means_no_provider_is_asked(self) -> None:
