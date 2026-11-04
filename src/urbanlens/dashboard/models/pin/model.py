@@ -195,6 +195,18 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
         blank=True,
         related_name="detail_pins",
     )
+    # True once the user deliberately parented, promoted or detached this pin. Boundary nesting never touches it
+    # (services.pins.boundary_nesting).
+    parenting_is_manual = BooleanField(default=False)
+    # The user's pin whose drawn boundary nested this pin. Set only by boundary_nesting, cleared by any other
+    # change of parent; it is how a boundary edit tells its own nesting from a hierarchy the user built.
+    nested_by_boundary_pin = ForeignKey(
+        "self",
+        on_delete=SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
     # The accepted PinShare this pin was created from, when the owner added it
     # by accepting a friend's share. Links reshares of this pin back into the
     # original share chain (see PinShare.parent_share).
@@ -232,6 +244,7 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
         profile_id: int
         location_id: int | None
         parent_pin_id: int | None
+        nested_by_boundary_pin_id: int | None
         source_share_id: int | None
         inferred_source_share_id: int | None
         cover_photo_id: int | None
@@ -417,7 +430,9 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
                 else:
                     other_root = Pin.objects.root_pins().filter(profile_id=self.profile_id, location_id=child.location_id).exclude(pk=child.pk).first()
                     child.parent_pin_id = other_root.pk if other_root is not None else None
-                child.save(update_fields=["parent_pin", "updated"])
+                child.parenting_is_manual = True
+                child.nested_by_boundary_pin = None
+                child.save(update_fields=["parent_pin", "parenting_is_manual", "nested_by_boundary_pin", "updated"])
                 promoted += 1
         return promoted
 
@@ -451,9 +466,12 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
             self.parent_pin_id = grandparent_id
 
         with transaction.atomic():
-            self.save(update_fields=["parent_pin", "updated"])
+            for pin in (self, old_parent):
+                pin.parenting_is_manual = True
+                pin.nested_by_boundary_pin = None
+            self.save(update_fields=["parent_pin", "parenting_is_manual", "nested_by_boundary_pin", "updated"])
             old_parent.parent_pin = self
-            old_parent.save(update_fields=["parent_pin", "updated"])
+            old_parent.save(update_fields=["parent_pin", "parenting_is_manual", "nested_by_boundary_pin", "updated"])
 
         return old_parent
 

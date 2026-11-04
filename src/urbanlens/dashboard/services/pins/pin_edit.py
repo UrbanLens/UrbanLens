@@ -261,7 +261,9 @@ def reparent_pin(pin: Pin, new_parent: Pin | None) -> None:
         if pin.would_create_cycle(new_parent):
             raise CircularParentChainError(f"Reparenting pin {pin.pk} under pin {new_parent.pk} would create a cycle.")
         pin.parent_pin = new_parent
-    pin.save(update_fields=["parent_pin", "updated"])
+    pin.parenting_is_manual = True
+    pin.nested_by_boundary_pin = None
+    pin.save(update_fields=["parent_pin", "parenting_is_manual", "nested_by_boundary_pin", "updated"])
 
 
 def _promote_children(instance: Pin) -> list[int]:
@@ -279,19 +281,25 @@ def _promote_children(instance: Pin) -> list[int]:
     for child in Pin.objects.filter(parent_pin=instance):
         if new_parent_id is not None:
             child.parent_pin_id = new_parent_id
-            child.save(update_fields=["parent_pin", "updated"])
+            child.parenting_is_manual = True
+            child.nested_by_boundary_pin = None
+            child.save(update_fields=["parent_pin", "parenting_is_manual", "nested_by_boundary_pin", "updated"])
             continue
         other_root = Pin.objects.root_pins().filter(profile_id=instance.profile_id, location_id=child.location_id).exclude(pk=instance.pk).first()
         if other_root is not None:
             child.parent_pin_id = other_root.pk
-            child.save(update_fields=["parent_pin", "updated"])
+            child.parenting_is_manual = True
+            child.nested_by_boundary_pin = None
+            child.save(update_fields=["parent_pin", "parenting_is_manual", "nested_by_boundary_pin", "updated"])
         elif child.location_id == instance.location_id:
             # Bypass save() so no side effects run for this transient state.
-            Pin.objects.filter(pk=child.pk).update(parent_pin_id=child.pk)
+            Pin.objects.filter(pk=child.pk).update(parent_pin_id=child.pk, parenting_is_manual=True, nested_by_boundary_pin=None)
             deferred_ids.append(child.pk)
         else:
             child.parent_pin = None
-            child.save(update_fields=["parent_pin", "updated"])
+            child.parenting_is_manual = True
+            child.nested_by_boundary_pin = None
+            child.save(update_fields=["parent_pin", "parenting_is_manual", "nested_by_boundary_pin", "updated"])
     return deferred_ids
 
 
@@ -306,7 +314,9 @@ def _finish_deferred_promotions(profile_id: int, deferred_ids: list[int]) -> Non
     for child in Pin.objects.filter(pk__in=deferred_ids):
         existing_root = Pin.objects.root_pins().filter(profile_id=profile_id, location_id=child.location_id).exclude(pk=child.pk).first()
         child.parent_pin_id = existing_root.pk if existing_root is not None else None
-        child.save(update_fields=["parent_pin", "updated"])
+        child.parenting_is_manual = True
+        child.nested_by_boundary_pin = None
+        child.save(update_fields=["parent_pin", "parenting_is_manual", "nested_by_boundary_pin", "updated"])
 
 
 @dataclass(frozen=True, slots=True)
