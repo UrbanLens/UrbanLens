@@ -918,14 +918,23 @@ def _import_pins(
         return
     rows = _parents_before_children(rows)
     total_rows = len(rows)
+    uuids_in_archive: set[str] = set()
     security_level_values = set(SecurityLevel.values)
 
     for idx, row in enumerate(rows, start=1):
         if report_progress:
             report_progress(idx, total_rows)
         uuid_str = row.get("uuid", "")
+        if not isinstance(uuid_str, str):
+            uuid_str = ""
 
         # Idempotency: skip pins that already exist FOR THIS USER.
+        if uuid_str and uuid_str in uuids_in_archive:
+            result.warnings.append(f"Skipped pin '{row.get('name', uuid_str)}': an earlier pin in this archive has the same uuid.")
+            result.inc_skipped("pins")
+            continue
+        if uuid_str:
+            uuids_in_archive.add(uuid_str)
         existing = Pin.objects.filter(uuid=uuid_str, profile=profile).first() if uuid_str else None
         if existing:
             pin_uuid_map[uuid_str] = existing.pk

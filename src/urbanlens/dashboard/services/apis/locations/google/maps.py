@@ -13,7 +13,7 @@ import time
 from typing import IO, TYPE_CHECKING, Any, ClassVar
 
 from defusedxml.ElementTree import ParseError as XMLParseError, iterparse as iterparse_xml_defused
-from django.db import DatabaseError
+from django.db import DatabaseError, IntegrityError, transaction
 from fastkml.exceptions import KMLParseError
 from gpxpy.gpx import GPXException
 from lxml.etree import XMLSyntaxError
@@ -301,7 +301,12 @@ def _create_pin_from_confirmed(
         elif not Location.objects.by_cid(cid).exists():
             # fetch_if_missing=False: never block the import loop on a live Places call per pin.
             # A pin found by its import key may sit elsewhere now; the cid belongs to the Location that already holds it.
-            GooglePlaceService().set_cid_for_entity(pin.location, cid, fetch_if_missing=False)
+            try:
+                with transaction.atomic():
+                    GooglePlaceService().set_cid_for_entity(pin.location, cid, fetch_if_missing=False)
+            except IntegrityError:
+                # A GooglePlace holding this cid with no Location on it; the import goes on without the backfill.
+                logger.info("A GooglePlace already holds a cid; left it alone.")
 
     return pin, created
 

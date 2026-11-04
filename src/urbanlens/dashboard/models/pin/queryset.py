@@ -455,7 +455,7 @@ class PinManager(_PinManagerBase["Pin"]):
             profile (Profile): The profile associated with the pin.
             defaults (dict, optional): Defaults to use for object creation.
             import_source (str, optional): The importer, for a re-import to recognise its own pins.
-            import_key (str, optional): The pin's content-derived identity within ``import_source``. The profile's pin with the same (source, key) wins first, even where the user has since moved it; a pin found at the Location without a key is stamped with it.
+            import_key (str, optional): The pin's content-derived identity within ``import_source``. The profile's pin with the same (source, key) wins first, even where the user has since moved it or nested it under another pin; a root pin found at the Location without a key is stamped with it.
 
         Returns:
             (Pin, bool): Tuple of (Pin instance, created boolean)
@@ -529,8 +529,8 @@ class PinManager(_PinManagerBase["Pin"]):
         return pin, True
 
     def _stamped_with_import_key(self, pin, import_source, import_key):
-        """Give a pin found by Location the import identity it lacked, so the next re-import finds it even after it moves."""
-        if import_source and import_key and not pin.import_key:
+        """Give a root pin found by Location the import identity it lacked (a nested pin is never touched), so the next re-import finds it even after it moves."""
+        if import_source and import_key and not pin.import_key and pin.parent_pin_id is None:
             pin.import_source, pin.import_key = import_source, import_key
             try:
                 with transaction.atomic():
