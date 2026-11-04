@@ -90,6 +90,13 @@ PIN_TYPE_ICONS: dict[str, str] = {
 }
 
 
+class PinImportSource(TextChoices):
+    """Which importer created a pin; with ``Pin.import_key`` it lets a re-import find the pin again wherever it has since moved."""
+
+    GOOGLE_TAKEOUT = "google_takeout", "Google Takeout"
+    JSON_ARCHIVE = "json_archive", "UrbanLens JSON archive"
+
+
 class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel, abstract.AddressableModel, abstract.LabelledModel):
     """A user's personal record for a physical location. A Pin belongs to exactly one Profile (user)."""
 
@@ -100,6 +107,11 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
         default=False,
         help_text="Prevents external API name refreshes from overwriting a user-entered pin name.",
     )
+
+    #: The importer that created this pin, and its content-derived identity for the pin (see services.pins.import_keys).
+    #: Independent of the pin's Location, so a re-import still finds a pin the user has since moved.
+    import_source = CharField(max_length=20, choices=PinImportSource.choices, null=True, blank=True)
+    import_key = CharField(max_length=255, null=True, blank=True)
 
     # User's custom label. None = show location.display_name instead (see effective_name).
     name = CharField(max_length=255, null=True, blank=True)
@@ -885,6 +897,11 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
                 fields=["location", "profile"],
                 condition=Q(parent_pin__isnull=True),
                 name="db_pin_unique_location_per_profile",
+            ),
+            UniqueConstraint(
+                fields=["profile", "import_source", "import_key"],
+                condition=Q(import_key__isnull=False),
+                name="db_pin_unique_import_key_per_profile",
             ),
             UniqueConstraint(
                 fields=["profile", "slug"],
