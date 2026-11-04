@@ -463,6 +463,10 @@ FULL_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.sweep_achievements",
         "schedule": crontab(hour=3, minute=10),
     },
+    "trust-signals-refresh": {
+        "task": "urbanlens.dashboard.tasks.refresh_trust_signals",
+        "schedule": crontab(hour=3, minute=40),
+    },
     "safety-checkin-due-reminders": {
         "task": "urbanlens.dashboard.tasks.send_due_checkin_reminders",
         "schedule": 5 * 60,
@@ -1502,3 +1506,19 @@ LOGGING = {
         },
     },
 }
+
+
+# Real-user and independence gates (ADR35 section 5; services/trust). Start strict; tune from production distributions.
+# Scores are 0-1. Never surface them or the signals behind them to another user.
+#: Minimum real-user score for ``is_real_user``.
+UL_TRUST_REAL_USER_THRESHOLD = float(os.getenv("UL_TRUST_REAL_USER_THRESHOLD", "0.75"))
+#: Profiles with fewer pins than this have no usable geography for the independence check.
+UL_TRUST_MIN_PINS_FOR_GEOGRAPHY = int(os.getenv("UL_TRUST_MIN_PINS_FOR_GEOGRAPHY", "5"))
+#: The real-user score a profile without usable geography must reach instead of the Jaccard test.
+UL_TRUST_NO_GEOGRAPHY_THRESHOLD = float(os.getenv("UL_TRUST_NO_GEOGRAPHY_THRESHOLD", "0.9"))
+#: Two profiles are independent when the Jaccard overlap of their pin cells is below this.
+UL_TRUST_MAX_CELL_JACCARD = float(os.getenv("UL_TRUST_MAX_CELL_JACCARD", "0.2"))
+#: How much an accepted friendship raises ``UL_TRUST_MAX_CELL_JACCARD`` for that pair. It only ever loosens the check.
+UL_TRUST_FRIENDSHIP_JACCARD_BONUS = float(os.getenv("UL_TRUST_FRIENDSHIP_JACCARD_BONUS", "0.05"))
+#: Cached signals older than this many seconds are recomputed on read.
+UL_TRUST_SIGNALS_MAX_AGE_SECONDS = int(os.getenv("UL_TRUST_SIGNALS_MAX_AGE_SECONDS", str(24 * 3600)))
