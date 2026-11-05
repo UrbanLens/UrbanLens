@@ -234,6 +234,10 @@ def move_pin_to_coordinates(pin: Pin, latitude: float, longitude: float) -> None
     before_lat, before_lng = float(pin.effective_latitude), float(pin.effective_longitude)
     pin.location = location
     pin.save(update_fields=["location", "updated"])
+    if location.place_id is not None and pin.parent_pin_id is None:
+        from urbanlens.dashboard.services.pins.property_nesting import request_property_nesting
+
+        request_property_nesting(location.pk)
     from urbanlens.dashboard.services.undo.mutations import stash_pin_move
 
     stash_pin_move(pin, before_lat=before_lat, before_lng=before_lng, after_lat=latitude, after_lng=longitude)
@@ -257,11 +261,12 @@ def reparent_pin(pin: Pin, new_parent: Pin | None) -> None:
         if conflict:
             raise ReparentLocationConflictError(f"Pin {pin.pk} (location {pin.location_id}) already shares that location with another top-level pin of profile {pin.profile_id}; refusing detach.")
         pin.parent_pin = None
+        pin.parenting_is_manual = True
     else:
         if pin.would_create_cycle(new_parent):
             raise CircularParentChainError(f"Reparenting pin {pin.pk} under pin {new_parent.pk} would create a cycle.")
         pin.parent_pin = new_parent
-    pin.save(update_fields=["parent_pin", "updated"])
+    pin.save(update_fields=["parent_pin", "parenting_is_manual", "updated"])
 
 
 def _promote_children(instance: Pin) -> list[int]:
@@ -287,11 +292,12 @@ def _promote_children(instance: Pin) -> list[int]:
             child.save(update_fields=["parent_pin", "updated"])
         elif child.location_id == instance.location_id:
             # Bypass save() so no side effects run for this transient state.
-            Pin.objects.filter(pk=child.pk).update(parent_pin_id=child.pk)
+            Pin.objects.filter(pk=child.pk).update(parent_pin_id=child.pk, parenting_is_manual=True)
             deferred_ids.append(child.pk)
         else:
             child.parent_pin = None
-            child.save(update_fields=["parent_pin", "updated"])
+            child.parenting_is_manual = True
+            child.save(update_fields=["parent_pin", "parenting_is_manual", "updated"])
     return deferred_ids
 
 
@@ -306,7 +312,9 @@ def _finish_deferred_promotions(profile_id: int, deferred_ids: list[int]) -> Non
     for child in Pin.objects.filter(pk__in=deferred_ids):
         existing_root = Pin.objects.root_pins().filter(profile_id=profile_id, location_id=child.location_id).exclude(pk=child.pk).first()
         child.parent_pin_id = existing_root.pk if existing_root is not None else None
-        child.save(update_fields=["parent_pin", "updated"])
+        if existing_root is None:
+            child.parenting_is_manual = True
+        child.save(update_fields=["parent_pin", "parenting_is_manual", "updated"])
 
 
 @dataclass(frozen=True, slots=True)

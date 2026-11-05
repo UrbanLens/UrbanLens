@@ -7,6 +7,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.db import IntegrityError, transaction
+from django.db.models import Q
 
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
@@ -16,6 +17,7 @@ from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.core.icons import clean_icon
 from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, LONGITUDE_BOUND, coordinate_or_none, safe_int_or_none
 from urbanlens.dashboard.services.locations.geocoding import get_pin_by_address
+from urbanlens.dashboard.services.pins.tree_lock import lock_profile_pin_tree
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -42,7 +44,14 @@ class DuplicateCoordinatesError(PinCreationError):
 
 
 class DuplicatePropertyError(PinCreationError):
-    """This profile already has a root pin on this property/location."""
+    """
+    This profile already has a root pin on this property/location.
+
+    Attributes:
+        existing_pin_uuid: The caller's own pin that holds the property, so a client can offer to add the new pin as a building on it.
+    """
+
+    existing_pin_uuid: str | None = None
 
 
 class PinParentNotFoundError(PinCreationError):
@@ -248,19 +257,8 @@ def create_pin_for_profile(
     if location.place_resolved_at is None:
         resolve_location_place(location)
 
-    # One root pin per property, still - the guarantee the old 50 m snap was
-    # really providing, now expressed against the property itself instead of
-    # against whichever coordinate happened to be recorded first.
-    # The property is the domain root: a point on one of its buildings resolves onto the building's place.
-    if new_parent is None and location.place is not None:
-        property_id = location.place.domain_root_id or location.place_id
-        if Pin.objects.root_pins().filter(profile=profile, location__place__domain_root_id=property_id).exists():
-            raise DuplicatePropertyError("Duplicate root pin on this property.")
-
-    # The chosen location, plus any property this coordinate could plausibly mean instead - so a
-    # caller can still treat "more than one" as "there is a real choice here".
-    # Competitors are almost always absent: everything inside one property is the same answer, not a
-    # rival one.
+    # One root pin per property: a point on a building resolves onto the building's place.
+    # Competing places are almost always absent; more than one means a real choice.
     rivals = competing_places(lat_f, lon_f, location.place if location.place_id else None)
     all_locations = [location, *[candidate for candidate in representative_locations(rivals) if candidate.pk != location.pk]]
 
@@ -295,8 +293,25 @@ def create_pin_for_profile(
         # explicitly at the ORM layer - serializers/forms never bind it.
         create_kwargs["uuid"] = client_uuid
 
+    def reject_if_property_taken() -> None:
+        if new_parent is not None or location.place is None:
+            return
+        property_id = location.place.domain_root_id or location.place_id
+        existing = Pin.objects.root_pins().filter(Q(location__place__domain_root_id=property_id) | Q(location__place_id=property_id), profile=profile).order_by("created", "pk").first()
+        if existing is not None:
+            error = DuplicatePropertyError("Duplicate root pin on this property.")
+            error.existing_pin_uuid = str(existing.uuid)
+            raise error
+
     try:
         with transaction.atomic():
+            # The profile's tree lock makes the check and the insert one step: two concurrent creates cannot both pass it.
+            lock_profile_pin_tree(profile.pk)
+            # A concurrent retry of this client_uuid may have created the pin while this call waited for the lock.
+            replayed = Pin.objects.filter(profile=profile, uuid=client_uuid).select_related("location").first() if client_uuid is not None else None
+            if replayed is not None:
+                return PinCreationResult(pin=replayed, all_locations=[replayed.location], created=False)
+            reject_if_property_taken()
             pin = Pin.objects.create(**create_kwargs)
             if custom_icon:
                 from urbanlens.dashboard.services.media.held_upload import hold_upload

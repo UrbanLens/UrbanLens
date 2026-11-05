@@ -20,6 +20,7 @@ from django.db import transaction
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.geo.child_pin_boundaries import deferring_child_boundary_refits
 from urbanlens.dashboard.services.pins.pin_edit import PinReparentError, reparent_pin
+from urbanlens.dashboard.services.pins.tree_lock import lock_profile_pin_tree
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -145,16 +146,19 @@ def bulk_merge_under(target: Pin, sources: Sequence[Pin]) -> BulkMergeResult:
     candidates = [source for source in sources if source.pk != target.pk]
     if not candidates:
         raise NoValidSourcesError
-    promote = target.parent_pin_id is not None
-    if promote and Pin.objects.root_pins().filter(profile_id=target.profile_id, location_id=target.location_id).exclude(pk=target.pk).exists():
-        raise MergeTargetConflictError
-
     merged: list[Pin] = []
     skipped: list[Pin] = []
     with transaction.atomic(), deferring_child_boundary_refits():
-        if promote:
+        # The tree lock makes the conflict check and the writes one step against the nesting pass and other movers.
+        lock_profile_pin_tree(target.profile_id)
+        promote = target.parent_pin_id is not None
+        if promote and Pin.objects.root_pins().filter(profile_id=target.profile_id, location_id=target.location_id).exclude(pk=target.pk).exists():
+            raise MergeTargetConflictError
+        # The user chose this target, so the nesting pass must leave it where it is, whether or not it was a child.
+        if promote or not target.parenting_is_manual:
             target.parent_pin = None
-            target.save(update_fields=["parent_pin", "updated"])
+            target.parenting_is_manual = True
+            target.save(update_fields=["parent_pin", "parenting_is_manual", "updated"])
         for source in candidates:
             try:
                 reparent_pin(source, target)

@@ -90,6 +90,13 @@ PIN_TYPE_ICONS: dict[str, str] = {
 }
 
 
+class PinImportSource(TextChoices):
+    """Which importer created a pin; with ``Pin.import_key`` it lets a re-import find the pin again wherever it has since moved."""
+
+    GOOGLE_TAKEOUT = "google_takeout", "Google Takeout"
+    JSON_ARCHIVE = "json_archive", "UrbanLens JSON archive"
+
+
 class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel, abstract.AddressableModel, abstract.LabelledModel):
     """A user's personal record for a physical location. A Pin belongs to exactly one Profile (user)."""
 
@@ -100,6 +107,15 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
         default=False,
         help_text="Prevents external API name refreshes from overwriting a user-entered pin name.",
     )
+
+    #: The importer that created this pin, and its content-derived identity for the pin (see services.pins.import_keys).
+    #: Independent of the pin's Location, so a re-import still finds a pin the user has since moved.
+    import_source = CharField(max_length=20, choices=PinImportSource.choices, null=True, blank=True)
+    import_key = CharField(max_length=255, null=True, blank=True)
+
+    #: Exempt from automatic nesting: the user chose this pin's place in the hierarchy (promote, detach, keep children, swap with parent).
+    #: See services.pins.property_nesting. Rows that predate the field default to True.
+    parenting_is_manual = BooleanField(default=False, db_default=False)
 
     # User's custom label. None = show location.display_name instead (see effective_name).
     name = CharField(max_length=255, null=True, blank=True)
@@ -417,7 +433,9 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
                 else:
                     other_root = Pin.objects.root_pins().filter(profile_id=self.profile_id, location_id=child.location_id).exclude(pk=child.pk).first()
                     child.parent_pin_id = other_root.pk if other_root is not None else None
-                child.save(update_fields=["parent_pin", "updated"])
+                if child.parent_pin_id is None:
+                    child.parenting_is_manual = True
+                child.save(update_fields=["parent_pin", "parenting_is_manual", "updated"])
                 promoted += 1
         return promoted
 
@@ -450,8 +468,9 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
         else:
             self.parent_pin_id = grandparent_id
 
+        self.parenting_is_manual = True
         with transaction.atomic():
-            self.save(update_fields=["parent_pin", "updated"])
+            self.save(update_fields=["parent_pin", "parenting_is_manual", "updated"])
             old_parent.parent_pin = self
             old_parent.save(update_fields=["parent_pin", "updated"])
 
@@ -885,6 +904,11 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
                 fields=["location", "profile"],
                 condition=Q(parent_pin__isnull=True),
                 name="db_pin_unique_location_per_profile",
+            ),
+            UniqueConstraint(
+                fields=["profile", "import_source", "import_key"],
+                condition=Q(import_key__isnull=False),
+                name="db_pin_unique_import_key_per_profile",
             ),
             UniqueConstraint(
                 fields=["profile", "slug"],

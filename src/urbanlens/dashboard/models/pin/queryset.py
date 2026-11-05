@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Self
 
 from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.measure import D
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.db.models import Count, Exists, F, OuterRef, Q
 
 from urbanlens.dashboard.models import abstract
@@ -444,16 +444,18 @@ _PinManagerBase = abstract.PublicDashboardManager.from_queryset(PinQuerySet)
 class PinManager(_PinManagerBase["Pin"]):
     """Manager for Pin."""
 
-    def get_nearby_or_create(self, latitude, longitude, profile, threshold_meters=50, defaults=None):
+    def get_nearby_or_create(self, latitude, longitude, profile, defaults=None, *, import_source=None, import_key=None):
         """
-        Get or create a pin, treating nearby coordinates as the same place.
+        Get or create the profile's pin at exactly these coordinates.
+        Despite the name nothing is snapped: the pin sits on the Location at the submitted point (6 dp), which is never another user's marker moved onto.
 
         Args:
             latitude (float): Latitude of the pin.
             longitude (float): Longitude of the pin.
             profile (Profile): The profile associated with the pin.
-            threshold_meters (float): Distance threshold in meters for considering pins as the same.
             defaults (dict, optional): Defaults to use for object creation.
+            import_source (str, optional): The importer, for a re-import to recognise its own pins.
+            import_key (str, optional): The pin's content-derived identity within ``import_source``. The profile's pin with the same (source, key) wins first, even where the user has since moved it or nested it under another pin; a root pin found at the Location without a key is stamped with it.
 
         Returns:
             (Pin, bool): Tuple of (Pin instance, created boolean)
@@ -491,25 +493,50 @@ class PinManager(_PinManagerBase["Pin"]):
         for redundant in ("latitude", "longitude", "point", "profile"):
             defaults.pop(redundant, None)
 
+        keyed = bool(import_source and import_key)
+        if keyed:
+            known = self.filter(profile=profile, import_source=import_source, import_key=import_key).first()
+            if known is not None:
+                return known, False
+            defaults["import_source"] = import_source
+            defaults["import_key"] = import_key
+
         # Pins reference a shared Location; resolve one when not given.
         location = defaults.pop("location", None)
         if location is None:
             from urbanlens.dashboard.models.location.model import Location
 
-            location, _ = Location.objects.get_nearby_or_create(latitude, longitude, threshold_meters=threshold_meters)
+            location, _ = Location.objects.get_exact_or_create(latitude, longitude)
 
         # Include child pins when deduping; prefer root pins as merge target.
         existing_pin = self.filter(location=location, profile=profile).order_by(F("parent_pin_id").asc(nulls_first=True)).first()
         if existing_pin is not None:
-            return existing_pin, False
+            return self._stamped_with_import_key(existing_pin, import_source, import_key), False
 
         try:
-            pin = self.create(location=location, profile=profile, **defaults)
+            with transaction.atomic():
+                pin = self.create(location=location, profile=profile, **defaults)
         except IntegrityError:
             # Concurrent insert won the race; return that row.
+            if keyed:
+                raced = self.filter(profile=profile, import_source=import_source, import_key=import_key).first()
+                if raced is not None:
+                    return raced, False
             existing_pin = self.filter(location=location, profile=profile).order_by(F("parent_pin_id").asc(nulls_first=True)).first()
             if existing_pin is not None:
-                return existing_pin, False
+                return self._stamped_with_import_key(existing_pin, import_source, import_key), False
             raise
 
         return pin, True
+
+    def _stamped_with_import_key(self, pin, import_source, import_key):
+        """Give a root pin found by Location the import identity it lacked (a nested pin is never touched), so the next re-import finds it even after it moves."""
+        if import_source and import_key and not pin.import_key and pin.parent_pin_id is None:
+            pin.import_source, pin.import_key = import_source, import_key
+            try:
+                with transaction.atomic():
+                    pin.save(update_fields=["import_source", "import_key"])
+            except IntegrityError:
+                # Another of this profile's pins already holds that identity; leave this one unkeyed.
+                pin.import_source = pin.import_key = None
+        return pin

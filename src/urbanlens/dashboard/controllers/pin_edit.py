@@ -27,6 +27,7 @@ from urbanlens.dashboard.services.core.request_body import posted_fields, text_f
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LENGTH, column_length_error, text_length_error
 from urbanlens.dashboard.services.pins.pin_edit import SECURITY_EDIT_FIELDS, apply_pin_edits
 from urbanlens.dashboard.services.pins.pin_subresources import create_pin_note, delete_pin_note
+from urbanlens.dashboard.services.pins.tree_lock import lock_profile_pin_tree
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
@@ -424,12 +425,20 @@ class PinDetachChildView(LoginRequiredMixin, View):
         pin = result
         if pin.parent_pin_id is None:
             return HttpResponse("This pin is already a top-level pin.", status=400)
-        conflict = Pin.objects.root_pins().filter(profile=pin.profile, location_id=pin.location_id).exclude(pk=pin.pk).exists()
-        if conflict:
-            return HttpResponse("You already have a top-level pin at this exact location. Move this child pin slightly before detaching it.", status=400)
-        logger.info("User %s detached child pin %s from parent %s", request.user.id, pin.id, pin.parent_pin_id)
-        pin.parent_pin = None
-        pin.save(update_fields=["parent_pin", "updated"])
+        with transaction.atomic():
+            # The tree lock makes the check and the save one step against a concurrent create or nesting pass.
+            lock_profile_pin_tree(pin.profile_id)
+            # Reread under the lock: a concurrent move or detach may have changed the parent or Location while this waited.
+            pin = Pin.objects.get(pk=pin.pk)
+            if pin.parent_pin_id is None:
+                return HttpResponse("This pin is already a top-level pin.", status=400)
+            conflict = Pin.objects.root_pins().filter(profile_id=pin.profile_id, location_id=pin.location_id).exclude(pk=pin.pk).exists()
+            if conflict:
+                return HttpResponse("You already have a top-level pin at this exact location. Move this child pin slightly before detaching it.", status=400)
+            logger.info("User %s detached child pin %s from parent %s", request.user.id, pin.id, pin.parent_pin_id)
+            pin.parent_pin = None
+            pin.parenting_is_manual = True
+            pin.save(update_fields=["parent_pin", "parenting_is_manual", "updated"])
         response = HttpResponse("", status=200)
         response["HX-Refresh"] = "true"
         return response

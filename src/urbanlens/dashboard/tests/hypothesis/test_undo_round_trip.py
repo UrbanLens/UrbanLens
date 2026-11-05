@@ -24,6 +24,13 @@ from urbanlens.dashboard.services.undo.base import _HANDLERS, get_handler
 #: it cannot collide with something created since the delete.
 _EXPECTED_TO_DIFFER = frozenset({"id", "pk", "created", "updated", "uuid", "slug"})
 
+#: Per-model fields a restore changes on purpose, each with the reason.
+_MODEL_EXPECTED_TO_DIFFER: dict[str, dict[str, str]] = {
+    "pin": {
+        "parenting_is_manual": "a pin the undo restores as a root counts as placed by the user, so the nesting pass leaves it alone"
+    },
+}
+
 
 class UndoRoundTripTests(TestCase):
     """serialize → delete → restore must not lose a field."""
@@ -93,7 +100,7 @@ class UndoRoundTripTests(TestCase):
             self.assertTrue(restored, f"{model_label}: restore() returned nothing")
 
             for field in model._meta.local_fields:
-                if field.name in _EXPECTED_TO_DIFFER:
+                if field.name in _EXPECTED_TO_DIFFER or field.name in _MODEL_EXPECTED_TO_DIFFER.get(model_label, {}):
                     continue
                 checked += 1
                 old_value = before.get(field.name)

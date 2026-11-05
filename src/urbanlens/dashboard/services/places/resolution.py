@@ -12,6 +12,7 @@ from django.utils import timezone
 
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.place.model import Place
+from urbanlens.dashboard.services.pins.property_nesting import deferring_property_nesting, request_property_nesting
 from urbanlens.dashboard.services.places.lineage import enclosing_parcel
 
 if TYPE_CHECKING:
@@ -47,6 +48,8 @@ def resolve_location_place(location: Location, *, save: bool = True) -> Place | 
         # whether to record a miss, and a stale None there makes it clear the place that was just
         # resolved.
         location.place_resolved_at = stamped
+        if place is not None:
+            request_property_nesting(location.pk)
     location.place = place
     return place
 
@@ -68,11 +71,12 @@ def resolve_locations_in(polygon, *, exclude_place: Place | None = None) -> int:
     if exclude_place is not None:
         candidates = candidates.exclude(place=exclude_place)
     changed = 0
-    for location in candidates.iterator(chunk_size=500):
-        previous = location.place_id
-        resolved = resolve_location_place(location)
-        if previous != (resolved.pk if resolved else None):
-            changed += 1
+    with deferring_property_nesting():
+        for location in candidates.iterator(chunk_size=500):
+            previous = location.place_id
+            resolved = resolve_location_place(location)
+            if previous != (resolved.pk if resolved else None):
+                changed += 1
     if changed:
         logger.info("Re-resolved %s locations after a geometry change", changed)
     return changed
@@ -108,6 +112,8 @@ def attach_location(location: Location, place: Place | None) -> None:
     Location.objects.filter(pk=location.pk).update(place=place, place_resolved_at=timezone.now())
     location.place = place
     location.place_resolved_at = timezone.now()
+    if place is not None:
+        request_property_nesting(location.pk)
 
 
 def domain_ids_for_locations(location_ids: Iterable[int]) -> set[int]:

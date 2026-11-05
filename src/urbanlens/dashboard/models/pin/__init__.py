@@ -1,4 +1,4 @@
-from urbanlens.dashboard.models.pin.model import Pin, PinType
+from urbanlens.dashboard.models.pin.model import Pin, PinImportSource, PinType
 from urbanlens.dashboard.models.pin.note import PinNote
 from urbanlens.dashboard.models.pin.queryset import PinManager, PinQuerySet
 from urbanlens.dashboard.models.pin.serializer import PinSerializer
