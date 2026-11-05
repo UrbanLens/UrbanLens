@@ -136,10 +136,16 @@ def repoint_subjects(predecessor: Place, successors: Iterable[Place], *, contain
         contained_only: Require the pin's point inside the successor's geometry (splits); a merge passes False because the survivor takes every pin.
 
     Returns:
-        How many pins were repointed."""
+        How many pins were repointed.
+
+    Raises:
+        ValueError: *contained_only* is False and more than one successor was given, so which takes the pins is unclear."""
+    successors = [successor for successor in successors if successor.pk != predecessor.pk]
+    if not contained_only and len(successors) > 1:
+        raise ValueError("a merge has one survivor; pass contained_only=True to split a place among several successors")
     moved = 0
     for successor in successors:
-        if successor.pk == predecessor.pk or (contained_only and successor.geometry is None):
+        if contained_only and successor.geometry is None:
             continue
         pins = Pin.objects.filter(subject_place=predecessor)
         if contained_only:

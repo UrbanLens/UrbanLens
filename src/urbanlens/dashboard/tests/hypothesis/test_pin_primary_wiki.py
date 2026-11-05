@@ -124,6 +124,20 @@ class PrimaryWikiTests(_Fixture):
         self.pin.refresh_from_db()
         self.assertEqual(self.pin.subject_place_id, replacement.pk)
 
+    def test_a_merge_with_several_survivors_is_refused_and_moves_nothing(self) -> None:
+        first = make_place(PlaceKind.BUILDING, square(-74.0, 40.0, 0.0006), parent=self.parcel, name="East Mill")
+        second = make_place(PlaceKind.BUILDING, square(-74.0, 40.0, 0.0007), parent=self.parcel, name="West Mill")
+        with self.assertRaises(ValueError):
+            repoint_subjects(self.building, [first, second], contained_only=False)
+        self.pin.refresh_from_db()
+        self.assertEqual(self.pin.subject_place_id, self.building.pk)
+
+    def test_a_merge_moves_every_pin_onto_the_one_survivor(self) -> None:
+        survivor = make_place(PlaceKind.BUILDING, square(-60.0, 30.0, 0.001), parent=self.parcel, name="Far Mill")
+        self.assertEqual(repoint_subjects(self.building, [self.building, survivor], contained_only=False), 1)
+        self.pin.refresh_from_db()
+        self.assertEqual(self.pin.subject_place_id, survivor.pk)
+
     def test_an_inaccessible_wiki_is_never_primary_even_if_it_is_the_subjects(self) -> None:
         stranger_parcel = make_place(PlaceKind.PARCEL, square(-60.0, 30.0, 0.001), name="Private Parcel")
         stranger_location = _location(30.0, -60.0)
