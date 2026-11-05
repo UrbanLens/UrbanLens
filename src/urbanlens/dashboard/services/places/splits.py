@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 import logging
 from typing import TYPE_CHECKING
 
@@ -66,6 +67,16 @@ SPLIT_OVERLAP_TOLERANCE = 0.05
 
 #: How much of the old outline the new outline plus the covering parcels must rebuild.
 SPLIT_REBUILD_RATIO = 0.8
+
+
+#: How many boundary refresh cycles (``SiteSettings.boundary_cache_days``) back an older outline still counts as the parcel's earlier extent.
+SPLIT_VERSION_REFRESH_CYCLES = 2
+
+#: Most recent outlines of one parcel considered.
+MAX_VERSIONS_COMPARED = 20
+
+#: Version provider for outlines chosen by a community boundary vote; never evidence of a provider's subdivision.
+VOTE_PROVIDER = "vote"
 
 
 def candidate_parcels(place: Place, new_geometry: MultiPolygon) -> list[MultiPolygon]:
@@ -184,12 +195,18 @@ def detect_split_from_versions(new_parcel: Place) -> Place | None:
     candidates = Place.objects.filter(kind=PlaceKind.PARCEL, status=PlaceStatus.CURRENT, parent__isnull=True, geometry__intersects=new_geometry).exclude(pk=new_parcel.pk)
     if new_parcel.provider:
         candidates = candidates.filter(provider=new_parcel.provider)
+    from urbanlens.dashboard.models.site_settings import SiteSettings
+
+    horizon = timezone.now() - timedelta(days=SPLIT_VERSION_REFRESH_CYCLES * SiteSettings.get_current().boundary_cache_days)
     for previous in candidates:
         current = previous.geometry
         if current is None or current.area <= 0 or not is_plausible_area(previous.kind, previous.area_sqm):
             continue
-        # Superseded outlines are older than the current one; the largest is the parcel's earlier extent.
-        older = [version.geometry for version in previous.geometry_versions.filter(erroneous=False).order_by("-recorded_at", "-pk")[1:]]
+        versions = list(previous.geometry_versions.filter(erroneous=False).order_by("-recorded_at", "-pk")[: 1 + MAX_VERSIONS_COMPARED])
+        # A vote moves the outline without the provider saying the parcel changed, so only the provider's own earlier outlines count.
+        if not versions or versions[0].provider == VOTE_PROVIDER:
+            continue
+        older = [version.geometry for version in versions[1:] if version.provider == versions[0].provider and version.recorded_at >= horizon]
         before = max(older, key=lambda geometry: geometry.area, default=None)
         if before is None or before.area <= 0 or current.area / before.area >= SPLIT_KEEP_CEILING:
             continue

@@ -7,8 +7,13 @@ from django.contrib.gis.geos import MultiPolygon, Polygon
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.place.lifecycle import LineageEdgeKind, PlaceGeometryVersion, PlaceLineageEdge
-from urbanlens.dashboard.models.place.model import GrantReason, PlaceAccessGrant, PlaceKind, PlaceStatus
+from urbanlens.dashboard.models.place.lifecycle import (
+    LineageEdgeKind,
+    PlaceAccessGrantSource,
+    PlaceGeometryVersion,
+    PlaceLineageEdge,
+)
+from urbanlens.dashboard.models.place.model import GrantReason, Place, PlaceAccessGrant, PlaceKind, PlaceStatus
 from urbanlens.dashboard.services.places import geometry_versions
 from urbanlens.dashboard.services.places.lineage_events import (
     LineageEvent,
@@ -146,9 +151,92 @@ class LineageEdgeTests(TestCase):
         assert any(str(self.new_a.pk) in line for line in logs.output)
         assert PlaceLineageEdge.objects.filter(erroneous=True).count() == 2
 
+    def test_a_sound_earlier_grant_survives_a_later_erroneous_event_into_the_same_successor(self) -> None:
+        now = self._event(LineageEventKind.SPLIT).learned_at
+        handle_lineage_event(LineageEvent(LineageEventKind.SPLIT, [self.old], [self.new_a], now))
+        grant = PlaceAccessGrant.objects.get(profile=self.holder, place=self.new_a)
+        other = upsert_place(PlaceKind.PARCEL, rect(-73.99, -73.98), provider="x", provider_key="c")
+        assert other is not None
+        pin_on(self.holder, other, lat=40.0, lng=-73.985)
+        handle_lineage_event(LineageEvent(LineageEventKind.SPLIT, [other], [self.new_a], now))
+        bad = list(PlaceLineageEdge.objects.filter(predecessor=other))
+        assert retract_erroneous_event(bad, "test") == 0
+        assert PlaceAccessGrant.objects.filter(pk=grant.pk).exists()
+
+    def test_a_grant_justified_by_a_sound_and_an_erroneous_edge_survives(self) -> None:
+        handle_lineage_event(self._event(LineageEventKind.SPLIT))
+        grant = PlaceAccessGrant.objects.get(profile=self.holder, place=self.new_a)
+        replay = LineageEvent(
+            LineageEventKind.REPLACE, [self.old], [self.new_a], self._event(LineageEventKind.SPLIT).learned_at
+        )
+        handle_lineage_event(replay)
+        assert PlaceAccessGrantSource.objects.filter(grant=grant).count() == 3
+        bad = list(PlaceLineageEdge.objects.filter(kind=LineageEdgeKind.REPLACED_BY))
+        assert retract_erroneous_event(bad, "test") == 0
+        assert PlaceAccessGrant.objects.filter(pk=grant.pk).exists()
+
+    def test_a_grant_with_no_sources_is_never_retracted(self) -> None:
+        legacy = PlaceAccessGrant.objects.create(
+            profile=self.holder, place=self.new_a, reason=GrantReason.GRANDFATHERED_SPLIT
+        )
+        handle_lineage_event(self._event(LineageEventKind.SPLIT))
+        assert retract_erroneous_event(list(PlaceLineageEdge.objects.all()), "test") >= 1
+        assert PlaceAccessGrant.objects.filter(pk=legacy.pk).exists()
+
+    def test_retraction_reopens_the_predecessor(self) -> None:
+        handle_lineage_event(self._event(LineageEventKind.SPLIT))
+        retract_erroneous_event(list(PlaceLineageEdge.objects.all()), "test")
+        self.old.refresh_from_db()
+        assert self.old.valid_to is None
+
+    def test_a_same_domain_merge_writes_the_edge_and_no_grants(self) -> None:
+        sibling = upsert_place(PlaceKind.PARCEL, rect(-74.004, -74.0005), provider="y", provider_key="s")
+        assert sibling is not None
+        Place.objects.filter(pk=sibling.pk).update(domain_root=self.old.domain_root_id)
+        sibling.refresh_from_db()
+        handle_lineage_event(
+            LineageEvent(LineageEventKind.MERGE, [sibling], [self.old], self._event(LineageEventKind.MERGE).learned_at)
+        )
+        assert PlaceLineageEdge.objects.filter(kind=LineageEdgeKind.MERGED_INTO, predecessor=sibling).exists()
+        assert not PlaceAccessGrant.objects.exists()
+
+    def test_a_cross_domain_merge_grants_the_holders(self) -> None:
+        handle_lineage_event(
+            LineageEvent(
+                LineageEventKind.MERGE, [self.old], [self.new_a], self._event(LineageEventKind.MERGE).learned_at
+            )
+        )
+        assert PlaceAccessGrant.objects.filter(
+            profile=self.holder, place=self.new_a, reason=GrantReason.GRANDFATHERED_LINEAGE
+        ).exists()
+
 
 class VersionSplitDetectionTests(TestCase):
     """A mild shrink whose remainder parcel arrives later is found from the older outline."""
+
+    def test_a_vote_polygon_does_not_trigger_a_split(self) -> None:
+        original = upsert_place(PlaceKind.PARCEL, rect(-74.004, -73.996), provider="county")
+        assert original is not None
+        geometry_versions.set_geometry(original, rect(-74.004, -73.998), provider="vote")
+        upsert_place(PlaceKind.PARCEL, rect(-73.998, -73.996), provider="county")
+        original.refresh_from_db()
+        assert original.status == PlaceStatus.CURRENT
+
+    def test_an_outline_older_than_the_window_is_ignored(self) -> None:
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        original = upsert_place(PlaceKind.PARCEL, rect(-74.004, -73.996), provider="county")
+        assert original is not None
+        geometry_versions.set_geometry(original, rect(-74.004, -73.998), provider="county")
+        PlaceGeometryVersion.objects.filter(place=original).update(recorded_at=timezone.now() - timedelta(days=3650))
+        PlaceGeometryVersion.objects.filter(place=original, geometry__equals=rect(-74.004, -73.998)).update(
+            recorded_at=timezone.now()
+        )
+        upsert_place(PlaceKind.PARCEL, rect(-73.998, -73.996), provider="county")
+        original.refresh_from_db()
+        assert original.status == PlaceStatus.CURRENT
 
     def test_a_late_remainder_parcel_completes_the_split(self) -> None:
         holder = baker.make(User).profile

@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 
     from urbanlens.dashboard.models.place.external_tag import PlaceExternalTag  # noqa: F401 - mypy needs these; ruff does not
     from urbanlens.dashboard.models.place.external_tag_group import ExternalTagGroup, ExternalTagVocabularyEntry  # noqa: F401 - mypy needs these; ruff does not
+    from urbanlens.dashboard.models.place.lifecycle import PlaceLineageEdge
     from urbanlens.dashboard.models.place.model import (
         Place,
         PlaceAccessGrant,  # noqa: F401 - mypy needs these; ruff does not
@@ -168,7 +169,7 @@ class PlaceAccessGrantManager(_PlaceAccessGrantManagerBase["PlaceAccessGrant"]):
             return set()
         return {root for root in self.for_profile(profile).values_list("place__domain_root_id", flat=True) if root is not None}
 
-    def grant_places(self, profile_ids: Iterable[int], places: Iterable[Place], *, reason: str) -> int:
+    def grant_places(self, profile_ids: Iterable[int], places: Iterable[Place], *, reason: str, edges: Iterable[PlaceLineageEdge] = ()) -> int:
         """
         Permanently grant each profile each place's domain.
         Never removes anything. Repeat grants are no-ops.
@@ -177,6 +178,8 @@ class PlaceAccessGrantManager(_PlaceAccessGrantManagerBase["PlaceAccessGrant"]):
             profile_ids: Profiles to grant. A no-op for an empty iterable.
             places: Places to grant on.
             reason: Why, as a :class:`GrantReason` value.
+            edges: Lineage edges that justify the grants. Each is recorded as a source of every grant it created
+                and of every existing grant that already has a source; a grant without sources is never given one.
 
         Returns:
             How many grants were requested (existing ones included).
@@ -189,7 +192,22 @@ class PlaceAccessGrantManager(_PlaceAccessGrantManagerBase["PlaceAccessGrant"]):
         # ignore_conflicts: a repeat call (a profile who already holds part of
         # the family, or two overlapping snapshot triggers) must stay a no-op,
         # not an IntegrityError on the (profile, place) unique constraint.
+        edge_list = list(edges)
+        if not edge_list:
+            self.bulk_create(grants, ignore_conflicts=True)
+            return len(grants)
+        from urbanlens.dashboard.models.place.lifecycle import PlaceAccessGrantSource
+
+        place_ids = [place.pk for place in targets]
+        pairs = self.filter(profile_id__in=ids, place_id__in=place_ids)
+        sourced = set(PlaceAccessGrantSource.objects.filter(grant__in=pairs).values_list("grant_id", flat=True))
+        before = set(pairs.values_list("pk", flat=True))
         self.bulk_create(grants, ignore_conflicts=True)
+        eligible = [grant_id for grant_id in self.filter(profile_id__in=ids, place_id__in=place_ids).values_list("pk", flat=True) if grant_id not in before or grant_id in sourced]
+        PlaceAccessGrantSource.objects.bulk_create(
+            [PlaceAccessGrantSource(grant_id=grant_id, edge=edge) for grant_id in eligible for edge in edge_list],
+            ignore_conflicts=True,
+        )
         return len(grants)
 
     def snapshot_family(self, profile_ids: Iterable[int], aggregate: Place, *, reason: str | None = None) -> None:

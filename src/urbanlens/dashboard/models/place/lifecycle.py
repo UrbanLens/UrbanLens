@@ -93,3 +93,21 @@ class PlaceLineageEdge(abstract.DashboardModel):
             CheckConstraint(condition=~Q(predecessor=F("successor")), name="place_lineage_edge_not_self"),
         ]
         indexes = [Index(fields=["successor"], name="idxdb_lineage_successor")]
+
+
+class PlaceAccessGrantSource(abstract.DashboardModel):
+    """
+    The lineage edge that justified a grant.
+    A grant may have several sources; one with none pre-dates this record (or came from engagement) and is never retracted.
+
+    Attributes:
+        grant: The grant.
+        edge: An edge whose event wrote, or would have written, it.
+    """
+
+    grant = ForeignKey("dashboard.PlaceAccessGrant", on_delete=CASCADE, related_name="sources")
+    edge = ForeignKey("dashboard.PlaceLineageEdge", on_delete=CASCADE, related_name="grant_sources")
+
+    class Meta(abstract.DashboardModel.Meta):
+        db_table = "dashboard_place_access_grant_sources"
+        constraints = [UniqueConstraint(fields=["grant", "edge"], name="place_access_grant_source_unique")]
