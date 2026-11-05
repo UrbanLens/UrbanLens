@@ -62,8 +62,13 @@ def is_real_user(profile: Profile) -> bool:
     return meets_floors(signals) and real_user_score(signals) >= settings.UL_TRUST_REAL_USER_THRESHOLD
 
 
-def _has_geography(signals: ProfileTrustSignals) -> bool:
-    return signals.pin_count >= settings.UL_TRUST_MIN_PINS_FOR_GEOGRAPHY
+def _cells_without(signals: ProfileTrustSignals, exclude_cell: str | None) -> set[str]:
+    return set(signals.pin_cells) - {exclude_cell}
+
+
+def _has_geography(signals: ProfileTrustSignals, exclude_cell: str | None = None) -> bool:
+    """Enough mature pins, and enough cells in the window once the decided place's cell is removed (pins older than the window leave no cells)."""
+    return signals.pin_count >= settings.UL_TRUST_MIN_PINS_FOR_GEOGRAPHY and len(_cells_without(signals, exclude_cell)) >= settings.UL_TRUST_MIN_CELLS_FOR_GEOGRAPHY
 
 
 def _jaccard(a: set[str], b: set[str]) -> float | None:
@@ -103,7 +108,7 @@ def are_independent(a: Profile, b: Profile, *, exclude_cell: str | None = None) 
     Unless both accounts are older than ``UL_TRUST_BOTH_ESTABLISHED_DAYS``, the pair must have been created more than ``UL_TRUST_MIN_CREATION_GAP_DAYS`` apart and must not be invitation-linked (one invited the other, or one inviter brought in both).
     Then the Jaccard overlap of their geohash-6 pin cells (pins from the last ``UL_TRUST_CELL_WINDOW_DAYS`` days), ignoring ``exclude_cell`` (the cell of the place being decided, at the same precision, which they share by construction), must be below ``UL_TRUST_MAX_CELL_JACCARD``; co-located real users pass.
     An accepted friendship at least ``UL_TRUST_FRIENDSHIP_MIN_AGE_DAYS`` old raises that limit to ``UL_TRUST_FRIENDSHIP_JACCARD_LIMIT`` and never causes a fail.
-    A profile too small to have usable geography must instead reach ``UL_TRUST_NO_GEOGRAPHY_THRESHOLD`` as a real user.
+    A profile with fewer than ``UL_TRUST_MIN_CELLS_FOR_GEOGRAPHY`` window cells left after removing ``exclude_cell`` (or too few pins) has no usable geography and is never treated as zero overlap; it must instead reach ``UL_TRUST_NO_GEOGRAPHY_THRESHOLD`` as a real user.
     Run it from a Celery task: it reads two signal rows and, as needed, the friendship and invitation tables.
     """
     if a.pk == b.pk:
@@ -112,12 +117,12 @@ def are_independent(a: Profile, b: Profile, *, exclude_cell: str | None = None) 
     established = _both_established(sig_a, sig_b)
     if not _creation_ok(a, b, sig_a, sig_b):
         return False
-    if _has_geography(sig_a) and _has_geography(sig_b):
-        overlap = _jaccard(set(sig_a.pin_cells) - {exclude_cell}, set(sig_b.pin_cells) - {exclude_cell})
+    if _has_geography(sig_a, exclude_cell) and _has_geography(sig_b, exclude_cell):
+        overlap = _jaccard(_cells_without(sig_a, exclude_cell), _cells_without(sig_b, exclude_cell))
         if overlap is None:
             return False
         if overlap >= settings.UL_TRUST_MAX_CELL_JACCARD and not (overlap < settings.UL_TRUST_FRIENDSHIP_JACCARD_LIMIT and _established_friends(a, b)):
             return False
-    elif not all(real_user_score(sig) >= settings.UL_TRUST_NO_GEOGRAPHY_THRESHOLD and meets_floors(sig) for sig in (sig_a, sig_b) if not _has_geography(sig)):
+    elif not all(real_user_score(sig) >= settings.UL_TRUST_NO_GEOGRAPHY_THRESHOLD and meets_floors(sig) for sig in (sig_a, sig_b) if not _has_geography(sig, exclude_cell)):
         return False
     return established or not _invitation_linked(a, b)

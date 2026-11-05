@@ -221,7 +221,11 @@ class IndependenceTests(TestCase):
         _pins(a, NY, 1)
         shared = signals_for(a).pin_cells[0]
         self.assertFalse(are_independent(a, b))
-        self.assertTrue(are_independent(a, b, exclude_cell=shared))
+        self.assertFalse(are_independent(a, b, exclude_cell=shared))
+        _weeks(b, 3)
+        compute_signals(b)
+        with override_settings(UL_TRUST_NO_GEOGRAPHY_THRESHOLD=0.0):
+            self.assertTrue(are_independent(a, b, exclude_cell=shared))
 
     def test_friendship_never_flips_pass_to_fail(self) -> None:
         for centers in ((LA, NY), (LA, LA)):
@@ -284,6 +288,29 @@ class IndependenceTests(TestCase):
         compute_signals(sparse)
         with override_settings(UL_TRUST_NO_GEOGRAPHY_THRESHOLD=0.0):
             self.assertTrue(are_independent(sparse, other))
+
+    def test_target_cell_only_account_is_not_zero_overlap(self) -> None:
+        x, v = _profile(), _profile()
+        _pins(x, LA, 8)
+        _pins(v, LA, 8)
+        _pins(v, NY, 1)
+        target = signals_for(x).pin_cells[0]
+        self.assertFalse(are_independent(x, v, exclude_cell=target))
+        _weeks(x, 6)
+        compute_signals(x)
+        with override_settings(UL_TRUST_NO_GEOGRAPHY_THRESHOLD=0.0):
+            self.assertTrue(are_independent(x, v, exclude_cell=target))
+
+    def test_pins_older_than_the_cell_window_leave_no_geography(self) -> None:
+        old, other = _profile(), _profile()
+        _pins(old, LA, 8, age_days=900)
+        _pins(other, NY, 8)
+        self.assertEqual(signals_for(old).pin_cells, [])
+        self.assertFalse(are_independent(old, other))
+        _weeks(old, 3)
+        compute_signals(old)
+        with override_settings(UL_TRUST_NO_GEOGRAPHY_THRESHOLD=0.0):
+            self.assertTrue(are_independent(old, other))
 
     def test_a_profile_is_not_independent_of_itself(self) -> None:
         a = _profile()
