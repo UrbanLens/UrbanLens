@@ -286,10 +286,9 @@ def wiki_audience(wiki: Wiki) -> list[int]:
     from urbanlens.dashboard.models.pin.model import Pin
 
     pins = Pin.objects.root_pins()
-    from urbanlens.dashboard.models.place.model import Place
+    from urbanlens.dashboard.services.pins.same_place import is_shared_place
 
-    place_ok = wiki.place_id is not None and Place.objects.current().exclude(pk__in=Place.objects.implausible().values("pk")).filter(pk=wiki.place_id).exists()
-    pins = pins.filter(location__place_id=wiki.place_id) if place_ok else pins.filter(location_id=wiki.location_id)  # same-place: audience of a wiki: pins at its current plausible Place, else its Location; not pin-to-pin
+    pins = pins.filter(location__place_id=wiki.place_id) if is_shared_place(wiki.place_id) else pins.filter(location_id=wiki.location_id)  # same-place: audience of a wiki: pins at its current plausible Place, else its Location; not pin-to-pin
     return list(pins.values_list("profile_id", flat=True).distinct())
 
 

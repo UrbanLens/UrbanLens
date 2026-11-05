@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import ast
 import pathlib
+import re
 import sys
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -76,13 +77,27 @@ def _is_literal(value: ast.expr) -> bool:
     return False
 
 
+#: Where a key names the Location: at its start, or after a leading f-string placeholder (``f"{prefix}__location"``).
+#: Relation paths such as ``wiki__location__in`` filter another model and are not checked.
+LOCATION_START = re.compile(r"^(?:\0(?:__)?)?location")
+
+
 def _is_identity_key(key: str) -> bool:
-    """Whether a filter key tests a row's Location (or its Place or point) against something."""
-    if not key.startswith("location"):
-        return False
-    if "\0" in key:
-        return True
-    return key[len("location") :] in IDENTITY_SUFFIXES
+    """
+    Whether a filter key tests a row's Location (or its Place or point) against something.
+
+    The key may start with an f-string placeholder (``\\0`` here).
+    A dynamic tail counts as identity unless its literal text already rules out every identity suffix (``location__official_name__\\0``).
+    """
+    for match in LOCATION_START.finditer(key):
+        tail = key[match.end() :]
+        if "\0" in tail:
+            literal = tail.split("\0", 1)[0]
+            if any(suffix.startswith(literal) for suffix in IDENTITY_SUFFIXES):
+                return True
+        elif tail in IDENTITY_SUFFIXES:
+            return True
+    return False
 
 
 def _values_of_location(node: ast.AST) -> bool:
@@ -198,7 +213,9 @@ def find_violations(source: str, rel_path: str) -> list[str]:
             report(node, "Location ids of pin sets intersected")
         elif isinstance(node, ast.Compare) and any(isinstance(op, (ast.Eq, ast.NotEq, ast.In, ast.NotIn)) for op in node.ops):
             operands = [node.left, *node.comparators]
-            if sum(isinstance(o, ast.Attribute) and o.attr in LOCATION_ATTRS for o in operands) >= 2:
+            attrs = sum(isinstance(o, ast.Attribute) and o.attr in LOCATION_ATTRS for o in operands)
+            member_of_set = any(isinstance(op, (ast.In, ast.NotIn)) for op in node.ops) and attrs >= 1 and any(_is_location_set(o, names) for o in node.comparators)
+            if attrs >= 2 or member_of_set:
                 report(node, "two locations compared for identity")
     return found
 

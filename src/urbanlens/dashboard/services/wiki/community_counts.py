@@ -73,13 +73,14 @@ def wiki_community_summary(wiki: Wiki, location: Location) -> dict[str, Any]:
     Returns:
         Dict with ``pin_count_low`` (bool), ``pin_count_approx`` (int, or None when low), ``first_pinned`` (``date`` truncated to the 1st, or None), and ``first_pinned_precision`` (always ``"month"``, so a client never renders the value as an exact day)."""
     from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.pins.same_place import is_shared_place
 
     # Place-aware: count root pins across every Location sharing this wiki's Place, not just the one
     # Location the caller happened to resolve it through - otherwise "N users have this pinned"
     # undercounts (and varies by which of the place's several pinned coordinates the URL names)
     # whenever more than one Location row exists under the Place.
-    if wiki.place_id is not None:
-        root_pins = Pin.objects.root_pins().filter(location__place_id=wiki.place_id)  # same-place: audience of a wiki: pins at its Place, else its Location; not pin-to-pin
+    if is_shared_place(wiki.place_id):
+        root_pins = Pin.objects.root_pins().filter(location__place_id=wiki.place_id)  # same-place: audience of a wiki: pins at its current plausible Place, else its Location; not pin-to-pin
     else:
         root_pins = location.pins.root_pins()
     exact_count = root_pins.values("profile").distinct().count()

@@ -318,11 +318,17 @@ class SamePlaceLintTests(SimpleTestCase):
             "q_dict": "def f(key, ids):\n    return Q(**{'location_id__in': ids})\n",
             "dwithin": "def f(p):\n    return Pin.objects.filter(location__point__dwithin=(p, D(m=5)))\n",
             "distance": "def f(p):\n    return Pin.objects.filter(location__point__distance_lte=(p, D(m=5)))\n",
+            "placeholder_first": "def f(p, v):\n    return Pin.objects.filter(**{f'{p}__location': v})\n",
+            "membership": "def f(pin, theirs):\n    ids = set(theirs.values_list('location_id', flat=True))\n    return pin.location_id in ids\n",
             "intersect": "def f(a, b):\n    return set(a.values_list('location_id', flat=True)) & set(b.values_list('location_id', flat=True))\n",
         }
         for name, source in probes.items():
             with self.subTest(name):
                 self.assertGreaterEqual(self._found(source), 1)
+
+    def test_a_dynamic_name_search_is_not_an_identity_test(self):
+        source = "def f(lookup, term):\n    return Pin.objects.filter(**{f'location__official_name__{lookup}': term})\n"
+        self.assertEqual(self._found(source), 0)
 
     def test_a_waiver_comment_clears_the_line(self):
         source = "def f(ids):\n    return Pin.objects.filter(location__in=ids)  # same-place: exact match is intended\n"

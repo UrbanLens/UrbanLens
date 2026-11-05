@@ -30,6 +30,13 @@ def on_a_shared_place(prefix: str = "location__") -> Q:
     return Q(**{f"{prefix}place__status": PlaceStatus.CURRENT}) & ~Q(**{f"{prefix}place_id__in": Place.objects.implausible().values("pk")})
 
 
+def is_shared_place(place_id: int | None) -> bool:
+    """Whether *place_id* is a CURRENT, plausibly sized Place, i.e. one whose Locations all count as the same place."""
+    if place_id is None:
+        return False
+    return Place.objects.current().exclude(pk__in=Place.objects.implausible().values("pk")).filter(pk=place_id).exists()
+
+
 def _shares_a_place(location_a: Location, location_b: Location) -> bool:
     """
     The single rule behind :func:`same_place` and :func:`same_place_q`; widen it here.
@@ -45,7 +52,7 @@ def _shares_a_place(location_a: Location, location_b: Location) -> bool:
         return True
     if location_a.place_id is None or location_a.place_id != location_b.place_id:
         return False
-    return Place.objects.current().filter(pk=location_a.place_id).exclude(pk__in=Place.objects.implausible().values("pk")).exists()
+    return is_shared_place(location_a.place_id)
 
 
 def same_place(pin_a: Pin, pin_b: Pin) -> bool:
