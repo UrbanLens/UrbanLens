@@ -259,9 +259,13 @@ def provision_outcome_for_coordinate(location: Location, *, name: str | None = N
 def _probe_neighbours(location: Location, previous: Place, new_parcel_polygon: MultiPolygon, known: list[MultiPolygon]) -> list[MultiPolygon]:
     """Ask the provider chain about the domain's locations that fall outside the new outline, at most :data:`MAX_SUBDIVISION_PROBES` times."""
     from urbanlens.dashboard.models.location.model import Location as LocationModel
+    from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain
+    from urbanlens.dashboard.services.places import splits
+    from urbanlens.dashboard.services.places.lineage_events import holders_of
 
     found: list[MultiPolygon] = []
+    holders: set[int] | None = None
     probes = 0
     neighbours = LocationModel.objects.filter(place__domain_root_id=previous.domain_root_id).exclude(pk=location.pk).exclude(point__within=new_parcel_polygon).annotate(distance=Distance("point", location.point)).order_by("distance")
     for other in neighbours.iterator():
@@ -271,8 +275,21 @@ def _probe_neighbours(location: Location, previous: Place, new_parcel_polygon: M
             break
         probes += 1
         chain_result = BoundaryProviderChain().get_boundaries(float(other.latitude), float(other.longitude), name=other.official_name or None)
-        if chain_result.property_polygon is not None and not any(candidate.equals(chain_result.property_polygon) for candidate in [*known, *found]):
-            found.append(chain_result.property_polygon)
+        # Same rules candidate_parcels applies to stored parcels: the previous provider's outline only,
+        # essentially disjoint from the refreshed outline, and never one that would hand strangers access.
+        polygon = next((candidate for service_key, candidate in chain_result.property_candidates if service_key == previous.provider), None)
+        if polygon is None or polygon.area <= 0 or polygon.intersection(new_parcel_polygon).area / polygon.area > splits.SPLIT_OVERLAP_TOLERANCE:
+            continue
+        if any(candidate.equals(polygon) for candidate in [*known, *found]):
+            continue
+        matched = find_matching_place(PlaceKind.PARCEL, polygon, exclude_pk=previous.pk)
+        if matched is not None:
+            if holders is None:
+                holders = holders_of([previous], timezone.now())
+            if Pin.objects.filter(location__place__domain_root_id=matched.domain_root_id).exclude(profile_id__in=holders).exists():
+                logger.info("split probe skipped: place %s has pins from outside place %s", matched.pk, previous.pk)
+                continue
+        found.append(polygon)
     return found
 
 

@@ -191,6 +191,10 @@ def process_split(place: Place, successors: list[MultiPolygon]) -> Place:
         logger.info("process_split: place %s produced fewer than two successors; leaving it current", place.pk)
         return place
 
+    # Snapshot before anything moves: once buildings re-home, containment can
+    # no longer prove what these profiles already had.
+    handle_lineage_event(LineageEvent(LineageEventKind.SPLIT, [place], children, learned_at))
+
     Place.objects.filter(pk=place.pk).update(status=PlaceStatus.SUPERSEDED)
     place.status = PlaceStatus.SUPERSEDED
 
@@ -203,10 +207,6 @@ def process_split(place: Place, successors: list[MultiPolygon]) -> Place:
         new_home = next((child for child in children if child.geometry is not None and child.geometry.contains(building.geometry.centroid)), None)
         if new_home is not None:
             lineage.set_parent(building, new_home, PlaceRelation.PART_OF)
-
-    # Snapshot before re-resolution moves anyone: after this, containment can
-    # no longer prove what these profiles already had.
-    handle_lineage_event(LineageEvent(LineageEventKind.SPLIT, [place], children, learned_at))
 
     for child in children:
         if child.geometry is not None:
