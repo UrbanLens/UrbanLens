@@ -6,7 +6,7 @@ from datetime import timedelta
 import logging
 from typing import TYPE_CHECKING
 
-from django.contrib.gis.geos import GeometryCollection
+from django.contrib.gis.geos import GeometryCollection, GEOSException
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
@@ -138,17 +138,21 @@ def remainder_is_covered(place: Place, new_geometry: MultiPolygon, seen: Iterabl
     """
     if place.geometry is None:
         return False
-    remainder = place.geometry.difference(new_geometry)
-    if remainder.empty or remainder.area <= 0:
+    try:
+        remainder = place.geometry.difference(new_geometry)
+        if remainder.empty or remainder.area <= 0:
+            return False
+        candidates = [*candidate_parcels(place, new_geometry), *seen]
+        if not candidates:
+            return False
+        union = GeometryCollection(*candidates).unary_union
+        if (remainder.intersection(union).area / remainder.area) < SPLIT_REMAINDER_COVERAGE:
+            return False
+        rebuilt = place.geometry.intersection(new_geometry.union(union))
+        return (rebuilt.area / place.geometry.area) >= SPLIT_REBUILD_RATIO
+    except GEOSException:
+        logger.warning("split check of %s skipped: invalid provider outline", place.pk)
         return False
-    candidates = [*candidate_parcels(place, new_geometry), *seen]
-    if not candidates:
-        return False
-    union = GeometryCollection(*candidates).unary_union
-    if (remainder.intersection(union).area / remainder.area) < SPLIT_REMAINDER_COVERAGE:
-        return False
-    rebuilt = place.geometry.intersection(new_geometry.union(union))
-    return (rebuilt.area / place.geometry.area) >= SPLIT_REBUILD_RATIO
 
 
 def looks_like_a_split(place: Place, new_geometry: MultiPolygon | None, seen: Iterable[MultiPolygon] = ()) -> bool:
@@ -195,8 +199,7 @@ def detect_split_from_versions(new_parcel: Place) -> Place | None:
         return None
     # Older outlines count too: the remainder can sit in a gap from the parcel's current outline.
     candidates = Place.objects.filter(kind=PlaceKind.PARCEL, status=PlaceStatus.CURRENT, parent__isnull=True).filter(Q(geometry__intersects=new_geometry) | Q(geometry_versions__geometry__intersects=new_geometry)).exclude(pk=new_parcel.pk).distinct()
-    if new_parcel.provider:
-        candidates = candidates.filter(provider=new_parcel.provider)
+    candidates = candidates.filter(provider=new_parcel.provider)
     from urbanlens.dashboard.models.site_settings import SiteSettings
 
     horizon = timezone.now() - timedelta(days=SPLIT_VERSION_REFRESH_CYCLES * SiteSettings.get_current().boundary_cache_days)
@@ -215,10 +218,14 @@ def detect_split_from_versions(new_parcel: Place) -> Place | None:
         # The new parcel must sit in the space the old one gave up, not overlap what it kept.
         if new_geometry.intersection(current).area / new_geometry.area > SPLIT_OVERLAP_TOLERANCE:
             continue
-        remainder = before.difference(current)
-        if remainder.empty or remainder.area <= 0 or remainder.intersection(new_geometry).area / remainder.area < SPLIT_REMAINDER_COVERAGE:
-            continue
-        if before.intersection(current.union(new_geometry)).area / before.area < SPLIT_REBUILD_RATIO:
+        try:
+            remainder = before.difference(current)
+            if remainder.empty or remainder.area <= 0 or remainder.intersection(new_geometry).area / remainder.area < SPLIT_REMAINDER_COVERAGE:
+                continue
+            if before.intersection(current.union(new_geometry)).area / before.area < SPLIT_REBUILD_RATIO:
+                continue
+        except GEOSException:
+            logger.warning("version split of %s skipped: invalid provider outline", previous.pk)
             continue
         holders = holders_of([previous], timezone.now())
         if Pin.objects.filter(location__place__domain_root_id=new_parcel.domain_root_id).exclude(profile_id__in=holders).exists():
@@ -245,17 +252,23 @@ def process_split(place: Place, successors: list[MultiPolygon]) -> Place:
     learned_at = timezone.now()
 
     children: list[Place] = []
+    previous_parents: dict[int, tuple[Place | None, str]] = {}
     for geometry in successors:
         # place is still CURRENT, so without exclude_pk a piece holding its centroid would alias back onto it.
         child = upsert_place(PlaceKind.PARCEL, geometry, name=place.name, exclude_pk=place.pk, detect_splits=False)
         if child is not None and child.pk != place.pk:
+            previous_parents[child.pk] = (child.parent, child.parent_relation)
             lineage.set_parent(child, place, PlaceRelation.MEMBER_OF)
             children.append(child)
 
     if len(children) < 2:
         logger.info("process_split: place %s produced fewer than two successors; leaving it current", place.pk)
         for child in children:
-            lineage.set_parent(child, None)
+            old_parent, old_relation = previous_parents[child.pk]
+            if old_parent is None:
+                lineage.set_parent(child, None)
+            else:
+                lineage.set_parent(child, old_parent, old_relation)
         return place
 
     Place.objects.filter(pk=place.pk).update(status=PlaceStatus.SUPERSEDED)

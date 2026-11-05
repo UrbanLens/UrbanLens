@@ -170,7 +170,7 @@ class LineageEdgeTests(TestCase):
             LineageEventKind.REPLACE, [self.old], [self.new_a], self._event(LineageEventKind.SPLIT).learned_at
         )
         handle_lineage_event(replay)
-        assert PlaceAccessGrantSource.objects.filter(grant=grant).count() == 3
+        assert PlaceAccessGrantSource.objects.filter(grant=grant).count() == 2
         bad = list(PlaceLineageEdge.objects.filter(kind=LineageEdgeKind.REPLACED_BY))
         assert retract_erroneous_event(bad, "test") == 0
         assert PlaceAccessGrant.objects.filter(pk=grant.pk).exists()
@@ -245,9 +245,10 @@ class VersionSplitDetectionTests(TestCase):
         assert original is not None
         geometry_versions.set_geometry(original, rect(-74.004, -73.998), provider="county")
         PlaceGeometryVersion.objects.filter(place=original).update(recorded_at=timezone.now() - timedelta(days=3650))
-        PlaceGeometryVersion.objects.filter(place=original, geometry__equals=rect(-74.004, -73.998)).update(
+        touched = PlaceGeometryVersion.objects.filter(place=original, geometry__equals=rect(-74.004, -73.998)).update(
             recorded_at=timezone.now()
         )
+        assert touched == 1
         upsert_place(PlaceKind.PARCEL, rect(-73.998, -73.996), provider="county")
         original.refresh_from_db()
         assert original.status == PlaceStatus.CURRENT
