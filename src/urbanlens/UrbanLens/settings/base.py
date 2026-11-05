@@ -467,6 +467,10 @@ FULL_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.refresh_trust_signals",
         "schedule": crontab(hour=3, minute=40),
     },
+    "shared-places-sweep": {
+        "task": "urbanlens.dashboard.tasks.evaluate_shared_places_sweep",
+        "schedule": crontab(hour=4, minute=20),
+    },
     "safety-checkin-due-reminders": {
         "task": "urbanlens.dashboard.tasks.send_due_checkin_reminders",
         "schedule": 5 * 60,
@@ -1536,3 +1540,18 @@ UL_TRUST_BOTH_ESTABLISHED_DAYS = int(os.getenv("UL_TRUST_BOTH_ESTABLISHED_DAYS",
 UL_TRUST_SIGNALS_MAX_AGE_SECONDS = int(os.getenv("UL_TRUST_SIGNALS_MAX_AGE_SECONDS", str(36 * 3600)))
 #: The nightly refresh skips a profile with no activity in 90 days while its row is younger than this.
 UL_TRUST_DORMANT_REFRESH_DAYS = int(os.getenv("UL_TRUST_DORMANT_REFRESH_DAYS", "7"))
+
+# Shared placeless places (ADR35 section 2, UL-367). Evaluated only in Celery.
+#: A provisional place groups pins within this many metres of its one fixed anchor (the earlier pin's point).
+UL_SHARED_PLACE_PROVISIONAL_RADIUS_M = float(os.getenv("UL_SHARED_PLACE_PROVISIONAL_RADIUS_M", "25"))
+#: An anchored place groups pins within this many metres of a stored public reference.
+UL_SHARED_PLACE_ANCHORED_RADIUS_M = float(os.getenv("UL_SHARED_PLACE_ANCHORED_RADIUS_M", "30"))
+#: A pin must be this old, or have a verified (photo) visit, before it counts toward a shared place.
+UL_SHARED_PLACE_MIN_PIN_AGE_DAYS = int(os.getenv("UL_SHARED_PLACE_MIN_PIN_AGE_DAYS", "7"))
+#: One profile may join at most this many shared places per window; beyond it joins are skipped and logged for review.
+UL_SHARED_PLACE_JOIN_LIMIT = int(os.getenv("UL_SHARED_PLACE_JOIN_LIMIT", "5"))
+UL_SHARED_PLACE_JOIN_WINDOW_HOURS = int(os.getenv("UL_SHARED_PLACE_JOIN_WINDOW_HOURS", "24"))
+#: Pin saves within this many seconds collapse into one evaluation.
+UL_SHARED_PLACE_DEBOUNCE_SECONDS = int(os.getenv("UL_SHARED_PLACE_DEBOUNCE_SECONDS", "120"))
+#: The nightly sweep looks at placeless pins created in this many days (older ones were seen when they matured).
+UL_SHARED_PLACE_SWEEP_DAYS = int(os.getenv("UL_SHARED_PLACE_SWEEP_DAYS", "45"))

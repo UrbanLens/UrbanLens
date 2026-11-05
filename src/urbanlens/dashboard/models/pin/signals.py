@@ -281,3 +281,36 @@ def ensure_wiki_for_pin_location(sender: type[Pin], instance: Pin, created: bool
         enqueue_follow_on(ensure_wiki_for_location, ensure_wikis_for_locations, location_id, queue=queue)
 
     transaction.on_commit(_run)
+
+
+@receiver(post_save, sender=Pin, dispatch_uid="pin_evaluate_shared_places")
+def evaluate_shared_places_on_pin_save(sender: type[Pin], instance: Pin, created: bool, **kwargs) -> None:
+    """
+    Queue the shared-place trust checks when a pin is created or moved.
+    The checks run only in Celery (``tasks.evaluate_shared_places_for_pin``); nothing here reads or decides anything.
+    """
+    if instance.location_id is None or not (created or getattr(instance, "child_boundary_position_changed", False)):
+        return
+    pin_id = instance.pk
+
+    def _run() -> None:
+        from urbanlens.dashboard.services.places.shared_place_triggers import schedule_pin_evaluation
+
+        schedule_pin_evaluation(pin_id)
+
+    transaction.on_commit(_run)
+
+
+@receiver(post_delete, sender=Pin, dispatch_uid="pin_revalidate_shared_places")
+def revalidate_shared_places_on_pin_delete(sender: type[Pin], instance: Pin, **kwargs) -> None:
+    """Queue a membership re-check after a pin is deleted, so access follows the pins a member still holds."""
+    profile_id = instance.profile_id
+    if profile_id is None:
+        return
+
+    def _run() -> None:
+        from urbanlens.dashboard.services.places.shared_place_triggers import schedule_membership_revalidation
+
+        schedule_membership_revalidation(profile_id)
+
+    transaction.on_commit(_run)

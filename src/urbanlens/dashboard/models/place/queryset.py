@@ -57,11 +57,11 @@ class PlaceQuerySet(abstract.DashboardQuerySet["Place"]):
     def resolvable(self) -> Self:
         """
         Places a coordinate is allowed to resolve onto.
-        Four exclusions, each load-bearing: - **Superseded** places keep their geometry for display and history, but a historical campus boundary still geometrically contains every post-split pin, so containment against it must never resolve. - **Aggregates** (anything with ``MEMBER_OF`` children) exist to be *earned* by holding every member, never to be pinned into directly - see ``services.wiki.wiki_access``. - **Implausible** places (see :meth:`implausible`) would join strangers a county apart.
+        Five exclusions, each load-bearing: - **Provisional and anchored** (shared placeless) places are reached only through explicit ``SharedPlaceMember`` rows written by the Celery evaluator; resolving a coordinate onto one would hand every tier-0 wiki at that point to the whole group, skipping every gate. - **Superseded** places keep their geometry for display and history, but a historical campus boundary still geometrically contains every post-split pin, so containment against it must never resolve. - **Aggregates** (anything with ``MEMBER_OF`` children) exist to be *earned* by holding every member, never to be pinned into directly - see ``services.wiki.wiki_access``. - **Implausible** places (see :meth:`implausible`) would join strangers a county apart.
         """
-        from urbanlens.dashboard.models.place.model import Place
+        from urbanlens.dashboard.models.place.model import Place, PlaceEvidence
 
-        return self.current().filter(is_aggregate=False, geometry__isnull=False).exclude(pk__in=Place.objects.implausible().values("pk"))
+        return self.current().filter(is_aggregate=False, geometry__isnull=False).exclude(evidence__in=(PlaceEvidence.PROVISIONAL, PlaceEvidence.ANCHORED)).exclude(pk__in=Place.objects.implausible().values("pk"))
 
     def containing_point(self, point: Point) -> Self:
         """

@@ -5273,3 +5273,77 @@ def announce_wiki_change_task(wiki_id: int, actor_id: int, change: str, fields: 
     if wiki is None or actor is None:
         return 0
     return notify_wiki_change(wiki, actor, change, fields)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+def evaluate_shared_places_for_pin(pin_id: int) -> bool:
+    """
+    Run the shared-place trust checks and tier evaluation for one pin (ADR35 section 2).
+
+    The only place those checks run: never in a request. Enqueued debounced on pin create/move (see ``services.places.shared_place_triggers``).
+
+    Args:
+        pin_id: The pin that was created or moved.
+
+    Returns:
+        Whether the pin's profile joined or formed a shared place.
+    """
+    from urbanlens.dashboard.services.places.shared_places import evaluate_pin
+
+    return evaluate_pin(pin_id) is not None
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+def revalidate_shared_place_memberships(profile_id: int) -> int:
+    """
+    Drop a profile's shared-place memberships it no longer holds a nearby pin for.
+
+    Args:
+        profile_id: The profile whose pin was deleted.
+
+    Returns:
+        How many memberships were dropped.
+    """
+    from urbanlens.dashboard.models.profile import Profile
+    from urbanlens.dashboard.services.places.shared_places import revalidate_memberships
+
+    profile = Profile.objects.filter(pk=profile_id).first()
+    return revalidate_memberships(profile) if profile is not None else 0
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+def evaluate_shared_places_sweep(chunk_size: int = 500) -> int:
+    """
+    Nightly sweep: re-evaluate recent pins, so pins that matured since their last evaluation, bulk imports and trust changes are picked up.
+
+    Args:
+        chunk_size: Maximum pins per subtask.
+
+    Returns:
+        How many range subtasks were enqueued.
+    """
+    from django.conf import settings
+
+    from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.core.celery import dispatch_pk_ranges
+
+    since = timezone.now() - timedelta(days=settings.UL_SHARED_PLACE_SWEEP_DAYS)
+    return dispatch_pk_ranges(Pin.objects.filter(created__gte=since, location__isnull=False, profile__community_enabled=True), evaluate_shared_places_range, chunk_size=chunk_size)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+def evaluate_shared_places_range(start_pk: int, end_pk: int) -> int:
+    """
+    Evaluate every pin with ``start_pk <= pk <= end_pk`` and revalidate the memberships of their owners.
+
+    Args:
+        start_pk: First pin primary key.
+        end_pk: Last pin primary key.
+
+    Returns:
+        How many pins joined or formed a shared place.
+    """
+    from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.places.shared_places import evaluate_pin
+
+    return sum(1 for pin_id in Pin.objects.filter(pk__gte=start_pk, pk__lte=end_pk, location__isnull=False).values_list("pk", flat=True) if evaluate_pin(pin_id) is not None)

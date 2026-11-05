@@ -184,6 +184,20 @@ def place_visible_to(place: Place | None, profile: Profile) -> bool:
     return place.domain_root_id in accessible_domain_ids(profile)
 
 
+def _shared_place_ids(profile: Profile):
+    """Subquery of the synthetic places *profile* was admitted to (Celery-written; see ``SharedPlaceMember``)."""
+    from urbanlens.dashboard.models.place.shared import SharedPlaceMember
+
+    return SharedPlaceMember.objects.filter(profile=profile).values("place_id")
+
+
+def _holds_shared_place_wiki(location: Location, profile: Profile) -> bool:
+    """Whether *location* is the hub of a shared placeless place the profile is a member of."""
+    from urbanlens.dashboard.models.wiki.model import Wiki
+
+    return Wiki.objects.filter(location=location, place_id__in=_shared_place_ids(profile)).exists()
+
+
 def _visible_given_pins(location: Location, pins, profile: Profile | None, *, extra_point=None) -> bool:
     """Whether the location's wiki is visible to the owner of pins."""
     if pins.filter(location=location).exists():
@@ -192,6 +206,9 @@ def _visible_given_pins(location: Location, pins, profile: Profile | None, *, ex
     # Previewed move onto this location's coordinates keeps the exact-match grant
     # (the moving pin is excluded from *pins*).
     if extra_point is not None and _point_is_at(extra_point, location):
+        return True
+
+    if profile is not None and _holds_shared_place_wiki(location, profile):
         return True
 
     place = location.place if location.place_id else None
@@ -235,9 +252,7 @@ def visible_wiki_locations(profile: Profile) -> VisibleWikiLocations:
 
     pinned = Pin.objects.filter(profile=profile, location_id__isnull=False).values_list("location_id", flat=True)
     domains = accessible_domain_ids(profile)
-    if not domains:
-        return pinned
-    return Location.objects.filter(Q(pk__in=pinned) | Q(wiki__isnull=False, place__domain_root_id__in=domains)).values_list("pk", flat=True)
+    return Location.objects.filter(Q(pk__in=pinned) | Q(wiki__isnull=False, place__domain_root_id__in=domains) | Q(wiki__place_id__in=_shared_place_ids(profile))).values_list("pk", flat=True)
 
 
 def visible_wiki_location_ids(profile: Profile) -> set[int]:
@@ -366,7 +381,7 @@ def visible_locations_filter(profile: Profile) -> Q:
     """
     from urbanlens.dashboard.models.pin.model import Pin
 
-    return Q(Exists(Pin.objects.filter(profile=profile, location=OuterRef("pk")))) | Q(place__domain_root_id__in=accessible_domain_ids(profile))
+    return Q(Exists(Pin.objects.filter(profile=profile, location=OuterRef("pk")))) | Q(place__domain_root_id__in=accessible_domain_ids(profile)) | Q(wiki__place_id__in=_shared_place_ids(profile))
 
 
 def visible_location_or_404(profile: Profile, location_slug: str, *, related: tuple[str, ...] = ()) -> Location:

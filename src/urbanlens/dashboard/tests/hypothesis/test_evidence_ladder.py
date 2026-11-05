@@ -90,10 +90,18 @@ class EvidenceResolutionOrderTests(TestCase):
             self.assertLess(small.area_sqm, official.area_sqm)
             self.assertEqual(Place.objects.resolve_for_point(LAT, LON), official, evidence)
 
-    def test_a_synthetic_place_resolves_when_nothing_strong_does(self) -> None:
-        synthetic = make_place(PlaceKind.BUILDING, _box(10))
-        Place.objects.filter(pk=synthetic.pk).update(evidence=PlaceEvidence.PROVISIONAL)
-        self.assertEqual(Place.objects.resolve_for_point(LAT, LON), synthetic)
+    def test_a_standin_resolves_when_nothing_strong_does(self) -> None:
+        standin = make_place(PlaceKind.BUILDING, _box(10))
+        Place.objects.filter(pk=standin.pk).update(evidence=PlaceEvidence.STANDIN)
+        self.assertEqual(Place.objects.resolve_for_point(LAT, LON), standin)
+
+    def test_provisional_and_anchored_places_never_resolve_even_alone(self) -> None:
+        # UL-367: they are reached through explicit SharedPlaceMember rows, never by containment.
+        for evidence in (PlaceEvidence.PROVISIONAL, PlaceEvidence.ANCHORED):
+            Place.objects.all().delete()
+            synthetic = make_place(PlaceKind.BUILDING, _box(10))
+            Place.objects.filter(pk=synthetic.pk).update(evidence=evidence)
+            self.assertIsNone(Place.objects.resolve_for_point(LAT, LON), evidence)
 
     def test_existing_places_default_to_official(self) -> None:
         self.assertEqual(make_place(PlaceKind.PARCEL, _box(50)).evidence, PlaceEvidence.OFFICIAL)

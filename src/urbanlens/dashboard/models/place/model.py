@@ -11,7 +11,7 @@ import logging
 import operator
 from typing import TYPE_CHECKING
 
-from django.contrib.gis.db.models import MultiPolygonField
+from django.contrib.gis.db.models import MultiPolygonField, PointField
 from django.db.models import CASCADE, SET_NULL, BooleanField, CharField, DateTimeField, FloatField, ForeignKey, Index, IntegerField, Q, TextChoices, UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
@@ -182,6 +182,9 @@ class Place(abstract.DashboardModel):
     # A non-null value with null geometry means "the providers were asked and
     # had nothing" - don't refetch on every page view.
     geometry_generated_at = DateTimeField(null=True, blank=True)
+
+    # The single fixed point a provisional or anchored (synthetic) place is measured from; later pins join by distance to it, never to each other. Null for every other place.
+    anchor = PointField(geography=True, srid=4326, null=True, blank=True)
 
     provider = CharField(max_length=20, blank=True, default="")
     provider_key = CharField(max_length=255, blank=True, default="")
