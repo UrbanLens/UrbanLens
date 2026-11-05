@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 
 from django.contrib.gis.gdal import CoordTransform, GDALException, OGRGeometry, SpatialReference
-from django.contrib.gis.geos import GEOSGeometry
+from django.contrib.gis.geos import GEOSException, GEOSGeometry
 
 #: WGS 84 / NSIDC EASE-Grid 2.0 Global: equal-area, so a planar area in it is a true area.
 EQUAL_AREA_SRID = 6933
@@ -43,17 +43,17 @@ def buffer_meters(geometry: GEOSGeometry, meters: float) -> GEOSGeometry:
     Returns:
         The buffered geometry in WGS-84, or the input unchanged when it cannot be projected.
     """
-    centroid = geometry.centroid
-    wgs84 = SpatialReference(4326)
-    local = SpatialReference(f"+proj=aeqd +lat_0={centroid.y} +lon_0={centroid.x} +datum=WGS84 +units=m")
     try:
+        centroid = geometry.centroid
+        wgs84 = SpatialReference(4326)
+        local = SpatialReference(f"+proj=aeqd +lat_0={centroid.y} +lon_0={centroid.x} +datum=WGS84 +units=m")
         flat = OGRGeometry(geometry.wkt, srs=wgs84)
         flat.transform(CoordTransform(wgs84, local))
         grown = GEOSGeometry(flat.wkt).buffer(meters)
         back = OGRGeometry(grown.wkt, srs=local)
         back.transform(CoordTransform(local, wgs84))
-    except GDALException:
+        result = back.geos
+    except (GDALException, GEOSException):
         return geometry
-    result = back.geos
     result.srid = geometry.srid or 4326
     return result
