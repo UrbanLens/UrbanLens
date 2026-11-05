@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
-import json
+import re
 from unittest.mock import patch
 
 from django.contrib.gis.geos import MultiPolygon, Polygon
@@ -485,11 +485,7 @@ class InParcelDomainTests(SharedPlaceTestCase):
 
     def test_the_parcels_child_wiki_payloads_carry_neither_the_shared_wiki_nor_its_hub(self) -> None:
         self.client.force_login(self.carol.user)
-        forbidden = {
-            text
-            for value in (self.hub.latitude, self.hub.longitude)
-            for text in (f"{float(value):.6f}", json.dumps(float(value)), f"{float(value):.5f}")
-        }
+        forbidden = [float(value) for value in (self.hub.latitude, self.hub.longitude)]
         parcel_slug = self.parcel_wiki.location.slug or str(self.parcel_wiki.location.uuid)
         for name, query in (
             ("location.wiki.detail_pins.json", ""),
@@ -501,8 +497,10 @@ class InParcelDomainTests(SharedPlaceTestCase):
             self.assertEqual(response.status_code, 200, name)
             body = response.content.decode()
             self.assertNotIn(str(self.wiki.uuid), body, f"{name}{query} lists the shared wiki")
-            for text in forbidden:
-                self.assertNotIn(text, body, f"{name}{query} leaked {text}")
+            # Compare parsed numbers, not substrings: "42.65" is a prefix of an unrelated "42.650898".
+            numbers = [float(match) for match in re.findall(r"-?\d+\.\d+", body)]
+            for value in forbidden:
+                self.assertFalse(any(abs(number - value) < 1e-6 for number in numbers), f"{name}{query} leaked {value}")
 
     def test_a_parcel_holder_cannot_draw_on_the_shared_wiki(self) -> None:
         self.client.force_login(self.carol.user)

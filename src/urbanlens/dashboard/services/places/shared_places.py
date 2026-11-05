@@ -138,7 +138,9 @@ def _nearest_reference(point: Point) -> Point | None:
     """The nearest stored public reference (a Google place) within the anchored radius."""
     reach = settings.UL_SHARED_PLACE_ANCHORED_RADIUS_M
     span = reach / 111_320.0 * 1.5
-    nearby = GooglePlace.objects.filter(latitude__range=(point.y - span, point.y + span), longitude__range=(point.x - span * 2, point.x + span * 2))
+    # A degree of longitude shrinks with cos(latitude); clamp so the window stays finite near the poles.
+    lon_span = span / max(math.cos(math.radians(point.y)), 0.05)
+    nearby = GooglePlace.objects.filter(latitude__range=(point.y - span, point.y + span), longitude__range=(point.x - lon_span, point.x + lon_span))
     best: tuple[float, Point] | None = None
     for ref in nearby:
         ref_point = Point(float(ref.longitude), float(ref.latitude), srid=4326)

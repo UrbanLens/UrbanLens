@@ -214,8 +214,14 @@ def process_split(place: Place, successors: list[MultiPolygon]) -> Place:
 
     learned_at = timezone.now()
 
+    outlines = adoptable_outlines(place, successors)
+    if len(outlines) < 2:
+        logger.info("process_split: place %s has fewer than two adoptable successors; leaving it current", place.pk)
+        return place
+
     children: list[Place] = []
-    for geometry in adoptable_outlines(place, successors):
+    sid = transaction.savepoint()
+    for geometry in outlines:
         # exclude_pk=place.pk: place is still CURRENT here (status flips below, only once we know
         # this is really a split) - without it, a successor whose centroid falls near the original
         # parcel's own centroid (common: the original center often lands inside one of its own
@@ -226,8 +232,12 @@ def process_split(place: Place, successors: list[MultiPolygon]) -> Place:
             children.append(child)
 
     if len(children) < 2:
+        # Undo the re-parenting above: a lone MEMBER_OF child would make the old parcel an aggregate while it stays CURRENT.
+        transaction.savepoint_rollback(sid)
+        place.refresh_from_db()
         logger.info("process_split: place %s produced fewer than two successors; leaving it current", place.pk)
         return place
+    transaction.savepoint_commit(sid)
 
     Place.objects.filter(pk=place.pk).update(status=PlaceStatus.SUPERSEDED)
     place.status = PlaceStatus.SUPERSEDED
