@@ -14,6 +14,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
+from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.place.model import PlaceKind
 from urbanlens.dashboard.services.pins.pin_creation import DuplicatePropertyError, create_pin_for_profile
@@ -146,3 +147,44 @@ class PropertyNestingTests(TestCase):
             with self.assertRaises(DuplicatePropertyError) as caught:
                 create_pin_for_profile(self.profile, name="b", latitude=_Y + 0.004, longitude=_X + 0.004)
         self.assertEqual(caught.exception.existing_pin_uuid, str(first.uuid))
+
+    def test_import_sweep_reports_pins_on_an_already_resolved_location(self) -> None:
+        from urbanlens.dashboard.services.pins.property_nesting import summary_warning, sweep_after_import
+
+        self.parcel = make_place(PlaceKind.PARCEL, _square(_X, _Y, _SIZE), name="parcel")
+        old = self._root(self.profile, 1, age=5)
+        newer = self._root(self.profile, 2, age=3)
+        self.assertIsNotNone(old.location.place_id)
+        nested = sweep_after_import(self.profile.pk)
+        self.assertEqual([item.pin_id for item in nested], [newer.pk])
+        self.assertIn("'pin 2'", summary_warning(nested) or "")
+        self.assertEqual(NotificationLog.objects.count(), 0)
+
+    def test_import_sweep_never_raises(self) -> None:
+        from urbanlens.dashboard.services.pins.property_nesting import sweep_after_import
+
+        with mock.patch(
+            "urbanlens.dashboard.services.pins.property_nesting.nest_duplicate_roots", side_effect=RuntimeError("boom")
+        ):
+            self.assertEqual(sweep_after_import(self.profile.pk), [])
+
+    def test_deferred_pass_notifies_only_the_owner_once(self) -> None:
+        self._root(self.profile, 1, age=5)
+        self._root(self.profile, 2, age=3)
+        self._root(self.profile, 3, age=1)
+        self._root(self.other, 1, age=9)
+        self._provision()
+        notes = NotificationLog.objects.all()
+        self.assertEqual(notes.count(), 1)
+        self.assertEqual(notes[0].profile_id, self.profile.pk)
+        self.assertIn("Detach", notes[0].message)
+
+    def test_superseded_places_do_not_group(self) -> None:
+        from urbanlens.dashboard.models.place.model import Place, PlaceStatus
+
+        self._root(self.profile, 1, age=5)
+        self._root(self.profile, 2, age=3)
+        self._provision()
+        Pin.objects.filter(profile=self.profile).update(parent_pin=None)
+        Place.objects.filter(pk=self.parcel.pk).update(status=PlaceStatus.SUPERSEDED)
+        self.assertEqual(nest_duplicate_roots(profile_id=self.profile.pk), [])

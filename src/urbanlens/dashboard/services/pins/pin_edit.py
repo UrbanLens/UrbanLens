@@ -234,6 +234,10 @@ def move_pin_to_coordinates(pin: Pin, latitude: float, longitude: float) -> None
     before_lat, before_lng = float(pin.effective_latitude), float(pin.effective_longitude)
     pin.location = location
     pin.save(update_fields=["location", "updated"])
+    if location.place_id is not None and pin.parent_pin_id is None:
+        from urbanlens.dashboard.services.pins.property_nesting import request_property_nesting
+
+        request_property_nesting(location.pk)
     from urbanlens.dashboard.services.undo.mutations import stash_pin_move
 
     stash_pin_move(pin, before_lat=before_lat, before_lng=before_lng, after_lat=latitude, after_lng=longitude)

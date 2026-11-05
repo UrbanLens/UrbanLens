@@ -473,9 +473,9 @@ def _run_import_steps(profile: Any, data_dir: str, result: ImportResult, job_sta
         report_progress = _make_step_progress_reporter(job_status, key, step_start, step_end)
         importer(profile, data_dir, result, pin_uuid_map=pin_uuid_map, label_uuid_map=label_uuid_map, report_progress=report_progress)
 
-    from urbanlens.dashboard.services.pins.property_nesting import nest_duplicate_roots, summary_warning
+    from urbanlens.dashboard.services.pins.property_nesting import summary_warning, sweep_after_import
 
-    nested_warning = summary_warning(nest_duplicate_roots(profile_id=profile.pk))
+    nested_warning = summary_warning(sweep_after_import(profile.pk))
     if nested_warning:
         result.warnings.append(nested_warning)
 
@@ -980,6 +980,8 @@ def _import_pins(
         if uuid_str and not Pin.objects.filter(uuid=uuid_str).exists():
             defaults["uuid"] = uuid_str
 
+        # The archive is the user's own arrangement, so its roots stay where it put them.
+        defaults["parenting_is_manual"] = True
         parent_pin = None
         parent_uuid = row.get("parent_uuid")
         if parent_uuid:

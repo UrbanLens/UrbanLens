@@ -358,9 +358,9 @@ def run_confirmed_import(profile_id: int, job_id: str) -> dict[str, Any]:
                         return counts
         finally:
             events.close()
-        from urbanlens.dashboard.services.pins.property_nesting import describe_nested, nest_duplicate_roots, summary_warning
+        from urbanlens.dashboard.services.pins.property_nesting import describe_nested, summary_warning, sweep_after_import
 
-        nested = nest_duplicate_roots(profile_id=profile_id)
+        nested = sweep_after_import(profile_id)
         if nested:
             counts["nested"] = describe_nested(nested)
             notices.append(summary_warning(nested) or "")
