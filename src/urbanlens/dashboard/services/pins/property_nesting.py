@@ -17,7 +17,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.db import transaction
 from django.db.models import Case, Count, IntegerField, Value, When
@@ -109,18 +109,21 @@ def _nest_for_profile(profile_id: int, domain_ids: set[int]) -> list[NestedPin]:
 
     with transaction.atomic(), deferring_child_boundary_refits():
         lock_profile_pin_tree(profile_id)
-        roots = list(
-            Pin.objects.root_pins()
-            .filter(profile_id=profile_id, location__place__status=PlaceStatus.CURRENT)
-            .annotate(domain=_domain_key())
-            .filter(domain__in=domain_ids)
-            .order_by("created", "pk")
-            .values("pk", "name", "parenting_is_manual", "domain")
-        )
-        groups: dict[int, list[dict]] = defaultdict(list)
+        roots = [
+            dict(row)
+            for row in (
+                Pin.objects.root_pins()
+                .filter(profile_id=profile_id, location__place__status=PlaceStatus.CURRENT)
+                .annotate(domain=_domain_key())
+                .filter(domain__in=domain_ids)
+                .order_by("created", "pk")
+                .values("pk", "name", "parenting_is_manual", "domain")
+            )
+        ]
+        groups: dict[int, list[dict[str, Any]]] = defaultdict(list)
         for row in roots:
             groups[row["domain"]].append(row)
-        plan: dict[int, dict] = {}
+        plan: dict[int, dict[str, Any]] = {}
         for rows in groups.values():
             if len(rows) < 2:
                 continue
@@ -135,11 +138,11 @@ def _nest_for_profile(profile_id: int, domain_ids: set[int]) -> list[NestedPin]:
         # or one lying beneath its mover, would turn the move into a cycle.
         wanted = set(plan) | {entry["target"]["pk"] for entry in plan.values()}
         locked = {pk: (parent, manual) for pk, parent, manual in Pin.objects.select_for_update(of=("self",)).filter(pk__in=wanted, profile_id=profile_id).order_by("pk").values_list("pk", "parent_pin_id", "parenting_is_manual")}
-        moves = {}
+        moves: dict[int, dict[str, Any]] = {}
         for pk, entry in plan.items():
             target_pk = entry["target"]["pk"]
-            mover, target = locked.get(pk), locked.get(target_pk)
-            if mover is None or target is None or target_pk == pk or mover[0] is not None or mover[1] or target[0] is not None:
+            mover, held_target = locked.get(pk), locked.get(target_pk)
+            if mover is None or held_target is None or target_pk == pk or mover[0] is not None or mover[1] or held_target[0] is not None:
                 continue
             moves[pk] = entry
         if not moves:
