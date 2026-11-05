@@ -91,7 +91,9 @@ class SubdivisionProbeCostTests(TestCase):
         """A probe answered only by a different provider than the parcel's own must not become a child."""
 
         class _Foreign(_Chain):
-            def get_boundaries(self, latitude: float, longitude: float, *, name: str | None = None) -> ResolvedBoundaries:
+            def get_boundaries(
+                self, latitude: float, longitude: float, *, name: str | None = None
+            ) -> ResolvedBoundaries:
                 resolved = super().get_boundaries(latitude, longitude, name=name)
                 resolved.property_candidates = [("other_provider", resolved.property_polygon)]
                 return resolved
@@ -111,7 +113,9 @@ class ScatteredSubdivisionProbeCapTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
         _Chain.calls = 0
-        oversized = baker.make(Place, kind=PlaceKind.PARCEL, geometry=_box(WEST, SOUTH, 0.06), area_sqm=8_300_000.0, provider=PROVIDER)
+        oversized = baker.make(
+            Place, kind=PlaceKind.PARCEL, geometry=_box(WEST, SOUTH, 0.06), area_sqm=8_300_000.0, provider=PROVIDER
+        )
         oversized.domain_root = oversized
         oversized.save()
         self.locations = [
