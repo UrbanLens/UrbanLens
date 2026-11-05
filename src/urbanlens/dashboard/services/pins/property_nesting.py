@@ -109,7 +109,7 @@ def _nest_for_profile(profile_id: int, domain_ids: set[int]) -> list[NestedPin]:
 
     with transaction.atomic(), deferring_child_boundary_refits():
         lock_profile_pin_tree(profile_id)
-        roots = [
+        roots: list[dict[str, Any]] = [
             dict(row)
             for row in (
                 Pin.objects.root_pins()
