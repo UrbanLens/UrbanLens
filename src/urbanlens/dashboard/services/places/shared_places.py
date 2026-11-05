@@ -182,7 +182,9 @@ def evaluate_pin(pin_id: int, *, revalidate: bool = True) -> Place | None:
     existing = _nearest_synthetic_place(point)
     reference = None if existing is not None else _nearest_reference(point)
     neighbours = [] if existing is not None else _pins_near(reference if reference is not None else point, _radius(PlaceEvidence.ANCHORED if reference is not None else PlaceEvidence.PROVISIONAL), excluding=pin.profile)
-    if existing is None and not neighbours:
+    # With a reference but no anchored neighbours, a provisional pair around the pin itself may still qualify.
+    provisional = _pins_near(point, _radius(PlaceEvidence.PROVISIONAL), excluding=pin.profile) if existing is None and reference is not None else []
+    if existing is None and not neighbours and not provisional:
         return None
     if not _record_attempt(pin):
         return None
@@ -195,7 +197,7 @@ def evaluate_pin(pin_id: int, *, revalidate: bool = True) -> Place | None:
         formed = _form(pin, reference, PlaceEvidence.ANCHORED, neighbours)
         if formed is not None:
             return formed
-    return _form(pin, None, PlaceEvidence.PROVISIONAL, _pins_near(point, _radius(PlaceEvidence.PROVISIONAL), excluding=pin.profile) if reference is not None else neighbours)
+    return _form(pin, None, PlaceEvidence.PROVISIONAL, provisional if reference is not None else neighbours)
 
 
 def _form(pin: Pin, reference: Point | None, evidence: str, candidates: list[Pin]) -> Place | None:
@@ -227,9 +229,11 @@ def _join(place: Place, pin: Pin) -> Place | None:
     """Admit the pin's profile by distance to the anchor alone, provided it is independent of every current member."""
     if SharedPlaceMember.objects.filter(place=place, profile=pin.profile).exists():
         return place
-    if not _independent_of_all_members(place, pin):
-        return None
     with transaction.atomic():
+        # Serialise with other joiners and creators so two mutually dependent accounts cannot both pass the check unseen.
+        _lock_creation()
+        if not _independent_of_all_members(place, pin):
+            return None
         _, created = SharedPlaceMember.objects.get_or_create(place=place, profile=pin.profile)
         if created:
             _offer_notes(place, pin)
