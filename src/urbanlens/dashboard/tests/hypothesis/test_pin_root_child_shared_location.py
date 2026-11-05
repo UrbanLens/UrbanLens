@@ -112,18 +112,27 @@ class RootChildSharedLocationTests(TestCase):
         other_root = baker.make(
             Pin, profile=self.profile, location=baker.make(Location, latitude=43.5, longitude=-74.5)
         )
-        sub = baker.make(Pin, profile=self.profile, location=self.location, parent_pin=other_root)
+        free_location = baker.make(Location, latitude=45.0, longitude=-76.0)
+        racer = baker.make(Pin, profile=self.profile, location=free_location)
+        sub = baker.make(Pin, profile=self.profile, location=free_location, parent_pin=other_root)
         real_save = Pin.save
 
         def racing_save(pin, *args, **kwargs):
             if pin.pk == sub.pk:
-                # A concurrent request lands a root here between the check and the write.
-                Pin.objects.filter(pk=other_root.pk).update(location=self.location)
                 raise IntegrityError("db_pin_unique_location_per_profile")
             return real_save(pin, *args, **kwargs)
 
-        with mock.patch.object(Pin, "save", racing_save), self.assertRaises(SwapLocationConflictError):
+        # The pre-check sees no root at sub's point; the recheck after the IntegrityError sees the racing root.
+        # A write inside racing_save would be rolled back with the atomic block, so the lookup is patched instead.
+        root_lookups = [Pin.objects.none(), Pin.objects.filter(pk=racer.pk)]
+        with (
+            mock.patch.object(Pin, "save", racing_save),
+            mock.patch.object(Pin.objects, "root_pins", side_effect=root_lookups) as root_pins,
+            self.assertRaises(SwapLocationConflictError),
+        ):
             sub.swap_with_parent()
+
+        self.assertEqual(root_pins.call_count, 2)
 
     def test_deleting_a_parent_keeps_two_children_at_its_point(self) -> None:
         from urbanlens.dashboard.services.pins.pin_edit import delete_pin
@@ -139,12 +148,8 @@ class RootChildSharedLocationTests(TestCase):
         survivor = roots.get()
         self.assertEqual({p.parent_pin_id for p in remaining if p.pk != survivor.pk}, {survivor.pk})
 
-    def test_import_match_ignores_a_child_pin_at_the_location(self) -> None:
-        lonely = baker.make(Location, latitude=44.0, longitude=-75.0)
-        child_only = baker.make(Pin, profile=self.profile, location=lonely, parent_pin=self.root)
+    def test_import_match_prefers_the_root_when_a_child_shares_its_location(self) -> None:
+        pin, created = Pin.objects.get_nearby_or_create(43.0, -74.0, self.profile)
 
-        pin, created = Pin.objects.get_nearby_or_create(44.0, -75.0, self.profile)
-
-        self.assertTrue(created)
-        self.assertNotEqual(pin.pk, child_only.pk)
-        self.assertIsNone(pin.parent_pin_id)
+        self.assertFalse(created)
+        self.assertEqual(pin.pk, self.root.pk)
