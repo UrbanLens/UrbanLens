@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from django.contrib.gis.geos import GeometryCollection
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from urbanlens.dashboard.models.place.model import Place, PlaceKind, PlaceRelation, PlaceStatus, is_plausible_area
@@ -192,7 +193,13 @@ def detect_split_from_versions(new_parcel: Place) -> Place | None:
     new_geometry = new_parcel.geometry
     if new_geometry is None or new_geometry.area <= 0 or new_parcel.kind != PlaceKind.PARCEL:
         return None
-    candidates = Place.objects.filter(kind=PlaceKind.PARCEL, status=PlaceStatus.CURRENT, parent__isnull=True, geometry__intersects=new_geometry).exclude(pk=new_parcel.pk)
+    # Older outlines count too: the remainder can sit in a gap from the parcel's current outline.
+    candidates = (
+        Place.objects.filter(kind=PlaceKind.PARCEL, status=PlaceStatus.CURRENT, parent__isnull=True)
+        .filter(Q(geometry__intersects=new_geometry) | Q(geometry_versions__geometry__intersects=new_geometry))
+        .exclude(pk=new_parcel.pk)
+        .distinct()
+    )
     if new_parcel.provider:
         candidates = candidates.filter(provider=new_parcel.provider)
     from urbanlens.dashboard.models.site_settings import SiteSettings
@@ -252,6 +259,8 @@ def process_split(place: Place, successors: list[MultiPolygon]) -> Place:
 
     if len(children) < 2:
         logger.info("process_split: place %s produced fewer than two successors; leaving it current", place.pk)
+        for child in children:
+            lineage.set_parent(child, None)
         return place
 
     Place.objects.filter(pk=place.pk).update(status=PlaceStatus.SUPERSEDED)

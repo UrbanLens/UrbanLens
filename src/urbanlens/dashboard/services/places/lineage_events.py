@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 
 from urbanlens.dashboard.models.place.lifecycle import LineageEdgeKind, PlaceLineageEdge
-from urbanlens.dashboard.models.place.model import GrantReason, Place, PlaceAccessGrant
+from urbanlens.dashboard.models.place.model import GrantReason, Place, PlaceAccessGrant, PlaceStatus
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -144,7 +144,7 @@ def retract_erroneous_event(edges: Sequence[PlaceLineageEdge], reason: str) -> i
         for edge in edges:
             if not PlaceLineageEdge.objects.filter(predecessor_id=edge.predecessor_id, erroneous=False).exists():
                 # Only reopen a place these edges closed; one retired by another mechanism keeps its valid_to.
-                Place.objects.filter(pk=edge.predecessor_id, valid_to=edge.learned_at).update(valid_to=None)
+                Place.objects.filter(pk=edge.predecessor_id, valid_to=edge.learned_at).update(valid_to=None, status=PlaceStatus.CURRENT)
     logger.warning("erroneous lineage event retracted (%s): removed %s grants (profile, place): %s", reason, len(removed), removed)
     return len(removed)
 
@@ -173,6 +173,13 @@ def handle_lineage_event(event: LineageEvent) -> int:
     for predecessor in event.predecessors:
         targets.extend(PlaceAccessGrant.objects.family_of(predecessor))
     targets.extend(event.successors)
-    PlaceAccessGrant.objects.grant_places(holders, targets, reason=_REASONS[event.kind], edges=edges)
+    # A successor's grant is justified only by its own predecessor-to-successor edges, so retracting one erroneous edge cannot leave another's access behind.
+    successor_ids = {successor.pk for successor in event.successors}
+    own_edges = {pk: [edge for edge in edges if edge.successor_id == pk] for pk in successor_ids}
+    shared = [place for place in targets if place.pk not in successor_ids or not own_edges[place.pk]]
+    PlaceAccessGrant.objects.grant_places(holders, shared, reason=_REASONS[event.kind], edges=edges)
+    for successor in event.successors:
+        if own_edges[successor.pk]:
+            PlaceAccessGrant.objects.grant_places(holders, [successor], reason=_REASONS[event.kind], edges=own_edges[successor.pk])
     logger.info("lineage %s: %s holders granted across %s places", event.kind, len(holders), len(targets))
     return len(holders)

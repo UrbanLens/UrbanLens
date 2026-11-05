@@ -50,10 +50,12 @@ def set_geometry(place: Place, polygon: MultiPolygon, *, provider: str = "", rec
     """
     with transaction.atomic():
         # The row lock keeps two first writes from both recording the previous outline.
-        list(Place.objects.select_for_update().filter(pk=place.pk).values_list("pk", flat=True))
+        locked = list(Place.objects.select_for_update().filter(pk=place.pk).values_list("geometry", "geometry_generated_at"))
+        stored, stored_at = locked[0] if locked else (None, None)
         had_versions = PlaceGeometryVersion.objects.filter(place=place).exists()
-        if not had_versions and place.geometry is not None:
-            record_version(place, place.geometry, provider=place.provider, recorded_at=place.geometry_generated_at or place.created)
+        if not had_versions and stored is not None:
+            # The outline stored under the lock, not the caller's possibly stale copy.
+            record_version(place, stored, provider=place.provider, recorded_at=stored_at or place.created)
         changed = record_version(place, polygon, provider=provider or place.provider, recorded_at=recorded_at) is not None
         Place.objects.filter(pk=place.pk).update(geometry=polygon, updated=timezone.now())
     place.geometry = polygon

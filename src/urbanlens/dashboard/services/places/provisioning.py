@@ -242,7 +242,7 @@ def provision_outcome_for_coordinate(location: Location, *, name: str | None = N
     if detect_splits and not resolved.deferred:
         detect_subdivision(location, resolved.property_polygon)
 
-    parcel = upsert_place(PlaceKind.PARCEL, resolved.property_polygon, name=name or location.official_name or "")
+    parcel = upsert_place(PlaceKind.PARCEL, resolved.property_polygon, name=name or location.official_name or "", detect_splits=detect_splits)
     building = None
     if resolved.building_polygon is not None:
         building = upsert_place(PlaceKind.BUILDING, resolved.building_polygon, name="", parent=parcel)
@@ -274,6 +274,9 @@ def _probe_neighbours(location: Location, previous: Place, new_parcel_polygon: M
     from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain
 
     found: list[MultiPolygon] = []
+    if previous.domain_root_id is None:
+        # Filtering on None would match every unrooted place's locations.
+        return found
     probes = 0
     neighbours = LocationModel.objects.filter(place__domain_root_id=previous.domain_root_id).exclude(pk=location.pk).exclude(point__within=new_parcel_polygon).annotate(distance=Distance("point", location.point)).order_by("distance")
     for other in neighbours.iterator():
