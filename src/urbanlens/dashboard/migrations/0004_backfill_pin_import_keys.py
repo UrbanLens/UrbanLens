@@ -18,6 +18,12 @@ FROM (
     JOIN dashboard_google_places gp ON gp.id = l.google_place_id
     WHERE p.profile_id >= %s AND p.profile_id < %s
       AND p.parent_pin_id IS NULL AND p.import_key IS NULL AND gp.cid IS NOT NULL
+      AND NOT EXISTS (
+          SELECT 1 FROM dashboard_user_pins held
+          WHERE held.profile_id = p.profile_id
+            AND held.import_source = 'google_takeout'
+            AND held.import_key = 'cid:' || gp.cid::text
+      )
     ORDER BY p.profile_id, gp.cid, (l.created >= %s) DESC, p.id
 ) AS picked
 WHERE pin.id = picked.id

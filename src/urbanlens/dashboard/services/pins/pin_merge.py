@@ -727,6 +727,8 @@ PIN_FIELD_POLICY: dict[str, str] = {
     "profile": _IDENTITY,
     "location": _IDENTITY,
     "parent_pin": _IDENTITY,
+    "import_source": _IDENTITY,  # unique per profile with import_key, so the survivor keeps its own
+    "import_key": _IDENTITY,
     "last_visited": _DERIVED,
     "source_share": _LINEAGE,
     "inferred_source_share": _LINEAGE,

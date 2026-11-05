@@ -189,6 +189,8 @@ class SharedPinCopyCoversEveryFieldTests(TestCase):
         "created": "auto_now_add",
         "updated": "auto_now",
         "slug": "regenerated for the new pin; reusing the sender's would collide",
+        "import_source": "the sender's importer identity; the recipient's own re-import must not match a shared copy",
+        "import_key": "the sender's importer identity; the recipient's own re-import must not match a shared copy",
         "last_visited": "the recipient has not been there",
         "last_viewed_at": "the recipient has not opened it",
         "unlogged_visit_dismissed": "recipient's own dismissal state",

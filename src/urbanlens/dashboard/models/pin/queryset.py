@@ -514,7 +514,9 @@ class PinManager(_PinManagerBase["Pin"]):
             return self._stamped_with_import_key(existing_pin, import_source, import_key), False
 
         try:
-            pin = self.create(location=location, profile=profile, **defaults)
+            # A savepoint, so a collision does not poison an enclosing transaction.
+            with transaction.atomic():
+                pin = self.create(location=location, profile=profile, **defaults)
         except IntegrityError:
             # Concurrent insert won the race; return that row.
             if keyed:
