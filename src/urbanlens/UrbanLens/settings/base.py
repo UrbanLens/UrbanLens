@@ -1517,6 +1517,8 @@ UL_TRUST_REAL_USER_THRESHOLD = float(os.getenv("UL_TRUST_REAL_USER_THRESHOLD", "
 #: Profiles with fewer (mature) pins than this have no usable geography for the independence check.
 UL_TRUST_MIN_PINS_FOR_GEOGRAPHY = int(os.getenv("UL_TRUST_MIN_PINS_FOR_GEOGRAPHY", "5"))
 #: The real-user score a profile without usable geography must reach instead of the Jaccard test.
+#: Minimum pin cells (in the window, after removing the decided place's cell) a profile needs for the Jaccard check to count; fewer means the no-geography bar applies.
+UL_TRUST_MIN_CELLS_FOR_GEOGRAPHY = int(os.getenv("UL_TRUST_MIN_CELLS_FOR_GEOGRAPHY", "1"))
 UL_TRUST_NO_GEOGRAPHY_THRESHOLD = float(os.getenv("UL_TRUST_NO_GEOGRAPHY_THRESHOLD", "0.8"))
 #: Two profiles are independent only when the Jaccard overlap of their pin cells is below this.
 UL_TRUST_MAX_CELL_JACCARD = float(os.getenv("UL_TRUST_MAX_CELL_JACCARD", "0.5"))
