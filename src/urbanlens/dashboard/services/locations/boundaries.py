@@ -57,6 +57,9 @@ class ResolvedBoundaries:
     #: order - including polygons that lost the ``property_polygon`` slot to an earlier provider.
     #: Feeds the per-source candidate rows boundary voting chooses between; costs no extra API calls
     property_candidates: list[tuple[str, MultiPolygon]] = field(default_factory=list)
+    #: Every building outline any queried provider returned, as (service_key, polygon) pairs in chain order. With no
+    #: parcel to anchor them, footprints from several sources are reconciled into one place from these.
+    building_candidates: list[tuple[str, MultiPolygon]] = field(default_factory=list)
     #: Providers that declined for now (throttled, source budget spent). Their silence is not a "nothing here".
     deferred: list[str] = field(default_factory=list)
     #: The longest wait any deferring provider asked for, in seconds.
@@ -106,7 +109,9 @@ class BoundaryProviderChain:
             # A single-kind provider whose slot is already filled has nothing to add;
             # providers overriding get_typed_boundaries may fill either slot.
             single_kind = type(provider).get_typed_boundaries is BoundaryProvider.get_typed_boundaries
-            if single_kind and resolved.polygon_for(provider.boundary_kind) is not None:
+            # With no parcel yet, every footprint source is asked: they are reconciled by centroid rather than first-wins.
+            wants_every_footprint = provider.boundary_kind == PlaceKind.BUILDING and resolved.property_polygon is None
+            if single_kind and resolved.polygon_for(provider.boundary_kind) is not None and not wants_every_footprint:
                 continue
             try:
                 typed = provider.get_typed_boundaries(latitude, longitude, name=name)
@@ -143,8 +148,11 @@ class BoundaryProviderChain:
                 resolved.property_candidates.append((provider.service_key, property_polygon))
             if resolved.property_polygon is None:
                 resolved.property_polygon = property_polygon
+            building_polygon = _plausible(PlaceKind.BUILDING, _as_multipolygon(typed.get("building")), provider.service_key)
+            if building_polygon is not None and provider.service_key:
+                resolved.building_candidates.append((provider.service_key, building_polygon))
             if resolved.building_polygon is None:
-                resolved.building_polygon = _plausible(PlaceKind.BUILDING, _as_multipolygon(typed.get("building")), provider.service_key)
+                resolved.building_polygon = building_polygon
         return resolved
 
     def get_boundary(self, latitude: float, longitude: float, *, name: str | None = None) -> Polygon | MultiPolygon | None:

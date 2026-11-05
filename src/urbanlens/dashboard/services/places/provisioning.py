@@ -10,11 +10,13 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.gis.db.models.functions import Distance
+from django.contrib.gis.geos import GEOSException
 from django.db import transaction
 from django.utils import timezone
 
-from urbanlens.dashboard.models.place.model import Place, PlaceKind, PlaceRelation, is_plausible_area
-from urbanlens.dashboard.services.geo.area import area_sqm
+from urbanlens.dashboard.models.place.model import STRONG_EVIDENCE, Place, PlaceEvidence, PlaceKind, PlaceRelation, is_plausible_area
+from urbanlens.dashboard.models.place.queryset import FOOTPRINT_BUFFER_METERS
+from urbanlens.dashboard.services.geo.area import area_sqm, buffer_meters
 from urbanlens.dashboard.services.places import lineage, resolution
 
 if TYPE_CHECKING:
@@ -27,6 +29,27 @@ logger = logging.getLogger(__name__)
 #: Upstream chain runs one split may spend finding successors. A location left unprobed keeps working through the
 #: superseded parcel's domain and finds its own parcel on its next refresh.
 MAX_SUBDIVISION_PROBES = 20
+
+#: Boundary-provider keys whose building outlines are machine-learned footprints rather than surveyed or registry
+#: geometry. Every other source (OSM, registry records) is official.
+FOOTPRINT_SOURCES: frozenset[str] = frozenset({"microsoft_building_footprints", "overture", "overture_maps", "google_open_buildings"})
+
+
+def evidence_for_source(source: str) -> str:
+    """The :class:`PlaceEvidence` a building outline from provider ``source`` carries."""
+    return PlaceEvidence.FOOTPRINT if source in FOOTPRINT_SOURCES else PlaceEvidence.OFFICIAL
+
+
+def evidence_for_record(building: dict) -> str:
+    """
+    The :class:`PlaceEvidence` of a cached building record, by its richest source.
+
+    Overture records carry no per-feature dataset here, and Overture mixes machine-derived footprints with OSM, so they count as footprint.
+    County GIS, assessor, CRIS and OSM records are official.
+    """
+    sources = [entry for entry in building.get("sources") or [] if isinstance(entry, dict)]
+    source = str(sources[0].get("source") or "") if sources else str(building.get("source") or "")
+    return evidence_for_source(source)
 
 
 def geometry_stale(place: Place) -> bool:
@@ -65,7 +88,7 @@ def find_matching_place(kind: str, polygon: MultiPolygon, *, provider: str = "",
     # Providers disagree about exact edges all the time, and an overlap-fraction threshold would
     # need tuning per kind; mutual centroid containment needs none and cannot match two side-by-side
     centroid = polygon.centroid
-    centroid_holders = Place.objects.current().of_kind(kind).filter(geometry__isnull=False, geometry__contains=centroid).exclude(pk=exclude_pk)
+    centroid_holders = Place.objects.current().of_kind(kind).filter(geometry__isnull=False, geometry__contains=centroid, evidence__in=STRONG_EVIDENCE).exclude(pk=exclude_pk)
     for candidate in centroid_holders:
         # A place already claimed by a *different* id from this same provider is not this record,
         # whatever the geometry says - the provider has just told us they are two things.
@@ -89,6 +112,7 @@ def upsert_place(
     parent: Place | None = None,
     relation: str = PlaceRelation.PART_OF,
     exclude_pk: int | None = None,
+    evidence: str = PlaceEvidence.OFFICIAL,
 ) -> Place | None:
     """
     Create or update the place a provider record describes.
@@ -102,6 +126,9 @@ def upsert_place(
         parent: The containing or aggregating place.
         relation: How it attaches to ``parent``.
         exclude_pk: Passed through to :func:`find_matching_place` - a place that must never be matched, however well its geometry fits.
+        evidence: How strong the polygon is. A footprint matched onto an existing place never replaces its geometry
+            unless it has a parent, so a machine-derived outline cannot overwrite an official one or a reconciled sibling; an
+            official polygon upgrades a matched footprint place.
 
     Returns:
         The place, or None when there is neither plausible geometry nor a provider key to identify it by."""
@@ -116,13 +143,17 @@ def upsert_place(
         place = Place.objects.filter(provider=provider, provider_key=provider_key, kind=kind).exclude(pk=exclude_pk).first()
 
     now = timezone.now()
+    footprint_keeps_geometry = False
     if place is None:
-        place = Place(kind=kind, name=name[:255], provider=provider, provider_key=provider_key, geometry=polygon, geometry_generated_at=now)
+        place = Place(kind=kind, name=name[:255], provider=provider, provider_key=provider_key, geometry=polygon, geometry_generated_at=now, evidence=evidence)
         place.save()
     else:
         updates: dict = {"geometry_generated_at": now, "updated": now}
-        if polygon is not None:
+        footprint_keeps_geometry = polygon is not None and evidence == PlaceEvidence.FOOTPRINT and (place.evidence != PlaceEvidence.FOOTPRINT or parent is None)
+        if polygon is not None and not footprint_keeps_geometry:
             updates["geometry"] = polygon
+            if evidence == PlaceEvidence.OFFICIAL and place.evidence == PlaceEvidence.FOOTPRINT:
+                updates["evidence"] = PlaceEvidence.OFFICIAL
         if name and not place.name:
             updates["name"] = name[:255]
         if provider and provider_key and not place.provider_key:
@@ -130,10 +161,14 @@ def upsert_place(
         Place.objects.filter(pk=place.pk).update(**updates)
         place.refresh_from_db()
 
-    if polygon is not None:
+    if polygon is not None and not footprint_keeps_geometry:
         resolution.refresh_area(place)
     if parent is not None and place.parent_id != parent.pk:
+        nested_footprint = place.evidence == PlaceEvidence.FOOTPRINT and place.parent_id is None
         lineage.set_parent(place, parent, relation)
+        if nested_footprint:
+            # TODO(UL-369): notify the members whose footprint wiki now sits in the parcel's domain.
+            logger.info("footprint place nested under parcel", extra={"event": "place.footprint_nested", "place_id": place.pk, "parent_id": parent.pk})
     return place
 
 
@@ -224,16 +259,36 @@ def provision_outcome_for_coordinate(location: Location, *, name: str | None = N
 
     if resolved.deferred and (known := Place.objects.resolve_for_point(location.latitude, location.longitude)) is not None:
         # A fallback's outline must not overwrite one the deferring provider gave earlier; keep it until that provider answers.
+        # A footprint is never an overwrite of an official outline, so what the answering providers found is kept.
+        if not _parcel_covers(location):
+            kept = ensure_footprint_places([(source, outline) for source, outline in resolved.building_candidates if evidence_for_source(source) == PlaceEvidence.FOOTPRINT])
+            for place in kept:
+                _resolve_locations_around(place)
+            known = Place.objects.resolve_for_point(location.latitude, location.longitude) or known
         resolution.attach_location(location, known)
         return ProvisionOutcome(place=known, deferred=list(resolved.deferred), retry_after=resolved.retry_after, backs_off=resolved.backs_off)
 
     if detect_splits and not resolved.deferred:
-        detect_subdivision(location, resolved.property_polygon)
+        try:
+            detect_subdivision(location, resolved.property_polygon)
+        except GEOSException:
+            # Whether the parcel was split is unknown, so the smaller outline must not replace it; it stays stale and a later refresh asks again.
+            logger.warning("split check for location %s failed: geometry overlay error; keeping the outline on record", location.pk, exc_info=True)
+            known = Place.objects.resolve_for_point(location.latitude, location.longitude)
+            if known is not None:
+                resolution.attach_location(location, known)
+            return ProvisionOutcome(place=known)
 
     parcel = upsert_place(PlaceKind.PARCEL, resolved.property_polygon, name=name or location.official_name or "")
     building = None
+    footprints: list[Place] = []
     if resolved.building_polygon is not None:
-        building = upsert_place(PlaceKind.BUILDING, resolved.building_polygon, name="", parent=parcel)
+        if parcel is None and not _parcel_covers(location):
+            footprints = ensure_footprint_places(resolved.building_candidates or [("", resolved.building_polygon)])
+            building = next((place for place in footprints if place.geometry is not None and place.geometry.contains(location.point)), None) or (footprints[0] if footprints else None)
+        else:
+            source = resolved.building_candidates[0][0] if resolved.building_candidates else ""
+            building = upsert_place(PlaceKind.BUILDING, resolved.building_polygon, name="", parent=parcel, evidence=evidence_for_source(source))
 
     if parcel is not None:
         record_boundary_candidates(parcel, resolved.property_candidates)
@@ -241,9 +296,8 @@ def provision_outcome_for_coordinate(location: Location, *, name: str | None = N
     # A newly-arrived parcel or footprint changes the answer for every
     # coordinate under it, not just this one - a building footprint appearing
     # inside a parcel re-homes every pin standing on that building.
-    for place in (parcel, building):
-        if place is not None and place.geometry is not None:
-            resolution.resolve_locations_in(place.geometry)
+    for touched in (parcel, building, *footprints):
+        _resolve_locations_around(touched)
 
     standing_on = resolution.resolve_location_place(location)
     if standing_on is None and (building or parcel) is not None:
@@ -256,6 +310,69 @@ def provision_outcome_for_coordinate(location: Location, *, name: str | None = N
     return ProvisionOutcome(place=standing_on, deferred=list(resolved.deferred), retry_after=resolved.retry_after, backs_off=resolved.backs_off)
 
 
+def _resolve_locations_around(place: Place | None) -> None:
+    """Re-resolve the locations a place can claim: those in its outline, plus the buffer ring when it is a parcel-less footprint."""
+    if place is None or place.geometry is None:
+        return
+    reach = buffer_meters(place.geometry, FOOTPRINT_BUFFER_METERS) if place.evidence == PlaceEvidence.FOOTPRINT and place.parent_id is None else place.geometry
+    resolution.resolve_locations_in(reach)
+
+
+def _parcel_covers(location: Location) -> bool:
+    """Whether a stored, resolvable parcel or site already holds the location's point."""
+    return Place.objects.containing_point(location.point).filter(kind__in=(PlaceKind.PARCEL, PlaceKind.SITE)).exists()
+
+
+def ensure_footprint_places(candidates: list[tuple[str, MultiPolygon]]) -> list[Place]:
+    """
+    Create the top-level building places for outlines found where no parcel exists.
+
+    Outlines of one building from several sources reconcile by mutual centroid containment (see
+    :func:`find_matching_place`), so the first source in ``candidates`` wins and later duplicates add nothing.
+    The true outline is stored; resolution reaches :data:`FOOTPRINT_BUFFER_METERS` past it only while no place
+    contains the point (``PlaceQuerySet.footprints_near``). An implausibly large outline is refused.
+
+    Args:
+        candidates: ``(provider service_key, outline)`` pairs, in chain order.
+
+    Returns:
+        The places, one per distinct building.
+    """
+    return _footprint_places([(evidence_for_source(source), outline) for source, outline in candidates])
+
+
+def _footprint_places(outlines: list[tuple[str, MultiPolygon]]) -> list[Place]:
+    """:func:`ensure_footprint_places` for outlines whose evidence is already decided."""
+    places: list[Place] = []
+    for evidence, outline in outlines:
+        if not is_plausible_area(PlaceKind.BUILDING, area_sqm(outline)):
+            continue
+        place = upsert_place(PlaceKind.BUILDING, outline, evidence=evidence)
+        if place is not None and all(place.pk != other.pk for other in places):
+            places.append(place)
+    return places
+
+
+def _probe_neighbours(location: Location, previous: Place, new_parcel_polygon: MultiPolygon, known: list[MultiPolygon]) -> list[MultiPolygon]:
+    """Ask the provider chain about the domain's locations that fall outside the new outline, at most :data:`MAX_SUBDIVISION_PROBES` times."""
+    from urbanlens.dashboard.models.location.model import Location as LocationModel
+    from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain
+
+    found: list[MultiPolygon] = []
+    probes = 0
+    neighbours = LocationModel.objects.filter(place__domain_root_id=previous.domain_root_id).exclude(pk=location.pk).exclude(point__within=new_parcel_polygon).annotate(distance=Distance("point", location.point)).order_by("distance")
+    for other in neighbours.iterator():
+        if any(successor.contains(other.point) for successor in [*known, *found]):
+            continue
+        if probes >= MAX_SUBDIVISION_PROBES:
+            break
+        probes += 1
+        chain_result = BoundaryProviderChain().get_boundaries(float(other.latitude), float(other.longitude), name=other.official_name or None)
+        if chain_result.property_polygon is not None and not any(candidate.equals(chain_result.property_polygon) for candidate in [*known, *found]):
+            found.append(chain_result.property_polygon)
+    return found
+
+
 def detect_subdivision(location: Location, new_parcel_polygon: MultiPolygon | None) -> Place | None:
     """
     Only the shrink case is detected from a single coordinate: the provider now returns a much smaller parcel here than the one on record, which means the rest of the old parcel became something else.
@@ -266,27 +383,28 @@ def detect_subdivision(location: Location, new_parcel_polygon: MultiPolygon | No
 
     Returns:
         The superseded place, or None when nothing was subdivided."""
-    from urbanlens.dashboard.models.location.model import Location as LocationModel
-    from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain
     from urbanlens.dashboard.services.places import splits
 
     previous = location.place.parcel if (location.place_id and location.place is not None) else None
-    if previous is None or new_parcel_polygon is None or not splits.looks_like_a_split(previous, new_parcel_polygon):
+    if previous is None or new_parcel_polygon is None:
+        return None
+    ratio = splits.shrink_ratio(previous, new_parcel_polygon)
+    heavy = ratio is not None and ratio < (1 - splits.SPLIT_SHRINK_RATIO)
+    # A mild shrink only counts once the missing part turns up as another parcel; a stored one is enough.
+    if not heavy and not splits.is_mild_shrink(previous, new_parcel_polygon):
         return None
 
     successors = [new_parcel_polygon]
-    probes = 0
-    neighbours = LocationModel.objects.filter(place__domain_root_id=previous.domain_root_id).exclude(pk=location.pk).exclude(point__within=new_parcel_polygon).annotate(distance=Distance("point", location.point)).order_by("distance")
-    for other in neighbours.iterator():
-        if any(successor.contains(other.point) for successor in successors):
-            continue
-        if probes >= MAX_SUBDIVISION_PROBES:
-            break
-        probes += 1
-        chain_result = BoundaryProviderChain().get_boundaries(float(other.latitude), float(other.longitude), name=other.official_name or None)
-        if chain_result.property_polygon is not None and not any(candidate.equals(chain_result.property_polygon) for candidate in successors):
-            successors.append(chain_result.property_polygon)
-
+    if not heavy:
+        # Stored parcels first: when they explain the remainder no provider needs asking.
+        if not splits.looks_like_a_split(previous, new_parcel_polygon):
+            successors += _probe_neighbours(location, previous, new_parcel_polygon, successors)
+            if not splits.looks_like_a_split(previous, new_parcel_polygon, seen=successors[1:]):
+                return None
+        stored = splits.candidate_parcels(previous, new_parcel_polygon)
+        successors.extend(geometry for geometry in stored if not any(candidate.equals(geometry) for candidate in successors))
+    else:
+        successors += _probe_neighbours(location, previous, new_parcel_polygon, successors)
     if len(successors) < 2:
         return None
     return splits.process_split(previous, successors)
@@ -298,7 +416,7 @@ def ensure_building_places(parcel: Place | None, buildings: list[dict], *, provi
     It keeps identity, lineage, and the ability to hold its own wiki, and can never be resolved onto - which is the right answer for a structure we know exists but cannot locate precisely.
 
     Args:
-        parcel: The parcel these buildings stand on; None skips the whole step, since a building place with no parcel has no domain to join.
+        parcel: The parcel these buildings stand on. With None, each record that has an outline becomes a top-level footprint place (see :func:`ensure_footprint_places`); records nest only under a parcel.
         buildings: Cached building records (see ``services.places.building_records``).
         provider: Provider namespace for stable-id matching.
 
@@ -308,7 +426,7 @@ def ensure_building_places(parcel: Place | None, buildings: list[dict], *, provi
     from urbanlens.dashboard.services.places.building_records import building_key, place_provider
 
     if parcel is None:
-        return {}
+        return _footprints_without_parcel(buildings)
     source = place_provider(provider)
     rekey = source.place_keyer() if source is not None else None
 
@@ -361,6 +479,7 @@ def ensure_building_places(parcel: Place | None, buildings: list[dict], *, provi
             name=building_name(building),
             parent=parent_place,
             relation=PlaceRelation.PART_OF,
+            evidence=evidence_for_record(building),
         )
         if place is not None:
             created[index] = place
@@ -403,6 +522,22 @@ def ensure_building_places(parcel: Place | None, buildings: list[dict], *, provi
     for place in created.values():
         if place.geometry is not None:
             resolution.resolve_locations_in(place.geometry)
+    return created
+
+
+def _footprints_without_parcel(buildings: list[dict]) -> dict[int, Place]:
+    """Top-level footprint places for the records that carry an outline, keyed by their index in ``buildings``."""
+    from urbanlens.dashboard.services.pins.pin_restructure import building_footprint
+
+    created: dict[int, Place] = {}
+    for index, building in enumerate(buildings):
+        outline = _as_multipolygon(building_footprint(building))
+        if outline is None:
+            continue
+        if places := _footprint_places([(evidence_for_record(building), outline)]):
+            created[index] = places[0]
+    for place in created.values():
+        _resolve_locations_around(place)
     return created
 
 

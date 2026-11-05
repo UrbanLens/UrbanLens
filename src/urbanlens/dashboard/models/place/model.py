@@ -89,11 +89,30 @@ class PlaceStatus(TextChoices):
     SUPERSEDED = "superseded", "Superseded"
 
 
+class PlaceEvidence(TextChoices):
+    """
+    How strong the evidence is that a Place's geometry describes a real thing.
+    ``OFFICIAL`` and ``FOOTPRINT`` are strong and always outrank the synthetic tiers when a coordinate resolves, whatever their size.
+    """
+
+    OFFICIAL = "official", "Official"
+    FOOTPRINT = "footprint", "Building footprint"
+    STANDIN = "standin", "Stand-in"
+    ANCHORED = "anchored", "Anchored"
+    PROVISIONAL = "provisional", "Provisional"
+
+
+#: Evidence tiers that resolution prefers over every other, regardless of area.
+STRONG_EVIDENCE: tuple[str, ...] = (PlaceEvidence.OFFICIAL, PlaceEvidence.FOOTPRINT)
+
+
 class GrantReason(TextChoices):
     """Why a profile holds access that containment can no longer prove."""
 
     GRANDFATHERED_BACKFILL = "backfill", "Held before places existed"
-    GRANDFATHERED_SPLIT = "split", "Held the split family - originally, or by earning every current member"
+    GRANDFATHERED_SPLIT = "split", "Held the parcel when it was subdivided"
+    GRANDFATHERED_LINEAGE = "lineage", "Held a place when it was merged or reclassified"
+    EARNED_FAMILY = "earned_family", "Pinned every current member of a split family"
     GRANDFATHERED_ENGAGEMENT = "engagement", "Viewed the wiki or shared content to it while access was held"
 
 
@@ -106,6 +125,7 @@ class Place(abstract.DashboardModel):
         parent: The containing or aggregating place, if any.
         parent_relation: How it is attached (see :class:`PlaceRelation`).
         status: Whether it still describes the ground (see :class:`PlaceStatus`).
+        evidence: How strong the evidence for its geometry is (see :class:`PlaceEvidence`).
         geometry: Official boundary. Written **only** by the provider chain and
             boundary voting - there is no user-writable path, which is what
             makes "user-drawn shapes can never widen access" structural rather
@@ -124,6 +144,7 @@ class Place(abstract.DashboardModel):
 
     kind = CharField(max_length=20, choices=PlaceKind.choices, default=PlaceKind.PARCEL)
     status = CharField(max_length=20, choices=PlaceStatus.choices, default=PlaceStatus.CURRENT)
+    evidence = CharField(max_length=20, choices=PlaceEvidence.choices, default=PlaceEvidence.OFFICIAL, db_default=PlaceEvidence.OFFICIAL)
 
     # Human-readable label for admin and logs only. The community-facing name
     # lives on Wiki; this is never rendered to users.
@@ -250,7 +271,7 @@ class Place(abstract.DashboardModel):
 class PlaceAccessGrant(abstract.DashboardModel):
     """
     Materialised access that containment can no longer prove.
-    Written by four callers, all through ``PlaceAccessGrantManager`` rather than a public "grant access" API surface:
+    Written by lineage events (``services.places.lineage_events``), earned split families, engagement and the backfill, all through ``PlaceAccessGrantManager`` rather than a public "grant access" API surface:
 
     Attributes:
         profile: Who holds the access.

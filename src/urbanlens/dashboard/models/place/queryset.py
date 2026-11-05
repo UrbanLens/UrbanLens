@@ -27,6 +27,9 @@ Coordinate = float | Decimal | str | None
 
 logger = logging.getLogger(__name__)
 
+#: How far past its outline a parcel-less footprint place still resolves a coordinate, in metres; absorbs GPS error only.
+FOOTPRINT_BUFFER_METERS = 10.0
+
 
 class PlaceQuerySet(abstract.DashboardQuerySet["Place"]):
     """QuerySet for Place - the real-world parcels and buildings pins resolve onto."""
@@ -63,10 +66,38 @@ class PlaceQuerySet(abstract.DashboardQuerySet["Place"]):
     def containing_point(self, point: Point) -> Self:
         """
         Resolvable places whose official geometry contains a coordinate.
-        Ordered most-specific first: smallest area wins.
+        Ordered most-specific first: an official or footprint place beats any synthetic one whatever its size, and within each of those two groups the smallest area wins.
         A building footprint is always smaller than the parcel enclosing it, so area ordering subsumes "deepest in the containment tree" without needing to walk it, and it stays deterministic for two unrelated parcels that overlap through bad county geometry.
         """
-        return self.resolvable().filter(geometry__contains=point).order_by("area_sqm", "pk")
+        return self.resolvable().filter(geometry__contains=point).most_specific_first()
+
+    def most_specific_first(self) -> Self:
+        """Order strong evidence (official, footprint) before synthetic, then smallest area, then pk."""
+        from django.db.models import Case, IntegerField, Value, When
+
+        from urbanlens.dashboard.models.place.model import STRONG_EVIDENCE
+
+        return self.annotate(evidence_rank=Case(When(evidence__in=STRONG_EVIDENCE, then=Value(0)), default=Value(1), output_field=IntegerField())).order_by("evidence_rank", "area_sqm", "pk")
+
+    def footprints_near(self, point: Point) -> Self:
+        """
+        Top-level footprint places within :data:`FOOTPRINT_BUFFER_METERS` of a coordinate, nearest first.
+        A footprint with no parcel is only a machine-derived outline, so a GPS pin a few metres off it still means the building.
+        """
+        from django.contrib.gis.db.models.functions import Distance
+        from django.contrib.gis.measure import D
+
+        from urbanlens.dashboard.models.place.model import PlaceEvidence
+
+        return self.resolvable().filter(evidence=PlaceEvidence.FOOTPRINT, parent__isnull=True, geometry__dwithin=(point, D(m=FOOTPRINT_BUFFER_METERS))).annotate(footprint_distance=Distance("geometry", point)).order_by("footprint_distance", "pk")
+
+    def candidates_for_point(self, point: Point) -> Self:
+        """
+        The places a coordinate may resolve onto, best first.
+        Places containing the point decide it. Only when none does are nearby parcel-less footprints considered, so a parcel that arrives later wins without any re-ranking.
+        """
+        containing = self.containing_point(point)
+        return containing if containing.exists() else self.footprints_near(point)
 
 
 _PlaceManagerBase = abstract.DashboardManager.from_queryset(PlaceQuerySet)
@@ -83,20 +114,21 @@ class PlaceManager(_PlaceManagerBase["Place"]):
 
     def resolve_for_point(self, latitude: Coordinate, longitude: Coordinate) -> Place | None:
         """
-        The most specific current place containing a coordinate, or None.
+        The most specific current place for a coordinate, or None.
 
         Args:
             latitude: WGS-84 latitude; None is tolerated.
             longitude: WGS-84 longitude; None is tolerated.
 
         Returns:
-            The smallest resolvable Place containing the point, or None when
-            the coordinate is on no known parcel or building.
+            The first of :meth:`PlaceQuerySet.containing_point`; when no place contains the point, the nearest
+            top-level footprint within :data:`FOOTPRINT_BUFFER_METERS` (see :meth:`PlaceQuerySet.footprints_near`);
+            otherwise None.
         """
         point = point_for_coordinates(latitude, longitude)
         if point is None:
             return None
-        return self.containing_point(point).first()
+        return self.containing_point(point).first() or self.footprints_near(point).first()
 
     def competing_for_point(self, latitude: Coordinate, longitude: Coordinate, *, resolved: Place | None) -> PlaceQuerySet:
         """
@@ -115,7 +147,7 @@ class PlaceManager(_PlaceManagerBase["Place"]):
         point = point_for_coordinates(latitude, longitude)
         if point is None:
             return self.none()
-        candidates = self.containing_point(point)
+        candidates = self.candidates_for_point(point)
         if resolved is not None:
             candidates = candidates.exclude(domain_root_id=resolved.domain_root_id)
         return candidates
@@ -168,29 +200,53 @@ class PlaceAccessGrantManager(_PlaceAccessGrantManagerBase["PlaceAccessGrant"]):
             return set()
         return {root for root in self.for_profile(profile).values_list("place__domain_root_id", flat=True) if root is not None}
 
+    def grant_places(self, profile_ids: Iterable[int], places: Iterable[Place], *, reason: str) -> int:
+        """
+        Permanently grant each profile each place's domain.
+        Never removes anything. Repeat grants are no-ops.
+
+        Args:
+            profile_ids: Profiles to grant. A no-op for an empty iterable.
+            places: Places to grant on.
+            reason: Why, as a :class:`GrantReason` value.
+
+        Returns:
+            How many grants were requested (existing ones included).
+        """
+        ids = list(profile_ids)
+        targets = list({place.pk: place for place in places}.values())
+        if not ids or not targets:
+            return 0
+        grants = [self.model(profile_id=profile_id, place=place, reason=reason) for profile_id in ids for place in targets]
+        # ignore_conflicts: a repeat call (a profile who already holds part of
+        # the family, or two overlapping snapshot triggers) must stay a no-op,
+        # not an IntegrityError on the (profile, place) unique constraint.
+        self.bulk_create(grants, ignore_conflicts=True)
+        return len(grants)
+
     def snapshot_family(self, profile_ids: Iterable[int], aggregate: Place, *, reason: str | None = None) -> None:
         """
         Permanently grant a split-derived aggregate and all its current members.
-        Used both at the moment a parcel is split (for everyone who held the undivided parcel) and, later, for anyone who independently earns the same aggregate by pinning every one of its current successors - both are "proved full knowledge of this split family", just at different times, and both deserve the identical permanent record.
+        For anyone who independently earns the aggregate by pinning every one of its current successors.
+        Grants made when the split happens go through ``services.places.lineage_events``.
 
         Args:
             profile_ids: Profiles to grant. A no-op for an empty iterable.
             aggregate: The split-derived aggregate place. Its own row and
                 every current ``MEMBER_OF`` child are granted together.
-            reason: Defaults to :attr:`GrantReason.GRANDFATHERED_SPLIT`.
+            reason: Defaults to :attr:`GrantReason.EARNED_FAMILY`.
         """
-        from urbanlens.dashboard.models.place.model import GrantReason, PlaceRelation
+        from urbanlens.dashboard.models.place.model import GrantReason
 
-        resolved_reason = reason if reason is not None else GrantReason.GRANDFATHERED_SPLIT
-        ids = list(profile_ids)
-        if not ids:
-            return
-        family = [aggregate, *aggregate.children.filter(parent_relation=PlaceRelation.MEMBER_OF)]
-        grants = [self.model(profile_id=profile_id, place=place, reason=resolved_reason) for profile_id in ids for place in family]
-        # ignore_conflicts: a repeat call (a profile who already holds part of
-        # the family, or two overlapping snapshot triggers) must stay a no-op,
-        # not an IntegrityError on the (profile, place) unique constraint.
-        self.bulk_create(grants, ignore_conflicts=True)
+        resolved_reason = reason if reason is not None else GrantReason.EARNED_FAMILY
+        self.grant_places(profile_ids, self.family_of(aggregate), reason=resolved_reason)
+
+    @staticmethod
+    def family_of(aggregate: Place) -> list[Place]:
+        """The aggregate plus every current ``MEMBER_OF`` child."""
+        from urbanlens.dashboard.models.place.model import PlaceRelation
+
+        return [aggregate, *aggregate.children.filter(parent_relation=PlaceRelation.MEMBER_OF)]
 
     def record_engagement(self, profile, place: Place | None) -> None:
         """
