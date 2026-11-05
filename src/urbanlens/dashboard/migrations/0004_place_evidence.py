@@ -13,6 +13,6 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='place',
             name='evidence',
-            field=models.CharField(choices=[('official', 'Official'), ('footprint', 'Building footprint'), ('standin', 'Stand-in'), ('anchored', 'Anchored'), ('provisional', 'Provisional')], default='official', max_length=20),
+            field=models.CharField(choices=[('official', 'Official'), ('footprint', 'Building footprint'), ('standin', 'Stand-in'), ('anchored', 'Anchored'), ('provisional', 'Provisional')], db_default='official', default='official', max_length=20),
         ),
     ]

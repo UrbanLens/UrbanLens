@@ -61,7 +61,7 @@ class RadiusFiltersUseTheSpatialIndexTests(TestCase):
         self.near_location = Location.objects.create(latitude=10.0, longitude=20.0)
         self.near_pin = baker.make(Pin, profile=self.profile, location=self.near_location, name="Near")
         with connection.cursor() as cursor:
-            cursor.execute("ANALYZE dashboard_locations, dashboard_user_pins")
+            cursor.execute("ANALYZE dashboard_locations, dashboard_user_pins, dashboard_places")
 
     def assertRadiusIsIndexable(self, run: Callable[[], Any], *, reads_the_index: bool = False) -> Any:
         with CaptureQueriesContext(connection) as captured:

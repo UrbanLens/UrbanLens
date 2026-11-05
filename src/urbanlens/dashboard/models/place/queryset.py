@@ -82,7 +82,7 @@ class PlaceQuerySet(abstract.DashboardQuerySet["Place"]):
     def footprints_near(self, point: Point) -> Self:
         """
         Top-level footprint places within :data:`FOOTPRINT_BUFFER_METERS` of a coordinate, nearest first.
-        A footprint with no parcel is only an ML outline, so a GPS pin a few metres off it still means the building.
+        A footprint with no parcel is only a machine-derived outline, so a GPS pin a few metres off it still means the building.
         """
         from django.contrib.gis.db.models.functions import Distance
         from django.contrib.gis.measure import D
