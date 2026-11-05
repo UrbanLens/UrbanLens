@@ -7,6 +7,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.db import IntegrityError, transaction
+from django.db.models import Q
 
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
@@ -256,14 +257,8 @@ def create_pin_for_profile(
     if location.place_resolved_at is None:
         resolve_location_place(location)
 
-    # One root pin per property, still - the guarantee the old 50 m snap was
-    # really providing, now expressed against the property itself instead of
-    # against whichever coordinate happened to be recorded first.
-    # The property is the domain root: a point on one of its buildings resolves onto the building's place.
-    # The chosen location, plus any property this coordinate could plausibly mean instead - so a
-    # caller can still treat "more than one" as "there is a real choice here".
-    # Competitors are almost always absent: everything inside one property is the same answer, not a
-    # rival one.
+    # One root pin per property: a point on a building resolves onto the building's place.
+    # Competing places are almost always absent; more than one means a real choice.
     rivals = competing_places(lat_f, lon_f, location.place if location.place_id else None)
     all_locations = [location, *[candidate for candidate in representative_locations(rivals) if candidate.pk != location.pk]]
 
@@ -302,7 +297,7 @@ def create_pin_for_profile(
         if new_parent is not None or location.place is None:
             return
         property_id = location.place.domain_root_id or location.place_id
-        existing = Pin.objects.root_pins().filter(profile=profile, location__place__domain_root_id=property_id).order_by("created", "pk").first()
+        existing = Pin.objects.root_pins().filter(Q(location__place__domain_root_id=property_id) | Q(location__place_id=property_id), profile=profile).order_by("created", "pk").first()
         if existing is not None:
             error = DuplicatePropertyError("Duplicate root pin on this property.")
             error.existing_pin_uuid = str(existing.uuid)
