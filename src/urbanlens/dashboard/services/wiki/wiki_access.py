@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from django.db.models import Exists, OuterRef, Q
+from django.db.models import Exists, F, OuterRef, Q
 from django.http import Http404
 
 logger = logging.getLogger(__name__)
@@ -179,9 +179,36 @@ def place_visible_to(place: Place | None, profile: Profile) -> bool:
     Returns:
         Whether the profile holds the domain.
     """
-    if place is None or place.domain_root_id is None:
+    if place is None:
+        return False
+    if is_synthetic_place(place) and _shared_place_ids(profile).filter(place_id=place.pk).exists():
+        return True
+    if place.domain_root_id is None or is_members_only_place(place):
         return False
     return place.domain_root_id in accessible_domain_ids(profile)
+
+
+def is_synthetic_place(place: Place) -> bool:
+    """Whether the place is a shared placeless one (provisional or anchored)."""
+    from urbanlens.dashboard.models.place.model import SYNTHETIC_EVIDENCE
+
+    return place.evidence in SYNTHETIC_EVIDENCE
+
+
+def is_members_only_place(place: Place) -> bool:
+    """
+    Whether only membership reaches the place: a synthetic place that is its own domain.
+
+    One that is ``PART_OF`` a plausible parcel shares the parcel's domain, as a building does (ADR35 section 1, R-52).
+    """
+    return is_synthetic_place(place) and place.domain_root_id == place.pk
+
+
+def _not_members_only() -> Q:
+    """Locations not on a members-only place, whose domain no pin can hold (no pin ever resolves onto a synthetic place)."""
+    from urbanlens.dashboard.models.place.model import SYNTHETIC_EVIDENCE
+
+    return ~Q(place__evidence__in=SYNTHETIC_EVIDENCE, place__domain_root_id=F("place_id"))
 
 
 def _shared_place_ids(profile: Profile):
@@ -212,7 +239,7 @@ def _visible_given_pins(location: Location, pins, profile: Profile | None, *, ex
         return True
 
     place = location.place if location.place_id else None
-    if place is None or place.domain_root_id is None:
+    if place is None or place.domain_root_id is None or is_members_only_place(place):
         return False
     return place.domain_root_id in _domains_given_pins(pins, profile, extra_point=extra_point)
 
@@ -252,7 +279,7 @@ def visible_wiki_locations(profile: Profile) -> VisibleWikiLocations:
 
     pinned = Pin.objects.filter(profile=profile, location_id__isnull=False).values_list("location_id", flat=True)
     domains = accessible_domain_ids(profile)
-    return Location.objects.filter(Q(pk__in=pinned) | Q(wiki__isnull=False, place__domain_root_id__in=domains) | Q(wiki__place_id__in=_shared_place_ids(profile))).values_list("pk", flat=True)
+    return Location.objects.filter(Q(pk__in=pinned) | Q(_not_members_only(), wiki__isnull=False, place__domain_root_id__in=domains) | Q(wiki__place_id__in=_shared_place_ids(profile))).values_list("pk", flat=True)
 
 
 def visible_wiki_location_ids(profile: Profile) -> set[int]:
@@ -361,7 +388,9 @@ def wiki_accessible_to(wiki: Wiki, profile: Profile) -> bool:
 
     Returns:
         Whether the governing wiki's location is visible to *profile*."""
-    governing = wiki.parent_wiki if wiki.parent_wiki_id else wiki
+    # A shared placeless wiki governs itself even when nested under its parcel's: a member's pin may lie just outside the parcel.
+    shared = wiki.place if wiki.place_id else None
+    governing = wiki if shared is not None and is_synthetic_place(shared) else (wiki.parent_wiki if wiki.parent_wiki_id else wiki)
     if governing is None or governing.location_id is None:
         return False
     return location_visible_to(governing.location, profile)
@@ -381,7 +410,7 @@ def visible_locations_filter(profile: Profile) -> Q:
     """
     from urbanlens.dashboard.models.pin.model import Pin
 
-    return Q(Exists(Pin.objects.filter(profile=profile, location=OuterRef("pk")))) | Q(place__domain_root_id__in=accessible_domain_ids(profile)) | Q(wiki__place_id__in=_shared_place_ids(profile))
+    return Q(Exists(Pin.objects.filter(profile=profile, location=OuterRef("pk")))) | Q(_not_members_only(), place__domain_root_id__in=accessible_domain_ids(profile)) | Q(wiki__place_id__in=_shared_place_ids(profile))
 
 
 def visible_location_or_404(profile: Profile, location_slug: str, *, related: tuple[str, ...] = ()) -> Location:

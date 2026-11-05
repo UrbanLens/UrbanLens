@@ -5343,7 +5343,19 @@ def evaluate_shared_places_range(start_pk: int, end_pk: int) -> int:
     Returns:
         How many pins joined or formed a shared place.
     """
-    from urbanlens.dashboard.models.pin.model import Pin
-    from urbanlens.dashboard.services.places.shared_places import evaluate_pin
+    from django.conf import settings
 
-    return sum(1 for pin_id in Pin.objects.filter(pk__gte=start_pk, pk__lte=end_pk, location__isnull=False).values_list("pk", flat=True) if evaluate_pin(pin_id) is not None)
+    from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.places.shared_places import evaluate_pin, revalidate_memberships
+
+    since = timezone.now() - timedelta(days=settings.UL_SHARED_PLACE_SWEEP_DAYS)
+    pins = Pin.objects.filter(pk__gte=start_pk, pk__lte=end_pk, created__gte=since, location__isnull=False, profile__community_enabled=True).select_related("profile")
+    revalidated: set[int] = set()
+    joined = 0
+    for pin in pins.order_by("pk"):
+        if pin.profile_id not in revalidated:
+            revalidated.add(pin.profile_id)
+            revalidate_memberships(pin.profile)
+        if evaluate_pin(pin.pk, revalidate=False) is not None:
+            joined += 1
+    return joined

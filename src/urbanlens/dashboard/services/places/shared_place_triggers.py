@@ -2,13 +2,29 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+
 from django.conf import settings
 from django.core.cache import cache
+from django.utils import timezone
 
 
-def schedule_pin_evaluation(pin_id: int) -> None:
-    """Queue one evaluation for the pin unless one was queued within ``UL_SHARED_PLACE_DEBOUNCE_SECONDS``."""
+def schedule_pin_evaluation(pin_id: int, *, created: datetime | None = None) -> bool:
+    """
+    Queue one evaluation for the pin unless one was queued within ``UL_SHARED_PLACE_DEBOUNCE_SECONDS``.
+
+    Args:
+        pin_id: The pin to evaluate.
+        created: When the pin was created; a pin younger than ``UL_SHARED_PLACE_MIN_PIN_AGE_DAYS`` cannot pass the maturity gate yet, so
+            no task is spent on it (the nightly sweep evaluates it once it has matured).
+
+    Returns:
+        Whether a task was enqueued.
+    """
     from urbanlens.dashboard.tasks import evaluate_shared_places_for_pin
+
+    if created is not None and created > timezone.now() - timedelta(days=settings.UL_SHARED_PLACE_MIN_PIN_AGE_DAYS):
+        return False
 
     debounce = settings.UL_SHARED_PLACE_DEBOUNCE_SECONDS
     try:
@@ -17,6 +33,7 @@ def schedule_pin_evaluation(pin_id: int) -> None:
         first = True
     if first:
         evaluate_shared_places_for_pin.apply_async(args=(pin_id,), countdown=debounce)
+    return bool(first)
 
 
 def schedule_membership_revalidation(profile_id: int) -> None:

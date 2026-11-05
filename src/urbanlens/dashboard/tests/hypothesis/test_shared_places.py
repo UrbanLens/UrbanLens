@@ -17,7 +17,13 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.place.model import Place, PlaceEvidence, PlaceKind
-from urbanlens.dashboard.models.place.shared import NotesOffer, NotesOfferStatus, SharedPlaceMember
+from urbanlens.dashboard.models.place.shared import (
+    NotesOffer,
+    NotesOfferStatus,
+    SharedPlaceAttempt,
+    SharedPlaceFlag,
+    SharedPlaceMember,
+)
 from urbanlens.dashboard.models.visits.model import VisitSource
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.places import shared_places
@@ -124,8 +130,7 @@ class TierOneTests(SharedPlaceTestCase):
     def test_a_later_pin_joins_by_distance_to_the_anchor_alone(self) -> None:
         self.pair()
         joiner = _pin(self.carol, -24)  # 24 m from the anchor, 34 m from the second pin
-        with patch(f"{MODULE}.are_independent", return_value=False):
-            shared_places.evaluate_pin(joiner.pk)
+        shared_places.evaluate_pin(joiner.pk)
         self.assertTrue(SharedPlaceMember.objects.filter(profile=self.carol).exists())
         self.assertEqual(Place.objects.filter(evidence=PlaceEvidence.PROVISIONAL).count(), 1)
 
@@ -135,19 +140,35 @@ class TierOneTests(SharedPlaceTestCase):
         shared_places.evaluate_pin(outsider.pk)
         self.assertFalse(SharedPlaceMember.objects.filter(profile=self.carol).exists())
 
-    @override_settings(UL_SHARED_PLACE_JOIN_LIMIT=1)
-    def test_the_per_account_join_rate_limit_throttles_a_grid_of_probe_pins(self) -> None:
+    @override_settings(UL_SHARED_PLACE_ATTEMPT_LIMIT=2)
+    def test_attempts_are_counted_per_rolling_window_and_over_the_limit_are_deferred_not_dropped(self) -> None:
         self.pair()
-        probes = [_pin(self.alice, 100 * (i + 1)) for i in range(3)]
+        prober = _profile()
+        probes = [_pin(prober, 100 * (i + 1)) for i in range(3)]
         for index, probe in enumerate(probes):
-            partner = _pin(self.carol, 100 * (index + 1) + 5)
-            shared_places.evaluate_pin(partner.pk)
-        self.assertLessEqual(
-            SharedPlaceMember.objects.filter(
-                profile=self.alice, created__gte=timezone.now() - timedelta(hours=1)
-            ).count(),
-            1,
+            _pin(self.carol, 100 * (index + 1) + 5)
+            shared_places.evaluate_pin(probe.pk)
+        self.assertEqual(SharedPlaceAttempt.objects.filter(profile=prober).count(), 2)
+        flag = SharedPlaceFlag.objects.get(profile=prober)
+        self.assertEqual(flag.deferred_count, 1)
+        deferred = probes[2]
+        self.assertFalse(SharedPlaceMember.objects.filter(profile=prober).exists())
+        # The window rolls: the deferred pin is picked up by a later evaluation, not lost.
+        SharedPlaceAttempt.objects.filter(profile=prober).update(created=timezone.now() - timedelta(hours=25))
+        shared_places.evaluate_pin(deferred.pk)
+        self.assertTrue(
+            SharedPlaceAttempt.objects.filter(pin=deferred, created__gte=timezone.now() - timedelta(hours=1)).exists()
         )
+
+    @override_settings(UL_SHARED_PLACE_ATTEMPT_LIMIT=1)
+    def test_a_partner_at_their_own_limit_defers_the_pair_instead_of_answering_the_prober(self) -> None:
+        first = _pin(self.alice)
+        SharedPlaceAttempt.objects.create(profile=self.alice, pin=first)
+        second = _pin(self.bob, 10)
+        self.assertIsNone(shared_places.evaluate_pin(second.pk))
+        self.assertFalse(Place.objects.filter(evidence=PlaceEvidence.PROVISIONAL).exists())
+        SharedPlaceAttempt.objects.filter(profile=self.alice).update(created=timezone.now() - timedelta(hours=25))
+        self.assertIsNotNone(shared_places.evaluate_pin(second.pk))
 
     def test_synthetic_places_never_resolve_a_coordinate(self) -> None:
         self.pair()
@@ -292,7 +313,7 @@ class ParcelNestingTests(SharedPlaceTestCase):
 
 
 class CeleryOnlyTests(SharedPlaceTestCase):
-    def test_pin_creation_only_queues_work_and_decides_nothing(self) -> None:
+    def test_a_fresh_pin_queues_nothing_because_it_cannot_have_matured(self) -> None:
         _pin(self.alice)
         with (
             patch("urbanlens.dashboard.tasks.evaluate_shared_places_for_pin.apply_async") as queued,
@@ -301,6 +322,19 @@ class CeleryOnlyTests(SharedPlaceTestCase):
             baker.make(
                 Pin, profile=self.bob, location=baker.make(Location, latitude=round(LAT + 10 * M_LAT, 6), longitude=LON)
             )
+        queued.assert_not_called()
+        self.assertFalse(SharedPlaceMember.objects.exists())
+
+    def test_a_mature_pin_only_queues_work_and_decides_nothing(self) -> None:
+        from django.core.cache import cache
+
+        from urbanlens.dashboard.services.places.shared_place_triggers import schedule_pin_evaluation
+
+        _pin(self.alice)
+        mature = _pin(self.bob, 10)
+        cache.delete(f"ul:shared-place:eval:{mature.pk}")
+        with patch("urbanlens.dashboard.tasks.evaluate_shared_places_for_pin.apply_async") as queued:
+            self.assertTrue(schedule_pin_evaluation(mature.pk, created=mature.created))
         queued.assert_called_once()
         self.assertFalse(SharedPlaceMember.objects.exists())
 
@@ -322,3 +356,213 @@ class CeleryOnlyTests(SharedPlaceTestCase):
         second = _pin(self.bob, 10)
         self.assertTrue(tasks.evaluate_shared_places_for_pin(second.pk))
         self.assertTrue(Place.objects.filter(evidence=PlaceEvidence.PROVISIONAL).exists())
+
+
+class HubPrivacyTests(SharedPlaceTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.first, self.second = self.pair()
+        self.place = Place.objects.get(evidence=PlaceEvidence.PROVISIONAL)
+        self.wiki = Wiki.objects.get(place=self.place)
+        self.hub = self.wiki.location
+
+    def test_the_hub_is_a_fresh_location_at_a_stored_offset_inside_the_radius_and_not_at_the_anchor(self) -> None:
+        self.assertNotIn(self.hub.pk, set(Pin.objects.values_list("location_id", flat=True)))
+        gap = shared_places._distance(self.hub.point, self.place.anchor)
+        self.assertGreater(gap, 0.5)
+        self.assertLessEqual(gap, 25.5)
+        self.hub.refresh_from_db()
+        self.assertEqual(self.hub.place_id, self.place.pk)
+
+    def test_the_hub_never_reuses_an_existing_location(self) -> None:
+        taken = _pin(self.carol, 500).location
+        with patch.object(
+            shared_places,
+            "_random_offset_point",
+            side_effect=[(float(taken.latitude), float(taken.longitude)), (round(LAT + 7 * M_LAT, 6), LON)],
+        ):
+            hub = shared_places._hub_location(self.place.anchor, 25)
+        self.assertNotEqual(hub.pk, taken.pk)
+
+    def _coordinate_strings(self, location) -> set[str]:
+        return {
+            f"{float(location.latitude):.6f}",
+            f"{float(location.longitude):.6f}",
+            str(location.latitude),
+            str(location.longitude),
+        }
+
+    def test_the_wiki_page_shows_neither_the_anchor_nor_the_hub(self) -> None:
+        self.client.force_login(self.bob.user)
+        response = self.client.get(reverse("location.wiki", kwargs={"location_slug": self.hub.slug}))
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        for text in self._coordinate_strings(self.hub) | self._coordinate_strings(self.first.location):
+            self.assertNotIn(text, content)
+        # Centred on the viewer's own pin instead.
+        self.assertIn(f"{float(self.second.location.latitude):.6f}"[:8], content)
+
+    def test_wiki_json_endpoints_show_neither_the_anchor_nor_the_hub(self) -> None:
+        self.client.force_login(self.bob.user)
+        forbidden = self._coordinate_strings(self.hub) | self._coordinate_strings(self.first.location)
+        for name in (
+            "location.wiki.boundary",
+            "location.wiki.detail_pins.json",
+            "location.wiki.markup.json",
+            "location.wiki.gallery.json",
+        ):
+            response = self.client.get(reverse(name, kwargs={"location_slug": self.hub.slug}))
+            body = response.content.decode()
+            for text in forbidden:
+                self.assertNotIn(text, body, f"{name} leaked {text}")
+
+
+class SyntheticIsolationTests(SharedPlaceTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.parcel = make_place(PlaceKind.PARCEL, _box(150))
+        self.parcel_wiki = baker.make(
+            Wiki, location=baker.make(Location, latitude=round(LAT + 100 * M_LAT, 6), longitude=LON), place=self.parcel
+        )
+        self.pair()
+        self.place = Place.objects.get(evidence=PlaceEvidence.PROVISIONAL)
+        self.wiki = Wiki.objects.get(place=self.place)
+        self.hub = self.wiki.location
+        # Carol holds a pin elsewhere on the parcel, so she holds its access domain.
+        self.holder_pin = _pin(self.carol, 100)
+        Location.objects.filter(pk=self.holder_pin.location_id).update(place=self.parcel)
+
+    def test_the_hub_keeps_its_place_through_save_and_re_resolution(self) -> None:
+        from urbanlens.dashboard.services.places import resolution
+
+        self.hub.refresh_from_db()
+        self.hub.save()
+        resolution.resolve_location_place(self.hub)
+        resolution.attach_location(self.hub, self.parcel)
+        resolution.resolve_locations_in(self.parcel.geometry)
+        self.hub.refresh_from_db()
+        self.assertEqual(self.hub.place_id, self.place.pk)
+
+    def test_a_parcel_holder_who_is_not_a_member_is_denied_by_every_predicate(self) -> None:
+        self.assertTrue(wiki_access.location_visible_to(self.holder_pin.location, self.carol))
+        self.assertFalse(wiki_access.location_visible_to(self.hub, self.carol))
+        self.assertFalse(wiki_access.wiki_accessible_to(self.wiki, self.carol))
+        self.assertFalse(wiki_access.place_visible_to(self.place, self.carol))
+        self.assertNotIn(self.hub.pk, set(wiki_access.visible_wiki_locations(self.carol)))
+        self.assertFalse(
+            Location.objects.filter(wiki_access.visible_locations_filter(self.carol), pk=self.hub.pk).exists()
+        )
+        self.assertTrue(wiki_access.place_visible_to(self.place, self.alice))
+
+    def test_nesting_never_attaches_the_shared_wiki_to_the_parcel(self) -> None:
+        from urbanlens.dashboard.services.wiki.wiki_merge import reconcile_wiki_nesting
+
+        reconcile_wiki_nesting(self.wiki)
+        reconcile_wiki_nesting(self.parcel_wiki)
+        self.wiki.refresh_from_db()
+        self.assertIsNone(self.wiki.parent_wiki_id)
+        self.assertFalse(Wiki.objects.filter(parent_wiki=self.parcel_wiki, pk=self.wiki.pk).exists())
+        self.assertFalse(wiki_access.wiki_accessible_to(self.wiki, self.carol))
+
+
+def _signals(profile, *, age: int = 400, cells=("aaaaaa", "bbbbbb", "cccccc", "dddddd", "eeeeee"), weeks: int = 6):
+    from urbanlens.dashboard.models.trust_signals import ProfileTrustSignals
+
+    return ProfileTrustSignals.objects.update_or_create(
+        profile=profile,
+        defaults={
+            "computed_at": timezone.now(),
+            "account_age_days": age,
+            "active_weeks_90": weeks,
+            "pin_count": 10,
+            "pin_cells": list(cells),
+            "spread_cells": 3,
+            "photo_visit_days": 2,
+        },
+    )[0]
+
+
+class RealTrustCheckTests(TestCase):
+    """The join and formation gates with the REAL ``is_real_user`` / ``are_independent``, on ``ProfileTrustSignals`` rows."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.alice, self.bob, self.carol = _profile(), _profile(), _profile()
+        _signals(self.alice, cells=("a1aaaa", "a2aaaa", "a3aaaa", "a4aaaa", "a5aaaa"))
+        _signals(self.bob, cells=("b1bbbb", "b2bbbb", "b3bbbb", "b4bbbb", "b5bbbb"))
+        _pin(self.alice)
+        self.bob_pin = _pin(self.bob, 10)
+
+    def formed(self) -> Place | None:
+        return Place.objects.filter(evidence=PlaceEvidence.PROVISIONAL).first()
+
+    def test_two_real_independent_profiles_form_a_place(self) -> None:
+        shared_places.evaluate_pin(self.bob_pin.pk)
+        self.assertIsNotNone(self.formed())
+
+    def test_a_profile_that_is_not_a_real_user_forms_nothing(self) -> None:
+        _signals(self.bob, age=2, weeks=0, cells=("b1bbbb", "b2bbbb", "b3bbbb", "b4bbbb", "b5bbbb"))
+        shared_places.evaluate_pin(self.bob_pin.pk)
+        self.assertIsNone(self.formed())
+
+    def test_profiles_with_identical_pin_cells_are_not_independent(self) -> None:
+        _signals(self.bob, cells=("a1aaaa", "a2aaaa", "a3aaaa", "a4aaaa", "a5aaaa"))
+        shared_places.evaluate_pin(self.bob_pin.pk)
+        self.assertIsNone(self.formed())
+
+    def test_a_joiner_independent_of_the_founder_but_not_of_another_member_does_not_join(self) -> None:
+        shared_places.evaluate_pin(self.bob_pin.pk)
+        place = self.formed()
+        _signals(
+            self.carol, cells=("b1bbbb", "b2bbbb", "b3bbbb", "b4bbbb", "b5bbbb")
+        )  # a twin of bob, unrelated to alice
+        joiner = _pin(self.carol, -20)
+        shared_places.evaluate_pin(joiner.pk)
+        self.assertFalse(SharedPlaceMember.objects.filter(place=place, profile=self.carol).exists())
+
+    def test_a_joiner_independent_of_every_member_joins(self) -> None:
+        shared_places.evaluate_pin(self.bob_pin.pk)
+        place = self.formed()
+        _signals(self.carol, cells=("c1cccc", "c2cccc", "c3cccc", "c4cccc", "c5cccc"))
+        shared_places.evaluate_pin(_pin(self.carol, -20).pk)
+        self.assertTrue(SharedPlaceMember.objects.filter(place=place, profile=self.carol).exists())
+
+
+class CheapGatesFirstTests(SharedPlaceTestCase):
+    def test_a_fresh_pin_costs_no_place_resolution(self) -> None:
+        _pin(self.alice)
+        fresh = _pin(self.bob, 10, age_days=1)
+        with (
+            patch.object(Place.objects.__class__, "resolve_for_point") as resolve,
+            patch(f"{MODULE}._nearest_reference") as reference,
+        ):
+            shared_places.evaluate_pin(fresh.pk)
+        resolve.assert_not_called()
+        reference.assert_not_called()
+
+    def test_a_pin_with_community_off_is_skipped_before_any_lookup(self) -> None:
+        _pin(self.alice)
+        other = _pin(self.bob, 10)
+        type(self.bob).objects.filter(pk=self.bob.pk).update(community_enabled=False)
+        with patch(f"{MODULE}._nearest_synthetic_place") as nearest:
+            shared_places.evaluate_pin(other.pk)
+        nearest.assert_not_called()
+
+    def test_the_range_task_revalidates_once_per_profile_and_honours_the_filters(self) -> None:
+        from urbanlens.dashboard import tasks
+
+        mine = [_pin(self.alice, 500 + 50 * i) for i in range(3)]
+        old = _pin(self.alice, 900)
+        Pin.objects.filter(pk=old.pk).update(created=timezone.now() - timedelta(days=400))
+        off = _profile()
+        type(off).objects.filter(pk=off.pk).update(community_enabled=False)
+        skipped = _pin(off, 1000)
+        pks = [p.pk for p in mine] + [old.pk, skipped.pk]
+        with (
+            patch(f"{MODULE}.revalidate_memberships") as revalidate,
+            patch(f"{MODULE}.evaluate_pin", return_value=None) as evaluate,
+        ):
+            tasks.evaluate_shared_places_range(min(pks), max(pks))
+        self.assertEqual(revalidate.call_count, 1)
+        evaluated = {call.args[0] for call in evaluate.call_args_list}
+        self.assertEqual(evaluated, {p.pk for p in mine})

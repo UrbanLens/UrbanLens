@@ -173,6 +173,29 @@ class LocationRedirectView(LoginRequiredMixin, View):
         return _unstored(HttpResponseRedirect(_with_query_string(reverse("location.wiki", kwargs={"location_slug": location.slug or str(location.uuid)}), request)))
 
 
+def _map_center(location, wiki, profile) -> dict[str, str]:
+    """
+    Where the wiki map opens.
+
+    A shared placeless wiki's hub coordinates are never rendered, however offset: the map opens on the viewer's own pin near the
+    place (every member holds one), and on the neutral world view when they somehow hold none.
+    """
+    from django.contrib.gis.measure import D
+
+    from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.models.place.model import SYNTHETIC_EVIDENCE
+
+    place = wiki.place if wiki.place_id is not None else None
+    if place is None or place.evidence not in SYNTHETIC_EVIDENCE:
+        return {"lat": str(location.latitude), "lng": str(location.longitude)}
+    own = None
+    if place.anchor is not None:
+        own = Pin.objects.filter(profile=profile, location__point__dwithin=(place.anchor, D(m=100))).select_related("location").first()
+    if own is None or own.location is None:
+        return {"lat": "", "lng": ""}
+    return {"lat": str(own.location.latitude), "lng": str(own.location.longitude)}
+
+
 class LocationWikiView(LoginRequiredMixin, View):
     """
     Main wiki page for a place.
@@ -285,6 +308,7 @@ class LocationWikiView(LoginRequiredMixin, View):
                 "public_vote": projection.public_vote(location),
                 "boundary_vote": projection.boundary_vote(location.place),
                 "user_pin": user_pin,
+                "map_center": _map_center(location, wiki, profile),
                 "other_locations": other_locations,
                 "page_name": "location-wiki",
                 "pin_type_choices": PinType.choices,

@@ -13,13 +13,15 @@ from __future__ import annotations
 
 from datetime import timedelta
 import logging
-from typing import TYPE_CHECKING
+import math
+import secrets
 
 from django.conf import settings
 from django.contrib.gis.db.models.functions import GeoHash
 from django.contrib.gis.geos import MultiPolygon, Point, Polygon
 from django.contrib.gis.measure import D
 from django.db import connection, transaction
+from django.db.models import F
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
@@ -28,8 +30,9 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.notifications.meta import NotificationType
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.place.model import STRONG_EVIDENCE, Place, PlaceEvidence, PlaceKind, PlaceRelation, PlaceStatus
-from urbanlens.dashboard.models.place.shared import NotesOffer, NotesOfferStatus, SharedPlaceMember
+from urbanlens.dashboard.models.place.model import STRONG_EVIDENCE, SYNTHETIC_EVIDENCE, Place, PlaceEvidence, PlaceKind, PlaceRelation, PlaceStatus
+from urbanlens.dashboard.models.place.shared import NotesOffer, NotesOfferStatus, SharedPlaceAttempt, SharedPlaceFlag, SharedPlaceMember
+from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.core.text_limits import MAX_WIKI_DESCRIPTION_LENGTH
@@ -39,17 +42,12 @@ from urbanlens.dashboard.services.places import lineage, resolution
 from urbanlens.dashboard.services.trust.checks import are_independent, is_real_user
 from urbanlens.dashboard.services.trust.signals import CELL_PRECISION
 
-if TYPE_CHECKING:
-    from urbanlens.dashboard.models.profile.model import Profile
-
 logger = logging.getLogger(__name__)
 
-SYNTHETIC_EVIDENCE = (PlaceEvidence.PROVISIONAL, PlaceEvidence.ANCHORED)
 #: Serialises place creation so two evaluations of one cluster cannot each make a place.
 _CREATION_LOCK_KEY = 367_001
-#: How far the hub Location is nudged off the anchor to avoid an existing Location at the same 6-decimal coordinate.
-_HUB_NUDGE_DEGREES = 0.000001
-_HUB_NUDGE_ATTEMPTS = 60
+#: Tries at a random hub coordinate before giving up (a collision at 6 decimals is vanishingly rare).
+_HUB_ATTEMPTS = 60
 
 
 def _radius(evidence: str) -> float:
@@ -60,42 +58,62 @@ def _distance(a: Point, b: Point) -> float:
     return meters_between(a.y, a.x, b.y, b.x)
 
 
+def maturity_cutoff():
+    """Pins created at or before this are old enough on age alone."""
+    return timezone.now() - timedelta(days=settings.UL_SHARED_PLACE_MIN_PIN_AGE_DAYS)
+
+
 def pin_has_matured(pin: Pin) -> bool:
     """Whether the pin is old enough, or has a photo-verified visit; a fresh pin is cheap to scatter."""
-    if pin.created <= timezone.now() - timedelta(days=settings.UL_SHARED_PLACE_MIN_PIN_AGE_DAYS):
+    if pin.created <= maturity_cutoff():
         return True
     return PinVisit.objects.filter(pin=pin, tentative=False, source=VisitSource.PHOTO).exists()
 
 
-def resolved_official_place(location: Location) -> Place | None:
-    """The place the coordinate resolves onto today, or None."""
-    return Place.objects.resolve_for_point(float(location.latitude), float(location.longitude))
-
-
 def pin_is_placeless(location: Location) -> bool:
     """Whether nothing with a building outline sits under the pin; a parcel alone does not count as a place for the pin."""
-    resolved = resolved_official_place(location)
+    resolved = Place.objects.resolve_for_point(float(location.latitude), float(location.longitude))
     return resolved is None or resolved.kind != PlaceKind.BUILDING
 
 
+def _cheap_gates(pin: Pin) -> bool:
+    """The gates that cost no spatial lookup: a location, community on, and maturity."""
+    return pin.location_id is not None and pin.profile.community_enabled and pin_has_matured(pin)
+
+
 def _pin_qualifies(pin: Pin) -> bool:
-    """The pin-level gates: community on, a location, nothing building-like under it, mature, and a real user behind it."""
-    if pin.location_id is None or not pin.profile.community_enabled:
+    """All pin-level gates, cheapest first: community on, a location, mature, nothing building-like under it, then a real user behind it."""
+    return _cheap_gates(pin) and pin_is_placeless(pin.location) and is_real_user(pin.profile)
+
+
+def _attempts_in_window(profile: Profile) -> int:
+    since = timezone.now() - timedelta(hours=settings.UL_SHARED_PLACE_ATTEMPT_WINDOW_HOURS)
+    return SharedPlaceAttempt.objects.filter(profile=profile, created__gte=since).count()
+
+
+def _record_attempt(pin: Pin) -> bool:
+    """
+    Count this pin's evaluation against a candidate, positive or negative, within the rolling window.
+
+    Returns:
+        False when the account is over its limit: the profile is flagged and the evaluation is deferred, to be retried by a later sweep
+        once the window rolls, never dropped. Nothing is learned from a deferral by anyone.
+    """
+    since = timezone.now() - timedelta(hours=settings.UL_SHARED_PLACE_ATTEMPT_WINDOW_HOURS)
+    if SharedPlaceAttempt.objects.filter(pin=pin, created__gte=since).exists():
+        return True
+    if _attempts_in_window(pin.profile) >= settings.UL_SHARED_PLACE_ATTEMPT_LIMIT:
+        flag, _ = SharedPlaceFlag.objects.get_or_create(profile=pin.profile)
+        SharedPlaceFlag.objects.filter(pk=flag.pk).update(deferred_count=F("deferred_count") + 1, last_deferred_at=timezone.now())
+        logger.warning("Shared-place evaluation deferred for profile %s (over %s attempts in %sh)", pin.profile_id, settings.UL_SHARED_PLACE_ATTEMPT_LIMIT, settings.UL_SHARED_PLACE_ATTEMPT_WINDOW_HOURS)
         return False
-    return pin_is_placeless(pin.location) and pin_has_matured(pin) and is_real_user(pin.profile)
-
-
-def _recent_joins(profile: Profile) -> int:
-    since = timezone.now() - timedelta(hours=settings.UL_SHARED_PLACE_JOIN_WINDOW_HOURS)
-    return SharedPlaceMember.objects.filter(profile=profile, created__gte=since).count()
-
-
-def _under_join_limit(profile: Profile) -> bool:
-    """Per-account join rate limit. A profile over it is skipped and logged, which is how a grid of probe pins is flagged."""
-    if _recent_joins(profile) >= settings.UL_SHARED_PLACE_JOIN_LIMIT:
-        logger.warning("Shared-place join throttled for profile %s (over %s joins in %sh); flagged for review", profile.pk, settings.UL_SHARED_PLACE_JOIN_LIMIT, settings.UL_SHARED_PLACE_JOIN_WINDOW_HOURS)
-        return False
+    SharedPlaceAttempt.objects.create(profile=pin.profile, pin=pin)
     return True
+
+
+def _has_headroom(profile: Profile) -> bool:
+    """Whether a partner's account is under its own limit; a partner at the limit defers the pair instead of failing it."""
+    return _attempts_in_window(profile) < settings.UL_SHARED_PLACE_ATTEMPT_LIMIT
 
 
 def _cell_of(location: Location) -> str | None:
@@ -130,16 +148,21 @@ def _nearest_reference(point: Point) -> Point | None:
 
 
 def _pins_near(point: Point, radius: float, *, excluding: Profile) -> list[Pin]:
-    pins = Pin.objects.filter(location__point__dwithin=(point, D(m=radius))).exclude(profile=excluding).select_related("location", "profile").order_by("created", "pk")
+    """Other accounts' mature pins near *point*, oldest first; fresh pins are dropped before anything costlier runs."""
+    pins = Pin.objects.filter(location__point__dwithin=(point, D(m=radius)), created__lte=maturity_cutoff()).exclude(profile=excluding).select_related("location", "profile").order_by("created", "pk")
     return [pin for pin in pins if _distance(pin.location.point, point) <= radius]
 
 
-def evaluate_pin(pin_id: int) -> Place | None:
+def evaluate_pin(pin_id: int, *, revalidate: bool = True) -> Place | None:
     """
     Run the trust checks and tier evaluation for one pin. Celery only.
 
     Joins the pin's profile to an existing synthetic place by distance to its single anchor, or forms a new anchored then provisional
     place from a qualifying, independent pair of profiles.
+
+    Args:
+        pin_id: The pin to evaluate.
+        revalidate: Whether to re-check the owner's memberships first; a sweep does that once per profile instead.
 
     Returns:
         The place the profile joined or formed, else None. The return value never leaves the worker.
@@ -147,31 +170,40 @@ def evaluate_pin(pin_id: int) -> Place | None:
     pin = Pin.objects.select_related("location", "profile").filter(pk=pin_id).first()
     if pin is None or pin.location_id is None:
         return None
-    revalidate_memberships(pin.profile)
-    if not _pin_qualifies(pin) or not _under_join_limit(pin.profile):
+    if revalidate:
+        revalidate_memberships(pin.profile)
+    if not _cheap_gates(pin):
         return None
     point = pin.location.point
 
     existing = _nearest_synthetic_place(point)
+    reference = None if existing is not None else _nearest_reference(point)
+    neighbours = [] if existing is not None else _pins_near(reference if reference is not None else point, _radius(PlaceEvidence.ANCHORED if reference is not None else PlaceEvidence.PROVISIONAL), excluding=pin.profile)
+    if existing is None and not neighbours:
+        return None
+    if not _record_attempt(pin):
+        return None
+    if not pin_is_placeless(pin.location) or not is_real_user(pin.profile):
+        return None
+
     if existing is not None:
         return _join(existing, pin)
-
-    reference = _nearest_reference(point)
     if reference is not None:
-        formed = _form(pin, reference, PlaceEvidence.ANCHORED)
+        formed = _form(pin, reference, PlaceEvidence.ANCHORED, neighbours)
         if formed is not None:
             return formed
-    return _form(pin, None, PlaceEvidence.PROVISIONAL)
+    return _form(pin, None, PlaceEvidence.PROVISIONAL, _pins_near(point, _radius(PlaceEvidence.PROVISIONAL), excluding=pin.profile) if reference is not None else neighbours)
 
 
-def _form(pin: Pin, reference: Point | None, evidence: str) -> Place | None:
-    """Look for a qualifying independent partner near *pin* (or near the public *reference*) and create the place."""
-    centre = reference if reference is not None else pin.location.point
+def _form(pin: Pin, reference: Point | None, evidence: str, candidates: list[Pin]) -> Place | None:
+    """Pair *pin* with the first qualifying independent partner among *candidates* and create the place."""
     radius = _radius(evidence)
-    for other in _pins_near(centre, radius, excluding=pin.profile):
-        if not _pin_qualifies(other) or not _under_join_limit(other.profile):
+    for other in candidates:
+        if not _has_headroom(other.profile):
             continue
         if reference is None and _distance(pin.location.point, other.location.point) > radius:
+            continue
+        if not _pin_qualifies(other):
             continue
         if not are_independent(pin.profile, other.profile, exclude_cell=_cell_of(pin.location)):
             continue
@@ -181,8 +213,19 @@ def _form(pin: Pin, reference: Point | None, evidence: str) -> Place | None:
     return None
 
 
+def _independent_of_all_members(place: Place, pin: Pin) -> bool:
+    """A joiner must look independent of every existing member, not only of whoever formed the place."""
+    cell = _cell_of(pin.location)
+    members = Profile.objects.filter(shared_place_memberships__place=place).exclude(pk=pin.profile_id)
+    return all(are_independent(pin.profile, member, exclude_cell=cell) for member in members)
+
+
 def _join(place: Place, pin: Pin) -> Place | None:
-    """Admit the pin's profile by distance to the anchor alone, never pairwise."""
+    """Admit the pin's profile by distance to the anchor alone, provided it is independent of every current member."""
+    if SharedPlaceMember.objects.filter(place=place, profile=pin.profile).exists():
+        return place
+    if not _independent_of_all_members(place, pin):
+        return None
     with transaction.atomic():
         _, created = SharedPlaceMember.objects.get_or_create(place=place, profile=pin.profile)
         if created:
@@ -201,13 +244,28 @@ def _circle(anchor: Point, radius: float) -> MultiPolygon:
     return MultiPolygon(polygon, srid=4326)
 
 
-def _hub_location(anchor: Point) -> Location:
-    """A Location of its own beside the anchor, because an existing Location at the anchor already holds a tier-0 wiki."""
-    for step in range(1, _HUB_NUDGE_ATTEMPTS):
-        location, created = Location.objects.get_exact_or_create(anchor.y, anchor.x + step * _HUB_NUDGE_DEGREES)
-        if created or not (location.pins.exists() or Wiki.objects.filter(location=location).exists()):
+def _random_offset_point(anchor: Point, radius: float) -> tuple[float, float]:
+    """A point uniform over the disc of *radius* metres around *anchor*, from the OS random source."""
+    resolution_steps = 1_000_000
+    angle = 2 * math.pi * secrets.randbelow(resolution_steps) / resolution_steps
+    distance = radius * math.sqrt(secrets.randbelow(resolution_steps) / resolution_steps)
+    latitude = anchor.y + distance * math.sin(angle) / 111_320.0
+    longitude = anchor.x + distance * math.cos(angle) / (111_320.0 * max(math.cos(math.radians(anchor.y)), 0.01))
+    return round(latitude, 6), round(longitude, 6)
+
+
+def _hub_location(anchor: Point, radius: float) -> Location:
+    """
+    A brand-new Location at a random point within the place's radius, chosen once.
+
+    Never at the anchor (the earlier pin's exact point) and never an existing row, so no page about the hub can show where a member pinned.
+    """
+    for _ in range(_HUB_ATTEMPTS):
+        latitude, longitude = _random_offset_point(anchor, radius)
+        location, created = Location.objects.get_exact_or_create(latitude, longitude)
+        if created:
             return location
-    raise RuntimeError("no free hub coordinate beside the anchor")
+    raise RuntimeError("no free hub coordinate within the place")
 
 
 def _create_place(anchor: Point, evidence: str, pins: list[Pin]) -> Place | None:
@@ -223,13 +281,13 @@ def _create_place(anchor: Point, evidence: str, pins: list[Pin]) -> Place | None
         resolution.refresh_area(place)
         if parent is not None:
             lineage.set_parent(place, parent, PlaceRelation.PART_OF)
-        hub = _hub_location(anchor)
-        wiki = Wiki.objects.create(location=hub, place=place, name="Shared place")
+        hub = _hub_location(anchor, _radius(evidence))
+        # Location.save resolved the hub onto the official parcel; the hub belongs to the shared place alone (see resolution.pinned_to_synthetic_place).
+        Location.objects.filter(pk=hub.pk).update(place=place)
+        hub.place = place
+        Wiki.objects.create(location=hub, place=place, name="Shared place")
         for pin in pins:
             SharedPlaceMember.objects.get_or_create(place=place, profile=pin.profile)
-        from urbanlens.dashboard.services.wiki.wiki_merge import reconcile_wiki_nesting
-
-        reconcile_wiki_nesting(wiki)
         for pin in pins:
             _offer_notes(place, pin)
     return place

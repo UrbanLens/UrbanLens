@@ -446,8 +446,8 @@
 {% url 'location.wiki.boundary' location.slug as boundary_url %}
 {% url 'location.wiki.gallery.json' location.slug as photo_gallery_json_url %}
 <div id="map-annotations-config" hidden
-     data-map-center-lat="{{ location.latitude }}"
-     data-map-center-lng="{{ location.longitude }}"
+     data-map-center-lat="{{ map_center.lat }}"
+     data-map-center-lng="{{ map_center.lng }}"
      data-marker-icon-url="{% leaflet_marker_url "iconUrl" %}"
      data-marker-shadow-url="{% leaflet_marker_url "shadowUrl" %}"
      data-location-slug="{{ location.slug }}"

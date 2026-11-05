@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from django.db.models import CASCADE, SET_NULL, CharField, DateTimeField, ForeignKey, Index, TextChoices, UniqueConstraint
+from django.db.models import CASCADE, SET_NULL, CharField, DateTimeField, ForeignKey, Index, OneToOneField, PositiveIntegerField, TextChoices, UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
 
@@ -74,3 +74,45 @@ class NotesOffer(abstract.DashboardModel):
         db_table = "dashboard_notes_offers"
         constraints = [UniqueConstraint(fields=["profile", "place"], name="notes_offer_unique")]
         indexes = [Index(fields=["profile", "status"], name="idxdb_notesoffer_prof_status")]
+
+
+class SharedPlaceAttempt(abstract.DashboardModel):
+    """
+    One pin of an account evaluated against a candidate neighbour or anchor, whatever the outcome.
+
+    The per-account throttle counts these, not successes, so a prober cannot learn from a run of negatives.
+    A pin is recorded once per rolling window.
+
+    Attributes:
+        profile: The account whose pin was evaluated.
+        pin: The pin; the row goes with it.
+    """
+
+    profile = ForeignKey("dashboard.Profile", on_delete=CASCADE, related_name="shared_place_attempts")
+    pin = ForeignKey("dashboard.Pin", on_delete=CASCADE, related_name="+")
+
+    if TYPE_CHECKING:
+        profile_id: int
+        pin_id: int
+
+    class Meta(abstract.DashboardModel.Meta):
+        db_table = "dashboard_shared_place_attempts"
+        indexes = [Index(fields=["profile", "created"], name="idxdb_spa_profile_created")]
+
+
+class SharedPlaceFlag(abstract.DashboardModel):
+    """
+    An account that hit the attempt limit, for review. Its evaluations are deferred to a later sweep, never dropped.
+
+    Attributes:
+        profile: The throttled account.
+        deferred_count: How many evaluations were deferred, cumulatively.
+        last_deferred_at: The latest deferral.
+    """
+
+    profile = OneToOneField("dashboard.Profile", on_delete=CASCADE, related_name="shared_place_flag")
+    deferred_count = PositiveIntegerField(default=0)
+    last_deferred_at = DateTimeField(null=True, blank=True)
+
+    class Meta(abstract.DashboardModel.Meta):
+        db_table = "dashboard_shared_place_flags"

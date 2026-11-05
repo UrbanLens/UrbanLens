@@ -1548,9 +1548,9 @@ UL_SHARED_PLACE_PROVISIONAL_RADIUS_M = float(os.getenv("UL_SHARED_PLACE_PROVISIO
 UL_SHARED_PLACE_ANCHORED_RADIUS_M = float(os.getenv("UL_SHARED_PLACE_ANCHORED_RADIUS_M", "30"))
 #: A pin must be this old, or have a verified (photo) visit, before it counts toward a shared place.
 UL_SHARED_PLACE_MIN_PIN_AGE_DAYS = int(os.getenv("UL_SHARED_PLACE_MIN_PIN_AGE_DAYS", "7"))
-#: One profile may join at most this many shared places per window; beyond it joins are skipped and logged for review.
-UL_SHARED_PLACE_JOIN_LIMIT = int(os.getenv("UL_SHARED_PLACE_JOIN_LIMIT", "5"))
-UL_SHARED_PLACE_JOIN_WINDOW_HOURS = int(os.getenv("UL_SHARED_PLACE_JOIN_WINDOW_HOURS", "24"))
+#: One profile's pins may be evaluated against a candidate neighbour or anchor at most this many times per rolling window, whatever the outcome; beyond it the profile is flagged and its evaluations deferred to a later sweep.
+UL_SHARED_PLACE_ATTEMPT_LIMIT = int(os.getenv("UL_SHARED_PLACE_ATTEMPT_LIMIT", "20"))
+UL_SHARED_PLACE_ATTEMPT_WINDOW_HOURS = int(os.getenv("UL_SHARED_PLACE_ATTEMPT_WINDOW_HOURS", "24"))
 #: Pin saves within this many seconds collapse into one evaluation.
 UL_SHARED_PLACE_DEBOUNCE_SECONDS = int(os.getenv("UL_SHARED_PLACE_DEBOUNCE_SECONDS", "120"))
 #: The nightly sweep looks at placeless pins created in this many days (older ones were seen when they matured).

@@ -296,7 +296,8 @@ def evaluate_shared_places_on_pin_save(sender: type[Pin], instance: Pin, created
     def _run() -> None:
         from urbanlens.dashboard.services.places.shared_place_triggers import schedule_pin_evaluation
 
-        schedule_pin_evaluation(pin_id)
+        # A pin too young to count (no photo-verified visit yet) is left to the nightly sweep, which picks it up once it matures.
+        schedule_pin_evaluation(pin_id, created=instance.created)
 
     transaction.on_commit(_run)
 

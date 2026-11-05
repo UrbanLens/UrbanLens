@@ -105,6 +105,9 @@ class PlaceEvidence(TextChoices):
 #: Evidence tiers that resolution prefers over every other, regardless of area.
 STRONG_EVIDENCE: tuple[str, ...] = (PlaceEvidence.OFFICIAL, PlaceEvidence.FOOTPRINT)
 
+#: Shared placeless tiers: places that never resolve a coordinate; members-only unless PART_OF a plausible parcel's domain.
+SYNTHETIC_EVIDENCE: tuple[str, ...] = (PlaceEvidence.PROVISIONAL, PlaceEvidence.ANCHORED)
+
 
 class GrantReason(TextChoices):
     """Why a profile holds access that containment can no longer prove."""

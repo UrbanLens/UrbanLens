@@ -337,6 +337,7 @@ BEAT_EGRESS: Mapping[str, BeatEgress] = {
     "consensus-stall-sweep": BeatEgress.INTERNAL,
     "achievements-sweep": BeatEgress.INTERNAL,
     "trust-signals-refresh": BeatEgress.INTERNAL,
+    "shared-places-sweep": BeatEgress.INTERNAL,
     "safety-checkin-due-reminders": BeatEgress.INTERNAL,
     "safety-checkin-final-warnings": BeatEgress.INTERNAL,
     "safety-checkin-escalation": BeatEgress.INTERNAL,
