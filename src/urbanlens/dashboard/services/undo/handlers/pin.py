@@ -49,6 +49,7 @@ _RESTORABLE_FIELDS = (
     "vps",
     "plywood",
     "locked",
+    "parenting_is_manual",
 )
 
 

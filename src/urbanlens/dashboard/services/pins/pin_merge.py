@@ -312,7 +312,8 @@ def _reparent_children(survivor: Pin, loser: Pin) -> None:
     for child in list(loser.detail_pins.all()):
         if child.pk == survivor.pk:
             survivor.parent_pin = loser.parent_pin
-            if not _save_within_savepoint(survivor, ["parent_pin", "updated"]):
+            survivor.nested_by_boundary_pin = None
+            if not _save_within_savepoint(survivor, ["parent_pin", "nested_by_boundary_pin", "updated"]):
                 raise SurvivorRelocationCollisionError(
                     f"Pin merge blocked: survivor pin {survivor.pk} is loser pin {loser.pk}'s direct child and must relocate to loser.parent_pin_id={loser.parent_pin_id} to avoid CASCADE deletion, but a top-level pin already occupies that location.",
                 )
@@ -320,7 +321,9 @@ def _reparent_children(survivor: Pin, loser: Pin) -> None:
         if child.would_create_cycle(survivor):
             logger.warning("Pin merge: detaching child pin %s to root - re-parenting under the survivor would create a cycle.", child.pk)
             child.parent_pin = None
-            if not _save_within_savepoint(child, ["parent_pin", "updated"]):
+            child.parenting_is_manual = True
+            child.nested_by_boundary_pin = None
+            if not _save_within_savepoint(child, ["parent_pin", "parenting_is_manual", "nested_by_boundary_pin", "updated"]):
                 # It stays parented to the pin about to be deleted, and Pin.parent_pin CASCADEs - so
                 # this child, and the survivor somewhere beneath it, would both be destroyed by the
                 # delete this detach exists to prevent.
@@ -330,7 +333,8 @@ def _reparent_children(survivor: Pin, loser: Pin) -> None:
                 )
             continue
         child.parent_pin = survivor
-        child.save(update_fields=["parent_pin", "updated"])
+        child.nested_by_boundary_pin = None
+        child.save(update_fields=["parent_pin", "nested_by_boundary_pin", "updated"])
 
 
 def _merge_aliases(survivor: Pin, loser: Pin) -> None:
@@ -727,6 +731,8 @@ PIN_FIELD_POLICY: dict[str, str] = {
     "profile": _IDENTITY,
     "location": _IDENTITY,
     "parent_pin": _IDENTITY,
+    "nested_by_boundary_pin": _IDENTITY,
+    "parenting_is_manual": _EITHER,
     "last_visited": _DERIVED,
     "source_share": _LINEAGE,
     "inferred_source_share": _LINEAGE,

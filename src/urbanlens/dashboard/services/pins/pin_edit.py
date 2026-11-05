@@ -270,36 +270,35 @@ def _promote_children(instance: Pin) -> list[int]:
     """
     Re-parent *instance*'s direct children ahead of its deletion.
     A child whose Location already has another top-level pin nests under that pin instead (top-level pins are unique per Location+profile).
+    Children the pin's boundary nested return to the top level and stay open to nesting; the others are the user's to arrange and become exempt from it.
 
     Args:
         instance: The pin about to be deleted.
 
     Returns:
         Primary keys of children whose promotion must finish post-delete."""
-    new_parent_id = instance.parent_pin_id
     deferred_ids: list[int] = []
-    for child in Pin.objects.filter(parent_pin=instance):
+    update_fields = ["parent_pin", "parenting_is_manual", "nested_by_boundary_pin", "updated"]
+    for child in Pin.objects.filter(parent_pin=instance).order_by("pk"):
+        boundary_nested = child.nested_by_boundary_pin_id is not None
+        new_parent_id = None if boundary_nested else instance.parent_pin_id
+        child.parenting_is_manual = child.parenting_is_manual or not boundary_nested
+        child.nested_by_boundary_pin = None
         if new_parent_id is not None:
             child.parent_pin_id = new_parent_id
-            child.parenting_is_manual = True
-            child.nested_by_boundary_pin = None
-            child.save(update_fields=["parent_pin", "parenting_is_manual", "nested_by_boundary_pin", "updated"])
+            child.save(update_fields=update_fields)
             continue
         other_root = Pin.objects.root_pins().filter(profile_id=instance.profile_id, location_id=child.location_id).exclude(pk=instance.pk).first()
         if other_root is not None:
             child.parent_pin_id = other_root.pk
-            child.parenting_is_manual = True
-            child.nested_by_boundary_pin = None
-            child.save(update_fields=["parent_pin", "parenting_is_manual", "nested_by_boundary_pin", "updated"])
+            child.save(update_fields=update_fields)
         elif child.location_id == instance.location_id:
             # Bypass save() so no side effects run for this transient state.
-            Pin.objects.filter(pk=child.pk).update(parent_pin_id=child.pk, parenting_is_manual=True, nested_by_boundary_pin=None)
+            Pin.objects.filter(pk=child.pk).update(parent_pin_id=child.pk, parenting_is_manual=child.parenting_is_manual, nested_by_boundary_pin=None)
             deferred_ids.append(child.pk)
         else:
             child.parent_pin = None
-            child.parenting_is_manual = True
-            child.nested_by_boundary_pin = None
-            child.save(update_fields=["parent_pin", "parenting_is_manual", "nested_by_boundary_pin", "updated"])
+            child.save(update_fields=update_fields)
     return deferred_ids
 
 
@@ -311,12 +310,10 @@ def _finish_deferred_promotions(profile_id: int, deferred_ids: list[int]) -> Non
     Args:
         profile_id: Owner of the pins (root uniqueness is per profile).
         deferred_ids: Primary keys of the temporarily self-parented children."""
-    for child in Pin.objects.filter(pk__in=deferred_ids):
+    for child in Pin.objects.filter(pk__in=deferred_ids).order_by("pk"):
         existing_root = Pin.objects.root_pins().filter(profile_id=profile_id, location_id=child.location_id).exclude(pk=child.pk).first()
         child.parent_pin_id = existing_root.pk if existing_root is not None else None
-        child.parenting_is_manual = True
-        child.nested_by_boundary_pin = None
-        child.save(update_fields=["parent_pin", "parenting_is_manual", "nested_by_boundary_pin", "updated"])
+        child.save(update_fields=["parent_pin", "updated"])
 
 
 @dataclass(frozen=True, slots=True)

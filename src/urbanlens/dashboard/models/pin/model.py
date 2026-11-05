@@ -195,8 +195,8 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
         blank=True,
         related_name="detail_pins",
     )
-    # True once the user deliberately parented, promoted or detached this pin. Boundary nesting never touches it
-    # (services.pins.boundary_nesting).
+    # Exempt from automatic nesting: the user parented, promoted or detached this pin, or it predates boundary
+    # nesting (the migration marks existing rows). Boundary nesting never touches it (services.pins.boundary_nesting).
     parenting_is_manual = BooleanField(default=False)
     # The user's pin whose drawn boundary nested this pin. Set only by boundary_nesting, cleared by any other
     # change of parent; it is how a boundary edit tells its own nesting from a hierarchy the user built.
@@ -422,15 +422,17 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
         new_parent_id = self.parent_pin_id
         promoted = 0
         with transaction.atomic(), deferring_child_boundary_refits():
-            for child in Pin.objects.filter(parent_pin=self):
-                if new_parent_id is None and child.location_id == self.location_id:
+            for child in Pin.objects.filter(parent_pin=self).order_by("pk"):
+                # A child the owner's boundary nested goes back to the top level and stays open to nesting.
+                target_id = None if child.nested_by_boundary_pin_id else new_parent_id
+                if target_id is None and child.location_id == self.location_id:
                     continue
-                if new_parent_id is not None:
-                    child.parent_pin_id = new_parent_id
+                if target_id is not None:
+                    child.parent_pin_id = target_id
                 else:
                     other_root = Pin.objects.root_pins().filter(profile_id=self.profile_id, location_id=child.location_id).exclude(pk=child.pk).first()
                     child.parent_pin_id = other_root.pk if other_root is not None else None
-                child.parenting_is_manual = True
+                child.parenting_is_manual = child.parenting_is_manual or child.nested_by_boundary_pin_id is None
                 child.nested_by_boundary_pin = None
                 child.save(update_fields=["parent_pin", "parenting_is_manual", "nested_by_boundary_pin", "updated"])
                 promoted += 1
