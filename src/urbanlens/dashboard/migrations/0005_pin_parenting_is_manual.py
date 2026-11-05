@@ -8,5 +8,5 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.AddField(model_name="pin", name="parenting_is_manual", field=models.BooleanField(default=True)),
-        migrations.AlterField(model_name="pin", name="parenting_is_manual", field=models.BooleanField(default=False)),
+        migrations.AlterField(model_name="pin", name="parenting_is_manual", field=models.BooleanField(db_default=False, default=False)),
     ]

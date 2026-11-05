@@ -762,7 +762,9 @@ class BuildingUnderExistingRootPinTests(TestCase):
 
         self.client.post(self.url)
 
-        self.assertEqual(self.pin.detail_pins.filter(pin_type=PinType.BUILDING).count(), offered)
+        # Property nesting may also adopt the owner's stray pin standing on the property; only count what the import made.
+        created = self.pin.detail_pins.filter(pin_type=PinType.BUILDING).exclude(pk=self.stray.pk)
+        self.assertEqual(created.count(), offered)
 
     def test_the_pin_standing_on_it_is_still_offered_for_nesting(self) -> None:
         """Excluding the building must not also hide the action that resolves it."""

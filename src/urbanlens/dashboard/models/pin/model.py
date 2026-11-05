@@ -115,7 +115,7 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
 
     #: Exempt from automatic nesting: the user chose this pin's place in the hierarchy (promote, detach, keep children, swap with parent).
     #: See services.pins.property_nesting. Rows that predate the field default to True.
-    parenting_is_manual = BooleanField(default=False)
+    parenting_is_manual = BooleanField(default=False, db_default=False)
 
     # User's custom label. None = show location.display_name instead (see effective_name).
     name = CharField(max_length=255, null=True, blank=True)
