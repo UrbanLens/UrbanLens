@@ -103,8 +103,13 @@ def nest_pins(profile_id: int, pin_ids: Iterable[int]) -> int:
     Returns:
         How many pins changed parent.
     """
+    from urbanlens.dashboard.models.pin.model import Pin as PinModel
+
     ids = sorted(set(pin_ids))
-    if not ids or not _has_drawn_boundary(profile_id):
+    if ids and not _has_drawn_boundary(profile_id):
+        # With no outline left, only a pin a boundary nested still needs releasing.
+        ids = sorted(PinModel.objects.filter(pk__in=ids, profile_id=profile_id, nested_by_boundary_pin__isnull=False).values_list("pk", flat=True))
+    if not ids:
         return 0
     changed = 0
     with transaction.atomic():

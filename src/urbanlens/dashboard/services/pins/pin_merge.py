@@ -343,12 +343,11 @@ def _resettle_boundary_children(survivor: Pin) -> None:
     """Re-check the survivor's boundary-nested children against the boundaries that survived the merge."""
     from urbanlens.dashboard.models.pin.model import Pin as PinModel
     from urbanlens.dashboard.services.pins.boundary_nesting import _settle
-    from urbanlens.dashboard.services.pins.tree_lock import lock_profile_pin_tree
 
     ids = list(PinModel.objects.filter(parent_pin=survivor, nested_by_boundary_pin=survivor).values_list("pk", flat=True))
     if not ids:
         return
-    lock_profile_pin_tree(survivor.profile_id)
+    # The profile's pin-tree lock is already held: merge_pins takes it first.
     for pin_id in sorted(ids):
         _settle(pin_id)
 
@@ -1033,6 +1032,7 @@ def merge_pins(survivor: Pin, loser: Pin, profile: Profile, resolutions: dict[st
         raise UnresolvedMergeConflictError(missing)
 
     from urbanlens.dashboard.services.geo.child_pin_boundaries import deferring_child_boundary_refits
+    from urbanlens.dashboard.services.pins.tree_lock import lock_profile_pin_tree
 
     # Captured before anything is rewritten, so the note and summaries name the pins as the user knew them.
     labels = {survivor.pk: _pin_label(survivor), loser.pk: _pin_label(loser)}
@@ -1040,6 +1040,8 @@ def merge_pins(survivor: Pin, loser: Pin, profile: Profile, resolutions: dict[st
     record = _MergeRecord()
 
     with transaction.atomic(), deferring_child_boundary_refits():
+        # First, so a merge and a nesting pass take the lock before any pin row, in the same order.
+        lock_profile_pin_tree(survivor.profile_id)
         _reparent_children(survivor, loser)
         _merge_aliases(survivor, loser)
         _merge_scalars(survivor, loser, record, labels)
