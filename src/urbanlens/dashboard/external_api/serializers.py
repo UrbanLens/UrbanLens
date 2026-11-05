@@ -742,6 +742,13 @@ class ErrorSerializer(ExtensibleSerializer):
     error = serializers.CharField(read_only=True)
 
 
+class PinCreateErrorSerializer(ErrorSerializer):
+    """Documents the 400 from pin creation. A duplicate-property 400 also names the existing pin."""
+
+    code = serializers.CharField(read_only=True, required=False)
+    existing_pin_uuid = serializers.UUIDField(read_only=True, required=False)
+
+
 class PushDeviceRegisterSerializer(ExtensibleSerializer):
     """Validates a native client's push-destination registration."""
 

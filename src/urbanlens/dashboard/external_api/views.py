@@ -67,6 +67,7 @@ from urbanlens.dashboard.external_api.serializers import (
     PhotoVoteResponseSerializer,
     PhotoVoteSerializer,
     PinAliasSerializer,
+    PinCreateErrorSerializer,
     PinCreateResponseSerializer,
     PinCreateSerializer,
     PinDetailSerializer,
@@ -753,7 +754,7 @@ class PinsView(ExternalApiView):
 
     @extend_schema(
         request=PinCreateSerializer,
-        responses={201: PinCreateResponseSerializer, 200: PinCreateResponseSerializer, 400: ErrorSerializer, 403: ErrorSerializer},
+        responses={201: PinCreateResponseSerializer, 200: PinCreateResponseSerializer, 400: PinCreateErrorSerializer, 403: ErrorSerializer},
     )
     def post(self, request: Request) -> Response:
         """Validate the payload and create a pin owned by the key's user."""

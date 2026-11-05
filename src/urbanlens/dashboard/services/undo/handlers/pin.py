@@ -202,7 +202,7 @@ class PinUndoHandler(UndoHandler):
                     profile_id=entry["profile_id"],
                     wiki_id=entry["wiki_id"],
                     parent_pin_id=parent_pk,
-                    **{"parenting_is_manual": True, **entry["fields"]},
+                    **{**entry["fields"], "parenting_is_manual": True},
                 )
                 queue_held_upload(pin, "custom_icon")
                 old_to_new[entry["old_pk"]] = pin

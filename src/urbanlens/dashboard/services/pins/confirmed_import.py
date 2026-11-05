@@ -363,7 +363,8 @@ def run_confirmed_import(profile_id: int, job_id: str) -> dict[str, Any]:
         nested = sweep_after_import(profile_id)
         if nested:
             counts["nested"] = describe_nested(nested)
-            notices.append(summary_warning(nested) or "")
+            if warning := summary_warning(nested):
+                notices.append(warning)
         if notices:
             counts["notices"] = notices
         status.write("done", 100, "Import complete.", result=counts)

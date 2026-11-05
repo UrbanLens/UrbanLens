@@ -16,6 +16,7 @@ from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.core.icons import clean_icon
 from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, LONGITUDE_BOUND, coordinate_or_none, safe_int_or_none
 from urbanlens.dashboard.services.locations.geocoding import get_pin_by_address
+from urbanlens.dashboard.services.pins.tree_lock import lock_profile_pin_tree
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -259,14 +260,6 @@ def create_pin_for_profile(
     # really providing, now expressed against the property itself instead of
     # against whichever coordinate happened to be recorded first.
     # The property is the domain root: a point on one of its buildings resolves onto the building's place.
-    if new_parent is None and location.place is not None:
-        property_id = location.place.domain_root_id or location.place_id
-        existing = Pin.objects.root_pins().filter(profile=profile, location__place__domain_root_id=property_id).order_by("created", "pk").first()
-        if existing is not None:
-            error = DuplicatePropertyError("Duplicate root pin on this property.")
-            error.existing_pin_uuid = str(existing.uuid)
-            raise error
-
     # The chosen location, plus any property this coordinate could plausibly mean instead - so a
     # caller can still treat "more than one" as "there is a real choice here".
     # Competitors are almost always absent: everything inside one property is the same answer, not a
@@ -305,8 +298,21 @@ def create_pin_for_profile(
         # explicitly at the ORM layer - serializers/forms never bind it.
         create_kwargs["uuid"] = client_uuid
 
+    def reject_if_property_taken() -> None:
+        if new_parent is not None or location.place is None:
+            return
+        property_id = location.place.domain_root_id or location.place_id
+        existing = Pin.objects.root_pins().filter(profile=profile, location__place__domain_root_id=property_id).order_by("created", "pk").first()
+        if existing is not None:
+            error = DuplicatePropertyError("Duplicate root pin on this property.")
+            error.existing_pin_uuid = str(existing.uuid)
+            raise error
+
     try:
         with transaction.atomic():
+            # The profile's tree lock makes the check and the insert one step: two concurrent creates cannot both pass it.
+            lock_profile_pin_tree(profile.pk)
+            reject_if_property_taken()
             pin = Pin.objects.create(**create_kwargs)
             if custom_icon:
                 from urbanlens.dashboard.services.media.held_upload import hold_upload
