@@ -147,7 +147,7 @@ def _reader_subjects(location: Location, audiences: set[str]) -> dict[str, tuple
         subjects[SHARED_AUDIENCE].append(subject_relevance.subject_for_location(location, shared=shared))
     custom = audiences - {SHARED_AUDIENCE}
     if custom:
-        for pin in Pin.objects.filter(location=location):  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
+        for pin in Pin.objects.filter(location=location):  # same-place: all profiles' pins on this exact Location, grouped by search-name audience
             pin.location = location
             names = search_names(pin, shared=shared)
             if names.audience in custom and (subject := subject_relevance.subject_for_pin(pin, names=names)) not in subjects[names.audience]:

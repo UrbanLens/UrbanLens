@@ -123,9 +123,10 @@ def _filter_keys(call: ast.Call) -> list[tuple[str, ast.expr]]:
 
 
 def _waived(lines: list[str], first: int, last: int) -> bool:
-    """Whether a waiver sits on lines *first*..*last* (1-based) or on the line above."""
-    span = lines[max(first - 2, 0) : last]
-    return any(WAIVER in line for line in span)
+    """Whether a waiver sits on lines *first*..*last* (1-based) or in a comment-only line above."""
+    own = lines[first - 1 : last]
+    above = lines[first - 2] if first >= 2 else ""
+    return any(WAIVER in line for line in own) or (above.lstrip().startswith("#") and WAIVER in above)
 
 
 def _location_sets(tree: ast.AST) -> set[str]:

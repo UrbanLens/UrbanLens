@@ -327,6 +327,14 @@ class SamePlaceLintTests(SimpleTestCase):
         source = "def f(ids):\n    return Pin.objects.filter(location__in=ids)  # same-place: exact match is intended\n"
         self.assertEqual(self._found(source), 0)
 
+    def test_a_trailing_waiver_does_not_cover_the_next_statement(self):
+        source = "def f(x, y):\n    a = Pin.objects.filter(location=x)  # same-place: intended\n    b = Pin.objects.filter(location=y)\n    return a, b\n"
+        self.assertEqual(self._found(source), 1)
+
+    def test_a_comment_line_above_waives_the_statement(self):
+        source = "def f(x):\n    # same-place: intended\n    return Pin.objects.filter(location=x)\n"
+        self.assertEqual(self._found(source), 0)
+
     def test_radius_modules_and_the_owner_pass(self):
         source = "def f(p):\n    return Pin.objects.filter(location__point__dwithin=(p, D(m=5)))\n"
         self.assertEqual(self._found(source, "src/urbanlens/dashboard/services/sharing/share_provenance.py"), 0)
