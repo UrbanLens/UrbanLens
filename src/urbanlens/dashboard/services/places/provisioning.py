@@ -289,6 +289,9 @@ def _probe_neighbours(location: Location, previous: Place, new_parcel_polygon: M
             continue
         matched = find_matching_place(PlaceKind.PARCEL, polygon, exclude_pk=previous.pk)
         if matched is not None:
+            # candidate_parcels only takes root parcels; re-parenting one that already has a parent would rewrite its family.
+            if matched.parent_id is not None:
+                continue
             if holders is None:
                 holders = holders_of([previous], timezone.now())
             if Pin.objects.filter(location__place__domain_root_id=matched.domain_root_id).exclude(profile_id__in=holders).exists():
