@@ -333,8 +333,24 @@ def _reparent_children(survivor: Pin, loser: Pin) -> None:
                 )
             continue
         child.parent_pin = survivor
-        child.nested_by_boundary_pin = None
+        # A child the loser's drawn boundary nested stays boundary-managed: its provenance follows the
+        # boundary to the survivor, and _resettle_boundary_children releases it if the outline is gone.
+        child.nested_by_boundary_pin = survivor if child.nested_by_boundary_pin_id == loser.pk else None
         child.save(update_fields=["parent_pin", "nested_by_boundary_pin", "updated"])
+
+
+def _resettle_boundary_children(survivor: Pin) -> None:
+    """Re-check the survivor's boundary-nested children against the boundaries that survived the merge."""
+    from urbanlens.dashboard.models.pin.model import Pin as PinModel
+    from urbanlens.dashboard.services.pins.boundary_nesting import _settle
+    from urbanlens.dashboard.services.pins.tree_lock import lock_profile_pin_tree
+
+    ids = list(PinModel.objects.filter(parent_pin=survivor, nested_by_boundary_pin=survivor).values_list("pk", flat=True))
+    if not ids:
+        return
+    lock_profile_pin_tree(survivor.profile_id)
+    for pin_id in sorted(ids):
+        _settle(pin_id)
 
 
 def _merge_aliases(survivor: Pin, loser: Pin) -> None:
@@ -732,7 +748,7 @@ PIN_FIELD_POLICY: dict[str, str] = {
     "location": _IDENTITY,
     "parent_pin": _IDENTITY,
     "nested_by_boundary_pin": _IDENTITY,
-    "parenting_is_manual": _EITHER,
+    "parenting_is_manual": _IDENTITY,
     "last_visited": _DERIVED,
     "source_share": _LINEAGE,
     "inferred_source_share": _LINEAGE,
@@ -1034,6 +1050,7 @@ def merge_pins(survivor: Pin, loser: Pin, profile: Profile, resolutions: dict[st
         _merge_shares(survivor, loser)
         _merge_custom_field_values(survivor, loser, resolutions, record, labels)
         _merge_boundaries(survivor, loser, resolutions, profile, record, labels)
+        _resettle_boundary_children(survivor)
         _merge_article(survivor, loser, resolutions, profile, record, labels)
         _merge_lineage(survivor, loser)
         survivor.labels.add(*loser.labels.all())

@@ -80,6 +80,7 @@ class PinUndoHandler(UndoHandler):
             "profile_id": pin.profile_id,
             "wiki_id": pin.wiki_id,
             "parent_pin_old_pk": pin.parent_pin_id,
+            "nested_by_boundary_pin_old_pk": pin.nested_by_boundary_pin_id,
             "label_ids": list(pin.labels.values_list("id", flat=True)),
             # Image.pin is SET_NULL, so deleting a pin detaches its photos rather than destroying
             # them - the ids are captured here because nothing else records which pin they were on,
@@ -197,12 +198,16 @@ class PinUndoHandler(UndoHandler):
                     deferred.append(entry)
                     continue
                 parent_pk = old_to_new[parent_old_pk].pk if parent_old_pk in old_to_new else parent_old_pk
+                # Boundary provenance is only meaningful beside the parent it names.
+                nested_by = parent_pk if parent_pk is not None and entry.get("nested_by_boundary_pin_old_pk") == parent_old_pk else None
+                # Records saved before the field existed were of pins the migration marked manual.
                 pin = Pin.objects.create(
                     location_id=entry["location_id"],
                     profile_id=entry["profile_id"],
                     wiki_id=entry["wiki_id"],
                     parent_pin_id=parent_pk,
-                    **entry["fields"],
+                    nested_by_boundary_pin_id=nested_by,
+                    **{"parenting_is_manual": True, **entry["fields"]},
                 )
                 queue_held_upload(pin, "custom_icon")
                 old_to_new[entry["old_pk"]] = pin

@@ -184,7 +184,11 @@ def _queue(event: _Pass) -> _Pass:
 
 def request_pin_nesting(profile_id: int, pin_id: int) -> None:
     """Settle a created or moved pin after commit; every pin of one profile queued in a transaction shares a pass."""
-    _queue(_Pass(profile_id)).pin_ids.add(pin_id)
+    event = _Pass(profile_id)
+    event.pin_ids.add(pin_id)
+    queued = _queue(event)
+    if queued is not event:
+        queued.pin_ids.add(pin_id)
 
 
 def request_boundary_nesting(profile_id: int, owner_id: int, old_polygon, new_polygon) -> None:
