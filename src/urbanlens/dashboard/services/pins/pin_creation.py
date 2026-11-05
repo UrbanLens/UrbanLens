@@ -124,7 +124,7 @@ def resolve_child_pin_location(
         PinCreationError: This profile already has another pin at that point."""
     location, _created = Location.objects.get_exact_or_create(latitude, longitude, defaults=defaults)
 
-    overlapping = Pin.objects.filter(profile=profile, location=location)
+    overlapping = Pin.objects.filter(profile=profile, location=location)  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
     if exclude_pin is not None and exclude_pin.pk is not None:
         overlapping = overlapping.exclude(pk=exclude_pin.pk)
     if overlapping.exists():
@@ -313,7 +313,7 @@ def create_pin_for_profile(
                 return PinCreationResult(pin=existing, all_locations=all_locations, created=False)
             if Pin.objects.filter(uuid=client_uuid).exists():
                 raise DuplicateUuidError("Client-supplied uuid already belongs to a different pin.") from exc
-        if Pin.objects.root_pins().filter(profile=profile, location=location).exists():
+        if Pin.objects.root_pins().filter(profile=profile, location=location).exists():  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
             # The location is this exact coordinate, so the collision is a duplicate of it - on a property or not.
             raise DuplicateCoordinatesError("Duplicate root pin at these exact coordinates.") from exc
         raise

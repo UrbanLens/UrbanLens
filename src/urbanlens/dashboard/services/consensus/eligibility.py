@@ -8,7 +8,7 @@ from django.db.models import Prefetch
 
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.pins.same_place import same_place_q
+from urbanlens.dashboard.services.pins.same_place import same_place_location_ids
 from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_locations
 
 if TYPE_CHECKING:
@@ -46,7 +46,7 @@ def _wikis_at_visited_places(profile: Profile, wikis: WikiQuerySet[Wiki]) -> Wik
     A wiki the profile cannot already see is never offered, whatever the place match says, so a game round reveals nothing a wiki page would not.
     """
     visited = Pin.objects.by_profile(profile).visited()
-    return wikis.filter(same_place_q(visited), location_id__in=visible_wiki_locations(profile))
+    return wikis.filter(location_id__in=same_place_location_ids(visited)).filter(location_id__in=visible_wiki_locations(profile))  # same-place: ids come from same_place_location_ids; the second filter only limits to wikis wiki_access shows
 
 
 def eligible_wikis(profile: Profile, *, exclude_wiki_ids: Iterable[int] = ()) -> QuerySet[Wiki]:

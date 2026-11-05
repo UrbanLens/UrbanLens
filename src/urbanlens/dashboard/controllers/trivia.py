@@ -504,7 +504,7 @@ class TriviaQuestionSubmitView(LoginRequiredMixin, AlphaFeatureRequiredMixin, Vi
             location = Location.objects.get(pk=request.POST.get("location_id"))
         except (Location.DoesNotExist, ValueError, TypeError):
             return JsonResponse({"error": "location_id is required."}, status=400)
-        if not Pin.objects.filter(profile=profile, location=location).exists():
+        if not Pin.objects.filter(profile=profile, location=location).exists():  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
             return JsonResponse({"error": "You can only submit questions about places you've pinned."}, status=403)
 
         prompt = request.POST.get("prompt", "").strip()

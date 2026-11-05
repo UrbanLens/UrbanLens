@@ -286,7 +286,7 @@ def wiki_audience(wiki: Wiki) -> list[int]:
     from urbanlens.dashboard.models.pin.model import Pin
 
     pins = Pin.objects.root_pins()
-    pins = pins.filter(location__place_id=wiki.place_id) if wiki.place_id is not None else pins.filter(location_id=wiki.location_id)
+    pins = pins.filter(location__place_id=wiki.place_id) if wiki.place_id is not None else pins.filter(location_id=wiki.location_id)  # same-place: audience of a wiki: pins at its Place, else its Location; not pin-to-pin
     return list(pins.values_list("profile_id", flat=True).distinct())
 
 

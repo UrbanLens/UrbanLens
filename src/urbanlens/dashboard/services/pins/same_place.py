@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.db.models import Q
 
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.place.model import Place
+from urbanlens.dashboard.models.place.model import Place, PlaceStatus
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -20,14 +20,14 @@ if TYPE_CHECKING:
 
 def on_a_shared_place(prefix: str = "location__") -> Q:
     """
-    Rows whose Location has a Place that is not implausibly large (``PlaceQuerySet.implausible``).
+    Rows whose Location has a CURRENT Place that is not implausibly large (``PlaceQuerySet.implausible``).
 
-    Every other row matches only its exact Location.
+    Every other row, including one on a superseded Place, matches only its exact Location.
 
     Args:
         prefix: Lookup path from the filtered model to its ``Location``; empty when filtering ``Location`` itself.
     """
-    return Q(**{f"{prefix}place__isnull": False}) & ~Q(**{f"{prefix}place_id__in": Place.objects.implausible().values("pk")})
+    return Q(**{f"{prefix}place__status": PlaceStatus.CURRENT}) & ~Q(**{f"{prefix}place_id__in": Place.objects.implausible().values("pk")})
 
 
 def _shares_a_place(location_a: Location, location_b: Location) -> bool:
@@ -36,7 +36,7 @@ def _shares_a_place(location_a: Location, location_b: Location) -> bool:
 
     Two Locations are the same place when both resolve to one shared Place. Everything else compares the exact Location:
 
-    - Placeless, or on an implausibly large Place: only the identical Location row.
+    - Placeless, on a superseded Place, or on an implausibly large Place: only the identical Location row.
     - Two buildings in one parcel are different places, and so are a parcel and a building inside it. ``Location.place`` is the most specific
       Place a point resolved to, so the parcel is never "the same" as one of its buildings.
     - Places linked by split lineage are different places (R-46 is open).
@@ -45,7 +45,7 @@ def _shares_a_place(location_a: Location, location_b: Location) -> bool:
         return True
     if location_a.place_id is None or location_a.place_id != location_b.place_id:
         return False
-    return not Place.objects.implausible().filter(pk=location_a.place_id).exists()
+    return Place.objects.current().filter(pk=location_a.place_id).exclude(pk__in=Place.objects.implausible().values("pk")).exists()
 
 
 def same_place(pin_a: Pin, pin_b: Pin) -> bool:
@@ -81,6 +81,27 @@ def same_place_q(pins: QuerySet[Pin], *, prefix: str = "location__") -> Q:
     return Q(**{f"{prefix}place_id__in": anchored.filter(on_place).values("location__place_id")}) | Q(**{f"{id_field}__in": anchored.values("location_id")})
 
 
+def same_place_location_ids(pins: QuerySet[Pin]) -> QuerySet[Location, Any]:
+    """
+    The ids of Locations at the same place as any of *pins*, as a ``UNION`` of two indexed lookups.
+
+    Use it as ``other.filter(location_id__in=...)``. It is the same rule as :func:`same_place_q`, but an ``OR`` of the two halves cannot use an index (the planner scans the whole table), while each half of a ``UNION`` can.
+
+    Args:
+        pins: The pins to match against. Callers narrow these to pins the viewer may already see.
+
+    Returns:
+        A one-column ``Location`` queryset of primary keys.
+    """
+    from urbanlens.dashboard.models.location.model import Location
+
+    anchored = pins.filter(location__isnull=False)
+    on_place = on_a_shared_place("location__")
+    at_places = Location.objects.filter(place_id__in=anchored.filter(on_place).values("location__place_id")).values("pk")
+    exact = Location.objects.filter(pk__in=anchored.values("location_id")).values("pk")
+    return at_places.union(exact)
+
+
 def locations_sharing_a_place_with(profile: Profile, location_ids: Iterable[int]) -> set[int]:
     """
     Which of *location_ids* are the same place as one of *profile*'s pins; the batch form of :func:`same_place` for a list of Locations.
@@ -97,4 +118,4 @@ def locations_sharing_a_place_with(profile: Profile, location_ids: Iterable[int]
     ids = {pk for pk in location_ids if pk is not None}
     if not ids:
         return set()
-    return set(Location.objects.filter(same_place_q(Pin.objects.filter(profile=profile), prefix=""), pk__in=ids).values_list("pk", flat=True))
+    return set(Location.objects.filter(pk__in=ids).filter(pk__in=same_place_location_ids(Pin.objects.filter(profile=profile))).values_list("pk", flat=True))

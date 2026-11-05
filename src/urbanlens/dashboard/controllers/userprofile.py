@@ -290,7 +290,7 @@ class CommonPinsView(LoginRequiredMixin, View):
         common_ids = common_pin_location_ids([viewer, other])
         # Only ever read the viewer's own Pin rows for display - the other profile's private pin data (custom
         # name, notes, icon) must never leak through this page, per the feature's own privacy requirement.
-        my_pins = Pin.objects.filter(profile=viewer, location_id__in=common_ids).select_related("location", "location__wiki").order_by("name")
+        my_pins = Pin.objects.filter(profile=viewer, location_id__in=common_ids).select_related("location", "location__wiki").order_by("name")  # same-place: the viewer's own pins, by ids from common_pin_location_ids
 
         context = {
             "other_profile": other,
