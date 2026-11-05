@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 import hashlib
 import re
 
@@ -24,7 +24,11 @@ def takeout_import_key(*, cid: int | str | Decimal | None, place_id: str | None,
         longitude: Row longitude, used only when there is no cid or place_id.
     """
     if cid not in (None, ""):
-        return f"cid:{int(Decimal(str(cid)))}"
+        try:
+            return f"cid:{int(Decimal(str(cid)))}"
+        except (InvalidOperation, ValueError, OverflowError):
+            # A malformed cid is no identity; fall back to the place id or the name-and-point digest.
+            pass
     if place_id:
         return f"place:{place_id}"
     normalised = _WHITESPACE.sub(" ", (name or "").casefold()).strip()

@@ -50,6 +50,8 @@ _RESTORABLE_FIELDS = (
     "plywood",
     "locked",
     "parenting_is_manual",
+    "import_source",
+    "import_key",
 )
 
 
@@ -200,12 +202,16 @@ class PinUndoHandler(UndoHandler):
                 # A pin the undo puts back as a root was placed there by the user, so the nesting pass leaves it alone.
                 # A child keeps its own flag; stashes from before the field existed count as manual, as the migration does.
                 manual = True if parent_pk is None else entry["fields"].get("parenting_is_manual", True)
+                fields = {**entry["fields"], "parenting_is_manual": manual}
+                # An import identity claimed since the deletion stays with its new holder; this pin comes back unkeyed.
+                if fields.get("import_key") and Pin.objects.filter(profile_id=entry["profile_id"], import_source=fields.get("import_source"), import_key=fields["import_key"]).exists():
+                    fields["import_source"] = fields["import_key"] = None
                 pin = Pin.objects.create(
                     location_id=entry["location_id"],
                     profile_id=entry["profile_id"],
                     wiki_id=entry["wiki_id"],
                     parent_pin_id=parent_pk,
-                    **{**entry["fields"], "parenting_is_manual": manual},
+                    **fields,
                 )
                 queue_held_upload(pin, "custom_icon")
                 old_to_new[entry["old_pk"]] = pin

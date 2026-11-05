@@ -310,7 +310,7 @@ def create_pin_for_profile(
             # A concurrent retry of this client_uuid may have created the pin while this call waited for the lock.
             replayed = Pin.objects.filter(profile=profile, uuid=client_uuid).select_related("location").first() if client_uuid is not None else None
             if replayed is not None:
-                return PinCreationResult(pin=replayed, all_locations=all_locations, created=False)
+                return PinCreationResult(pin=replayed, all_locations=[replayed.location], created=False)
             reject_if_property_taken()
             pin = Pin.objects.create(**create_kwargs)
             if custom_icon:

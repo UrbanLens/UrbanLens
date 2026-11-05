@@ -428,7 +428,11 @@ class PinDetachChildView(LoginRequiredMixin, View):
         with transaction.atomic():
             # The tree lock makes the check and the save one step against a concurrent create or nesting pass.
             lock_profile_pin_tree(pin.profile_id)
-            conflict = Pin.objects.root_pins().filter(profile=pin.profile, location_id=pin.location_id).exclude(pk=pin.pk).exists()
+            # Reread under the lock: a concurrent move or detach may have changed the parent or Location while this waited.
+            pin = Pin.objects.get(pk=pin.pk)
+            if pin.parent_pin_id is None:
+                return HttpResponse("This pin is already a top-level pin.", status=400)
+            conflict = Pin.objects.root_pins().filter(profile_id=pin.profile_id, location_id=pin.location_id).exclude(pk=pin.pk).exists()
             if conflict:
                 return HttpResponse("You already have a top-level pin at this exact location. Move this child pin slightly before detaching it.", status=400)
             logger.info("User %s detached child pin %s from parent %s", request.user.id, pin.id, pin.parent_pin_id)
