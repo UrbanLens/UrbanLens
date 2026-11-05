@@ -990,8 +990,15 @@ def _inherit_import_key(survivor: Pin, import_source: str | None, import_key: st
     Give a keyless survivor the deleted loser's import key, so re-importing the loser's file finds the merged pin.
     Runs after the loser's delete: the (profile, source, key) constraint rejects the pair on two pins at once.
     A keyed survivor keeps its own; a pin has room for only one key."""
-    if import_source and import_key:
-        type(survivor).objects.filter(pk=survivor.pk, import_key__isnull=True).update(import_source=import_source, import_key=import_key)
+    if not (import_source and import_key) or survivor.import_key:
+        return
+    manager = type(survivor).objects
+    # Another pin of the profile may already hold the pair (the constraint would reject a second): then it is already findable.
+    if manager.filter(profile_id=survivor.profile_id, import_source=import_source, import_key=import_key).exists():
+        return
+    if manager.filter(pk=survivor.pk, import_key__isnull=True).update(import_source=import_source, import_key=import_key):
+        # update() skips the in-memory object; keep it current so a later save() cannot write NULL back.
+        survivor.import_source, survivor.import_key = import_source, import_key
 
 
 def merge_pins(survivor: Pin, loser: Pin, profile: Profile, resolutions: dict[str, int] | None = None) -> Pin:
@@ -1022,12 +1029,17 @@ def merge_pins(survivor: Pin, loser: Pin, profile: Profile, resolutions: dict[st
     if missing:
         raise UnresolvedMergeConflictError(missing)
 
+    from urbanlens.dashboard.models.pin.model import PinImportSource
     from urbanlens.dashboard.services.geo.child_pin_boundaries import deferring_child_boundary_refits
 
     # Captured before anything is rewritten, so the note and summaries name the pins as the user knew them.
     labels = {survivor.pk: _pin_label(survivor), loser.pk: _pin_label(loser)}
     loser_pk = loser.pk
     loser_import = (loser.import_source, loser.import_key)
+    if not loser.import_key:
+        # A JSON archive names each pin by its uuid; with the loser gone, that key is what lets a re-import find the merged pin
+        # instead of recreating the loser at its old point.
+        loser_import = (PinImportSource.JSON_ARCHIVE, str(loser.uuid))
     record = _MergeRecord()
 
     with transaction.atomic(), deferring_child_boundary_refits():

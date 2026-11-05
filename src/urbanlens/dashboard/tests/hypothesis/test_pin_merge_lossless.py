@@ -279,6 +279,14 @@ class PinColumnsAreKeptTests(_MergeTestCase):
 
         self.assertEqual((self.survivor.import_source, self.survivor.import_key), ("json_archive", "uuid:a"))
 
+    def test_two_keyless_pins_leave_the_losers_archive_uuid_as_a_key(self) -> None:
+        loser_uuid = str(self.loser.uuid)
+
+        merge_pins(self.survivor, self.loser, self.profile)
+
+        self.assertEqual((self.survivor.import_source, self.survivor.import_key), ("json_archive", loser_uuid))
+
+
 
 class AutomaticVisitOnTheSameDayTests(_MergeTestCase):
     """``db_pv_one_geo_per_pin_day`` made merging two pins with a geolocation visit on the same UTC day crash."""
