@@ -817,9 +817,7 @@ def _place_grouped_page(request: HttpRequest, shares: Any, *, param: str) -> tup
 
     pin_ids = [key["pin_id"] for key in keys if key["pin_id"] is not None]
     location_ids = [key["group_location"] for key in keys if key["pin_id"] is None]
-    rows = shares.filter(Q(pin_id__in=pin_ids) | Q(pin_id__isnull=True, location_id__in=location_ids)).order_by(
-        "-created"
-    )  # same-place: shares are grouped per exact Location row for display, not a sameness decision
+    rows = shares.filter(Q(pin_id__in=pin_ids) | Q(pin_id__isnull=True, location_id__in=location_ids)).order_by("-created")  # same-place: shares are grouped per exact Location row for display, not a sameness decision
 
     by_key: dict[tuple[str, int | None], list[PinShare]] = {}
     for share in rows:

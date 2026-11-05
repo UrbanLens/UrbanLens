@@ -80,6 +80,8 @@ def _is_identity_key(key: str) -> bool:
     """Whether a filter key tests a row's Location (or its Place or point) against something."""
     if not key.startswith("location"):
         return False
+    if "\0" in key:
+        return True
     return key[len("location") :] in IDENTITY_SUFFIXES
 
 
@@ -117,8 +119,9 @@ def _filter_keys(call: ast.Call) -> list[tuple[str, ast.expr]]:
             for key, value in zip(keyword.value.keys, keyword.value.values, strict=False):
                 if isinstance(key, ast.Constant) and isinstance(key.value, str):
                     keys.append((key.value, value))
-                elif isinstance(key, ast.JoinedStr) and key.values and isinstance(key.values[0], ast.Constant):
-                    keys.append((str(key.values[0].value), value))
+                elif isinstance(key, ast.JoinedStr):
+                    # An f-string key keeps its literal text with each placeholder as "\0"; _is_identity_key treats an unknown suffix as an identity test.
+                    keys.append(("".join(str(v.value) if isinstance(v, ast.Constant) else "\0" for v in key.values), value))
     return keys
 
 
@@ -193,7 +196,7 @@ def find_violations(source: str, rel_path: str) -> list[str]:
                 report(node, "Location ids of pin sets intersected")
         elif isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitAnd) and _is_location_set(node.left, names) and _is_location_set(node.right, names):
             report(node, "Location ids of pin sets intersected")
-        elif isinstance(node, ast.Compare) and any(isinstance(op, (ast.Eq, ast.NotEq)) for op in node.ops):
+        elif isinstance(node, ast.Compare) and any(isinstance(op, (ast.Eq, ast.NotEq, ast.In, ast.NotIn)) for op in node.ops):
             operands = [node.left, *node.comparators]
             if sum(isinstance(o, ast.Attribute) and o.attr in LOCATION_ATTRS for o in operands) >= 2:
                 report(node, "two locations compared for identity")

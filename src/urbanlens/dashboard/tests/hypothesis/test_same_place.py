@@ -207,6 +207,7 @@ class RealPlaceRowTests(TestCase):
 
     def test_set_form_with_a_placeless_side(self):
         placeless = _pin(self.a)
+        _pin(self.b)  # b's own placeless pin sits on a different Location: null places must not match each other
         _pin(self.b, self.one)
         self.assertEqual(
             set(same_place_location_ids(Pin.objects.filter(profile=self.b)).values_list("pk", flat=True))
