@@ -28,6 +28,8 @@ RECEIVER_HINTS = ("pin", "wiki")
 IDENTITY_SUFFIXES = (
     "",
     "_id",
+    "__exact",
+    "_id__exact",
     "__in",
     "_id__in",
     "__pk",
@@ -36,8 +38,12 @@ IDENTITY_SUFFIXES = (
     "__id__in",
     "__place",
     "__place__in",
+    "__place__exact",
+    "__place__id",
+    "__place__id__in",
     "__place_id",
     "__place_id__in",
+    "__place_id__exact",
     "__dwithin",
     "__point__dwithin",
     "__point__distance_lt",
@@ -83,10 +89,10 @@ LOCATION_START = re.compile(r"^(?:\0(?:__)?)?location")
 
 
 def _is_identity_key(key: str) -> bool:
-    """
+    r"""
     Whether a filter key tests a row's Location (or its Place or point) against something.
 
-    The key may start with an f-string placeholder (``\\0`` here).
+    The key may start with an f-string placeholder (``\0`` here).
     A dynamic tail counts as identity unless its literal text already rules out every identity suffix (``location__official_name__\\0``).
     """
     for match in LOCATION_START.finditer(key):
