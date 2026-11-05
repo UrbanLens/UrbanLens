@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 from django.contrib.auth.models import User
 from django.urls import reverse
 from model_bakery import baker
@@ -81,7 +83,8 @@ class RootChildSharedLocationTests(TestCase):
         self.assertEqual(self.child.parent_pin_id, self.root.pk)
 
     def test_get_nearby_or_create_prefers_the_root_over_an_older_child(self) -> None:
-        # The child is older than a second root would be; the root still wins.
+        # Make the child strictly older than the root, so only root-first ranking can pick the root.
+        Pin.objects.filter(pk=self.child.pk).update(created=self.root.created - timedelta(days=1))
         pin, created = Pin.objects.get_nearby_or_create(43.0, -74.0, profile=self.profile)
 
         self.assertFalse(created)

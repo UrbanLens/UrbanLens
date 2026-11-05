@@ -454,10 +454,10 @@ class PinPromoteChildrenView(LoginRequiredMixin, View):
         child_count = Pin.objects.filter(parent_pin=pin).count()
         if not child_count:
             return JsonResponse({"error": "This pin has no child pins to promote."}, status=400)
-        promoted = pin.promote_children()
+        promoted, skipped = pin.promote_children()
         logger.info("User %s promoted %s child pin(s) of pin %s", request.user.id, promoted, pin.id)
         payload: dict[str, Any] = {"ok": True, "promoted": promoted}
-        if skipped := child_count - promoted:
+        if skipped:
             payload["skipped"] = skipped
             payload["message"] = f"{skipped} child pin(s) sit at this pin's exact location and stay nested under it; two top-level pins can't share one location."
         return JsonResponse(payload)

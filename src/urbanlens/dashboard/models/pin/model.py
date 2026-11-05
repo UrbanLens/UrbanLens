@@ -400,7 +400,7 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
         """
         return Pin.objects.filter(pk=self.pk).with_descendants().exclude(pk=self.pk)
 
-    def promote_children(self) -> int:
+    def promote_children(self) -> tuple[int, int]:
         """
         Move this pin's direct children up one level, without deleting this pin.
         Children move to this pin's own parent, or become top-level pins if this pin has none.
@@ -408,15 +408,17 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
         A child at this pin's own Location stays put when this pin is top-level: promoting it would leave two top-level pins at one Location, which ``db_pin_unique_location_per_profile`` forbids.
 
         Returns:
-            The number of children actually promoted.
+            The number of children promoted and the number left in place, counted in the same pass that moves them.
         """
         from urbanlens.dashboard.services.geo.child_pin_boundaries import deferring_child_boundary_refits
 
         new_parent_id = self.parent_pin_id
         promoted = 0
+        skipped = 0
         with transaction.atomic(), deferring_child_boundary_refits():
             for child in Pin.objects.filter(parent_pin=self):
                 if new_parent_id is None and child.location_id == self.location_id:
+                    skipped += 1
                     continue
                 if new_parent_id is not None:
                     child.parent_pin_id = new_parent_id
@@ -425,7 +427,7 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
                     child.parent_pin_id = other_root.pk if other_root is not None else None
                 child.save(update_fields=["parent_pin", "updated"])
                 promoted += 1
-        return promoted
+        return promoted, skipped
 
     def swap_with_parent(self) -> Pin:
         """
