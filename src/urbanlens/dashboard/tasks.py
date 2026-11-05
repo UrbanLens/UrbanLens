@@ -4860,8 +4860,8 @@ def refresh_trust_signals(chunk_size: int = 500) -> int:
     return dispatch_pk_ranges(Profile.objects.all(), refresh_trust_signals_range, chunk_size=chunk_size)
 
 
-@shared_task(autoretry_for=(OSError, DatabaseOperationalError), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
-def refresh_trust_signals_range(start_pk: int, end_pk: int) -> int:
+@shared_task(bind=True, autoretry_for=(OSError, DatabaseOperationalError), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+def refresh_trust_signals_range(self, start_pk: int, end_pk: int) -> int:
     """
     Rebuild the signals row of every profile with ``start_pk <= pk <= end_pk``.
 
@@ -4892,7 +4892,11 @@ def refresh_trust_signals_range(start_pk: int, end_pk: int) -> int:
             compute_signals(profile)
         except (OSError, DatabaseOperationalError):
             # Transient: retry the whole range (rebuilds are idempotent) rather than skip the profile until tomorrow.
-            raise
+            # On the final attempt, isolate the profile so a persistent timeout can't block the rest of the range.
+            if self.request.retries < (self.max_retries or 0):
+                raise
+            logger.exception("Trust signals refresh failed for profile %s after retries", profile.pk)
+            continue
         except Exception:
             logger.exception("Trust signals refresh failed for profile %s", profile.pk)
             continue

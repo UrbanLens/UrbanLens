@@ -345,7 +345,9 @@ class NightlyRefreshTests(TestCase):
             _profile()
         with patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task", return_value="id") as safe:
             count = tasks.refresh_trust_signals(chunk_size=2)
-        self.assertGreaterEqual(count, 3)
+        total = Profile.objects.count()
+        self.assertEqual(count, -(-total // 2))
+        self.assertLess(count, total)
         self.assertEqual(safe.call_count, count)
 
     def test_range_is_idempotent(self) -> None:
@@ -395,3 +397,20 @@ class NightlyRefreshTests(TestCase):
             self.assertRaises(OperationalError),
         ):
             tasks.refresh_trust_signals_range(profile.pk, profile.pk)
+
+    def test_final_attempt_isolates_a_persistently_failing_profile(self) -> None:
+        bad, good = _profile(), _profile()
+        real = compute_signals
+
+        def flaky(profile):
+            if profile.pk == bad.pk:
+                raise OperationalError("timeout")
+            return real(profile)
+
+        with (
+            patch("urbanlens.dashboard.services.trust.compute_signals", side_effect=flaky),
+            patch.object(type(tasks.refresh_trust_signals_range.request), "retries", 3, create=True),
+        ):
+            rebuilt = tasks.refresh_trust_signals_range(min(bad.pk, good.pk), max(bad.pk, good.pk))
+        self.assertEqual(rebuilt, 1)
+        self.assertTrue(ProfileTrustSignals.objects.filter(profile=good).exists())
