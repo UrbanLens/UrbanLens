@@ -195,6 +195,8 @@ class SharedPinCopyCoversEveryFieldTests(TestCase):
         "restructure_offer_dismissed": "recipient's own dismissal state",
         "buildings_auto_nested_at": "the sweep is per-pin state; the recipient's copy gets its own",
         "auto_nested_buildings": "the sweep is per-pin state; the recipient's copy gets its own",
+        "parenting_is_manual": "how the owner arranged their own hierarchy; the recipient's copy starts open to nesting",
+        "nested_by_boundary_pin": "points at the owner's own pin; the recipient's boundaries nest their copy",
         "wiki": "a cache of an explicit link; the new pin resolves its own",
         "inferred_source_share": "provenance is recorded via source_share on the new pin",
         "cover_photo": "set afterwards by _carry_cover_photo, pointing at the recipient's copy",

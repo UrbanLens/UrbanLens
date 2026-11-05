@@ -18,11 +18,11 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="pin",
             name="parenting_is_manual",
-            field=models.BooleanField(default=True),
+            field=models.BooleanField(db_default=True, default=True),
         ),
         migrations.AlterField(
             model_name="pin",
             name="parenting_is_manual",
-            field=models.BooleanField(default=False),
+            field=models.BooleanField(db_default=False, default=False),
         ),
     ]

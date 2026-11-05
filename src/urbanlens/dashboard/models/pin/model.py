@@ -197,7 +197,7 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
     )
     # Exempt from automatic nesting: the user parented, promoted or detached this pin, or it predates boundary
     # nesting (the migration marks existing rows). Boundary nesting never touches it (services.pins.boundary_nesting).
-    parenting_is_manual = BooleanField(default=False)
+    parenting_is_manual = BooleanField(default=False, db_default=False)
     # The user's pin whose drawn boundary nested this pin. Set only by boundary_nesting, cleared by any other
     # change of parent; it is how a boundary edit tells its own nesting from a hierarchy the user built.
     nested_by_boundary_pin = ForeignKey(
