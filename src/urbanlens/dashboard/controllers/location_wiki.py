@@ -178,7 +178,7 @@ def _map_center(location, wiki, profile) -> dict[str, str]:
     Where the wiki map opens.
 
     A shared placeless wiki's hub coordinates are never rendered, however offset: the map opens on the viewer's own pin near the
-    place (every member holds one), and on the neutral world view when they somehow hold none.
+    place, else on the parcel it is part of (its wiki, else its outline), else on the hub rounded to about a kilometre.
     """
     from django.contrib.gis.measure import D
 
@@ -191,9 +191,16 @@ def _map_center(location, wiki, profile) -> dict[str, str]:
     own = None
     if place.anchor is not None:
         own = Pin.objects.filter(profile=profile, location__point__dwithin=(place.anchor, D(m=100))).select_related("location").first()
-    if own is None or own.location is None:
-        return {"lat": "", "lng": ""}
-    return {"lat": str(own.location.latitude), "lng": str(own.location.longitude)}
+    if own is not None and own.location is not None:
+        return {"lat": str(own.location.latitude), "lng": str(own.location.longitude)}
+    parent = place.parent if place.parent_id is not None else None
+    parent_wiki = wiki.parent_wiki if wiki.parent_wiki_id is not None else None
+    if parent_wiki is not None and parent_wiki.location is not None:
+        return {"lat": str(parent_wiki.location.latitude), "lng": str(parent_wiki.location.longitude)}
+    if parent is not None and parent.geometry is not None:
+        centre = parent.geometry.point_on_surface
+        return {"lat": f"{centre.y:.6f}", "lng": f"{centre.x:.6f}"}
+    return {"lat": f"{float(location.latitude):.2f}", "lng": f"{float(location.longitude):.2f}"}
 
 
 class LocationWikiView(LoginRequiredMixin, View):

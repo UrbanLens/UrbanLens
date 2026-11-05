@@ -5,8 +5,8 @@ Everything here runs in Celery (``tasks.evaluate_shared_places_for_pin`` and the
 no response can reveal whether a tier formed, when, or whose pin took part. The only thing a request ever does is the owner accepting or
 declining their own :class:`NotesOffer` (:func:`answer_notes_offer`).
 
-A synthetic place never resolves onto a ``Location`` (``PlaceQuerySet.resolvable`` excludes it). Access to its wiki is explicit
-``SharedPlaceMember`` membership, read by ``services.wiki.wiki_access``.
+A synthetic place never resolves onto a ``Location`` (``PlaceQuerySet.resolvable`` excludes it). Its members reach its wiki through
+``SharedPlaceMember``; one that is ``PART_OF`` a plausible parcel is also reached through the parcel's domain, as a building is (R-52).
 """
 
 from __future__ import annotations
@@ -41,6 +41,7 @@ from urbanlens.dashboard.services.locations.site_scope import meters_between
 from urbanlens.dashboard.services.places import lineage, resolution
 from urbanlens.dashboard.services.trust.checks import are_independent, is_real_user
 from urbanlens.dashboard.services.trust.signals import CELL_PRECISION
+from urbanlens.dashboard.services.wiki.wiki_merge import reconcile_wiki_nesting
 
 logger = logging.getLogger(__name__)
 
@@ -285,7 +286,10 @@ def _create_place(anchor: Point, evidence: str, pins: list[Pin]) -> Place | None
         # Location.save resolved the hub onto the official parcel; the hub belongs to the shared place alone (see resolution.pinned_to_synthetic_place).
         Location.objects.filter(pk=hub.pk).update(place=place)
         hub.place = place
-        Wiki.objects.create(location=hub, place=place, name="Shared place")
+        wiki = Wiki.objects.create(location=hub, place=place, name="Shared place")
+        if parent is not None:
+            # Like a building's, the wiki nests under the parcel's and is reached through the parcel's domain (R-52).
+            reconcile_wiki_nesting(wiki)
         for pin in pins:
             SharedPlaceMember.objects.get_or_create(place=place, profile=pin.profile)
         for pin in pins:

@@ -6,6 +6,7 @@ from datetime import timedelta
 from unittest.mock import patch
 
 from django.contrib.gis.geos import MultiPolygon, Polygon
+from django.contrib.gis.measure import D
 from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -78,9 +79,9 @@ class SharedPlaceTestCase(TestCase):
             self.addCleanup(patcher.stop)
         self.alice, self.bob, self.carol = _profile(), _profile(), _profile()
 
-    def pair(self, bob_north: float = 10.0):
+    def pair(self, bob_north: float = 10.0, bob_east: float = 0.0):
         first = _pin(self.alice)
-        second = _pin(self.bob, bob_north)
+        second = _pin(self.bob, bob_north, east_m=bob_east)
         shared_places.evaluate_pin(second.pk)
         return first, second
 
@@ -152,7 +153,9 @@ class TierOneTests(SharedPlaceTestCase):
         flag = SharedPlaceFlag.objects.get(profile=prober)
         self.assertEqual(flag.deferred_count, 1)
         deferred = probes[2]
-        self.assertFalse(SharedPlaceMember.objects.filter(profile=prober).exists())
+        # The first two probes paired with Carol's pins; the deferred one learned nothing.
+        self.assertEqual(SharedPlaceMember.objects.filter(profile=prober).count(), 2)
+        self.assertFalse(Place.objects.filter(anchor__dwithin=(deferred.location.point, D(m=30))).exists())
         # The window rolls: the deferred pin is picked up by a later evaluation, not lost.
         SharedPlaceAttempt.objects.filter(profile=prober).update(created=timezone.now() - timedelta(hours=25))
         shared_places.evaluate_pin(deferred.pk)
@@ -361,7 +364,8 @@ class CeleryOnlyTests(SharedPlaceTestCase):
 class HubPrivacyTests(SharedPlaceTestCase):
     def setUp(self) -> None:
         super().setUp()
-        self.first, self.second = self.pair()
+        # Bob's own pin shares neither coordinate with Alice's, so finding his on the page says nothing about hers.
+        self.first, self.second = self.pair(bob_north=6, bob_east=8)
         self.place = Place.objects.get(evidence=PlaceEvidence.PROVISIONAL)
         self.wiki = Wiki.objects.get(place=self.place)
         self.hub = self.wiki.location
@@ -417,20 +421,25 @@ class HubPrivacyTests(SharedPlaceTestCase):
                 self.assertNotIn(text, body, f"{name} leaked {text}")
 
 
-class SyntheticIsolationTests(SharedPlaceTestCase):
+class InParcelDomainTests(SharedPlaceTestCase):
+    """Inside a plausible parcel the shared place joins the parcel's domain, as a building does (R-52)."""
+
     def setUp(self) -> None:
         super().setUp()
         self.parcel = make_place(PlaceKind.PARCEL, _box(150))
         self.parcel_wiki = baker.make(
-            Wiki, location=baker.make(Location, latitude=round(LAT + 100 * M_LAT, 6), longitude=LON), place=self.parcel
+            Wiki,
+            location=baker.make(Location, latitude=round(LAT + 100 * M_LAT, 6), longitude=round(LON + 40 * M_LON, 6)),
+            place=self.parcel,
         )
         self.pair()
         self.place = Place.objects.get(evidence=PlaceEvidence.PROVISIONAL)
         self.wiki = Wiki.objects.get(place=self.place)
         self.hub = self.wiki.location
         # Carol holds a pin elsewhere on the parcel, so she holds its access domain.
-        self.holder_pin = _pin(self.carol, 100)
+        self.holder_pin = _pin(self.carol, 120)
         Location.objects.filter(pk=self.holder_pin.location_id).update(place=self.parcel)
+        self.dave = _profile()
 
     def test_the_hub_keeps_its_place_through_save_and_re_resolution(self) -> None:
         from urbanlens.dashboard.services.places import resolution
@@ -443,26 +452,74 @@ class SyntheticIsolationTests(SharedPlaceTestCase):
         self.hub.refresh_from_db()
         self.assertEqual(self.hub.place_id, self.place.pk)
 
-    def test_a_parcel_holder_who_is_not_a_member_is_denied_by_every_predicate(self) -> None:
-        self.assertTrue(wiki_access.location_visible_to(self.holder_pin.location, self.carol))
-        self.assertFalse(wiki_access.location_visible_to(self.hub, self.carol))
-        self.assertFalse(wiki_access.wiki_accessible_to(self.wiki, self.carol))
-        self.assertFalse(wiki_access.place_visible_to(self.place, self.carol))
-        self.assertNotIn(self.hub.pk, set(wiki_access.visible_wiki_locations(self.carol)))
-        self.assertFalse(
+    def test_a_parcel_holder_reaches_the_shared_wiki_through_every_predicate(self) -> None:
+        self.assertTrue(wiki_access.location_visible_to(self.hub, self.carol))
+        self.assertTrue(wiki_access.wiki_accessible_to(self.wiki, self.carol))
+        self.assertTrue(wiki_access.place_visible_to(self.place, self.carol))
+        self.assertIn(self.hub.pk, set(wiki_access.visible_wiki_locations(self.carol)))
+        self.assertTrue(
             Location.objects.filter(wiki_access.visible_locations_filter(self.carol), pk=self.hub.pk).exists()
         )
-        self.assertTrue(wiki_access.place_visible_to(self.place, self.alice))
 
-    def test_nesting_never_attaches_the_shared_wiki_to_the_parcel(self) -> None:
-        from urbanlens.dashboard.services.wiki.wiki_merge import reconcile_wiki_nesting
+    def test_someone_with_no_pin_on_the_parcel_is_denied_by_every_predicate(self) -> None:
+        self.assertFalse(wiki_access.location_visible_to(self.hub, self.dave))
+        self.assertFalse(wiki_access.wiki_accessible_to(self.wiki, self.dave))
+        self.assertFalse(wiki_access.place_visible_to(self.place, self.dave))
+        self.assertNotIn(self.hub.pk, set(wiki_access.visible_wiki_locations(self.dave)))
+        self.assertFalse(
+            Location.objects.filter(wiki_access.visible_locations_filter(self.dave), pk=self.hub.pk).exists()
+        )
 
-        reconcile_wiki_nesting(self.wiki)
-        reconcile_wiki_nesting(self.parcel_wiki)
+    def test_a_parcel_holders_view_shows_neither_the_anchor_nor_the_hub(self) -> None:
+        self.client.force_login(self.carol.user)
+        anchor = Pin.objects.get(profile=self.alice).location
+        forbidden = {
+            f"{float(value):.6f}"
+            for value in (self.hub.latitude, self.hub.longitude, anchor.latitude, anchor.longitude)
+        }
+        for name in ("location.wiki", "location.wiki.boundary"):
+            body = self.client.get(reverse(name, kwargs={"location_slug": self.hub.slug})).content.decode()
+            for text in forbidden:
+                self.assertNotIn(text, body, f"{name} leaked {text}")
+
+    def test_a_parcel_holder_cannot_draw_on_the_shared_wiki(self) -> None:
+        self.client.force_login(self.carol.user)
+        response = self.client.post(
+            reverse("location.wiki.boundary", kwargs={"location_slug": self.hub.slug}),
+            data={"boundary_type": "property", "polygon": None},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_the_shared_wiki_nests_under_the_parcels(self) -> None:
         self.wiki.refresh_from_db()
-        self.assertIsNone(self.wiki.parent_wiki_id)
-        self.assertFalse(Wiki.objects.filter(parent_wiki=self.parcel_wiki, pk=self.wiki.pk).exists())
-        self.assertFalse(wiki_access.wiki_accessible_to(self.wiki, self.carol))
+        self.assertEqual(self.wiki.parent_wiki_id, self.parcel_wiki.pk)
+
+    def test_a_member_whose_pin_lies_off_the_parcel_still_reaches_the_nested_wiki(self) -> None:
+        # Bob's own pin resolved nowhere (no domain); membership alone carries him.
+        Location.objects.filter(pk__in=Pin.objects.filter(profile=self.bob).values("location_id")).update(place=None)
+        self.assertTrue(wiki_access.wiki_accessible_to(self.wiki, self.bob))
+        self.assertTrue(wiki_access.place_visible_to(self.place, self.bob))
+
+
+class TopLevelIsolationTests(SharedPlaceTestCase):
+    """With no plausible parcel the shared place is its own domain, which only membership reaches."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.pair()
+        self.place = Place.objects.get(evidence=PlaceEvidence.PROVISIONAL)
+        self.wiki = Wiki.objects.get(place=self.place)
+        self.hub = self.wiki.location
+
+    def test_a_grant_on_the_places_own_domain_does_not_open_it_to_a_non_member(self) -> None:
+        with patch.object(wiki_access, "accessible_domain_ids", return_value={self.place.pk}):
+            self.assertFalse(wiki_access.place_visible_to(self.place, self.carol))
+            self.assertFalse(
+                Location.objects.filter(wiki_access.visible_locations_filter(self.carol), pk=self.hub.pk).exists()
+            )
+        self.assertFalse(wiki_access.location_visible_to(self.hub, self.carol))
+        self.assertTrue(wiki_access.place_visible_to(self.place, self.alice))
 
 
 def _signals(profile, *, age: int = 400, cells=("aaaaaa", "bbbbbb", "cccccc", "dddddd", "eeeeee"), weeks: int = 6):
