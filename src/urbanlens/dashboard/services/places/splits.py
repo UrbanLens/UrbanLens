@@ -222,7 +222,8 @@ def detect_split_from_versions(new_parcel: Place) -> Place | None:
         if Pin.objects.filter(location__place__domain_root_id=new_parcel.domain_root_id).exclude(profile_id__in=holders).exists():
             logger.info("version split of %s skipped: the domain of new parcel %s has pins from outside it", previous.pk, new_parcel.pk)
             continue
-        return process_split(previous, [current, new_geometry])
+        if process_split(previous, [current, new_geometry]).status == PlaceStatus.SUPERSEDED:
+            return previous
     return None
 
 
@@ -243,10 +244,7 @@ def process_split(place: Place, successors: list[MultiPolygon]) -> Place:
 
     children: list[Place] = []
     for geometry in successors:
-        # exclude_pk=place.pk: place is still CURRENT here (status flips below, only once we know
-        # this is really a split) - without it, a successor whose centroid falls near the original
-        # parcel's own centroid (common: the original center often lands inside one of its own
-        # pieces) would silently alias back onto place itself instead of becoming a new child.
+        # place is still CURRENT, so without exclude_pk a piece holding its centroid would alias back onto it.
         child = upsert_place(PlaceKind.PARCEL, geometry, name=place.name, exclude_pk=place.pk, detect_splits=False)
         if child is not None and child.pk != place.pk:
             lineage.set_parent(child, place, PlaceRelation.MEMBER_OF)
@@ -259,14 +257,10 @@ def process_split(place: Place, successors: list[MultiPolygon]) -> Place:
     Place.objects.filter(pk=place.pk).update(status=PlaceStatus.SUPERSEDED)
     place.status = PlaceStatus.SUPERSEDED
 
-    # Snapshot before anything moves: a re-homed building takes its pins out of the
-    # predecessor's domain, and after re-resolution containment can no longer prove
-    # what these profiles already had.
+    # Before buildings re-home: afterwards their pins no longer prove what the holders had.
     handle_lineage_event(LineageEvent(LineageEventKind.SPLIT, [place], children, learned_at))
 
-    # Buildings follow the ground they stand on, so each one re-homes to
-    # whichever successor now contains it. One that fits none stays put; its
-    # markers keep working through the superseded parent's domain.
+    # A building fitting no successor stays put and keeps working through the superseded domain.
     for building in Place.objects.filter(parent_id=place.pk, parent_relation=PlaceRelation.PART_OF, kind=PlaceKind.BUILDING):
         if building.geometry is None:
             continue

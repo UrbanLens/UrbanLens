@@ -49,6 +49,8 @@ def set_geometry(place: Place, polygon: MultiPolygon, *, provider: str = "", rec
         True when the outline changed.
     """
     with transaction.atomic():
+        # The row lock keeps two first writes from both recording the previous outline.
+        list(Place.objects.select_for_update().filter(pk=place.pk).values_list("pk", flat=True))
         had_versions = PlaceGeometryVersion.objects.filter(place=place).exists()
         if not had_versions and place.geometry is not None:
             record_version(place, place.geometry, provider=place.provider, recorded_at=place.geometry_generated_at or place.created)

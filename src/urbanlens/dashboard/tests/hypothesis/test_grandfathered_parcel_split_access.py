@@ -121,7 +121,7 @@ class GrandfatheredParcelSplitAccessTests(TestCase):
             name="Ward",
         )
         holder = baker.make(User).profile
-        pin_on(holder, building, lat=40.0, lng=-74.002)
+        pin_on(holder, building, lat=40.0001, lng=-74.0021)
         self._split()
         building.refresh_from_db()
         self.assertNotEqual(

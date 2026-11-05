@@ -189,6 +189,20 @@ class LineageEdgeTests(TestCase):
         self.old.refresh_from_db()
         assert self.old.valid_to is None
 
+    def test_a_relearned_event_retracted_again_reopens_the_predecessor(self) -> None:
+        from datetime import timedelta
+
+        first = self._event(LineageEventKind.SPLIT)
+        handle_lineage_event(first)
+        retract_erroneous_event(list(PlaceLineageEdge.objects.all()), "test")
+        later = LineageEvent(first.kind, first.predecessors, first.successors, first.learned_at + timedelta(hours=1))
+        handle_lineage_event(later)
+        self.old.refresh_from_db()
+        assert self.old.valid_to == later.learned_at
+        retract_erroneous_event(list(PlaceLineageEdge.objects.all()), "test")
+        self.old.refresh_from_db()
+        assert self.old.valid_to is None
+
     def test_a_same_domain_merge_writes_the_edge_and_no_grants(self) -> None:
         sibling = upsert_place(PlaceKind.PARCEL, rect(-74.004, -74.0005), provider="y", provider_key="s")
         assert sibling is not None
@@ -273,5 +287,20 @@ class VersionSplitDetectionTests(TestCase):
         assert original is not None
         geometry_versions.set_geometry(original, rect(-74.004, -73.9965), provider="county")
         upsert_place(PlaceKind.PARCEL, rect(-73.9965, -73.996), provider="county")
+        original.refresh_from_db()
+        assert original.status == PlaceStatus.CURRENT
+
+    def test_a_split_that_yields_one_successor_is_not_reported(self) -> None:
+        from unittest import mock
+
+        from urbanlens.dashboard.services.places import splits
+
+        original = upsert_place(PlaceKind.PARCEL, rect(-74.004, -73.996), provider="county")
+        assert original is not None
+        geometry_versions.set_geometry(original, rect(-74.004, -73.998), provider="county")
+        with mock.patch.object(splits, "process_split", side_effect=lambda place, successors: place):
+            remainder = upsert_place(PlaceKind.PARCEL, rect(-73.998, -73.996), provider="county")
+            assert remainder is not None
+            assert splits.detect_split_from_versions(remainder) is None
         original.refresh_from_db()
         assert original.status == PlaceStatus.CURRENT

@@ -93,8 +93,10 @@ def _record_edges(event: LineageEvent) -> list[PlaceLineageEdge]:
                 continue
             edge, _created = PlaceLineageEdge.objects.get_or_create(predecessor=predecessor, successor=successor, kind=kind, defaults={"learned_at": event.learned_at})
             if edge.erroneous:
+                # Re-learned: the new learned_at is what closes the predecessor below, so a later retraction can match it.
                 edge.erroneous = False
-                edge.save(update_fields=["erroneous"])
+                edge.learned_at = event.learned_at
+                edge.save(update_fields=["erroneous", "learned_at"])
             edges.append(edge)
         Place.objects.filter(pk=predecessor.pk, valid_to__isnull=True).update(valid_to=event.learned_at)
         predecessor.valid_to = predecessor.valid_to or event.learned_at
