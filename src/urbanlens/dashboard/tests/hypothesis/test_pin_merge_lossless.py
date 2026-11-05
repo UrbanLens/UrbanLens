@@ -287,7 +287,6 @@ class PinColumnsAreKeptTests(_MergeTestCase):
         self.assertEqual((self.survivor.import_source, self.survivor.import_key), ("json_archive", loser_uuid))
 
 
-
 class AutomaticVisitOnTheSameDayTests(_MergeTestCase):
     """``db_pv_one_geo_per_pin_day`` made merging two pins with a geolocation visit on the same UTC day crash."""
 
