@@ -259,6 +259,11 @@ def process_split(place: Place, successors: list[MultiPolygon]) -> Place:
     Place.objects.filter(pk=place.pk).update(status=PlaceStatus.SUPERSEDED)
     place.status = PlaceStatus.SUPERSEDED
 
+    # Snapshot before anything moves: a re-homed building takes its pins out of the
+    # predecessor's domain, and after re-resolution containment can no longer prove
+    # what these profiles already had.
+    handle_lineage_event(LineageEvent(LineageEventKind.SPLIT, [place], children, learned_at))
+
     # Buildings follow the ground they stand on, so each one re-homes to
     # whichever successor now contains it. One that fits none stays put; its
     # markers keep working through the superseded parent's domain.
@@ -268,10 +273,6 @@ def process_split(place: Place, successors: list[MultiPolygon]) -> Place:
         new_home = next((child for child in children if child.geometry is not None and child.geometry.contains(building.geometry.centroid)), None)
         if new_home is not None:
             lineage.set_parent(building, new_home, PlaceRelation.PART_OF)
-
-    # Snapshot before re-resolution moves anyone: after this, containment can
-    # no longer prove what these profiles already had.
-    handle_lineage_event(LineageEvent(LineageEventKind.SPLIT, [place], children, learned_at))
 
     for child in children:
         if child.geometry is not None:
