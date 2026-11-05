@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 
 from django.contrib.gis.gdal import CoordTransform, GDALException, OGRGeometry, SpatialReference
+from django.contrib.gis.gdal.error import SRSException
 from django.contrib.gis.geos import GEOSException, GEOSGeometry
 
 #: WGS 84 / NSIDC EASE-Grid 2.0 Global: equal-area, so a planar area in it is a true area.
@@ -53,7 +54,7 @@ def buffer_meters(geometry: GEOSGeometry, meters: float) -> GEOSGeometry:
         back = OGRGeometry(grown.wkt, srs=local)
         back.transform(CoordTransform(local, wgs84))
         result = back.geos
-    except (GDALException, GEOSException):
+    except (GDALException, GEOSException, SRSException):
         return geometry
     result.srid = geometry.srid or 4326
     return result
