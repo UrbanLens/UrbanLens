@@ -194,12 +194,7 @@ def detect_split_from_versions(new_parcel: Place) -> Place | None:
     if new_geometry is None or new_geometry.area <= 0 or new_parcel.kind != PlaceKind.PARCEL:
         return None
     # Older outlines count too: the remainder can sit in a gap from the parcel's current outline.
-    candidates = (
-        Place.objects.filter(kind=PlaceKind.PARCEL, status=PlaceStatus.CURRENT, parent__isnull=True)
-        .filter(Q(geometry__intersects=new_geometry) | Q(geometry_versions__geometry__intersects=new_geometry))
-        .exclude(pk=new_parcel.pk)
-        .distinct()
-    )
+    candidates = Place.objects.filter(kind=PlaceKind.PARCEL, status=PlaceStatus.CURRENT, parent__isnull=True).filter(Q(geometry__intersects=new_geometry) | Q(geometry_versions__geometry__intersects=new_geometry)).exclude(pk=new_parcel.pk).distinct()
     if new_parcel.provider:
         candidates = candidates.filter(provider=new_parcel.provider)
     from urbanlens.dashboard.models.site_settings import SiteSettings
