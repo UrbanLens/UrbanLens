@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Self
 from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.measure import D
 from django.db import IntegrityError
-from django.db.models import Count, Exists, F, OuterRef, Q
+from django.db.models import Case, Count, Exists, IntegerField, OuterRef, Q, Value, When
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.tree import TreeQuerySetMixin
@@ -40,7 +40,9 @@ class PinQuerySet(abstract.PublicDashboardQuerySet["Pin"], TreeQuerySetMixin):
         Order root pins before child pins, then oldest first.
         Where several of a profile's pins share a Location, ``.first()`` on this picks the one standing for the user's own place.
         """
-        return self.order_by(F("parent_pin_id").asc(nulls_first=True), "created", "pk")
+        # Rank by root-versus-child only; ordering on parent_pin_id itself would sort children by their parent's id before age.
+        is_child = Case(When(parent_pin__isnull=True, then=Value(0)), default=Value(1), output_field=IntegerField())
+        return self.order_by(is_child, "created", "pk")
 
     def tree_root_id(self, pin_id: int) -> int:
         """
