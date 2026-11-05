@@ -4875,9 +4875,9 @@ def refresh_trust_signals_range(start_pk: int, end_pk: int) -> int:
     from django.conf import settings
     from django.utils import timezone
 
+    from urbanlens.dashboard.models.achievements.model import ProfileActivityDay
     from urbanlens.dashboard.models.profile import Profile
     from urbanlens.dashboard.models.trust_signals import ProfileTrustSignals
-    from urbanlens.dashboard.models.achievements.model import ProfileActivityDay
     from urbanlens.dashboard.services.trust import compute_signals
     from urbanlens.dashboard.services.trust.signals import ACTIVITY_WINDOW_DAYS, MEANINGFUL_ACTIVITY_KINDS
 
