@@ -78,7 +78,6 @@ def candidate_parcels(place: Place, new_geometry: MultiPolygon) -> list[MultiPol
     The geometry is overwritten in place, so a remainder parcel that only appears on a later refresh is never
     seen here; append-only geometry versions (UL-362) would close that.
     """
-    from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.places.lineage_events import holders_of
 
     if place.geometry is None:
@@ -104,11 +103,50 @@ def candidate_parcels(place: Place, new_geometry: MultiPolygon) -> list[MultiPol
             continue
         if holders is None:
             holders = holders_of([place], timezone.now())
-        if Pin.objects.filter(location__place__domain_root_id=other.domain_root_id).exclude(profile_id__in=holders).exists():
-            logger.info("split candidate %s skipped: its domain has pins from outside place %s", other.pk, place.pk)
+        if not may_adopt(place, other, holders):
             continue
         geometries.append(other.geometry)
     return geometries
+
+
+def may_adopt(place: Place, other: Place, holders: set[int]) -> bool:
+    """
+    Whether a split of ``place`` may make the stored parcel ``other`` one of its successors.
+
+    It may not when ``other`` already has another parent, or when its domain holds pins from anyone outside
+    ``holders`` (those who held ``place``): re-parenting it would grant them a place strangers are on.
+    """
+    from urbanlens.dashboard.models.pin.model import Pin
+
+    if other.parent_id is not None and other.parent_id != place.pk:
+        logger.info("split successor %s skipped: it already has parent %s", other.pk, other.parent_id)
+        return False
+    if Pin.objects.filter(location__place__domain_root_id=other.domain_root_id).exclude(profile_id__in=holders).exists():
+        logger.info("split successor %s skipped: its domain has pins from outside place %s", other.pk, place.pk)
+        return False
+    return True
+
+
+def adoptable_outlines(place: Place, outlines: Iterable[MultiPolygon]) -> list[MultiPolygon]:
+    """
+    The outlines a split of ``place`` may take as successors: those describing no stored parcel, or one :func:`may_adopt` allows.
+
+    A provider's outline that matches a stored neighbour would otherwise re-parent it, skipping the checks :func:`candidate_parcels` applies.
+    """
+    from urbanlens.dashboard.services.places.lineage_events import holders_of
+    from urbanlens.dashboard.services.places.provisioning import find_matching_place
+
+    holders: set[int] | None = None
+    kept: list[MultiPolygon] = []
+    for outline in outlines:
+        stored = find_matching_place(PlaceKind.PARCEL, outline, exclude_pk=place.pk)
+        if stored is not None:
+            if holders is None:
+                holders = holders_of([place], timezone.now())
+            if not may_adopt(place, stored, holders):
+                continue
+        kept.append(outline)
+    return kept
 
 
 def remainder_is_covered(place: Place, new_geometry: MultiPolygon, seen: Iterable[MultiPolygon] = ()) -> bool:
@@ -177,7 +215,7 @@ def process_split(place: Place, successors: list[MultiPolygon]) -> Place:
     learned_at = timezone.now()
 
     children: list[Place] = []
-    for geometry in successors:
+    for geometry in adoptable_outlines(place, successors):
         # exclude_pk=place.pk: place is still CURRENT here (status flips below, only once we know
         # this is really a split) - without it, a successor whose centroid falls near the original
         # parcel's own centroid (common: the original center often lands inside one of its own

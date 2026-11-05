@@ -30,7 +30,7 @@ from urbanlens.dashboard.services.geo.geo import InvalidPolygonGeoJSONError, geo
 from urbanlens.dashboard.services.geo.wiki_boundary_edits import save_wiki_boundary
 from urbanlens.dashboard.services.locations.boundaries import boundary_generation_ran, schedule_location_boundary_generation
 from urbanlens.dashboard.services.pins.external_data import schedule_panel_fetch
-from urbanlens.dashboard.services.wiki.wiki_access import is_synthetic_place, resolve_visible_wiki
+from urbanlens.dashboard.services.wiki.wiki_access import is_synthetic_place, resolve_visible_wiki, without_shared_placeless
 
 if TYPE_CHECKING:
     from django.contrib.gis.geos import GEOSGeometry
@@ -120,7 +120,7 @@ def _wiki_detail_building_entries(wiki: Wiki, viewer: Profile, drawn: GEOSGeomet
     """
     from urbanlens.dashboard.services.wiki.viewer_projection import visible_rows
 
-    descendants = list(visible_rows(wiki.descendants(), wiki, viewer))
+    descendants = list(visible_rows(without_shared_placeless(wiki.descendants()), wiki, viewer))
     polygons = Boundary.objects.own_polygons_for_wikis(descendants, BoundaryType.BUILDING, viewer)
     parents: dict[int, int | None] = {descendant.pk: descendant.parent_wiki_id for descendant in descendants}
     ordered = sorted(descendants, key=lambda descendant: (_depth(descendant.pk, parents), descendant.pk))

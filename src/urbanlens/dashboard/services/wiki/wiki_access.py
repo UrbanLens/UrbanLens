@@ -5,7 +5,7 @@ Wikis are opt-in shared: a profile may see (or act on) a Wiki only for a place t
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.db.models import Exists, F, OuterRef, Q
 from django.http import Http404
@@ -193,6 +193,17 @@ def is_synthetic_place(place: Place) -> bool:
     from urbanlens.dashboard.models.place.model import SYNTHETIC_EVIDENCE
 
     return place.evidence in SYNTHETIC_EVIDENCE
+
+
+def without_shared_placeless[QuerySetT: QuerySet[Any]](wikis: QuerySetT) -> QuerySetT:
+    """
+    A parent's child wikis, less the shared placeless ones.
+
+    Their location is the hub, a stand-in coordinate that is never rendered (ADR35 section 2), so they are no marker, row or outline on the parent's map.
+    """
+    from urbanlens.dashboard.models.place.model import SYNTHETIC_EVIDENCE
+
+    return wikis.exclude(place__evidence__in=SYNTHETIC_EVIDENCE)
 
 
 def is_members_only_place(place: Place) -> bool:

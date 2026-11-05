@@ -12,6 +12,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.place.model import GrantReason, Place, PlaceAccessGrant, PlaceKind, PlaceStatus
+from urbanlens.dashboard.services.locations.boundaries import ResolvedBoundaries
 from urbanlens.dashboard.services.places import provisioning
 from urbanlens.dashboard.services.places.lineage_events import LineageEvent, LineageEventKind, handle_lineage_event
 from urbanlens.dashboard.services.places.splits import looks_like_a_split
@@ -124,6 +125,31 @@ class MildShrinkTests(_OldParcelCase):
         neighbour = self.remainder_parcel()
         pin_on(baker.make(User).profile, neighbour, lat=SOUTH + SIZE / 2, lng=WEST + SIZE * 0.8)
         self.assertFalse(looks_like_a_split(self.old, _strip(0, 0.6)))
+
+    def test_a_probe_answered_with_a_neighbour_holding_strangers_pins_neither_splits_nor_reparents(self) -> None:
+        neighbour = self.remainder_parcel()
+        pin_on(baker.make(User).profile, neighbour, lat=SOUTH + SIZE / 2, lng=WEST + SIZE * 0.8)
+        pin_on(self.holder, self.old, lat=SOUTH + SIZE / 2, lng=WEST + SIZE * 0.9)
+        with mock.patch(_CHAIN) as chain:
+            chain.return_value.get_boundaries.return_value = ResolvedBoundaries(property_polygon=_strip(0.6, 1.0))
+            self.assertIsNone(provisioning.detect_subdivision(self.pin.location, _strip(0, 0.6)))
+        chain.return_value.get_boundaries.assert_called()
+        neighbour.refresh_from_db()
+        self.assertIsNone(neighbour.parent_id)
+        self.assertFalse(PlaceAccessGrant.objects.filter(profile=self.holder).exists())
+
+    def test_a_heavy_shrink_probe_answered_with_a_parented_neighbour_leaves_it_alone(self) -> None:
+        site = make_place(PlaceKind.PARCEL, _strip(2, 3), name="Site")
+        neighbour = self.remainder_parcel(0.2, 1.0)
+        Place.objects.filter(pk=neighbour.pk).update(parent=site)
+        pin_on(self.holder, self.old, lat=SOUTH + SIZE / 2, lng=WEST + SIZE * 0.9)
+        with mock.patch(_CHAIN) as chain:
+            chain.return_value.get_boundaries.return_value = ResolvedBoundaries(property_polygon=_strip(0.2, 1.0))
+            provisioning.detect_subdivision(self.pin.location, _strip(0, 0.2))
+        chain.return_value.get_boundaries.assert_called()
+        neighbour.refresh_from_db()
+        self.assertEqual(neighbour.parent_id, site.pk)
+        self.assertFalse(PlaceAccessGrant.objects.filter(profile=self.holder, place=neighbour).exists())
 
     def test_the_pieces_must_rebuild_most_of_the_old_outline(self) -> None:
         self.assertTrue(looks_like_a_split(self.old, _strip(0, 0.6), seen=[_strip(0.6, 0.85)]))

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+import json
 from unittest.mock import patch
 
 from django.contrib.gis.geos import MultiPolygon, Polygon
@@ -481,6 +482,27 @@ class InParcelDomainTests(SharedPlaceTestCase):
             body = self.client.get(reverse(name, kwargs={"location_slug": self.hub.slug})).content.decode()
             for text in forbidden:
                 self.assertNotIn(text, body, f"{name} leaked {text}")
+
+    def test_the_parcels_child_wiki_payloads_carry_neither_the_shared_wiki_nor_its_hub(self) -> None:
+        self.client.force_login(self.carol.user)
+        forbidden = {
+            text
+            for value in (self.hub.latitude, self.hub.longitude)
+            for text in (f"{float(value):.6f}", json.dumps(float(value)), f"{float(value):.5f}")
+        }
+        parcel_slug = self.parcel_wiki.location.slug or str(self.parcel_wiki.location.uuid)
+        for name, query in (
+            ("location.wiki.detail_pins.json", ""),
+            ("location.wiki.detail_pins.json", "?children=1"),
+            ("location.wiki.detail_pins.panel", ""),
+            ("location.wiki.boundary", "?children=1"),
+        ):
+            response = self.client.get(reverse(name, kwargs={"location_slug": parcel_slug}) + query)
+            self.assertEqual(response.status_code, 200, name)
+            body = response.content.decode()
+            self.assertNotIn(str(self.wiki.uuid), body, f"{name}{query} lists the shared wiki")
+            for text in forbidden:
+                self.assertNotIn(text, body, f"{name}{query} leaked {text}")
 
     def test_a_parcel_holder_cannot_draw_on_the_shared_wiki(self) -> None:
         self.client.force_login(self.carol.user)

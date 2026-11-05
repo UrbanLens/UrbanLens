@@ -40,7 +40,7 @@ from urbanlens.dashboard.services.pins.public_pins import (
 from urbanlens.dashboard.services.places.ambiguity import competing_wiki_locations
 from urbanlens.dashboard.services.places.scope import scope_badge
 from urbanlens.dashboard.services.wiki.viewer_projection import project_wiki, viewer_projection, visible_rows, writable_wiki
-from urbanlens.dashboard.services.wiki.wiki_access import canonical_location_slug, locate_visible_wiki, resolve_visible_wiki, visible_parent_wiki
+from urbanlens.dashboard.services.wiki.wiki_access import canonical_location_slug, locate_visible_wiki, resolve_visible_wiki, visible_parent_wiki, without_shared_placeless
 from urbanlens.dashboard.services.wiki.wiki_edits import WikiEditConflictError, WikiEditValidationError, apply_wiki_edit, revert_edit_fields, revert_wiki_edit, save_edited_fields, wiki_revision_marker
 
 if TYPE_CHECKING:
@@ -413,7 +413,7 @@ class WikiParcelBuildingsPanelView(LoginRequiredMixin, View):
                 "section_id": "location-parcel-buildings-panel",
                 "icon": "apartment",
                 "title": "Buildings on this Property",
-                "rows": building_rows(buildings, list(wiki.child_wikis.select_related("location")), boundary_polygon=boundary_polygon),
+                "rows": building_rows(buildings, list(without_shared_placeless(wiki.child_wikis.select_related("location"))), boundary_polygon=boundary_polygon),
             },
         )
 

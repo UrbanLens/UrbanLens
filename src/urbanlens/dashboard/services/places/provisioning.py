@@ -345,9 +345,13 @@ def _footprint_places(outlines: list[tuple[str, MultiPolygon]]) -> list[Place]:
 
 
 def _probe_neighbours(location: Location, previous: Place, new_parcel_polygon: MultiPolygon, known: list[MultiPolygon]) -> list[MultiPolygon]:
-    """Ask the provider chain about the domain's locations that fall outside the new outline, at most :data:`MAX_SUBDIVISION_PROBES` times."""
+    """
+    Ask the provider chain about the domain's locations that fall outside the new outline, at most :data:`MAX_SUBDIVISION_PROBES` times.
+    An answer describing a stored parcel the split may not adopt (see ``splits.may_adopt``) is dropped, so it neither covers the remainder nor becomes a successor.
+    """
     from urbanlens.dashboard.models.location.model import Location as LocationModel
     from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain
+    from urbanlens.dashboard.services.places import splits
 
     found: list[MultiPolygon] = []
     probes = 0
@@ -361,7 +365,7 @@ def _probe_neighbours(location: Location, previous: Place, new_parcel_polygon: M
         chain_result = BoundaryProviderChain().get_boundaries(float(other.latitude), float(other.longitude), name=other.official_name or None)
         if chain_result.property_polygon is not None and not any(candidate.equals(chain_result.property_polygon) for candidate in [*known, *found]):
             found.append(chain_result.property_polygon)
-    return found
+    return splits.adoptable_outlines(previous, found)
 
 
 def detect_subdivision(location: Location, new_parcel_polygon: MultiPolygon | None) -> Place | None:
