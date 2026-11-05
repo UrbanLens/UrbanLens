@@ -40,7 +40,7 @@ from urbanlens.dashboard.services.pins.public_pins import (
 from urbanlens.dashboard.services.places.ambiguity import competing_wiki_locations
 from urbanlens.dashboard.services.places.scope import scope_badge
 from urbanlens.dashboard.services.wiki.viewer_projection import project_wiki, viewer_projection, visible_rows, writable_wiki
-from urbanlens.dashboard.services.wiki.wiki_access import canonical_location_slug, locate_visible_wiki, resolve_visible_wiki, visible_parent_wiki
+from urbanlens.dashboard.services.wiki.wiki_access import canonical_location_slug, locate_visible_wiki, resolve_visible_wiki, visible_parent_wiki, without_shared_placeless
 from urbanlens.dashboard.services.wiki.wiki_edits import WikiEditConflictError, WikiEditValidationError, apply_wiki_edit, revert_edit_fields, revert_wiki_edit, save_edited_fields, wiki_revision_marker
 
 if TYPE_CHECKING:
@@ -173,6 +173,36 @@ class LocationRedirectView(LoginRequiredMixin, View):
         return _unstored(HttpResponseRedirect(_with_query_string(reverse("location.wiki", kwargs={"location_slug": location.slug or str(location.uuid)}), request)))
 
 
+def _map_center(location, wiki, profile) -> dict[str, str]:
+    """
+    Where the wiki map opens.
+
+    A shared placeless wiki's hub coordinates are never rendered, however offset: the map opens on the viewer's own pin near the
+    place, else on the parcel it is part of (its wiki, else its outline), else on the hub rounded to about a kilometre.
+    """
+    from django.contrib.gis.measure import D
+
+    from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.models.place.model import SYNTHETIC_EVIDENCE
+
+    place = wiki.place if wiki.place_id is not None else None
+    if place is None or place.evidence not in SYNTHETIC_EVIDENCE:
+        return {"lat": str(location.latitude), "lng": str(location.longitude)}
+    own = None
+    if place.anchor is not None:
+        own = Pin.objects.filter(profile=profile, location__point__dwithin=(place.anchor, D(m=100))).select_related("location").first()
+    if own is not None and own.location is not None:
+        return {"lat": str(own.location.latitude), "lng": str(own.location.longitude)}
+    parent = place.parent if place.parent_id is not None else None
+    parent_wiki = wiki.parent_wiki if wiki.parent_wiki_id is not None else None
+    if parent_wiki is not None and parent_wiki.location is not None:
+        return {"lat": str(parent_wiki.location.latitude), "lng": str(parent_wiki.location.longitude)}
+    if parent is not None and parent.geometry is not None:
+        centre = parent.geometry.point_on_surface
+        return {"lat": f"{centre.y:.6f}", "lng": f"{centre.x:.6f}"}
+    return {"lat": f"{float(location.latitude):.2f}", "lng": f"{float(location.longitude):.2f}"}
+
+
 class LocationWikiView(LoginRequiredMixin, View):
     """
     Main wiki page for a place.
@@ -285,6 +315,7 @@ class LocationWikiView(LoginRequiredMixin, View):
                 "public_vote": projection.public_vote(location),
                 "boundary_vote": projection.boundary_vote(location.place),
                 "user_pin": user_pin,
+                "map_center": _map_center(location, wiki, profile),
                 "other_locations": other_locations,
                 "page_name": "location-wiki",
                 "pin_type_choices": PinType.choices,
@@ -382,7 +413,7 @@ class WikiParcelBuildingsPanelView(LoginRequiredMixin, View):
                 "section_id": "location-parcel-buildings-panel",
                 "icon": "apartment",
                 "title": "Buildings on this Property",
-                "rows": building_rows(buildings, list(wiki.child_wikis.select_related("location")), boundary_polygon=boundary_polygon),
+                "rows": building_rows(buildings, list(without_shared_placeless(wiki.child_wikis.select_related("location"))), boundary_polygon=boundary_polygon),
             },
         )
 

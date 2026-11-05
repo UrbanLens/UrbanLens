@@ -30,7 +30,7 @@ from urbanlens.dashboard.services.geo.geo import InvalidPolygonGeoJSONError, geo
 from urbanlens.dashboard.services.geo.wiki_boundary_edits import save_wiki_boundary
 from urbanlens.dashboard.services.locations.boundaries import boundary_generation_ran, schedule_location_boundary_generation
 from urbanlens.dashboard.services.pins.external_data import schedule_panel_fetch
-from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
+from urbanlens.dashboard.services.wiki.wiki_access import is_synthetic_place, resolve_visible_wiki, without_shared_placeless
 
 if TYPE_CHECKING:
     from django.contrib.gis.geos import GEOSGeometry
@@ -120,7 +120,7 @@ def _wiki_detail_building_entries(wiki: Wiki, viewer: Profile, drawn: GEOSGeomet
     """
     from urbanlens.dashboard.services.wiki.viewer_projection import visible_rows
 
-    descendants = list(visible_rows(wiki.descendants(), wiki, viewer))
+    descendants = list(visible_rows(without_shared_placeless(wiki.descendants()), wiki, viewer))
     polygons = Boundary.objects.own_polygons_for_wikis(descendants, BoundaryType.BUILDING, viewer)
     parents: dict[int, int | None] = {descendant.pk: descendant.parent_wiki_id for descendant in descendants}
     ordered = sorted(descendants, key=lambda descendant: (_depth(descendant.pk, parents), descendant.pk))
@@ -292,6 +292,22 @@ class BoundaryController(LoginRequiredMixin, GenericViewSet):
         return JsonResponse(payload)
 
 
+#: A shared placeless wiki's map shows no shape: its circle is centred on a member's pin, and its hub is a stand-in coordinate (ADR35 section 2).
+_SHARED_PLACELESS_PAYLOAD: dict[str, Any] = {
+    "latitude": None,
+    "longitude": None,
+    "default_radius_meters": DEFAULT_RADIUS_METERS,
+    "pending": False,
+    "refreshing": False,
+    "boundaries": {str(boundary_type.value): {"polygon": None, "source": None} for boundary_type in (BoundaryType.PROPERTY, BoundaryType.BUILDING)},
+    "detail_buildings": [],
+}
+
+
+def _is_shared_placeless(wiki: Wiki) -> bool:
+    return wiki.place_id is not None and wiki.place is not None and is_synthetic_place(wiki.place)
+
+
 class WikiBoundaryView(LoginRequiredMixin, View):
     """
     Community boundary editor endpoints for the wiki page.
@@ -306,6 +322,8 @@ class WikiBoundaryView(LoginRequiredMixin, View):
     def get(self, request, location_slug):
         """Return the wiki's effective boundaries, scheduling generation/refresh when needed."""
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
+        if _is_shared_placeless(wiki):
+            return JsonResponse(_SHARED_PLACELESS_PAYLOAD)
         already_ran = boundary_generation_ran(location)
         in_flight = schedule_location_boundary_generation(location, profile)
         include_children = request.GET.get("children") == "1"
@@ -314,6 +332,8 @@ class WikiBoundaryView(LoginRequiredMixin, View):
     def post(self, request, location_slug):
         """Save or clear the community-drawn boundary of one type, with audit."""
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
+        if _is_shared_placeless(wiki):
+            return JsonResponse({"error": "A shared place's boundary comes from public data, not drawings."}, status=403)
 
         try:
             body = posted_json_object(request)

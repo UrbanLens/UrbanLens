@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from django.contrib.auth.models import User
-from django.contrib.gis.geos import Point
+from django.contrib.gis.geos import MultiPolygon, Point, Polygon
 from django.db import connection
 from django.test import SimpleTestCase
 from django.test.utils import CaptureQueriesContext
@@ -27,6 +27,7 @@ from urbanlens.dashboard.models.device_scan.model import WikiDeviceMarker
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share.exposure import LocationExposure
+from urbanlens.dashboard.models.place.model import Place, PlaceEvidence, PlaceKind
 from urbanlens.dashboard.services.locations.enrichment import _nearby_density_score
 from urbanlens.dashboard.services.memories.photos import find_matching_pin
 from urbanlens.dashboard.services.sharing.share_provenance import find_profile_pin_near_location
@@ -58,10 +59,19 @@ class RadiusFiltersUseTheSpatialIndexTests(TestCase):
         Pin.objects.bulk_create(
             Pin(profile=self.profile, location=location, name=f"Far {i}") for i, location in enumerate(far)
         )
+        # Top-level footprints far away, so ``parent_id IS NULL`` matches every place and only the spatial index narrows them.
+        Place.objects.bulk_create(
+            Place(
+                kind=PlaceKind.BUILDING,
+                evidence=PlaceEvidence.FOOTPRINT,
+                geometry=MultiPolygon(Polygon.from_bbox((-100.0001, lat - 0.0001, -99.9999, lat + 0.0001)), srid=4326),
+            )
+            for lat in (round(40 + i * 0.01, 6) for i in range(FAR_PINS))
+        )
         self.near_location = Location.objects.create(latitude=10.0, longitude=20.0)
         self.near_pin = baker.make(Pin, profile=self.profile, location=self.near_location, name="Near")
         with connection.cursor() as cursor:
-            cursor.execute("ANALYZE dashboard_locations, dashboard_user_pins")
+            cursor.execute("ANALYZE dashboard_locations, dashboard_user_pins, dashboard_places")
 
     def assertRadiusIsIndexable(self, run: Callable[[], Any], *, reads_the_index: bool = False) -> Any:
         with CaptureQueriesContext(connection) as captured:

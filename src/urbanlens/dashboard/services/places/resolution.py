@@ -11,7 +11,7 @@ from django.contrib.gis.db.models.functions import Area
 from django.utils import timezone
 
 from urbanlens.dashboard.models.location.model import Location
-from urbanlens.dashboard.models.place.model import Place
+from urbanlens.dashboard.models.place.model import SYNTHETIC_EVIDENCE, Place
 from urbanlens.dashboard.services.places.lineage import enclosing_parcel
 
 if TYPE_CHECKING:
@@ -31,6 +31,9 @@ def resolve_location_place(location: Location, *, save: bool = True) -> Place | 
 
     Returns:
         The most specific current place containing the coordinate, or None when it is on no known parcel or building."""
+    if location.place_id is not None and location.place is not None and location.place.evidence in SYNTHETIC_EVIDENCE:
+        # A shared place's hub is pinned to it for good (see shared_places._create_place).
+        return location.place
     place = Place.objects.resolve_for_point(location.latitude, location.longitude)
     if save and location.place_id != (place.pk if place else None):
         previous_parcel = enclosing_parcel(Place.objects.filter(pk=location.place_id).select_related("parent").first()) if location.place_id else None
@@ -105,6 +108,8 @@ def attach_location(location: Location, place: Place | None) -> None:
     Args:
         location: The Location to update.
         place: The resolved place, or None to clear."""
+    if location.place_id is not None and location.place is not None and location.place.evidence in SYNTHETIC_EVIDENCE:
+        return
     Location.objects.filter(pk=location.pk).update(place=place, place_resolved_at=timezone.now())
     location.place = place
     location.place_resolved_at = timezone.now()

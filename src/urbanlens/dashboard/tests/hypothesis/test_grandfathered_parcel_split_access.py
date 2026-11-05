@@ -189,7 +189,7 @@ class GrandfatheredParcelSplitAccessTests(TestCase):
         location_visible_to(self.wiki_m.location, self.user_b)  # triggers the snapshot
 
         granted_places = set(
-            PlaceAccessGrant.objects.filter(profile=self.user_b, reason=GrantReason.GRANDFATHERED_SPLIT).values_list(
+            PlaceAccessGrant.objects.filter(profile=self.user_b, reason=GrantReason.EARNED_FAMILY).values_list(
                 "place_id", flat=True
             )
         )

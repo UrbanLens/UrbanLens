@@ -4842,6 +4842,52 @@ def sweep_achievements_range(start_pk: int, end_pk: int) -> int:
     return evaluate_profiles_in_range(start_pk, end_pk)
 
 
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+def refresh_trust_signals(chunk_size: int = 500) -> int:
+    """
+    Fan the nightly ``ProfileTrustSignals`` rebuild out as bounded profile-range subtasks.
+
+    Args:
+        chunk_size: Maximum profiles per subtask.
+
+    Returns:
+        How many range subtasks were enqueued.
+    """
+    from urbanlens.dashboard.models.profile import Profile
+    from urbanlens.dashboard.services.core.celery import dispatch_pk_ranges
+
+    return dispatch_pk_ranges(Profile.objects.all(), refresh_trust_signals_range, chunk_size=chunk_size)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+def refresh_trust_signals_range(start_pk: int, end_pk: int) -> int:
+    """
+    Rebuild the signals row of every profile with ``start_pk <= pk <= end_pk``.
+
+    Idempotent: rows are replaced, never accumulated. A profile with no activity in 90 days whose row is
+    younger than ``UL_TRUST_DORMANT_REFRESH_DAYS`` is skipped.
+
+    Returns:
+        How many profiles were rebuilt.
+    """
+    from datetime import timedelta
+
+    from django.conf import settings
+    from django.utils import timezone
+
+    from urbanlens.dashboard.models.profile import Profile
+    from urbanlens.dashboard.models.trust_signals import ProfileTrustSignals
+    from urbanlens.dashboard.services.trust import compute_signals
+
+    dormant_cutoff = timezone.now() - timedelta(days=settings.UL_TRUST_DORMANT_REFRESH_DAYS)
+    skip = set(ProfileTrustSignals.objects.filter(profile_id__gte=start_pk, profile_id__lte=end_pk, active_weeks_90=0, computed_at__gte=dormant_cutoff).values_list("profile_id", flat=True))
+    rebuilt = 0
+    for profile in Profile.objects.filter(pk__gte=start_pk, pk__lte=end_pk).exclude(pk__in=skip).iterator(chunk_size=200):
+        compute_signals(profile)
+        rebuilt += 1
+    return rebuilt
+
+
 @shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def cache_media_item_into_album(album_id: int, profile_id: int, source: str, url: str, page_url: str = "", caption: str = "") -> int | None:
     """
@@ -5227,3 +5273,89 @@ def announce_wiki_change_task(wiki_id: int, actor_id: int, change: str, fields: 
     if wiki is None or actor is None:
         return 0
     return notify_wiki_change(wiki, actor, change, fields)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+def evaluate_shared_places_for_pin(pin_id: int) -> bool:
+    """
+    Run the shared-place trust checks and tier evaluation for one pin (ADR35 section 2).
+
+    The only place those checks run: never in a request. Enqueued debounced on pin create/move (see ``services.places.shared_place_triggers``).
+
+    Args:
+        pin_id: The pin that was created or moved.
+
+    Returns:
+        Whether the pin's profile joined or formed a shared place.
+    """
+    from urbanlens.dashboard.services.places.shared_places import evaluate_pin
+
+    return evaluate_pin(pin_id) is not None
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+def revalidate_shared_place_memberships(profile_id: int) -> int:
+    """
+    Drop a profile's shared-place memberships it no longer holds a nearby pin for.
+
+    Args:
+        profile_id: The profile whose pin was deleted.
+
+    Returns:
+        How many memberships were dropped.
+    """
+    from urbanlens.dashboard.models.profile import Profile
+    from urbanlens.dashboard.services.places.shared_places import revalidate_memberships
+
+    profile = Profile.objects.filter(pk=profile_id).first()
+    return revalidate_memberships(profile) if profile is not None else 0
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+def evaluate_shared_places_sweep(chunk_size: int = 500) -> int:
+    """
+    Nightly sweep: re-evaluate recent pins, so pins that matured since their last evaluation, bulk imports and trust changes are picked up.
+
+    Args:
+        chunk_size: Maximum pins per subtask.
+
+    Returns:
+        How many range subtasks were enqueued.
+    """
+    from django.conf import settings
+
+    from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.core.celery import dispatch_pk_ranges
+
+    since = timezone.now() - timedelta(days=settings.UL_SHARED_PLACE_SWEEP_DAYS)
+    return dispatch_pk_ranges(Pin.objects.filter(created__gte=since, location__isnull=False, profile__community_enabled=True), evaluate_shared_places_range, chunk_size=chunk_size)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+def evaluate_shared_places_range(start_pk: int, end_pk: int) -> int:
+    """
+    Evaluate every pin with ``start_pk <= pk <= end_pk`` and revalidate the memberships of their owners.
+
+    Args:
+        start_pk: First pin primary key.
+        end_pk: Last pin primary key.
+
+    Returns:
+        How many pins joined or formed a shared place.
+    """
+    from django.conf import settings
+
+    from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.places.shared_places import evaluate_pin, revalidate_memberships
+
+    since = timezone.now() - timedelta(days=settings.UL_SHARED_PLACE_SWEEP_DAYS)
+    pins = Pin.objects.filter(pk__gte=start_pk, pk__lte=end_pk, created__gte=since, location__isnull=False, profile__community_enabled=True).select_related("profile")
+    revalidated: set[int] = set()
+    joined = 0
+    for pin in pins.order_by("pk"):
+        if pin.profile_id not in revalidated:
+            revalidated.add(pin.profile_id)
+            revalidate_memberships(pin.profile)
+        if evaluate_pin(pin.pk, revalidate=False) is not None:
+            joined += 1
+    return joined
