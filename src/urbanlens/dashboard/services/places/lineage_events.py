@@ -92,6 +92,9 @@ def _record_edges(event: LineageEvent) -> list[PlaceLineageEdge]:
             if successor.pk == predecessor.pk:
                 continue
             edge, _created = PlaceLineageEdge.objects.get_or_create(predecessor=predecessor, successor=successor, kind=kind, defaults={"learned_at": event.learned_at})
+            if edge.erroneous:
+                edge.erroneous = False
+                edge.save(update_fields=["erroneous"])
             edges.append(edge)
         Place.objects.filter(pk=predecessor.pk, valid_to__isnull=True).update(valid_to=event.learned_at)
         predecessor.valid_to = predecessor.valid_to or event.learned_at
@@ -136,9 +139,10 @@ def retract_erroneous_event(edges: Sequence[PlaceLineageEdge], reason: str) -> i
         doomed = affected.exclude(sources__edge__erroneous=False)
         removed = list(doomed.values_list("profile_id", "place_id"))
         PlaceAccessGrant.objects.filter(pk__in=list(doomed.values_list("pk", flat=True))).delete()
-        for predecessor_id in {edge.predecessor_id for edge in edges}:
-            if not PlaceLineageEdge.objects.filter(predecessor_id=predecessor_id, erroneous=False).exists():
-                Place.objects.filter(pk=predecessor_id).update(valid_to=None)
+        for edge in edges:
+            if not PlaceLineageEdge.objects.filter(predecessor_id=edge.predecessor_id, erroneous=False).exists():
+                # Only reopen a place these edges closed; one retired by another mechanism keeps its valid_to.
+                Place.objects.filter(pk=edge.predecessor_id, valid_to=edge.learned_at).update(valid_to=None)
     logger.warning("erroneous lineage event retracted (%s): removed %s grants (profile, place): %s", reason, len(removed), removed)
     return len(removed)
 

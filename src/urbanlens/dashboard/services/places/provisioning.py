@@ -122,7 +122,7 @@ def upsert_place(
     now = timezone.now()
     created = place is None
     if place is None:
-        place = Place(kind=kind, name=name[:255], provider=provider, provider_key=provider_key, geometry=polygon, geometry_generated_at=now, valid_from=now)
+        place = Place(kind=kind, name=(name or "")[:255], provider=provider, provider_key=provider_key, geometry=polygon, geometry_generated_at=now, valid_from=now)
         place.save()
         if polygon is not None:
             geometry_versions.record_version(place, polygon, provider=provider, recorded_at=now)
