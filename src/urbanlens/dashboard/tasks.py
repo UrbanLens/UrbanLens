@@ -4877,13 +4877,23 @@ def refresh_trust_signals_range(start_pk: int, end_pk: int) -> int:
 
     from urbanlens.dashboard.models.profile import Profile
     from urbanlens.dashboard.models.trust_signals import ProfileTrustSignals
+    from urbanlens.dashboard.models.achievements.model import ProfileActivityDay
     from urbanlens.dashboard.services.trust import compute_signals
+    from urbanlens.dashboard.services.trust.signals import ACTIVITY_WINDOW_DAYS, MEANINGFUL_ACTIVITY_KINDS
 
     dormant_cutoff = timezone.now() - timedelta(days=settings.UL_TRUST_DORMANT_REFRESH_DAYS)
     skip = set(ProfileTrustSignals.objects.filter(profile_id__gte=start_pk, profile_id__lte=end_pk, active_weeks_90=0, computed_at__gte=dormant_cutoff).values_list("profile_id", flat=True))
+    # A dormant row may be stale because the profile became active again since it was computed.
+    skip.difference_update(ProfileActivityDay.objects.filter(profile_id__in=skip, kind__in=MEANINGFUL_ACTIVITY_KINDS, day__gte=timezone.localdate() - timedelta(days=ACTIVITY_WINDOW_DAYS)).values_list("profile_id", flat=True))
     rebuilt = 0
     for profile in Profile.objects.filter(pk__gte=start_pk, pk__lte=end_pk).exclude(pk__in=skip).iterator(chunk_size=200):
-        compute_signals(profile)
+        try:
+            compute_signals(profile)
+        except OSError:
+            raise
+        except Exception:
+            logger.exception("Trust signals refresh failed for profile %s", profile.pk)
+            continue
         rebuilt += 1
     return rebuilt
 
