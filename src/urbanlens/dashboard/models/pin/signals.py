@@ -281,3 +281,15 @@ def ensure_wiki_for_pin_location(sender: type[Pin], instance: Pin, created: bool
         enqueue_follow_on(ensure_wiki_for_location, ensure_wikis_for_locations, location_id, queue=queue)
 
     transaction.on_commit(_run)
+
+
+@receiver(post_save, sender=Pin, dispatch_uid="pin_nest_under_boundary_on_save")
+def nest_pin_under_user_boundary(sender: type[Pin], instance: Pin, created: bool, **kwargs) -> None:
+    """A new or moved pin may fall inside, or out of, one of its owner's drawn boundaries."""
+    if instance.parenting_is_manual or (instance.parent_pin_id is not None and instance.nested_by_boundary_pin_id is None):
+        return
+    if not created and instance.previous_location_id == instance.location_id:
+        return
+    from urbanlens.dashboard.services.pins.boundary_nesting import request_pin_nesting
+
+    request_pin_nesting(instance.profile_id, instance.pk)

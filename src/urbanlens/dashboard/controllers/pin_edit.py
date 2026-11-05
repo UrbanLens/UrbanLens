@@ -429,7 +429,9 @@ class PinDetachChildView(LoginRequiredMixin, View):
             return HttpResponse("You already have a top-level pin at this exact location. Move this child pin slightly before detaching it.", status=400)
         logger.info("User %s detached child pin %s from parent %s", request.user.id, pin.id, pin.parent_pin_id)
         pin.parent_pin = None
-        pin.save(update_fields=["parent_pin", "updated"])
+        pin.parenting_is_manual = True
+        pin.nested_by_boundary_pin = None
+        pin.save(update_fields=["parent_pin", "parenting_is_manual", "nested_by_boundary_pin", "updated"])
         response = HttpResponse("", status=200)
         response["HX-Refresh"] = "true"
         return response
@@ -530,7 +532,9 @@ class PinRelinkView(LoginRequiredMixin, View):
         if existing is not None:
             if not pin.would_create_cycle(existing):
                 pin.parent_pin = existing
-                pin.save(update_fields=["parent_pin", "updated"])
+                pin.parenting_is_manual = True
+                pin.nested_by_boundary_pin = None
+                pin.save(update_fields=["parent_pin", "parenting_is_manual", "nested_by_boundary_pin", "updated"])
                 pin.refresh_from_db()
             if is_xhr:
                 from django.urls import reverse

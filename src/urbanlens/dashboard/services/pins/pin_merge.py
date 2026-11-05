@@ -312,7 +312,8 @@ def _reparent_children(survivor: Pin, loser: Pin) -> None:
     for child in list(loser.detail_pins.all()):
         if child.pk == survivor.pk:
             survivor.parent_pin = loser.parent_pin
-            if not _save_within_savepoint(survivor, ["parent_pin", "updated"]):
+            survivor.nested_by_boundary_pin = None
+            if not _save_within_savepoint(survivor, ["parent_pin", "nested_by_boundary_pin", "updated"]):
                 raise SurvivorRelocationCollisionError(
                     f"Pin merge blocked: survivor pin {survivor.pk} is loser pin {loser.pk}'s direct child and must relocate to loser.parent_pin_id={loser.parent_pin_id} to avoid CASCADE deletion, but a top-level pin already occupies that location.",
                 )
@@ -320,7 +321,9 @@ def _reparent_children(survivor: Pin, loser: Pin) -> None:
         if child.would_create_cycle(survivor):
             logger.warning("Pin merge: detaching child pin %s to root - re-parenting under the survivor would create a cycle.", child.pk)
             child.parent_pin = None
-            if not _save_within_savepoint(child, ["parent_pin", "updated"]):
+            child.parenting_is_manual = True
+            child.nested_by_boundary_pin = None
+            if not _save_within_savepoint(child, ["parent_pin", "parenting_is_manual", "nested_by_boundary_pin", "updated"]):
                 # It stays parented to the pin about to be deleted, and Pin.parent_pin CASCADEs - so
                 # this child, and the survivor somewhere beneath it, would both be destroyed by the
                 # delete this detach exists to prevent.
@@ -330,7 +333,23 @@ def _reparent_children(survivor: Pin, loser: Pin) -> None:
                 )
             continue
         child.parent_pin = survivor
-        child.save(update_fields=["parent_pin", "updated"])
+        # A child the loser's drawn boundary nested stays boundary-managed: its provenance follows the
+        # boundary to the survivor, and _resettle_boundary_children releases it if the outline is gone.
+        child.nested_by_boundary_pin = survivor if child.nested_by_boundary_pin_id == loser.pk else None
+        child.save(update_fields=["parent_pin", "nested_by_boundary_pin", "updated"])
+
+
+def _resettle_boundary_children(survivor: Pin) -> None:
+    """Re-check the survivor's boundary-nested children against the boundaries that survived the merge."""
+    from urbanlens.dashboard.models.pin.model import Pin as PinModel
+    from urbanlens.dashboard.services.pins.boundary_nesting import _settle
+
+    ids = list(PinModel.objects.filter(parent_pin=survivor, nested_by_boundary_pin=survivor).values_list("pk", flat=True))
+    if not ids:
+        return
+    # The profile's pin-tree lock is already held: merge_pins takes it first.
+    for pin_id in sorted(ids):
+        _settle(pin_id)
 
 
 def _merge_aliases(survivor: Pin, loser: Pin) -> None:
@@ -727,6 +746,8 @@ PIN_FIELD_POLICY: dict[str, str] = {
     "profile": _IDENTITY,
     "location": _IDENTITY,
     "parent_pin": _IDENTITY,
+    "nested_by_boundary_pin": _IDENTITY,
+    "parenting_is_manual": _IDENTITY,
     "last_visited": _DERIVED,
     "source_share": _LINEAGE,
     "inferred_source_share": _LINEAGE,
@@ -1011,6 +1032,7 @@ def merge_pins(survivor: Pin, loser: Pin, profile: Profile, resolutions: dict[st
         raise UnresolvedMergeConflictError(missing)
 
     from urbanlens.dashboard.services.geo.child_pin_boundaries import deferring_child_boundary_refits
+    from urbanlens.dashboard.services.pins.tree_lock import lock_profile_pin_tree
 
     # Captured before anything is rewritten, so the note and summaries name the pins as the user knew them.
     labels = {survivor.pk: _pin_label(survivor), loser.pk: _pin_label(loser)}
@@ -1018,6 +1040,8 @@ def merge_pins(survivor: Pin, loser: Pin, profile: Profile, resolutions: dict[st
     record = _MergeRecord()
 
     with transaction.atomic(), deferring_child_boundary_refits():
+        # First, so a merge and a nesting pass take the lock before any pin row, in the same order.
+        lock_profile_pin_tree(survivor.profile_id)
         _reparent_children(survivor, loser)
         _merge_aliases(survivor, loser)
         _merge_scalars(survivor, loser, record, labels)
@@ -1028,6 +1052,7 @@ def merge_pins(survivor: Pin, loser: Pin, profile: Profile, resolutions: dict[st
         _merge_shares(survivor, loser)
         _merge_custom_field_values(survivor, loser, resolutions, record, labels)
         _merge_boundaries(survivor, loser, resolutions, profile, record, labels)
+        _resettle_boundary_children(survivor)
         _merge_article(survivor, loser, resolutions, profile, record, labels)
         _merge_lineage(survivor, loser)
         survivor.labels.add(*loser.labels.all())
