@@ -903,7 +903,7 @@ def _import_pins(
 ) -> None:
     """
     Import user pins.
-    Top-level pins are deduped per-profile by proximity via ``Pin.objects.get_nearby_or_create`` (the same helper the Google Takeout importer uses) rather than inserted directly.
+    Top-level pins are deduped per-profile at their exact point, or by archive uuid, via ``Pin.objects.get_nearby_or_create`` (the same helper the Google Takeout importer uses) rather than inserted directly.
     A detail pin (one exported with a ``parent_uuid``) is instead created directly under its parent at its own exact coordinates: proximity dedup would fold it into the parent it sits a few metres from.
     Parents are imported before their children whatever order the archive lists them in."""
     from django.db import IntegrityError
@@ -911,21 +911,30 @@ def _import_pins(
     from urbanlens.dashboard.models.abstract.choices import SecurityLevel
     from urbanlens.dashboard.models.abstract.security import SECURITY_FIELDS
     from urbanlens.dashboard.models.location.model import Location
-    from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.models.pin.model import Pin, PinImportSource
 
     rows = _read_json(data_dir, "pins.json")
     if not rows:
         return
     rows = _parents_before_children(rows)
     total_rows = len(rows)
+    uuids_in_archive: set[str] = set()
     security_level_values = set(SecurityLevel.values)
 
     for idx, row in enumerate(rows, start=1):
         if report_progress:
             report_progress(idx, total_rows)
         uuid_str = row.get("uuid", "")
+        if not isinstance(uuid_str, str):
+            uuid_str = ""
 
         # Idempotency: skip pins that already exist FOR THIS USER.
+        if uuid_str and uuid_str in uuids_in_archive:
+            result.warnings.append(f"Skipped pin '{row.get('name', uuid_str)}': an earlier pin in this archive has the same uuid.")
+            result.inc_skipped("pins")
+            continue
+        if uuid_str:
+            uuids_in_archive.add(uuid_str)
         existing = Pin.objects.filter(uuid=uuid_str, profile=profile).first() if uuid_str else None
         if existing:
             pin_uuid_map[uuid_str] = existing.pk
@@ -988,7 +997,17 @@ def _import_pins(
                 if pin is None:
                     pin = Pin.objects.create(profile=profile, location=location, parent_pin=parent_pin, **defaults)
             else:
-                pin, created = Pin.objects.get_nearby_or_create(lat, lng, profile, defaults=defaults)
+                # An archive uuid already held by this profile's own pin was skipped above; the uuid also keys the pin,
+                # so a re-import still finds it after the uuid was not carried (taken elsewhere) and the pin moved.
+                archive_key = _safe_uuid(uuid_str)
+                pin, created = Pin.objects.get_nearby_or_create(
+                    lat,
+                    lng,
+                    profile,
+                    defaults=defaults,
+                    import_source=PinImportSource.JSON_ARCHIVE if archive_key else None,
+                    import_key=archive_key,
+                )
         except (IntegrityError, ValueError, TypeError):
             logger.warning("Failed to import pin %s", uuid_str, exc_info=True)
             result.warnings.append(f"Could not import pin '{row.get('name', uuid_str)}'.")
