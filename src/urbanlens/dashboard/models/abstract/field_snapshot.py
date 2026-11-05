@@ -41,14 +41,20 @@ class FieldSnapshot:
         """
         return [field.name for field in self._fields() if getattr(self.instance, field.attname) != self._before[field.attname]]
 
-    def save_changes(self) -> list[str]:
+    def save_changes(self, *, together: tuple[str, ...] = ()) -> list[str]:
         """
         Write only the changed columns, plus ``updated`` when the model has one; write nothing if none changed.
 
+        Args:
+            together: Fields that are only consistent as a set: when any of them changed, all of them are written,
+                so a concurrent write to the unchanged ones can't leave the row holding half of each edit.
+
         Returns:
-            The changed field names.
+            The field names written (``updated`` aside).
         """
         changed = self.changed()
+        if any(name in changed for name in together):
+            changed += [name for name in together if name not in changed]
         if changed:
             has_updated = any(field.name == "updated" for field in self._fields())
             self.instance.save(update_fields=[*changed, "updated"] if has_updated and "updated" not in changed else changed)

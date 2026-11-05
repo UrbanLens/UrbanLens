@@ -230,11 +230,13 @@ class DetailPinEditView(LoginRequiredMixin, View):
 
         before_subject_id = detail_pin.subject_place_id
         old_lat, old_lng = float(detail_pin.effective_latitude), float(detail_pin.effective_longitude)
-        if new_location is not None:
+        # The subject follows only a real change of Location: re-submitting the current point must not reset a
+        # subject that has since diverged from the Location's place (a merge gap-fill, a building repoint).
+        if new_location is not None and new_location.pk != detail_pin.location_id:
             detail_pin.location = new_location
             detail_pin.subject_place_id = new_location.place_id
 
-        snapshot.save_changes()
+        snapshot.save_changes(together=("location", "subject_place"))
         if moved:
             from urbanlens.dashboard.services.undo.mutations import stash_pin_move
 

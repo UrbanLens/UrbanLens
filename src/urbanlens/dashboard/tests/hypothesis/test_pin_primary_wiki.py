@@ -77,6 +77,16 @@ class SubjectPlaceTests(_Fixture):
         self.pin.refresh_from_db()
         self.assertEqual(self.pin.subject_place_id, self.parcel.pk)
 
+    def test_re_saving_the_current_point_keeps_a_diverged_subject(self) -> None:
+        Pin.objects.filter(pk=self.pin.pk).update(subject_place=self.parcel)
+        self.pin.refresh_from_db()
+        move_pin_to_coordinates(
+            self.pin, float(self.building_location.latitude), float(self.building_location.longitude)
+        )
+        self.pin.refresh_from_db()
+        self.assertEqual(self.pin.location_id, self.building_location.pk)
+        self.assertEqual(self.pin.subject_place_id, self.parcel.pk)
+
     def test_an_import_whose_place_resolves_later_gets_its_subject(self) -> None:
         elsewhere = _location(41.0, -73.0)
         imported = Pin.objects.create(profile=self.viewer, location=elsewhere, name="Imported")

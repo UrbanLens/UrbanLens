@@ -546,9 +546,11 @@ class PinRelinkView(LoginRequiredMixin, View):
 
         # Wikis are user-created only: link to the location's wiki when one
         # exists, otherwise leave the pin wiki-less until someone creates one.
+        # A move re-points the subject at whatever the new point resolves to (None when unplaced); re-picking the
+        # current Location is not a move and keeps a subject that has since diverged from its place.
+        if location.pk != pin.location_id:
+            pin.subject_place_id = location.place_id
         pin.location = location
-        # A move re-points the subject at whatever the new point resolves to (None when unplaced).
-        pin.subject_place_id = location.place_id
         pin.wiki = Wiki.objects.get_for_location(location)
         pin.save(update_fields=["location", "subject_place", "wiki", "updated"])
         pin.refresh_from_db()
