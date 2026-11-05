@@ -43,7 +43,7 @@ def evidence_for_record(building: dict) -> str:
     """
     The :class:`PlaceEvidence` of a cached building record, by its richest source.
 
-    Overture records carry no per-feature dataset here, and Overture mixes ML footprints with OSM, so they count as footprint.
+    Overture records carry no per-feature dataset here, and Overture mixes machine-derived footprints with OSM, so they count as footprint.
     County GIS, assessor, CRIS and OSM records are official.
     """
     sources = [entry for entry in building.get("sources") or [] if isinstance(entry, dict)]
@@ -126,7 +126,7 @@ def upsert_place(
         relation: How it attaches to ``parent``.
         exclude_pk: Passed through to :func:`find_matching_place` - a place that must never be matched, however well its geometry fits.
         evidence: How strong the polygon is. A footprint matched onto an existing place never replaces its geometry
-            unless it has a parent, so an ML outline cannot overwrite an official one or a reconciled sibling; an
+            unless it has a parent, so a machine-derived outline cannot overwrite an official one or a reconciled sibling; an
             official polygon upgrades a matched footprint place.
 
     Returns:

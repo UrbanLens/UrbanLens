@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from django.contrib.gis.geos import GeometryCollection
+from django.contrib.gis.geos import GeometryCollection, GEOSException
 from django.db import transaction
 from django.utils import timezone
 
@@ -158,7 +158,13 @@ def looks_like_a_split(place: Place, new_geometry: MultiPolygon | None, seen: It
         return False
     if ratio < (1 - SPLIT_SHRINK_RATIO):
         return True
-    return ratio < SPLIT_KEEP_CEILING and remainder_is_covered(place, new_geometry, seen)
+    if ratio >= SPLIT_KEEP_CEILING:
+        return False
+    try:
+        return remainder_is_covered(place, new_geometry, seen)
+    except GEOSException:
+        logger.warning("split check for place %s skipped: geometry overlay failed", place.pk, exc_info=True)
+        return False
 
 
 @transaction.atomic

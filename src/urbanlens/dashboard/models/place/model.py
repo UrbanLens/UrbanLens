@@ -144,7 +144,7 @@ class Place(abstract.DashboardModel):
 
     kind = CharField(max_length=20, choices=PlaceKind.choices, default=PlaceKind.PARCEL)
     status = CharField(max_length=20, choices=PlaceStatus.choices, default=PlaceStatus.CURRENT)
-    evidence = CharField(max_length=20, choices=PlaceEvidence.choices, default=PlaceEvidence.OFFICIAL)
+    evidence = CharField(max_length=20, choices=PlaceEvidence.choices, default=PlaceEvidence.OFFICIAL, db_default=PlaceEvidence.OFFICIAL)
 
     # Human-readable label for admin and logs only. The community-facing name
     # lives on Wiki; this is never rendered to users.
