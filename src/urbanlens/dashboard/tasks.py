@@ -30,6 +30,7 @@ from asgiref.sync import async_to_sync
 from celery import shared_task
 from celery.exceptions import SoftTimeLimitExceeded
 from channels.layers import get_channel_layer
+from django.db import OperationalError as DatabaseOperationalError
 from django.utils import timezone
 
 from urbanlens.dashboard.services.core.capacity import ALBUM_PHOTOS, CapacityExceededError, ensure_room
@@ -4859,7 +4860,7 @@ def refresh_trust_signals(chunk_size: int = 500) -> int:
     return dispatch_pk_ranges(Profile.objects.all(), refresh_trust_signals_range, chunk_size=chunk_size)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+@shared_task(autoretry_for=(OSError, DatabaseOperationalError), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def refresh_trust_signals_range(start_pk: int, end_pk: int) -> int:
     """
     Rebuild the signals row of every profile with ``start_pk <= pk <= end_pk``.
@@ -4889,7 +4890,8 @@ def refresh_trust_signals_range(start_pk: int, end_pk: int) -> int:
     for profile in Profile.objects.filter(pk__gte=start_pk, pk__lte=end_pk).exclude(pk__in=skip).iterator(chunk_size=200):
         try:
             compute_signals(profile)
-        except OSError:
+        except (OSError, DatabaseOperationalError):
+            # Transient: retry the whole range (rebuilds are idempotent) rather than skip the profile until tomorrow.
             raise
         except Exception:
             logger.exception("Trust signals refresh failed for profile %s", profile.pk)

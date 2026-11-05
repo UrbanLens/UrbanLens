@@ -6,6 +6,7 @@ from datetime import timedelta
 import itertools
 from unittest.mock import patch
 
+from django.db import OperationalError
 from django.test import override_settings
 from django.utils import timezone
 from model_bakery import baker
@@ -167,7 +168,9 @@ class RealUserTests(TestCase):
         now = timezone.now()
         seeds = [_profile(), _profile()]
         for seed in seeds:
-            ProfileTrustSignals.objects.create(profile=seed, computed_at=now, base_score=0.67, account_age_days=400, active_weeks_90=6, pin_count=10)
+            ProfileTrustSignals.objects.create(
+                profile=seed, computed_at=now, base_score=0.67, account_age_days=400, active_weeks_90=6, pin_count=10
+            )
         c, d = _profile(), _profile()
         _weeks(c, 6)
         for seed in seeds:
@@ -371,3 +374,24 @@ class NightlyRefreshTests(TestCase):
         self.assertEqual(tasks.refresh_trust_signals_range(profile.pk, profile.pk), 0)
         ProfileTrustSignals.objects.filter(profile=profile).update(computed_at=timezone.now() - timedelta(days=30))
         self.assertEqual(tasks.refresh_trust_signals_range(profile.pk, profile.pk), 1)
+
+    def test_one_broken_profile_does_not_stop_the_range(self) -> None:
+        profiles = [_profile() for _ in range(2)]
+        lo, hi = min(p.pk for p in profiles), max(p.pk for p in profiles)
+        real = compute_signals
+
+        def flaky(profile: Profile) -> ProfileTrustSignals:
+            if profile.pk == lo:
+                raise ValueError("bad data")
+            return real(profile)
+
+        with patch("urbanlens.dashboard.services.trust.compute_signals", side_effect=flaky):
+            self.assertEqual(tasks.refresh_trust_signals_range(lo, hi), 1)
+
+    def test_transient_database_error_escapes_for_retry(self) -> None:
+        profile = _profile()
+        with (
+            patch("urbanlens.dashboard.services.trust.compute_signals", side_effect=OperationalError("timeout")),
+            self.assertRaises(OperationalError),
+        ):
+            tasks.refresh_trust_signals_range(profile.pk, profile.pk)
