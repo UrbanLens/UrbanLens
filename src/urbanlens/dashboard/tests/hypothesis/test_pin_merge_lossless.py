@@ -27,7 +27,7 @@ from urbanlens.dashboard.models.floorplans.model import Floorplan
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.markup.meta import MarkupType
 from urbanlens.dashboard.models.markup.model import PinMarkup
-from urbanlens.dashboard.models.pin.model import Pin, PinType
+from urbanlens.dashboard.models.pin.model import Pin, PinImportSource, PinType
 from urbanlens.dashboard.models.pin.note import PinNote
 from urbanlens.dashboard.models.pin_share.meta import PinShareStatus
 from urbanlens.dashboard.models.pin_share.model import PinShare
@@ -259,6 +259,25 @@ class PinColumnsAreKeptTests(_MergeTestCase):
         merge_pins(self.survivor, self.loser, self.profile)
 
         self.assertTrue(self.survivor.restructure_offer_dismissed)
+
+    def test_a_keyless_survivor_takes_the_losers_import_key(self) -> None:
+        """Re-importing the loser's file looks it up by key; without the key it would recreate the merged-away pin."""
+        Pin.objects.filter(pk=self.loser.pk).update(import_source=PinImportSource.GOOGLE_TAKEOUT, import_key="cid:42")
+        self.loser.refresh_from_db()
+
+        merge_pins(self.survivor, self.loser, self.profile)
+
+        self.assertEqual((self.survivor.import_source, self.survivor.import_key), ("google_takeout", "cid:42"))
+
+    def test_a_keyed_survivor_keeps_its_own_import_key(self) -> None:
+        Pin.objects.filter(pk=self.survivor.pk).update(import_source=PinImportSource.JSON_ARCHIVE, import_key="uuid:a")
+        Pin.objects.filter(pk=self.loser.pk).update(import_source=PinImportSource.GOOGLE_TAKEOUT, import_key="cid:42")
+        self.loser.refresh_from_db()
+        self.survivor.refresh_from_db()
+
+        merge_pins(self.survivor, self.loser, self.profile)
+
+        self.assertEqual((self.survivor.import_source, self.survivor.import_key), ("json_archive", "uuid:a"))
 
 
 class AutomaticVisitOnTheSameDayTests(_MergeTestCase):
