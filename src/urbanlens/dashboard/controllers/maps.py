@@ -838,9 +838,10 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             if lat is None or lng is None:
                 return JsonResponse({"error": "That isn't a place on the map."}, status=400)
             pin.location, _ = Location.objects.get_nearby_or_create(lat, lng)
+            pin.subject_place_id = pin.location.place_id
             if pin.parent_pin_id is None and Pin.objects.root_pins().filter(profile=pin.profile, location=pin.location).exclude(pk=pin.pk).exists():
                 return JsonResponse({"error": _ALREADY_PINNED_THERE}, status=400)
-            touched.append("location")
+            touched += ["location", "subject_place"]
         if icon is not None:
             pin.icon = clean_icon(icon)
             touched.append("icon")

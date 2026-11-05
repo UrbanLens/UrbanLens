@@ -228,9 +228,11 @@ class DetailPinEditView(LoginRequiredMixin, View):
             detail_pin.pin_type, detail_pin.pin_type_is_user_provided = _requested_pin_type(body)
             reclassify = not detail_pin.pin_type_is_user_provided
 
+        before_subject_id = detail_pin.subject_place_id
         old_lat, old_lng = float(detail_pin.effective_latitude), float(detail_pin.effective_longitude)
         if new_location is not None:
             detail_pin.location = new_location
+            detail_pin.subject_place_id = new_location.place_id
 
         snapshot.save_changes()
         if moved:
@@ -242,6 +244,8 @@ class DetailPinEditView(LoginRequiredMixin, View):
                 before_lng=old_lng,
                 after_lat=float(detail_pin.effective_latitude),
                 after_lng=float(detail_pin.effective_longitude),
+                before_subject_id=before_subject_id,
+                after_subject_id=detail_pin.subject_place_id,
             )
         # A moved auto-typed marker may have landed on (or left) a building, so
         # its classification is re-derived from wherever it now sits.
