@@ -4842,6 +4842,52 @@ def sweep_achievements_range(start_pk: int, end_pk: int) -> int:
     return evaluate_profiles_in_range(start_pk, end_pk)
 
 
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+def refresh_trust_signals(chunk_size: int = 500) -> int:
+    """
+    Fan the nightly ``ProfileTrustSignals`` rebuild out as bounded profile-range subtasks.
+
+    Args:
+        chunk_size: Maximum profiles per subtask.
+
+    Returns:
+        How many range subtasks were enqueued.
+    """
+    from urbanlens.dashboard.models.profile import Profile
+    from urbanlens.dashboard.services.core.celery import dispatch_pk_ranges
+
+    return dispatch_pk_ranges(Profile.objects.all(), refresh_trust_signals_range, chunk_size=chunk_size)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+def refresh_trust_signals_range(start_pk: int, end_pk: int) -> int:
+    """
+    Rebuild the signals row of every profile with ``start_pk <= pk <= end_pk``.
+
+    Idempotent: rows are replaced, never accumulated. A profile with no activity in 90 days whose row is
+    younger than ``UL_TRUST_DORMANT_REFRESH_DAYS`` is skipped.
+
+    Returns:
+        How many profiles were rebuilt.
+    """
+    from datetime import timedelta
+
+    from django.conf import settings
+    from django.utils import timezone
+
+    from urbanlens.dashboard.models.profile import Profile
+    from urbanlens.dashboard.models.trust_signals import ProfileTrustSignals
+    from urbanlens.dashboard.services.trust import compute_signals
+
+    dormant_cutoff = timezone.now() - timedelta(days=settings.UL_TRUST_DORMANT_REFRESH_DAYS)
+    skip = set(ProfileTrustSignals.objects.filter(profile_id__gte=start_pk, profile_id__lte=end_pk, active_weeks_90=0, computed_at__gte=dormant_cutoff).values_list("profile_id", flat=True))
+    rebuilt = 0
+    for profile in Profile.objects.filter(pk__gte=start_pk, pk__lte=end_pk).exclude(pk__in=skip).iterator(chunk_size=200):
+        compute_signals(profile)
+        rebuilt += 1
+    return rebuilt
+
+
 @shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def cache_media_item_into_album(album_id: int, profile_id: int, source: str, url: str, page_url: str = "", caption: str = "") -> int | None:
     """
