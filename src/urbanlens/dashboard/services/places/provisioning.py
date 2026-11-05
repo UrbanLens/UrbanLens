@@ -277,7 +277,12 @@ def _probe_neighbours(location: Location, previous: Place, new_parcel_polygon: M
         chain_result = BoundaryProviderChain().get_boundaries(float(other.latitude), float(other.longitude), name=other.official_name or None)
         # Same rules candidate_parcels applies to stored parcels: the previous provider's outline only,
         # essentially disjoint from the refreshed outline, and never one that would hand strangers access.
-        polygon = next((candidate for service_key, candidate in chain_result.property_candidates if service_key == previous.provider), None)
+        # A parcel created by provision_outcome_for_coordinate has no recorded provider, so there is nothing to
+        # match candidates against: fall back to the chain's selected outline, as before provider matching existed.
+        if previous.provider:
+            polygon = next((candidate for service_key, candidate in chain_result.property_candidates if service_key == previous.provider), None)
+        else:
+            polygon = chain_result.property_polygon
         if polygon is None or polygon.area <= 0 or polygon.intersection(new_parcel_polygon).area / polygon.area > splits.SPLIT_OVERLAP_TOLERANCE:
             continue
         if any(candidate.equals(polygon) for candidate in [*known, *found]):
