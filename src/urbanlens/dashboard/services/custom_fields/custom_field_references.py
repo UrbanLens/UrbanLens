@@ -62,7 +62,7 @@ def referenceable_queryset(kind: str, profile: Profile) -> QuerySet:
         # same real-world place as an existing wiki but at a different Location row
         # (nearly-identical coordinates can resolve to distinct rows) - see
         # visible_wiki_locations, the same boundary-matching wiki_access.location_visible_to
-        return Wiki.objects.filter(location_id__in=visible_wiki_locations(profile)).select_related("location")
+        return Wiki.objects.filter(location_id__in=visible_wiki_locations(profile)).select_related("location")  # same-place: wiki visibility is wiki_access's decision, not pin sameness
     if kind == "markup_map":
         return MarkupMap.objects.filter(profile=profile)
     if kind == "trip":

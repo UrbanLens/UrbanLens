@@ -239,7 +239,7 @@ def _record_wiki_years(pin: Pin, nester: BuildingNester, site_year: BuildYear | 
     from urbanlens.dashboard.services.pins.building_clusters import match_clusters
     from urbanlens.dashboard.services.pins.pin_restructure import building_markers
 
-    campus = Wiki.objects.filter(location_id=pin.location_id).first()
+    campus = Wiki.objects.filter(location_id=pin.location_id).first()  # same-place: a wiki is anchored to one exact Location
     if campus is None:
         return
     if site_year is not None and (site_year.source != SOURCE_PROPERTY_RECORD or parcel_year_may_date(campus)):

@@ -22,23 +22,24 @@ _FUZZ_SPREAD = 2
 # How long one fuzzed value is served before re-rolling (seconds).
 _FUZZ_CACHE_TIMEOUT = 60 * 60 * 24
 
-_CACHE_KEY_TEMPLATE = "wiki_pin_count_fuzz:{wiki_id}"
+_CACHE_KEY_TEMPLATE = "wiki_pin_count_fuzz:{wiki_id}:{scope}"
 
 
-def approximate_pin_count(wiki_id: int, exact_count: int) -> dict[str, object]:
+def approximate_pin_count(wiki_id: int, exact_count: int, scope: str = "place") -> dict[str, object]:
     """
     Build the privacy-preserving display form of a wiki's pinned-user count.
 
     Args:
         wiki_id: Primary key of the wiki the count belongs to (cache key).
         exact_count: The exact number of distinct users with this place pinned.
+        scope: What the count covers (``"place"`` or ``"location:<pk>"``), so counts of different extent never share a cached value.
 
     Returns:
         Dict with ``is_low`` (True when the count is under :data:`MIN_VISIBLE_PIN_COUNT` and no number should be shown) and ``value`` (the fuzzed count to display, or None when ``is_low``)."""
     if exact_count < MIN_VISIBLE_PIN_COUNT:
         return {"is_low": True, "value": None}
 
-    key = _CACHE_KEY_TEMPLATE.format(wiki_id=wiki_id)
+    key = _CACHE_KEY_TEMPLATE.format(wiki_id=wiki_id, scope=scope)
     value = cache.get(key)
     if not isinstance(value, int):
         # secrets avoids the seedable module-level PRNG; the fuzz must not be
@@ -73,17 +74,20 @@ def wiki_community_summary(wiki: Wiki, location: Location) -> dict[str, Any]:
     Returns:
         Dict with ``pin_count_low`` (bool), ``pin_count_approx`` (int, or None when low), ``first_pinned`` (``date`` truncated to the 1st, or None), and ``first_pinned_precision`` (always ``"month"``, so a client never renders the value as an exact day)."""
     from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.pins.same_place import is_shared_place
 
     # Place-aware: count root pins across every Location sharing this wiki's Place, not just the one
     # Location the caller happened to resolve it through - otherwise "N users have this pinned"
     # undercounts (and varies by which of the place's several pinned coordinates the URL names)
     # whenever more than one Location row exists under the Place.
-    if wiki.place_id is not None:
-        root_pins = Pin.objects.root_pins().filter(location__place_id=wiki.place_id)
+    if is_shared_place(wiki.place_id):
+        scope = "place"
+        root_pins = Pin.objects.root_pins().filter(location__place_id=wiki.place_id)  # same-place: audience of a wiki: pins at its current plausible Place, else its Location; not pin-to-pin
     else:
+        scope = f"location:{location.pk}"
         root_pins = location.pins.root_pins()
     exact_count = root_pins.values("profile").distinct().count()
-    approximate = approximate_pin_count(wiki.pk, exact_count)
+    approximate = approximate_pin_count(wiki.pk, exact_count, scope)
     is_low = bool(approximate["is_low"])
 
     first_pinned: date | None = None

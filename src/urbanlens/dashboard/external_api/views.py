@@ -1587,7 +1587,9 @@ class VisitSuggestionsView(ExternalApiView):
 
         # One query for every suggestion's pin instead of one per row.
         location_ids = {s.location_id for s in suggestions if s.location_id}
-        pins_by_location = {pin.location_id: pin for pin in Pin.objects.filter(profile=profile, location_id__in=location_ids).select_related("location")} if location_ids else {}
+        pins_by_location = (
+            {pin.location_id: pin for pin in Pin.objects.filter(profile=profile, location_id__in=location_ids).select_related("location")} if location_ids else {}
+        )  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
 
         payload = []
         for suggestion in suggestions:

@@ -133,7 +133,7 @@ def repair_legacy_pin_coordinates(
     # db_pin_unique_location_per_profile.
     # Leave the legacy pin where it is and suggest merging it into the pin that's already correctly
     # placed instead - merging the two is a user decision, not something an import should do
-    existing_pin = Pin.objects.filter(profile=profile, location=correct_location).exclude(pk=candidate.pk).first()
+    existing_pin = Pin.objects.filter(profile=profile, location=correct_location).exclude(pk=candidate.pk).first()  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
     if existing_pin is not None:
         from urbanlens.dashboard.models.pin_merge_suggestions.model import PinMergeSuggestion, PinMergeSuggestionOrigin
 
@@ -246,7 +246,7 @@ def _match_by_cid(profile: Profile, cid: int | None) -> Pin | None:
     location = Location.objects.by_cid(cid).first()
     if location is None:
         return None
-    return _legacy_pins(profile).filter(location=location).order_by("created").first()
+    return _legacy_pins(profile).filter(location=location).order_by("created").first()  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
 
 
 def _match_by_coordinate_name(profile: Profile, name: str) -> Pin | None:
