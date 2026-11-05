@@ -8,6 +8,8 @@ from django.db.models import Prefetch
 
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki.model import Wiki
+from urbanlens.dashboard.services.pins.same_place import same_place_q
+from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_locations
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -15,6 +17,7 @@ if TYPE_CHECKING:
     from django.db.models import QuerySet
 
     from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.models.wiki.queryset import WikiQuerySet
 
 
 def _visible_images_prefetch(profiles: list[Profile], candidates: QuerySet[Wiki]) -> Prefetch:
@@ -36,9 +39,19 @@ def _visible_images_prefetch(profiles: list[Profile], candidates: QuerySet[Wiki]
     return Prefetch("images", queryset=images)
 
 
+def _wikis_at_visited_places(profile: Profile, wikis: WikiQuerySet[Wiki]) -> WikiQuerySet[Wiki]:
+    """
+    Narrow *wikis* to those at the same place as one of *profile*'s visited pins.
+
+    A wiki the profile cannot already see is never offered, whatever the place match says, so a game round reveals nothing a wiki page would not.
+    """
+    visited = Pin.objects.by_profile(profile).visited()
+    return wikis.filter(same_place_q(visited), location_id__in=visible_wiki_locations(profile))
+
+
 def eligible_wikis(profile: Profile, *, exclude_wiki_ids: Iterable[int] = ()) -> QuerySet[Wiki]:
     """
-    Wikis whose Location ``profile`` has a visited pin for.
+    Wikis at the same place (see ``same_place``) as a pin ``profile`` has visited.
 
     Args:
         profile: The profile a solo round (or one participant of a competitive round) is being generated for.
@@ -46,8 +59,7 @@ def eligible_wikis(profile: Profile, *, exclude_wiki_ids: Iterable[int] = ()) ->
 
     Returns:
         A Wiki queryset, unevaluated."""
-    visited_location_ids = Pin.objects.by_profile(profile).visited().values_list("location_id", flat=True)
-    candidates = Wiki.objects.filter(location_id__in=visited_location_ids)
+    candidates = _wikis_at_visited_places(profile, Wiki.objects.all())
     exclude_ids = list(exclude_wiki_ids)
     if exclude_ids:
         candidates = candidates.exclude(pk__in=exclude_ids)
@@ -73,8 +85,7 @@ def eligible_wikis_for_all(profiles: Iterable[Profile], *, exclude_wiki_ids: Ite
 
     candidates = Wiki.objects.all()
     for profile in profiles:
-        visited_location_ids = Pin.objects.by_profile(profile).visited().values_list("location_id", flat=True)
-        candidates = candidates.filter(location_id__in=visited_location_ids)
+        candidates = _wikis_at_visited_places(profile, candidates)
 
     exclude_ids = list(exclude_wiki_ids)
     if exclude_ids:
