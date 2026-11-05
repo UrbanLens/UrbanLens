@@ -75,8 +75,8 @@ def candidate_parcels(place: Place, new_geometry: MultiPolygon) -> list[MultiPol
     A candidate is a plausible CURRENT root parcel from the same provider, created since ``place``'s
     geometry was recorded, essentially disjoint from the new outline. One whose domain holds pins
     from anyone who did not hold ``place`` is skipped and logged: re-parenting it would hand strangers access.
-    The geometry is overwritten in place, so a remainder parcel that only appears on a later refresh is never
-    seen here; append-only geometry versions (UL-362) would close that.
+    A remainder parcel that only appears on a later refresh is not stored yet when the shrink happens;
+    :func:`detect_split_from_versions` finds that case from the older outline.
     """
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.places.lineage_events import holders_of
@@ -161,6 +161,54 @@ def looks_like_a_split(place: Place, new_geometry: MultiPolygon | None, seen: It
     return ratio < SPLIT_KEEP_CEILING and remainder_is_covered(place, new_geometry, seen)
 
 
+def detect_split_from_versions(new_parcel: Place) -> Place | None:
+    """
+    Notice a split that completes only when the remainder parcel arrives.
+
+    A parcel that shrank by 10-66% was left alone at refresh time, because nothing yet covered what it lost.
+    When a new parcel is created, look at the older outlines of the same provider's nearby root parcels: if the
+    new parcel fills the gap between an old outline and the current one, that parcel was split.
+
+    Args:
+        new_parcel: A root parcel just created.
+
+    Returns:
+        The superseded place, or None when no split was found.
+    """
+    from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.places.lineage_events import holders_of
+
+    new_geometry = new_parcel.geometry
+    if new_geometry is None or new_geometry.area <= 0 or new_parcel.kind != PlaceKind.PARCEL:
+        return None
+    candidates = Place.objects.filter(kind=PlaceKind.PARCEL, status=PlaceStatus.CURRENT, parent__isnull=True, geometry__intersects=new_geometry).exclude(pk=new_parcel.pk)
+    if new_parcel.provider:
+        candidates = candidates.filter(provider=new_parcel.provider)
+    for previous in candidates:
+        current = previous.geometry
+        if current is None or current.area <= 0 or not is_plausible_area(previous.kind, previous.area_sqm):
+            continue
+        # Superseded outlines are older than the current one; the largest is the parcel's earlier extent.
+        older = [version.geometry for version in previous.geometry_versions.filter(erroneous=False).order_by("-recorded_at", "-pk")[1:]]
+        before = max(older, key=lambda geometry: geometry.area, default=None)
+        if before is None or before.area <= 0 or current.area / before.area >= SPLIT_KEEP_CEILING:
+            continue
+        # The new parcel must sit in the space the old one gave up, not overlap what it kept.
+        if new_geometry.intersection(current).area / new_geometry.area > SPLIT_OVERLAP_TOLERANCE:
+            continue
+        remainder = before.difference(current)
+        if remainder.empty or remainder.area <= 0 or remainder.intersection(new_geometry).area / remainder.area < SPLIT_REMAINDER_COVERAGE:
+            continue
+        if before.intersection(current.union(new_geometry)).area / before.area < SPLIT_REBUILD_RATIO:
+            continue
+        holders = holders_of([previous], timezone.now())
+        if Pin.objects.filter(location__place__domain_root_id=new_parcel.domain_root_id).exclude(profile_id__in=holders).exists():
+            logger.info("version split of %s skipped: the domain of new parcel %s has pins from outside it", previous.pk, new_parcel.pk)
+            continue
+        return process_split(previous, [current, new_geometry])
+    return None
+
+
 @transaction.atomic
 def process_split(place: Place, successors: list[MultiPolygon]) -> Place:
     """
@@ -182,7 +230,7 @@ def process_split(place: Place, successors: list[MultiPolygon]) -> Place:
         # this is really a split) - without it, a successor whose centroid falls near the original
         # parcel's own centroid (common: the original center often lands inside one of its own
         # pieces) would silently alias back onto place itself instead of becoming a new child.
-        child = upsert_place(PlaceKind.PARCEL, geometry, name=place.name, exclude_pk=place.pk)
+        child = upsert_place(PlaceKind.PARCEL, geometry, name=place.name, exclude_pk=place.pk, detect_splits=False)
         if child is not None and child.pk != place.pk:
             lineage.set_parent(child, place, PlaceRelation.MEMBER_OF)
             children.append(child)

@@ -15,7 +15,7 @@ from django.utils import timezone
 
 from urbanlens.dashboard.models.place.model import Place, PlaceKind, PlaceRelation, is_plausible_area
 from urbanlens.dashboard.services.geo.area import area_sqm
-from urbanlens.dashboard.services.places import lineage, resolution
+from urbanlens.dashboard.services.places import geometry_versions, lineage, resolution
 
 if TYPE_CHECKING:
     from django.contrib.gis.geos import MultiPolygon
@@ -66,12 +66,14 @@ def find_matching_place(kind: str, polygon: MultiPolygon, *, provider: str = "",
     # need tuning per kind; mutual centroid containment needs none and cannot match two side-by-side
     centroid = polygon.centroid
     centroid_holders = Place.objects.current().of_kind(kind).filter(geometry__isnull=False, geometry__contains=centroid).exclude(pk=exclude_pk)
-    for candidate in centroid_holders:
-        # A place already claimed by a *different* id from this same provider is not this record,
-        # whatever the geometry says - the provider has just told us they are two things.
-        # This matters most for nested buildings: a source that reconciles a block and the wings inside it
-        # into separate records on purpose, and an L-shaped block can contain a wing's centroid
-        if provider and provider_key and candidate.provider == provider and candidate.provider_key and candidate.provider_key != provider_key:
+    # A keyed place is the better home for a keyless record, so look at it first.
+    keyed = bool(provider and provider_key)
+    for candidate in sorted(centroid_holders, key=lambda place: not place.provider_key):
+        # Two records that each carry a provider id are two things, whatever the geometry says: the
+        # provider (or two providers) has told us so. This matters most for nested buildings - a
+        # source that reconciles a block and the wings inside it into separate records on purpose, and an
+        # L-shaped block can contain a wing's centroid.
+        if keyed and candidate.provider_key:
             continue
         if candidate.geometry is not None and polygon.contains(candidate.geometry.centroid):
             return candidate
@@ -89,6 +91,7 @@ def upsert_place(
     parent: Place | None = None,
     relation: str = PlaceRelation.PART_OF,
     exclude_pk: int | None = None,
+    detect_splits: bool = True,
 ) -> Place | None:
     """
     Create or update the place a provider record describes.
@@ -102,6 +105,7 @@ def upsert_place(
         parent: The containing or aggregating place.
         relation: How it attaches to ``parent``.
         exclude_pk: Passed through to :func:`find_matching_place` - a place that must never be matched, however well its geometry fits.
+        detect_splits: For a newly created root parcel, look in the older outlines of nearby parcels for a split it completes.
 
     Returns:
         The place, or None when there is neither plausible geometry nor a provider key to identify it by."""
@@ -116,13 +120,16 @@ def upsert_place(
         place = Place.objects.filter(provider=provider, provider_key=provider_key, kind=kind).exclude(pk=exclude_pk).first()
 
     now = timezone.now()
+    created = place is None
     if place is None:
-        place = Place(kind=kind, name=name[:255], provider=provider, provider_key=provider_key, geometry=polygon, geometry_generated_at=now)
+        place = Place(kind=kind, name=name[:255], provider=provider, provider_key=provider_key, geometry=polygon, geometry_generated_at=now, valid_from=now)
         place.save()
+        if polygon is not None:
+            geometry_versions.record_version(place, polygon, provider=provider, recorded_at=now)
     else:
         updates: dict = {"geometry_generated_at": now, "updated": now}
         if polygon is not None:
-            updates["geometry"] = polygon
+            geometry_versions.set_geometry(place, polygon, provider=provider, recorded_at=now)
         if name and not place.name:
             updates["name"] = name[:255]
         if provider and provider_key and not place.provider_key:
@@ -134,6 +141,11 @@ def upsert_place(
         resolution.refresh_area(place)
     if parent is not None and place.parent_id != parent.pk:
         lineage.set_parent(place, parent, relation)
+    if created and detect_splits and kind == PlaceKind.PARCEL and parent is None and polygon is not None:
+        from urbanlens.dashboard.services.places import splits
+
+        splits.detect_split_from_versions(place)
+        place.refresh_from_db()
     return place
 
 

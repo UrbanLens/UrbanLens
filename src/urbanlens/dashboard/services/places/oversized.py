@@ -13,6 +13,7 @@ import logging
 
 from django.db import transaction
 from django.db.models import Q, QuerySet
+from django.utils import timezone
 
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import PinType
@@ -89,7 +90,7 @@ def detach_oversized_place(place: Place) -> DetachOutcome:
     location_ids = list(locations_standing_on(place).values_list("pk", flat=True))
     domain_wikis = list(Wiki.objects.filter(Q(location_id__in=location_ids) | Q(place=place)).values_list("pk", flat=True))
 
-    Place.objects.filter(pk=place.pk).update(status=PlaceStatus.SUPERSEDED)
+    Place.objects.filter(pk=place.pk).update(status=PlaceStatus.SUPERSEDED, valid_to=timezone.now())
     # A superseded building no longer counts toward its parcel's building_child_count.
     lineage.refresh_derived_flags([place.parent_id])
     for child in list(place.children.all()):
