@@ -6,13 +6,14 @@ from datetime import timedelta
 from unittest import mock
 
 from django.contrib.auth.models import User
-from django.contrib.gis.geos import MultiPolygon, Polygon
+from django.contrib.gis.geos import GEOSException, MultiPolygon, Polygon
 from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.place.model import GrantReason, Place, PlaceAccessGrant, PlaceKind, PlaceStatus
-from urbanlens.dashboard.services.places import provisioning
+from urbanlens.dashboard.services.locations.boundaries import ResolvedBoundaries
+from urbanlens.dashboard.services.places import provisioning, splits
 from urbanlens.dashboard.services.places.lineage_events import LineageEvent, LineageEventKind, handle_lineage_event
 from urbanlens.dashboard.services.places.splits import looks_like_a_split
 
@@ -64,6 +65,23 @@ class MildShrinkTests(_OldParcelCase):
             )
         )
         self.assertEqual(granted, {self.old.pk, *successors})
+
+    def test_a_failed_overlay_keeps_the_old_outline_until_a_refresh_can_tell(self) -> None:
+        self.remainder_parcel()
+        old_geometry = self.old.geometry
+        resolved = ResolvedBoundaries(property_polygon=_strip(0, 0.6))
+        with (
+            mock.patch(f"{_CHAIN}.get_boundaries", return_value=resolved),
+            mock.patch.object(splits, "remainder_is_covered", side_effect=GEOSException("overlay failed")),
+        ):
+            outcome = provisioning.provision_outcome_for_coordinate(self.pin.location)
+
+        self.old.refresh_from_db()
+        self.assertEqual(self.old.status, PlaceStatus.CURRENT)
+        assert self.old.geometry is not None and old_geometry is not None
+        self.assertTrue(self.old.geometry.equals(old_geometry))
+        self.assertEqual(outcome.place, self.old)
+        self.assertFalse(PlaceAccessGrant.objects.exists())
 
     def test_a_60_40_shrink_with_nothing_else_there_is_not_a_split(self) -> None:
         self.assertFalse(looks_like_a_split(self.old, _strip(0, 0.6)))

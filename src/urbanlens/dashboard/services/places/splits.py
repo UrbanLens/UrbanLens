@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from django.contrib.gis.geos import GeometryCollection, GEOSException
+from django.contrib.gis.geos import GeometryCollection
 from django.db import transaction
 from django.utils import timezone
 
@@ -152,19 +152,16 @@ def looks_like_a_split(place: Place, new_geometry: MultiPolygon | None, seen: It
         True when the parcel has shrunk past :data:`SPLIT_SHRINK_RATIO`, or kept less than
         :data:`SPLIT_KEEP_CEILING` of its area with the remainder mostly covered by another current parcel.
         A pin falling outside the new outline is deliberately not a signal: it is what GPS noise at a parcel edge looks like.
+
+    Raises:
+        GEOSException: An overlay failed, so whether the parcel was split is unknown rather than no.
     """
     ratio = shrink_ratio(place, new_geometry)
     if ratio is None or new_geometry is None:
         return False
     if ratio < (1 - SPLIT_SHRINK_RATIO):
         return True
-    if ratio >= SPLIT_KEEP_CEILING:
-        return False
-    try:
-        return remainder_is_covered(place, new_geometry, seen)
-    except GEOSException:
-        logger.warning("split check for place %s skipped: geometry overlay failed", place.pk, exc_info=True)
-        return False
+    return ratio < SPLIT_KEEP_CEILING and remainder_is_covered(place, new_geometry, seen)
 
 
 @transaction.atomic

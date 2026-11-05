@@ -313,5 +313,5 @@ class FootprintResolutionTests(TestCase):
         self.assertEqual(
             provisioning.evidence_for_record({"sources": [{"source": "overture"}]}), PlaceEvidence.FOOTPRINT
         )
-        self.assertEqual(provisioning.evidence_for_source("redata_boundary"), PlaceEvidence.OFFICIAL)
+        self.assertEqual(provisioning.evidence_for_source("county_gis"), PlaceEvidence.OFFICIAL)
         self.assertEqual(provisioning.evidence_for_source("overture_maps"), PlaceEvidence.FOOTPRINT)

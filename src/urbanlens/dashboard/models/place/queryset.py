@@ -114,16 +114,16 @@ class PlaceManager(_PlaceManagerBase["Place"]):
 
     def resolve_for_point(self, latitude: Coordinate, longitude: Coordinate) -> Place | None:
         """
-        The most specific current place containing a coordinate, or None.
+        The most specific current place for a coordinate, or None.
 
         Args:
             latitude: WGS-84 latitude; None is tolerated.
             longitude: WGS-84 longitude; None is tolerated.
 
         Returns:
-            The best resolvable Place containing the point (see
-            :meth:`PlaceQuerySet.candidates_for_point`), or None when the
-            coordinate is on no known parcel or building.
+            The first of :meth:`PlaceQuerySet.containing_point`; when no place contains the point, the nearest
+            top-level footprint within :data:`FOOTPRINT_BUFFER_METERS` (see :meth:`PlaceQuerySet.footprints_near`);
+            otherwise None.
         """
         point = point_for_coordinates(latitude, longitude)
         if point is None:

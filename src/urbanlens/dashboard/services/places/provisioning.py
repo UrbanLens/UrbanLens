@@ -10,6 +10,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.gis.db.models.functions import Distance
+from django.contrib.gis.geos import GEOSException
 from django.db import transaction
 from django.utils import timezone
 
@@ -268,7 +269,15 @@ def provision_outcome_for_coordinate(location: Location, *, name: str | None = N
         return ProvisionOutcome(place=known, deferred=list(resolved.deferred), retry_after=resolved.retry_after, backs_off=resolved.backs_off)
 
     if detect_splits and not resolved.deferred:
-        detect_subdivision(location, resolved.property_polygon)
+        try:
+            detect_subdivision(location, resolved.property_polygon)
+        except GEOSException:
+            # Whether the parcel was split is unknown, so the smaller outline must not replace it; it stays stale and a later refresh asks again.
+            logger.warning("split check for location %s failed: geometry overlay error; keeping the outline on record", location.pk, exc_info=True)
+            known = Place.objects.resolve_for_point(location.latitude, location.longitude)
+            if known is not None:
+                resolution.attach_location(location, known)
+            return ProvisionOutcome(place=known)
 
     parcel = upsert_place(PlaceKind.PARCEL, resolved.property_polygon, name=name or location.official_name or "")
     building = None
