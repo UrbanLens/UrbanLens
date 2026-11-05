@@ -18,6 +18,11 @@ FROM (
     JOIN dashboard_google_places gp ON gp.id = l.google_place_id
     WHERE p.profile_id >= %s AND p.profile_id < %s
       AND p.parent_pin_id IS NULL AND p.import_key IS NULL AND gp.cid IS NOT NULL
+      -- A rerun after an interrupted run must not hand a committed chunk's key to that pin's sibling.
+      AND NOT EXISTS (
+          SELECT 1 FROM dashboard_user_pins k
+          WHERE k.profile_id = p.profile_id AND k.import_source = 'google_takeout' AND k.import_key = 'cid:' || gp.cid::text
+      )
     ORDER BY p.profile_id, gp.cid, (l.created >= %s) DESC, p.id
 ) AS picked
 WHERE pin.id = picked.id

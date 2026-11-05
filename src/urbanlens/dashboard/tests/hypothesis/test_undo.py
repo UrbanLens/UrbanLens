@@ -168,6 +168,21 @@ class PinUndoHandlerTests(TestCase):
         restored_child = Pin.objects.get(profile=self.profile, name="Child")
         self.assertEqual(restored_child.parent_pin_id, restored_parent.pk)
 
+    def test_restored_root_is_manual_and_restored_child_keeps_its_flag(self) -> None:
+        """A root the undo brings back is the user's placement; a child under a restored parent keeps what it had."""
+        parent = baker.make(Pin, profile=self.profile, name="Parent", parenting_is_manual=False)
+        baker.make(Pin, profile=self.profile, name="Child", parent_pin=parent, parenting_is_manual=False)
+
+        subtree = list(Pin.objects.filter(pk=parent.pk).with_descendants())
+        undo_action = stash_for_undo("pin", subtree, self.profile)
+        for descendant in subtree:
+            descendant.delete()
+
+        restore_undo_action(undo_action)
+
+        self.assertTrue(Pin.objects.get(profile=self.profile, name="Parent").parenting_is_manual)
+        self.assertFalse(Pin.objects.get(profile=self.profile, name="Child").parenting_is_manual)
+
 
 class WikiUndoHandlerTests(TestCase):
     """Wiki's own fields, labels, and child-wiki subtree round-trip."""

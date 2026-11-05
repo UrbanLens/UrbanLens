@@ -307,6 +307,10 @@ def create_pin_for_profile(
         with transaction.atomic():
             # The profile's tree lock makes the check and the insert one step: two concurrent creates cannot both pass it.
             lock_profile_pin_tree(profile.pk)
+            # A concurrent retry of this client_uuid may have created the pin while this call waited for the lock.
+            replayed = Pin.objects.filter(profile=profile, uuid=client_uuid).select_related("location").first() if client_uuid is not None else None
+            if replayed is not None:
+                return PinCreationResult(pin=replayed, all_locations=all_locations, created=False)
             reject_if_property_taken()
             pin = Pin.objects.create(**create_kwargs)
             if custom_icon:

@@ -2913,6 +2913,12 @@ def _place_resolved_pins(result, deferred_lists: list[dict], *, profile, auto_ta
                 else:
                     skipped_count += 1
 
+    if created_count:
+        # A pin placed on a Location whose place is already known requests no nesting pass of its own,
+        # and the import's sweep ran before this round; the owner is notified of anything nested.
+        from urbanlens.dashboard.services.pins.property_nesting import sweep_and_notify
+
+        sweep_and_notify(profile.pk)
     return created_count, exists_count, skipped_count
 
 

@@ -197,12 +197,15 @@ class PinUndoHandler(UndoHandler):
                     deferred.append(entry)
                     continue
                 parent_pk = old_to_new[parent_old_pk].pk if parent_old_pk in old_to_new else parent_old_pk
+                # A pin the undo puts back as a root was placed there by the user, so the nesting pass leaves it alone.
+                # A child keeps its own flag; stashes from before the field existed count as manual, as the migration does.
+                manual = True if parent_pk is None else entry["fields"].get("parenting_is_manual", True)
                 pin = Pin.objects.create(
                     location_id=entry["location_id"],
                     profile_id=entry["profile_id"],
                     wiki_id=entry["wiki_id"],
                     parent_pin_id=parent_pk,
-                    **{**entry["fields"], "parenting_is_manual": True},
+                    **{**entry["fields"], "parenting_is_manual": manual},
                 )
                 queue_held_upload(pin, "custom_icon")
                 old_to_new[entry["old_pk"]] = pin

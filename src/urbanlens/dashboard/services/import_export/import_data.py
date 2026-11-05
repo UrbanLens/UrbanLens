@@ -993,21 +993,25 @@ def _import_pins(
                 result.inc_skipped("pins")
                 continue
 
+        # An archive uuid already held by this profile's own pin was skipped above; the uuid also keys the pin,
+        # so a re-import still finds it after the uuid was not carried (taken elsewhere) and the pin moved.
+        archive_key = _safe_uuid(uuid_str)
         try:
             if parent_pin is not None:
                 # Detail pins may share or sit beside their parent's Location (the one-root-pin-per-Location
                 # constraint covers top-level pins only), so keep the exported point exactly as given.
                 location, _location_created = Location.objects.get_exact_or_create(lat, lng)
-                # Re-importing into a profile that never held the archive's uuids (they were taken by the
-                # exporter's own pins) must not stack a second copy of the same detail pin.
-                pin = Pin.objects.filter(profile=profile, parent_pin=parent_pin, location=location, name=defaults["name"]).first()
+                pin = Pin.objects.filter(profile=profile, import_source=PinImportSource.JSON_ARCHIVE, import_key=archive_key).first() if archive_key else None
+                if pin is None:
+                    # Re-importing into a profile that never held the archive's uuids (they were taken by the
+                    # exporter's own pins) must not stack a second copy of the same detail pin.
+                    pin = Pin.objects.filter(profile=profile, parent_pin=parent_pin, location=location, name=defaults["name"]).first()
                 created = pin is None
                 if pin is None:
+                    if archive_key:
+                        defaults.update(import_source=PinImportSource.JSON_ARCHIVE, import_key=archive_key)
                     pin = Pin.objects.create(profile=profile, location=location, parent_pin=parent_pin, **defaults)
             else:
-                # An archive uuid already held by this profile's own pin was skipped above; the uuid also keys the pin,
-                # so a re-import still finds it after the uuid was not carried (taken elsewhere) and the pin moved.
-                archive_key = _safe_uuid(uuid_str)
                 pin, created = Pin.objects.get_nearby_or_create(
                     lat,
                     lng,

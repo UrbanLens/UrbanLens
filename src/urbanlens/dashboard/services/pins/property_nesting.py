@@ -138,11 +138,16 @@ def _nest_for_profile(profile_id: int, domain_ids: set[int]) -> list[NestedPin]:
         # or one lying beneath its mover, would turn the move into a cycle.
         wanted = set(plan) | {entry["target"]["pk"] for entry in plan.values()}
         locked = {pk: (parent, manual) for pk, parent, manual in Pin.objects.select_for_update(of=("self",)).filter(pk__in=wanted, profile_id=profile_id).order_by("pk").values_list("pk", "parent_pin_id", "parenting_is_manual")}
+        # The property each pin stands on, reread now that a move of any of them waits on the lock above:
+        # a pin moved off the property after the plan was read must not be nested on it.
+        standing = dict(Pin.objects.filter(pk__in=locked, location__place__status=PlaceStatus.CURRENT).annotate(domain=_domain_key()).values_list("pk", "domain"))
         moves: dict[int, dict[str, Any]] = {}
         for pk, entry in plan.items():
             target_pk = entry["target"]["pk"]
             mover, held_target = locked.get(pk), locked.get(target_pk)
             if mover is None or held_target is None or target_pk == pk or mover[0] is not None or mover[1] or held_target[0] is not None:
+                continue
+            if standing.get(pk) != entry["row"]["domain"] or standing.get(target_pk) != entry["row"]["domain"]:
                 continue
             moves[pk] = entry
         if not moves:
@@ -208,6 +213,11 @@ def _run_quietly(*, location_ids: Iterable[int] | None = None, profile_id: int |
 def sweep_after_import(profile_id: int) -> list[NestedPin]:
     """Nest a profile's duplicate roots at the end of an import, whose summary reports them instead of a notification."""
     return _run_quietly(profile_id=profile_id, notify=False)
+
+
+def sweep_and_notify(profile_id: int) -> list[NestedPin]:
+    """Nest a profile's duplicate roots now and tell the owner, for background work with no import summary of its own."""
+    return _run_quietly(profile_id=profile_id)
 
 
 NOTIFIED_NAMES = 10

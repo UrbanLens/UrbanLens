@@ -202,6 +202,18 @@ class JsonArchiveImportTests(_Base):
             self.assertEqual(Pin.objects.filter(profile=self.importer).count(), 3)
             self.assertEqual(Pin.objects.get(profile=self.importer, name="Boiler room").parent_pin_id, top.pk)
 
+    def test_reimporting_after_a_detail_pin_moved_creates_no_duplicate_child(self) -> None:
+        """The archive's uuids are the exporter's, so the copy is found again by its archive key, not its point."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self._export_with_child(temp_dir)
+            self._import_archive(temp_dir)
+            child = Pin.objects.get(profile=self.importer, name="Boiler room")
+            self.assertEqual(child.import_source, PinImportSource.JSON_ARCHIVE)
+            child.location = baker.make(Location, latitude="40.0009", longitude="-74.0009")
+            child.save()
+            self._import_archive(temp_dir)
+        self.assertEqual(Pin.objects.filter(profile=self.importer, name="Boiler room").count(), 1)
+
     def test_a_repeated_uuid_in_one_archive_is_reported(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             export_service._export_pins(self.owner, temp_dir)
@@ -235,3 +247,29 @@ class BackfillMigrationTests(_Base):
         self.assertEqual(new_pin.import_key, "cid:555")
         self.assertEqual(new_pin.import_source, PinImportSource.GOOGLE_TAKEOUT)
         self.assertIsNone(old_pin.import_key)
+
+    def test_a_rerun_after_an_interrupted_backfill_leaves_the_sibling_unkeyed(self) -> None:
+        """A rerun selects only unkeyed roots, so it must not hand a committed key to the pin's sibling on the same cid."""
+        import importlib
+
+        from django.db import connection
+
+        migration = importlib.import_module("urbanlens.dashboard.migrations.0004_backfill_pin_import_keys")
+        place = baker.make("dashboard.GooglePlace", latitude="21.000000", longitude="21.000000", cid=777)
+        first = baker.make(
+            Pin,
+            profile=self.importer,
+            location=baker.make(Location, latitude="21.0", longitude="21.0", google_place=place),
+        )
+        second = baker.make(
+            Pin,
+            profile=self.importer,
+            location=baker.make(Location, latitude="21.5", longitude="21.5", google_place=place),
+        )
+        editor = type("Editor", (), {"connection": connection})()
+        migration.key_takeout_pins(None, editor)
+        migration.key_takeout_pins(None, editor)
+        keys = sorted(
+            filter(None, Pin.objects.filter(pk__in=[first.pk, second.pk]).values_list("import_key", flat=True))
+        )
+        self.assertEqual(keys, ["cid:777"])

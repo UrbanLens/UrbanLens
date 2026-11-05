@@ -317,6 +317,8 @@ def run_confirmed_import(profile_id: int, job_id: str) -> dict[str, Any]:
             status.write("cancelled", 0, "Cancelled before it started.", result=counts)
             return counts
 
+        # (state, percent, message) when the import stops early; the pins made so far are still nested below.
+        stopped: tuple[str, int, str] | None = None
         events = _import_events(GoogleMapsGateway(), payload, profile)
         try:
             # Per-pin signals (wiki creation, category suggestion) would queue thousands of tasks; coalesced into bounded chunks.
@@ -335,8 +337,8 @@ def run_confirmed_import(profile_id: int, job_id: str) -> dict[str, Any]:
                         if kind == "progress" and event["current"] % PROGRESS_EVERY and event["current"] != event["total"]:
                             continue
                         if import_cancel_requested(job_id):
-                            status.write("cancelled", event.get("percent", 0), "Stopped before your history finished importing.", result=counts)
-                            return counts
+                            stopped = ("cancelled", event.get("percent", 0), "Stopped before your history finished importing.")
+                            break
                         status.write("running", event.get("percent", 0), _HISTORY_MESSAGES.get(subtype, "Importing..."), result=counts)
                         continue
                     if kind == "start":
@@ -348,14 +350,14 @@ def run_confirmed_import(profile_id: int, job_id: str) -> dict[str, Any]:
                         if event["current"] % PROGRESS_EVERY and event["current"] != event["total"]:
                             continue
                         if import_cancel_requested(job_id):
-                            status.write("cancelled", percent, f"Stopped after {counts['current']:,} of {counts['total']:,} pins.", result=counts)
-                            return counts
+                            stopped = ("cancelled", percent, f"Stopped after {counts['current']:,} of {counts['total']:,} pins.")
+                            break
                         status.write("running", percent, "Importing...", result=counts)
                     elif kind == "complete":
                         counts["deferred"] = event["deferred"]
                     elif kind == "error":
-                        status.write("error", percent, event["message"], result=counts)
-                        return counts
+                        stopped = ("error", percent, event["message"])
+                        break
         finally:
             events.close()
         from urbanlens.dashboard.services.pins.property_nesting import describe_nested, summary_warning, sweep_after_import
@@ -367,6 +369,10 @@ def run_confirmed_import(profile_id: int, job_id: str) -> dict[str, Any]:
                 notices.append(warning)
         if notices:
             counts["notices"] = notices
+        if stopped is not None:
+            state, stopped_percent, message = stopped
+            status.write(state, stopped_percent, message, result=counts)
+            return counts
         status.write("done", 100, "Import complete.", result=counts)
     except SOFT_TIME_LIMIT_ERRORS:
         message = f"The import ran out of time after {counts['current']:,} of {counts['total']:,} pins. Run it again to finish; pins already imported are matched, not duplicated."
