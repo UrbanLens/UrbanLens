@@ -93,21 +93,21 @@ class PinUndoHandler(UndoHandler):
         return describe_batch("Pin", "pins", [p.effective_name for p in instances])
 
     @classmethod
-    def _resolved_parent_pk(cls, entry: dict[str, Any], in_batch: set[int]) -> int | None:
+    def _resolved_parent_pk(cls, entry: dict[str, Any], in_batch: set[int], live_parents: set[tuple[int, int]]) -> int | None:
         """
         The old pk of the parent this entry will end up under, or None if it will be a root pin.
-        Three outcomes, matching what :meth:`restore` actually does: no parent recorded; a parent that is part of this same batch (relinked to its new row); or a parent outside the batch, reattached only if it still exists."""
+        Three outcomes, matching what :meth:`restore` actually does: no parent recorded; a parent that is part of this same batch (relinked to its new row); or a parent outside the batch, reattached only if it still exists (``live_parents``, resolved once for the batch by :meth:`assert_restorable`)."""
         old_parent_pk = entry["parent_pin_old_pk"]
         if not old_parent_pk:
             return None
         if old_parent_pk in in_batch:
             return old_parent_pk
-        if Pin.objects.filter(pk=old_parent_pk, profile_id=entry["profile_id"]).exists():
+        if (old_parent_pk, entry["profile_id"]) in live_parents:
             return old_parent_pk
         return None
 
     @classmethod
-    def assert_restorable(cls, payload: list[dict[str, Any]], in_batch: set[int]) -> None:
+    def assert_restorable(cls, payload: list[dict[str, Any]], in_batch: set[int]) -> set[tuple[int, int]]:
         """
         Refuse the whole batch if anything it references has gone since.
 
@@ -125,6 +125,9 @@ class PinUndoHandler(UndoHandler):
         Args:
             payload: The serialized pins to restore.
             in_batch: Old pks present in this batch, for the parent resolution.
+
+        Returns:
+            The ``(pk, profile_id)`` pairs of parents outside the batch that still exist.
 
         Raises:
             UndoExpiredError: When anything the batch references is missing, or
@@ -167,6 +170,7 @@ class PinUndoHandler(UndoHandler):
             resolves_to_parent = bool(parent_pk) and (parent_pk in in_batch or (parent_pk, entry["profile_id"]) in live_parents)
             if not resolves_to_parent and (entry["location_id"], entry["profile_id"]) in occupied_roots:
                 raise UndoExpiredError("You have pinned this place again since deleting it, so the original can't be restored alongside it.")
+        return live_parents
 
     @classmethod
     def restore(cls, payload: list[dict[str, Any]]) -> list[Pin]:
@@ -181,7 +185,7 @@ class PinUndoHandler(UndoHandler):
         from urbanlens.dashboard.services.undo.service import UndoExpiredError
 
         in_batch = {entry["old_pk"] for entry in payload}
-        cls.assert_restorable(payload, in_batch)
+        live_parents = cls.assert_restorable(payload, in_batch)
 
         old_to_new: dict[int, Pin] = {}
         restored: list[Pin] = []
@@ -193,7 +197,7 @@ class PinUndoHandler(UndoHandler):
             progressed = False
             deferred: list[dict[str, Any]] = []
             for entry in pending:
-                parent_old_pk = cls._resolved_parent_pk(entry, in_batch)
+                parent_old_pk = cls._resolved_parent_pk(entry, in_batch, live_parents)
                 if parent_old_pk in in_batch and parent_old_pk not in old_to_new:
                     deferred.append(entry)
                     continue
