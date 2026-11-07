@@ -9,6 +9,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.db import transaction
+from django.db.models import Q
 
 from urbanlens.dashboard.models.place.model import GrantReason, Place, PlaceAccessGrant
 
@@ -66,11 +67,9 @@ def holders_of(places: Sequence[Place], as_of: datetime) -> set[int]:
     from urbanlens.dashboard.models.pin.model import Pin
 
     roots = {place.domain_root_id for place in places if place.domain_root_id is not None}
-    if not roots:
-        return set()
-    return set(
-        Pin.objects.filter(location__place__domain_root_id__in=roots, created__lte=as_of).values_list("profile_id", flat=True).distinct(),
-    )
+    # The places' own pins count even when a deleted root has nulled the domain (domain_root is SET_NULL).
+    in_domain = Q(location__place_id__in=[place.pk for place in places]) | Q(location__place__domain_root_id__in=roots)
+    return set(Pin.objects.filter(in_domain, created__lte=as_of).values_list("profile_id", flat=True).distinct())
 
 
 @transaction.atomic

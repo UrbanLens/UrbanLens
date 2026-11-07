@@ -6,14 +6,20 @@ from datetime import timedelta
 from unittest import mock
 
 from django.contrib.auth.models import User
-from django.contrib.gis.geos import MultiPolygon, Polygon
+from django.contrib.gis.geos import GEOSException, MultiPolygon, Polygon
 from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.place.model import GrantReason, Place, PlaceAccessGrant, PlaceKind, PlaceStatus
+from urbanlens.dashboard.services.locations.boundaries import ResolvedBoundaries
 from urbanlens.dashboard.services.places import provisioning
-from urbanlens.dashboard.services.places.lineage_events import LineageEvent, LineageEventKind, handle_lineage_event
+from urbanlens.dashboard.services.places.lineage_events import (
+    LineageEvent,
+    LineageEventKind,
+    handle_lineage_event,
+    holders_of,
+)
 from urbanlens.dashboard.services.places.splits import looks_like_a_split
 
 from .test_places_access_predicate import pin_on
@@ -137,12 +143,71 @@ class MildShrinkTests(_OldParcelCase):
             provisioning.detect_subdivision(self.pin.location, _strip(0, 0.6))
         chain.assert_not_called()
 
-    def test_a_shrink_under_34_percent_still_splits_alone(self) -> None:
+    def test_a_shrink_under_34_percent_counts_without_a_remainder_parcel(self) -> None:
         self.assertTrue(looks_like_a_split(self.old, _strip(0, 0.2)))
         with mock.patch(_CHAIN):
-            provisioning.detect_subdivision(
-                self.pin.location, _strip(0, 0.2)
-            )  # only one successor found: stays current
+            # Nothing else to probe, so there is only one successor: it stays current.
+            self.assertIsNone(provisioning.detect_subdivision(self.pin.location, _strip(0, 0.2)))
+        self.old.refresh_from_db()
+        self.assertEqual(self.old.status, PlaceStatus.CURRENT)
+
+    def test_a_stored_neighbour_only_touching_the_old_outline_is_not_a_successor(self) -> None:
+        remainder = self.remainder_parcel()
+        touching = self.remainder_parcel(1.0, 1.4)
+        with mock.patch(_CHAIN):
+            self.assertEqual(provisioning.detect_subdivision(self.pin.location, _strip(0, 0.6)), self.old)
+        touching.refresh_from_db()
+        self.assertIsNone(touching.parent_id)
+        self.assertEqual(
+            set(self.old.children.values_list("pk", flat=True)) & {remainder.pk, touching.pk}, {remainder.pk}
+        )
+        self.assertFalse(PlaceAccessGrant.objects.filter(place=touching).exists())
+
+
+def _chain_answering(outline: MultiPolygon) -> type:
+    """A provider chain that answers every probe with ``outline``, from the parcel's own (empty) provider."""
+
+    class _Chain:
+        def get_boundaries(self, latitude: float, longitude: float, *, name: str | None = None) -> ResolvedBoundaries:
+            return ResolvedBoundaries(property_polygon=outline, property_candidates=[("", outline)])
+
+    return _Chain
+
+
+class ProbedSuccessorTests(_OldParcelCase):
+    """A probed outline answers to the same rules as a stored one."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.other = pin_on(self.holder, self.old, lat=SOUTH + SIZE / 2, lng=WEST + SIZE * 0.9)
+
+    def test_a_heavy_shrink_splits_when_a_probe_finds_the_remainder(self) -> None:
+        with mock.patch(_CHAIN, _chain_answering(_strip(0.2, 1.0))):
+            self.assertEqual(provisioning.detect_subdivision(self.pin.location, _strip(0, 0.2)), self.old)
+        self.assertEqual(self.old.children.count(), 2)
+
+    def test_a_probe_answering_with_a_parcel_beside_the_old_outline_is_no_successor(self) -> None:
+        with mock.patch(_CHAIN, _chain_answering(_strip(1.0, 1.8))):
+            self.assertIsNone(provisioning.detect_subdivision(self.pin.location, _strip(0, 0.2)))
+        self.old.refresh_from_db()
+        self.assertEqual(self.old.status, PlaceStatus.CURRENT)
+        self.assertFalse(PlaceAccessGrant.objects.exists())
+
+    def test_a_probe_mostly_outside_the_remainder_is_no_successor(self) -> None:
+        with mock.patch(_CHAIN, _chain_answering(_strip(0.8, 2.0))):
+            self.assertIsNone(provisioning.detect_subdivision(self.pin.location, _strip(0, 0.2)))
+        self.assertFalse(PlaceAccessGrant.objects.exists())
+
+
+class BrokenGeometryTests(_OldParcelCase):
+    def test_a_geos_error_skips_split_detection_instead_of_failing_the_refresh(self) -> None:
+        with (
+            mock.patch(_CHAIN),
+            mock.patch(
+                "urbanlens.dashboard.services.places.splits.remainder_of", side_effect=GEOSException("bad ring")
+            ),
+        ):
+            self.assertIsNone(provisioning.detect_subdivision(self.pin.location, _strip(0, 0.6)))
         self.old.refresh_from_db()
         self.assertEqual(self.old.status, PlaceStatus.CURRENT)
 
@@ -170,6 +235,11 @@ class LineageHandlerTests(_OldParcelCase):
         pin_on(late, self.old, lat=SOUTH + 0.0001, lng=WEST + 0.0001)
         handle_lineage_event(event)
         self.assertFalse(PlaceAccessGrant.objects.filter(profile=late).exists())
+
+    def test_a_predecessor_whose_domain_root_was_nulled_still_has_its_own_holders(self) -> None:
+        Place.objects.filter(pk=self.old.pk).update(domain_root=None)
+        self.old.refresh_from_db()
+        self.assertEqual(holders_of([self.old], timezone.now()), {self.holder.pk})
 
     def test_repeating_an_event_is_harmless_and_nothing_is_removed(self) -> None:
         event, _ = self._event(LineageEventKind.SPLIT)

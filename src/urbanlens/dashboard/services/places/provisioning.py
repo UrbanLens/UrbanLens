@@ -10,6 +10,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.gis.db.models.functions import Distance
+from django.contrib.gis.geos import GEOSException
 from django.db import transaction
 from django.utils import timezone
 
@@ -257,13 +258,21 @@ def provision_outcome_for_coordinate(location: Location, *, name: str | None = N
 
 
 def _probe_neighbours(location: Location, previous: Place, new_parcel_polygon: MultiPolygon, known: list[MultiPolygon]) -> list[MultiPolygon]:
-    """Ask the provider chain about the domain's locations that fall outside the new outline, at most :data:`MAX_SUBDIVISION_PROBES` times."""
+    """
+    Ask the provider chain about the domain's locations that fall outside the new outline, at most :data:`MAX_SUBDIVISION_PROBES` times.
+
+    A probed outline answers to the rules :func:`~urbanlens.dashboard.services.places.splits.candidate_parcels` holds
+    stored parcels to: the previous provider's outline, :func:`~urbanlens.dashboard.services.places.splits.is_remainder_piece`,
+    and, when it describes a stored parcel, a root one with no strangers' pins.
+    """
     from urbanlens.dashboard.models.location.model import Location as LocationModel
-    from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain
     from urbanlens.dashboard.services.places import splits
     from urbanlens.dashboard.services.places.lineage_events import holders_of
 
+    remainder = splits.remainder_of(previous, new_parcel_polygon)
+    if remainder is None:
+        return []
     found: list[MultiPolygon] = []
     holders: set[int] | None = None
     probes = 0
@@ -275,15 +284,13 @@ def _probe_neighbours(location: Location, previous: Place, new_parcel_polygon: M
             break
         probes += 1
         chain_result = BoundaryProviderChain().get_boundaries(float(other.latitude), float(other.longitude), name=other.official_name or None)
-        # Same rules candidate_parcels applies to stored parcels: the previous provider's outline only,
-        # essentially disjoint from the refreshed outline, and never one that would hand strangers access.
         # A parcel created by provision_outcome_for_coordinate has no recorded provider, so there is nothing to
         # match candidates against: fall back to the chain's selected outline, as before provider matching existed.
         if previous.provider:
             polygon = next((candidate for service_key, candidate in chain_result.property_candidates if service_key == previous.provider), None)
         else:
             polygon = chain_result.property_polygon
-        if polygon is None or polygon.area <= 0 or polygon.intersection(new_parcel_polygon).area / polygon.area > splits.SPLIT_OVERLAP_TOLERANCE:
+        if polygon is None or not splits.is_remainder_piece(polygon, new_parcel_polygon, remainder):
             continue
         if any(candidate.equals(polygon) for candidate in [*known, *found]):
             continue
@@ -294,8 +301,7 @@ def _probe_neighbours(location: Location, previous: Place, new_parcel_polygon: M
                 continue
             if holders is None:
                 holders = holders_of([previous], timezone.now())
-            if Pin.objects.filter(location__place__domain_root_id=matched.domain_root_id).exclude(profile_id__in=holders).exists():
-                logger.info("split probe skipped: place %s has pins from outside place %s", matched.pk, previous.pk)
+            if splits.has_stranger_pins(previous, matched, holders):
                 continue
         found.append(polygon)
     return found
@@ -310,7 +316,17 @@ def detect_subdivision(location: Location, new_parcel_polygon: MultiPolygon | No
         new_parcel_polygon: The parcel outline the providers now return here.
 
     Returns:
-        The superseded place, or None when nothing was subdivided."""
+        The superseded place, or None when nothing was subdivided, including when an outline is too broken for GEOS
+        to compare: the refresh goes on without split detection rather than failing."""
+    try:
+        return _detect_subdivision(location, new_parcel_polygon)
+    except GEOSException:
+        logger.warning("split detection skipped for location %s: GEOS could not compare its outlines", location.pk, exc_info=True)
+        return None
+
+
+def _detect_subdivision(location: Location, new_parcel_polygon: MultiPolygon | None) -> Place | None:
+    """:func:`detect_subdivision`, letting GEOS errors through."""
     from urbanlens.dashboard.services.places import splits
 
     previous = location.place.parcel if (location.place_id and location.place is not None) else None

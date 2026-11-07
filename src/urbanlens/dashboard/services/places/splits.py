@@ -10,13 +10,14 @@ from django.db import transaction
 from django.utils import timezone
 
 from urbanlens.dashboard.models.place.model import Place, PlaceKind, PlaceRelation, PlaceStatus, is_plausible_area
+from urbanlens.dashboard.services.geo.area import area_sqm
 from urbanlens.dashboard.services.places import lineage, resolution
 from urbanlens.dashboard.services.places.lineage_events import LineageEvent, LineageEventKind, handle_lineage_event
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from django.contrib.gis.geos import MultiPolygon
+    from django.contrib.gis.geos import GEOSGeometry, MultiPolygon
 
 logger = logging.getLogger(__name__)
 
@@ -68,23 +69,80 @@ SPLIT_OVERLAP_TOLERANCE = 0.05
 SPLIT_REBUILD_RATIO = 0.8
 
 
+#: Least share of a successor's own area that must lie in the part of the old outline the new one gave up.
+#: A parcel that only touches or clips the old outline is a neighbour, not a piece of it.
+SPLIT_REMAINDER_SHARE = 0.5
+
+
+def remainder_of(place: Place, new_geometry: MultiPolygon) -> GEOSGeometry | None:
+    """
+    The part of ``place``'s outline that ``new_geometry`` no longer holds.
+
+    Returns:
+        The remainder, or None when there is none.
+    """
+    if place.geometry is None:
+        return None
+    remainder = place.geometry.difference(new_geometry)
+    if remainder.empty or remainder.area <= 0:
+        return None
+    return remainder
+
+
+def is_remainder_piece(geometry: MultiPolygon | None, new_geometry: MultiPolygon, remainder: GEOSGeometry) -> bool:
+    """
+    Whether an outline could be one of the parcels the rest of the old one became.
+
+    The rule every successor answers to, stored or freshly probed: a plausible parcel, essentially disjoint from
+    the new outline (:data:`SPLIT_OVERLAP_TOLERANCE`), lying mostly in the remainder (:data:`SPLIT_REMAINDER_SHARE`).
+
+    Args:
+        geometry: The candidate outline.
+        new_geometry: The refreshed outline of the parcel being split.
+        remainder: :func:`remainder_of` that parcel.
+    """
+    if geometry is None or geometry.area <= 0 or not is_plausible_area(PlaceKind.PARCEL, area_sqm(geometry)):
+        return False
+    if geometry.intersection(new_geometry).area / geometry.area > SPLIT_OVERLAP_TOLERANCE:
+        return False
+    return geometry.intersection(remainder).area / geometry.area >= SPLIT_REMAINDER_SHARE
+
+
+def has_stranger_pins(place: Place, other: Place, holders: set[int]) -> bool:
+    """
+    Whether ``other``'s domain holds pins from anyone outside ``holders``; re-parenting it would hand them access.
+
+    Args:
+        place: The parcel being split, for the log line.
+        other: The parcel that would become its successor.
+        holders: :func:`~urbanlens.dashboard.services.places.lineage_events.holders_of` ``place``.
+    """
+    from urbanlens.dashboard.models.pin.model import Pin
+
+    if other.domain_root_id is None:
+        strangers = Pin.objects.filter(location__place_id=other.pk)
+    else:
+        strangers = Pin.objects.filter(location__place__domain_root_id=other.domain_root_id)
+    if strangers.exclude(profile_id__in=holders).exists():
+        logger.info("split successor %s skipped: its domain has pins from outside place %s", other.pk, place.pk)
+        return True
+    return False
+
+
 def candidate_parcels(place: Place, new_geometry: MultiPolygon) -> list[MultiPolygon]:
     """
     Outlines of stored parcels that could be the rest of ``place``.
 
-    A candidate is a plausible CURRENT root parcel from the same provider, created since ``place``'s
-    geometry was recorded, essentially disjoint from the new outline. One whose domain holds pins
-    from anyone who did not hold ``place`` is skipped and logged: re-parenting it would hand strangers access.
+    A candidate is a CURRENT root parcel from the same provider, created since ``place``'s geometry was recorded,
+    that passes :func:`is_remainder_piece`. One whose domain holds pins from anyone who did not hold ``place`` is
+    skipped and logged (:func:`has_stranger_pins`).
     The geometry is overwritten in place, so a remainder parcel that only appears on a later refresh is never
     seen here; append-only geometry versions (UL-362) would close that.
     """
-    from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.places.lineage_events import holders_of
 
-    if place.geometry is None:
-        return []
-    remainder = place.geometry.difference(new_geometry)
-    if remainder.empty:
+    remainder = remainder_of(place, new_geometry)
+    if remainder is None:
         return []
     since = place.geometry_generated_at or place.created
     queryset = Place.objects.filter(
@@ -98,14 +156,11 @@ def candidate_parcels(place: Place, new_geometry: MultiPolygon) -> list[MultiPol
     holders: set[int] | None = None
     geometries: list[MultiPolygon] = []
     for other in queryset:
-        if other.geometry is None or not is_plausible_area(other.kind, other.area_sqm) or other.geometry.area <= 0:
-            continue
-        if other.geometry.intersection(new_geometry).area / other.geometry.area > SPLIT_OVERLAP_TOLERANCE:
+        if other.geometry is None or not is_remainder_piece(other.geometry, new_geometry, remainder):
             continue
         if holders is None:
             holders = holders_of([place], timezone.now())
-        if Pin.objects.filter(location__place__domain_root_id=other.domain_root_id).exclude(profile_id__in=holders).exists():
-            logger.info("split candidate %s skipped: its domain has pins from outside place %s", other.pk, place.pk)
+        if has_stranger_pins(place, other, holders):
             continue
         geometries.append(other.geometry)
     return geometries
@@ -124,10 +179,8 @@ def remainder_is_covered(place: Place, new_geometry: MultiPolygon, seen: Iterabl
         True when :func:`candidate_parcels` and ``seen`` cover at least :data:`SPLIT_REMAINDER_COVERAGE` of the
         remainder and, with the new outline, rebuild at least :data:`SPLIT_REBUILD_RATIO` of the old one.
     """
-    if place.geometry is None:
-        return False
-    remainder = place.geometry.difference(new_geometry)
-    if remainder.empty or remainder.area <= 0:
+    remainder = remainder_of(place, new_geometry)
+    if place.geometry is None or remainder is None:
         return False
     candidates = [*candidate_parcels(place, new_geometry), *seen]
     if not candidates:
