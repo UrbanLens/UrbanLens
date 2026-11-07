@@ -263,7 +263,7 @@ def _probe_neighbours(location: Location, previous: Place, new_parcel_polygon: M
 
     A probed outline answers to the rules :func:`~urbanlens.dashboard.services.places.splits.candidate_parcels` holds
     stored parcels to: the previous provider's outline, :func:`~urbanlens.dashboard.services.places.splits.is_remainder_piece`,
-    and, when it describes a stored parcel, a root one with no strangers' pins.
+    and, when it describes a stored parcel, :func:`~urbanlens.dashboard.services.places.splits.is_safe_successor`.
     """
     from urbanlens.dashboard.models.location.model import Location as LocationModel
     from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain
@@ -296,12 +296,9 @@ def _probe_neighbours(location: Location, previous: Place, new_parcel_polygon: M
             continue
         matched = find_matching_place(PlaceKind.PARCEL, polygon, exclude_pk=previous.pk)
         if matched is not None:
-            # candidate_parcels only takes root parcels; re-parenting one that already has a parent would rewrite its family.
-            if matched.parent_id is not None:
-                continue
             if holders is None:
                 holders = holders_of([previous], timezone.now())
-            if splits.has_stranger_pins(previous, matched, holders):
+            if not splits.is_safe_successor(previous, matched, holders):
                 continue
         found.append(polygon)
     return found

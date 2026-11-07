@@ -11,7 +11,14 @@ from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.place.model import GrantReason, Place, PlaceAccessGrant, PlaceKind, PlaceStatus
+from urbanlens.dashboard.models.place.model import (
+    GrantReason,
+    Place,
+    PlaceAccessGrant,
+    PlaceKind,
+    PlaceRelation,
+    PlaceStatus,
+)
 from urbanlens.dashboard.services.locations.boundaries import ResolvedBoundaries
 from urbanlens.dashboard.services.places import provisioning
 from urbanlens.dashboard.services.places.lineage_events import (
@@ -196,6 +203,60 @@ class ProbedSuccessorTests(_OldParcelCase):
     def test_a_probe_mostly_outside_the_remainder_is_no_successor(self) -> None:
         with mock.patch(_CHAIN, _chain_answering(_strip(0.8, 2.0))):
             self.assertIsNone(provisioning.detect_subdivision(self.pin.location, _strip(0, 0.2)))
+        self.assertFalse(PlaceAccessGrant.objects.exists())
+
+    def test_a_probe_describing_a_parcel_of_another_family_is_no_successor(self) -> None:
+        site = make_place(PlaceKind.PARCEL, _strip(2, 3), name="Site")
+        taken = make_place(
+            PlaceKind.PARCEL, _strip(0.2, 1.0), parent=site, relation=PlaceRelation.MEMBER_OF, name="Taken"
+        )
+        with mock.patch(_CHAIN, _chain_answering(_strip(0.2, 1.0))):
+            self.assertIsNone(provisioning.detect_subdivision(self.pin.location, _strip(0, 0.2)))
+        taken.refresh_from_db()
+        self.assertEqual(taken.parent_id, site.pk)
+        self.assertFalse(PlaceAccessGrant.objects.exists())
+
+    def test_a_probe_describing_a_parcel_with_strangers_pins_is_no_successor(self) -> None:
+        theirs = make_place(PlaceKind.PARCEL, _strip(0.2, 1.0), name="Theirs")
+        pin_on(baker.make(User).profile, theirs, lat=SOUTH + SIZE / 2, lng=WEST + SIZE * 0.5)
+        with mock.patch(_CHAIN, _chain_answering(_strip(0.2, 1.0))):
+            self.assertIsNone(provisioning.detect_subdivision(self.pin.location, _strip(0, 0.2)))
+        theirs.refresh_from_db()
+        self.assertIsNone(theirs.parent_id)
+        self.assertFalse(PlaceAccessGrant.objects.exists())
+
+
+class RefreshedOutlineTests(_OldParcelCase):
+    """The refreshed outline becomes a successor too, so it answers to the same rules when it describes a stored parcel."""
+
+    def test_a_refreshed_outline_describing_a_parcel_with_strangers_pins_takes_nothing_into_the_split(self) -> None:
+        theirs = make_place(PlaceKind.PARCEL, _strip(0, 0.6), name="Theirs")
+        pin_on(baker.make(User).profile, theirs, lat=SOUTH + SIZE / 2, lng=WEST + SIZE * 0.3)
+        remainder = self.remainder_parcel()
+        with mock.patch(_CHAIN):
+            superseded = provisioning.detect_subdivision(self.pin.location, _strip(0, 0.6))
+        self.assertEqual(superseded, self.old)
+        self.old.refresh_from_db()
+        self.assertEqual(self.old.status, PlaceStatus.CURRENT)
+        for place in (theirs, remainder):
+            place.refresh_from_db()
+            self.assertIsNone(place.parent_id)
+        self.assertFalse(PlaceAccessGrant.objects.exists())
+
+    def test_a_refreshed_outline_describing_a_parcel_of_another_family_takes_nothing_into_the_split(self) -> None:
+        site = make_place(PlaceKind.PARCEL, _strip(2, 3), name="Site")
+        taken = make_place(
+            PlaceKind.PARCEL, _strip(0, 0.6), parent=site, relation=PlaceRelation.MEMBER_OF, name="Taken"
+        )
+        remainder = self.remainder_parcel()
+        with mock.patch(_CHAIN):
+            provisioning.detect_subdivision(self.pin.location, _strip(0, 0.6))
+        self.old.refresh_from_db()
+        self.assertEqual(self.old.status, PlaceStatus.CURRENT)
+        taken.refresh_from_db()
+        self.assertEqual(taken.parent_id, site.pk)
+        remainder.refresh_from_db()
+        self.assertIsNone(remainder.parent_id)
         self.assertFalse(PlaceAccessGrant.objects.exists())
 
 

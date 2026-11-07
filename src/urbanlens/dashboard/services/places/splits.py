@@ -12,7 +12,7 @@ from django.utils import timezone
 from urbanlens.dashboard.models.place.model import Place, PlaceKind, PlaceRelation, PlaceStatus, is_plausible_area
 from urbanlens.dashboard.services.geo.area import area_sqm
 from urbanlens.dashboard.services.places import lineage, resolution
-from urbanlens.dashboard.services.places.lineage_events import LineageEvent, LineageEventKind, handle_lineage_event
+from urbanlens.dashboard.services.places.lineage_events import LineageEvent, LineageEventKind, handle_lineage_event, holders_of
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -129,18 +129,34 @@ def has_stranger_pins(place: Place, other: Place, holders: set[int]) -> bool:
     return False
 
 
+def is_safe_successor(place: Place, other: Place, holders: set[int]) -> bool:
+    """
+    Whether a stored parcel may become a successor of ``place``.
+
+    The rule every successor that resolves to a stored parcel answers to, wherever its outline came from (a stored
+    candidate, a probe, or the refreshed outline itself): re-parenting must neither rewrite another family nor hand
+    strangers access (:func:`has_stranger_pins`).
+
+    Args:
+        place: The parcel being split.
+        other: The stored parcel the successor outline describes.
+        holders: :func:`~urbanlens.dashboard.services.places.lineage_events.holders_of` ``place``.
+    """
+    if other.parent_id is not None and other.parent_id != place.pk:
+        logger.info("split successor %s skipped: it already belongs to place %s", other.pk, other.parent_id)
+        return False
+    return not has_stranger_pins(place, other, holders)
+
+
 def candidate_parcels(place: Place, new_geometry: MultiPolygon) -> list[MultiPolygon]:
     """
     Outlines of stored parcels that could be the rest of ``place``.
 
     A candidate is a CURRENT root parcel from the same provider, created since ``place``'s geometry was recorded,
-    that passes :func:`is_remainder_piece`. One whose domain holds pins from anyone who did not hold ``place`` is
-    skipped and logged (:func:`has_stranger_pins`).
+    that passes :func:`is_remainder_piece` and :func:`is_safe_successor`.
     The geometry is overwritten in place, so a remainder parcel that only appears on a later refresh is never
     seen here; append-only geometry versions (UL-362) would close that.
     """
-    from urbanlens.dashboard.services.places.lineage_events import holders_of
-
     remainder = remainder_of(place, new_geometry)
     if remainder is None:
         return []
@@ -160,7 +176,7 @@ def candidate_parcels(place: Place, new_geometry: MultiPolygon) -> list[MultiPol
             continue
         if holders is None:
             holders = holders_of([place], timezone.now())
-        if has_stranger_pins(place, other, holders):
+        if not is_safe_successor(place, other, holders):
             continue
         geometries.append(other.geometry)
     return geometries
@@ -219,22 +235,38 @@ def process_split(place: Place, successors: list[MultiPolygon]) -> Place:
     """
     Retire a parcel in favour of the parcels it was divided into.
 
+    An outline that describes a stored parcel failing :func:`is_safe_successor` is left out, whichever path found
+    it: this is the one place every successor passes through, the refreshed outline included.
+
     Args:
         place: The parcel being superseded.
         successors: Official outlines for the new parcels.
 
     Returns:
         The superseded place."""
-    from urbanlens.dashboard.services.places.provisioning import upsert_place
+    from urbanlens.dashboard.services.places.provisioning import find_matching_place, upsert_place
 
     learned_at = timezone.now()
 
-    children: list[Place] = []
+    # exclude_pk=place.pk: place is still CURRENT until the split commits, and its centroid often lands inside one
+    # of its own pieces, which would otherwise alias back onto it. This is the lookup upsert_place makes, and all
+    # are checked before any is touched, so a split that falls short re-parents nothing.
+    accepted: list[MultiPolygon] = []
+    holders: set[int] | None = None
     for geometry in successors:
-        # exclude_pk=place.pk: place is still CURRENT here (status flips below, only once we know
-        # this is really a split) - without it, a successor whose centroid falls near the original
-        # parcel's own centroid (common: the original center often lands inside one of its own
-        # pieces) would silently alias back onto place itself instead of becoming a new child.
+        matched = find_matching_place(PlaceKind.PARCEL, geometry, exclude_pk=place.pk)
+        if matched is not None:
+            if holders is None:
+                holders = holders_of([place], learned_at)
+            if not is_safe_successor(place, matched, holders):
+                continue
+        accepted.append(geometry)
+    if len(accepted) < 2:
+        logger.info("process_split: place %s has fewer than two safe successors; leaving it current", place.pk)
+        return place
+
+    children: list[Place] = []
+    for geometry in accepted:
         child = upsert_place(PlaceKind.PARCEL, geometry, name=place.name, exclude_pk=place.pk)
         if child is not None and child.pk != place.pk:
             lineage.set_parent(child, place, PlaceRelation.MEMBER_OF)
