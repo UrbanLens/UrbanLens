@@ -14,6 +14,7 @@ From the repo root (or the worktree you are given):
   If a test opens its own Redis or Postgres socket, use `wp testsum -- bash bin/run_tests.sh <paths>` instead.
 - **TypeScript tests** (paths under `src/urbanlens/dashboard/frontend/ts`): `wp testsum -- bun test --isolate <paths>`.
   Browser tests (`.../frontend/browser`): `wp testsum -- bun test --timeout 60000 <paths>`.
+- Substitute `<paths>` as separate, individually shell-quoted arguments (`'path one' 'other path'`), never one unquoted string.
 - If the caller named no paths, say so and stop.
 - **"full":** `wp testsum -- bun run test:full`, then `wp testsum -- bun run test:browser` (pre-commit, `check`, `typecheck`, the TypeScript and perf tests and the whole non-browser suite, then the browser tests, which `test:full` does not run). It does not run `bun run lint` (ruff check and mypy); run that separately if asked for lint.
 
