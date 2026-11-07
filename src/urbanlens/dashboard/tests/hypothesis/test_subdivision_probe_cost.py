@@ -22,6 +22,7 @@ from urbanlens.dashboard.services.places import provisioning
 
 _CHAIN = "urbanlens.dashboard.services.locations.boundaries.BoundaryProviderChain"
 WEST, SOUTH = -73.95, 41.70
+PROVIDER = "test_provider"
 
 
 def _box(west: float, south: float, size: float) -> MultiPolygon:
@@ -39,7 +40,8 @@ class _Chain:
         type(self).calls += 1
         west = WEST + int((longitude - WEST) / self.tile) * self.tile
         south = SOUTH + int((latitude - SOUTH) / self.tile) * self.tile
-        return ResolvedBoundaries(property_polygon=_box(west, south, self.tile))
+        polygon = _box(west, south, self.tile)
+        return ResolvedBoundaries(property_polygon=polygon, property_candidates=[(PROVIDER, polygon)])
 
 
 class SubdivisionProbeCostTests(TestCase):
@@ -48,7 +50,7 @@ class SubdivisionProbeCostTests(TestCase):
         _Chain.calls = 0
         # Large but plausible: a county-sized outline is never probed at all.
         self.oversized = baker.make(
-            Place, kind=PlaceKind.PARCEL, geometry=_box(WEST, SOUTH, 0.03), area_sqm=8_300_000.0
+            Place, kind=PlaceKind.PARCEL, geometry=_box(WEST, SOUTH, 0.03), area_sqm=8_300_000.0, provider=PROVIDER
         )
         self.oversized.domain_root = self.oversized
         self.oversized.save()
@@ -85,6 +87,25 @@ class SubdivisionProbeCostTests(TestCase):
         split.assert_called_once()
         self.assertEqual(len(split.call_args.args[1]), 2, "the second parcel's locations must still yield a successor")
 
+    def test_another_providers_outline_is_not_a_successor(self) -> None:
+        """A probe answered only by a different provider than the parcel's own must not become a child."""
+
+        class _Foreign(_Chain):
+            def get_boundaries(
+                self, latitude: float, longitude: float, *, name: str | None = None
+            ) -> ResolvedBoundaries:
+                resolved = super().get_boundaries(latitude, longitude, name=name)
+                resolved.property_candidates = [("other_provider", resolved.property_polygon)]
+                return resolved
+
+        with (
+            mock.patch(_CHAIN, _Foreign),
+            mock.patch("urbanlens.dashboard.services.places.splits.process_split") as split,
+        ):
+            provisioning.ensure_place_for_location(self.locations[0], force=True)
+
+        split.assert_not_called()
+
 
 class ScatteredSubdivisionProbeCapTests(TestCase):
     """A domain whose every location sits in its own new parcel still costs a bounded number of chain runs."""
@@ -92,7 +113,9 @@ class ScatteredSubdivisionProbeCapTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
         _Chain.calls = 0
-        oversized = baker.make(Place, kind=PlaceKind.PARCEL, geometry=_box(WEST, SOUTH, 0.06), area_sqm=8_300_000.0)
+        oversized = baker.make(
+            Place, kind=PlaceKind.PARCEL, geometry=_box(WEST, SOUTH, 0.06), area_sqm=8_300_000.0, provider=PROVIDER
+        )
         oversized.domain_root = oversized
         oversized.save()
         self.locations = [

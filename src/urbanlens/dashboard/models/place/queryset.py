@@ -168,29 +168,53 @@ class PlaceAccessGrantManager(_PlaceAccessGrantManagerBase["PlaceAccessGrant"]):
             return set()
         return {root for root in self.for_profile(profile).values_list("place__domain_root_id", flat=True) if root is not None}
 
+    def grant_places(self, profile_ids: Iterable[int], places: Iterable[Place], *, reason: str) -> int:
+        """
+        Permanently grant each profile each place's domain.
+        Never removes anything. Repeat grants are no-ops.
+
+        Args:
+            profile_ids: Profiles to grant. A no-op for an empty iterable.
+            places: Places to grant on.
+            reason: Why, as a :class:`GrantReason` value.
+
+        Returns:
+            How many grants were requested (existing ones included).
+        """
+        ids = list(profile_ids)
+        targets = list({place.pk: place for place in places}.values())
+        if not ids or not targets:
+            return 0
+        grants = [self.model(profile_id=profile_id, place=place, reason=reason) for profile_id in ids for place in targets]
+        # ignore_conflicts: a repeat call (a profile who already holds part of
+        # the family, or two overlapping snapshot triggers) must stay a no-op,
+        # not an IntegrityError on the (profile, place) unique constraint.
+        self.bulk_create(grants, ignore_conflicts=True)
+        return len(grants)
+
     def snapshot_family(self, profile_ids: Iterable[int], aggregate: Place, *, reason: str | None = None) -> None:
         """
         Permanently grant a split-derived aggregate and all its current members.
-        Used both at the moment a parcel is split (for everyone who held the undivided parcel) and, later, for anyone who independently earns the same aggregate by pinning every one of its current successors - both are "proved full knowledge of this split family", just at different times, and both deserve the identical permanent record.
+        For anyone who independently earns the aggregate by pinning every one of its current successors.
+        Grants made when the split happens go through ``services.places.lineage_events``.
 
         Args:
             profile_ids: Profiles to grant. A no-op for an empty iterable.
             aggregate: The split-derived aggregate place. Its own row and
                 every current ``MEMBER_OF`` child are granted together.
-            reason: Defaults to :attr:`GrantReason.GRANDFATHERED_SPLIT`.
+            reason: Defaults to :attr:`GrantReason.EARNED_FAMILY`.
         """
-        from urbanlens.dashboard.models.place.model import GrantReason, PlaceRelation
+        from urbanlens.dashboard.models.place.model import GrantReason
 
-        resolved_reason = reason if reason is not None else GrantReason.GRANDFATHERED_SPLIT
-        ids = list(profile_ids)
-        if not ids:
-            return
-        family = [aggregate, *aggregate.children.filter(parent_relation=PlaceRelation.MEMBER_OF)]
-        grants = [self.model(profile_id=profile_id, place=place, reason=resolved_reason) for profile_id in ids for place in family]
-        # ignore_conflicts: a repeat call (a profile who already holds part of
-        # the family, or two overlapping snapshot triggers) must stay a no-op,
-        # not an IntegrityError on the (profile, place) unique constraint.
-        self.bulk_create(grants, ignore_conflicts=True)
+        resolved_reason = reason if reason is not None else GrantReason.EARNED_FAMILY
+        self.grant_places(profile_ids, self.family_of(aggregate), reason=resolved_reason)
+
+    @staticmethod
+    def family_of(aggregate: Place) -> list[Place]:
+        """The aggregate plus every current ``MEMBER_OF`` child."""
+        from urbanlens.dashboard.models.place.model import PlaceRelation
+
+        return [aggregate, *aggregate.children.filter(parent_relation=PlaceRelation.MEMBER_OF)]
 
     def record_engagement(self, profile, place: Place | None) -> None:
         """

@@ -128,6 +128,19 @@ class GrandfatheredParcelSplitAccessTests(TestCase):
         pin_on(self.user_a, self.place_p, lat=40.0, lng=-73.998)
         self.assertEqual(self._sees(self.user_a), {"m", "n", "o", "p"})
 
+    def test_a_holder_whose_only_pin_is_on_a_rehomed_building_is_still_grandfathered(self) -> None:
+        """The holder snapshot is taken before buildings move to a successor, or this profile would fall outside the old domain."""
+        building = make_place(
+            PlaceKind.BUILDING, _rect(-74.0025, -74.0015, 39.999, 40.001), parent=self.parcel, name="Annex"
+        )
+        user_c = baker.make(User).profile
+        pin_on(user_c, building, lat=40.0005, lng=-74.002)
+        self.pin_a.delete()
+
+        self._split()
+
+        self.assertEqual(self._sees(user_c), {"m", "n", "o", "p"})
+
     # ── User B: a new profile, never held the undivided parcel ─────────────
 
     def test_user_b_must_earn_every_current_successor_before_reaching_the_parent(self) -> None:
@@ -189,7 +202,7 @@ class GrandfatheredParcelSplitAccessTests(TestCase):
         location_visible_to(self.wiki_m.location, self.user_b)  # triggers the snapshot
 
         granted_places = set(
-            PlaceAccessGrant.objects.filter(profile=self.user_b, reason=GrantReason.GRANDFATHERED_SPLIT).values_list(
+            PlaceAccessGrant.objects.filter(profile=self.user_b, reason=GrantReason.EARNED_FAMILY).values_list(
                 "place_id", flat=True
             )
         )

@@ -10,6 +10,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.gis.db.models.functions import Distance
+from django.contrib.gis.geos import GEOSException
 from django.db import transaction
 from django.utils import timezone
 
@@ -256,6 +257,53 @@ def provision_outcome_for_coordinate(location: Location, *, name: str | None = N
     return ProvisionOutcome(place=standing_on, deferred=list(resolved.deferred), retry_after=resolved.retry_after, backs_off=resolved.backs_off)
 
 
+def _probe_neighbours(location: Location, previous: Place, new_parcel_polygon: MultiPolygon, known: list[MultiPolygon]) -> list[MultiPolygon]:
+    """
+    Ask the provider chain about the domain's locations that fall outside the new outline, at most :data:`MAX_SUBDIVISION_PROBES` times.
+
+    A probed outline answers to the rules :func:`~urbanlens.dashboard.services.places.splits.candidate_parcels` holds
+    stored parcels to: the previous provider's outline, :func:`~urbanlens.dashboard.services.places.splits.is_remainder_piece`,
+    and, when it describes a stored parcel, :func:`~urbanlens.dashboard.services.places.splits.is_safe_successor`.
+    """
+    from urbanlens.dashboard.models.location.model import Location as LocationModel
+    from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain
+    from urbanlens.dashboard.services.places import splits
+    from urbanlens.dashboard.services.places.lineage_events import holders_of
+
+    remainder = splits.remainder_of(previous, new_parcel_polygon)
+    if remainder is None:
+        return []
+    found: list[MultiPolygon] = []
+    holders: set[int] | None = None
+    probes = 0
+    neighbours = LocationModel.objects.filter(place__domain_root_id=previous.domain_root_id).exclude(pk=location.pk).exclude(point__within=new_parcel_polygon).annotate(distance=Distance("point", location.point)).order_by("distance")
+    for other in neighbours.iterator():
+        if any(successor.contains(other.point) for successor in [*known, *found]):
+            continue
+        if probes >= MAX_SUBDIVISION_PROBES:
+            break
+        probes += 1
+        chain_result = BoundaryProviderChain().get_boundaries(float(other.latitude), float(other.longitude), name=other.official_name or None)
+        # A parcel created by provision_outcome_for_coordinate has no recorded provider, so there is nothing to
+        # match candidates against: fall back to the chain's selected outline, as before provider matching existed.
+        if previous.provider:
+            polygon = next((candidate for service_key, candidate in chain_result.property_candidates if service_key == previous.provider), None)
+        else:
+            polygon = chain_result.property_polygon
+        if polygon is None or not splits.is_remainder_piece(polygon, new_parcel_polygon, remainder):
+            continue
+        if any(candidate.equals(polygon) for candidate in [*known, *found]):
+            continue
+        matched = find_matching_place(PlaceKind.PARCEL, polygon, exclude_pk=previous.pk)
+        if matched is not None:
+            if holders is None:
+                holders = holders_of([previous], timezone.now())
+            if not splits.is_safe_successor(previous, matched, holders):
+                continue
+        found.append(polygon)
+    return found
+
+
 def detect_subdivision(location: Location, new_parcel_polygon: MultiPolygon | None) -> Place | None:
     """
     Only the shrink case is detected from a single coordinate: the provider now returns a much smaller parcel here than the one on record, which means the rest of the old parcel became something else.
@@ -265,28 +313,39 @@ def detect_subdivision(location: Location, new_parcel_polygon: MultiPolygon | No
         new_parcel_polygon: The parcel outline the providers now return here.
 
     Returns:
-        The superseded place, or None when nothing was subdivided."""
-    from urbanlens.dashboard.models.location.model import Location as LocationModel
-    from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain
+        The superseded place, or None when nothing was subdivided, including when an outline is too broken for GEOS
+        to compare: the refresh goes on without split detection rather than failing."""
+    try:
+        return _detect_subdivision(location, new_parcel_polygon)
+    except GEOSException:
+        logger.warning("split detection skipped for location %s: GEOS could not compare its outlines", location.pk, exc_info=True)
+        return None
+
+
+def _detect_subdivision(location: Location, new_parcel_polygon: MultiPolygon | None) -> Place | None:
+    """:func:`detect_subdivision`, letting GEOS errors through."""
     from urbanlens.dashboard.services.places import splits
 
     previous = location.place.parcel if (location.place_id and location.place is not None) else None
-    if previous is None or new_parcel_polygon is None or not splits.looks_like_a_split(previous, new_parcel_polygon):
+    if previous is None or new_parcel_polygon is None:
+        return None
+    ratio = splits.shrink_ratio(previous, new_parcel_polygon)
+    heavy = ratio is not None and ratio < (1 - splits.SPLIT_SHRINK_RATIO)
+    # A mild shrink only counts once the missing part turns up as another parcel; a stored one is enough.
+    if not heavy and not splits.is_mild_shrink(previous, new_parcel_polygon):
         return None
 
     successors = [new_parcel_polygon]
-    probes = 0
-    neighbours = LocationModel.objects.filter(place__domain_root_id=previous.domain_root_id).exclude(pk=location.pk).exclude(point__within=new_parcel_polygon).annotate(distance=Distance("point", location.point)).order_by("distance")
-    for other in neighbours.iterator():
-        if any(successor.contains(other.point) for successor in successors):
-            continue
-        if probes >= MAX_SUBDIVISION_PROBES:
-            break
-        probes += 1
-        chain_result = BoundaryProviderChain().get_boundaries(float(other.latitude), float(other.longitude), name=other.official_name or None)
-        if chain_result.property_polygon is not None and not any(candidate.equals(chain_result.property_polygon) for candidate in successors):
-            successors.append(chain_result.property_polygon)
-
+    if not heavy:
+        # Stored parcels first: when they explain the remainder no provider needs asking.
+        if not splits.looks_like_a_split(previous, new_parcel_polygon):
+            successors += _probe_neighbours(location, previous, new_parcel_polygon, successors)
+            if not splits.looks_like_a_split(previous, new_parcel_polygon, seen=successors[1:]):
+                return None
+        stored = splits.candidate_parcels(previous, new_parcel_polygon)
+        successors.extend(geometry for geometry in stored if not any(candidate.equals(geometry) for candidate in successors))
+    else:
+        successors += _probe_neighbours(location, previous, new_parcel_polygon, successors)
     if len(successors) < 2:
         return None
     return splits.process_split(previous, successors)
