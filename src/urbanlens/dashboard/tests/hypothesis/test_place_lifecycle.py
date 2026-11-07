@@ -95,6 +95,17 @@ class GeometryVersionTests(TestCase):
         assert wrong.erroneous
         assert PlaceGeometryVersion.objects.filter(place=place).count() == 2
 
+    def test_a_versions_provider_is_who_drew_it_not_the_places_key_namespace(self) -> None:
+        place = Place.objects.create(
+            kind=PlaceKind.PARCEL, geometry=rect(-74.002, -73.998), provider="redata", provider_key="k"
+        )
+        geometry_versions.set_geometry(place, rect(-74.0015, -73.998), provider="county")
+        geometry_versions.set_geometry(place, rect(-74.0012, -73.998))
+        providers = list(place.geometry_versions.order_by("recorded_at", "pk").values_list("provider", flat=True))
+        # The outline stored before any version has an unknown source; an unnamed refresh is the provider chain's.
+        assert providers == ["", "county", ""]
+        assert geometry_versions.outline_source(place) == ""
+
 
 class LineageEdgeTests(TestCase):
     """The handler writes the edges with the snapshot, and only erroneous corrections remove access."""
@@ -299,10 +310,27 @@ class VersionSplitDetectionTests(TestCase):
         original = upsert_place(PlaceKind.PARCEL, rect(-74.004, -73.996), provider="county")
         assert original is not None
         geometry_versions.set_geometry(original, rect(-74.004, -73.998), provider="county")
-        with mock.patch.object(splits, "process_split", side_effect=lambda place, successors: place):
+        with mock.patch.object(splits, "process_split", side_effect=lambda place, successors, **_: place):
             remainder = upsert_place(PlaceKind.PARCEL, rect(-73.998, -73.996), provider="county")
             assert remainder is not None
             assert splits.detect_split_from_versions(remainder) is None
+        original.refresh_from_db()
+        assert original.status == PlaceStatus.CURRENT
+
+    def test_a_parcel_keyed_elsewhere_splits_when_its_outlines_came_from_the_remainders_provider(self) -> None:
+        original = upsert_place(PlaceKind.PARCEL, rect(-74.004, -73.996), provider="county")
+        assert original is not None
+        Place.objects.filter(pk=original.pk).update(provider="")
+        geometry_versions.set_geometry(original, rect(-74.004, -73.998), provider="county")
+        upsert_place(PlaceKind.PARCEL, rect(-73.998, -73.996), provider="county")
+        original.refresh_from_db()
+        assert original.status == PlaceStatus.SUPERSEDED
+
+    def test_a_remainder_from_another_provider_is_not_a_version_split(self) -> None:
+        original = upsert_place(PlaceKind.PARCEL, rect(-74.004, -73.996), provider="county")
+        assert original is not None
+        geometry_versions.set_geometry(original, rect(-74.004, -73.998), provider="county")
+        upsert_place(PlaceKind.PARCEL, rect(-73.998, -73.996), provider="osm")
         original.refresh_from_db()
         assert original.status == PlaceStatus.CURRENT
 
@@ -314,8 +342,10 @@ class VersionSplitDetectionTests(TestCase):
         original.refresh_from_db()
         assert original.status == PlaceStatus.SUPERSEDED
         piece = Place.objects.get(parent=original, geometry__equals=rect(-74.004, -73.998))
-        assert piece.provider == "county"
+        assert geometry_versions.outline_source(piece) == "county"
 
+        # A piece matched onto an existing place keeps that place's key namespace; its outlines decide.
+        Place.objects.filter(pk=piece.pk).update(provider="")
         geometry_versions.set_geometry(piece, rect(-74.004, -74.0005), provider="county")
         upsert_place(PlaceKind.PARCEL, rect(-74.0005, -73.998), provider="county")
         piece.refresh_from_db()

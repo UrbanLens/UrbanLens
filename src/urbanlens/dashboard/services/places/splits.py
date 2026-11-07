@@ -12,7 +12,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from urbanlens.dashboard.models.place.model import Place, PlaceKind, PlaceRelation, PlaceStatus, is_plausible_area
-from urbanlens.dashboard.services.places import lineage, resolution
+from urbanlens.dashboard.services.places import geometry_versions, lineage, resolution
 from urbanlens.dashboard.services.places.lineage_events import LineageEvent, LineageEventKind, handle_lineage_event
 
 if TYPE_CHECKING:
@@ -79,6 +79,9 @@ MAX_VERSIONS_COMPARED = 20
 #: Version provider for outlines chosen by a community boundary vote; never evidence of a provider's subdivision.
 VOTE_PROVIDER = "vote"
 
+#: Version provider of outlines from the provider chain, which records them without naming a provider.
+CHAIN_PROVIDER = ""
+
 
 def _pinned_by_outsiders(place: Place, holders: set[int]) -> bool:
     """Whether ``place``'s domain holds a pin from anyone outside ``holders``; an unrooted place counts, since its domain cannot be read."""
@@ -89,11 +92,11 @@ def _pinned_by_outsiders(place: Place, holders: set[int]) -> bool:
     return Pin.objects.filter(location__place__domain_root_id=place.domain_root_id).exclude(profile_id__in=holders).exists()
 
 
-def candidate_parcels(place: Place, new_geometry: MultiPolygon) -> list[MultiPolygon]:
+def candidate_parcels(place: Place, new_geometry: MultiPolygon, *, source: str = CHAIN_PROVIDER) -> list[MultiPolygon]:
     """
     Outlines of stored parcels that could be the rest of ``place``.
 
-    A candidate is a plausible CURRENT root parcel from the same provider, created since ``place``'s
+    A candidate is a plausible CURRENT root parcel whose outline ``source`` (the provider of ``new_geometry``) drew, created since ``place``'s
     geometry was recorded, essentially disjoint from the new outline. One whose domain holds pins
     from anyone who did not hold ``place`` is skipped and logged: re-parenting it would hand strangers access.
     A remainder parcel that only appears on a later refresh is not stored yet when the shrink happens;
@@ -116,13 +119,14 @@ def candidate_parcels(place: Place, new_geometry: MultiPolygon) -> list[MultiPol
         status=PlaceStatus.CURRENT,
         geometry__intersects=remainder,
         created__gt=since,
-        provider=place.provider,
         parent__isnull=True,
     ).exclude(pk=place.pk)
     holders: set[int] | None = None
     geometries: list[MultiPolygon] = []
     for other in queryset:
         if other.geometry is None or not is_plausible_area(other.kind, other.area_sqm) or other.geometry.area <= 0:
+            continue
+        if geometry_versions.outline_source(other) != source:
             continue
         try:
             if other.geometry.intersection(new_geometry).area / other.geometry.area > SPLIT_OVERLAP_TOLERANCE:
@@ -198,7 +202,7 @@ def detect_split_from_versions(new_parcel: Place) -> Place | None:
     Notice a split that completes only when the remainder parcel arrives.
 
     A parcel that shrank by 10-66% was left alone at refresh time, because nothing yet covered what it lost.
-    When a new parcel is created, look at the older outlines of the same provider's nearby root parcels (and pieces of earlier splits): if the
+    When a new parcel is created, look at the older outlines of nearby root parcels (and pieces of earlier splits) that the new parcel's provider drew: if the
     new parcel fills the gap between an old outline and the current one, that parcel was split.
 
     Args:
@@ -214,7 +218,9 @@ def detect_split_from_versions(new_parcel: Place) -> Place | None:
     standalone = Q(parent__isnull=True) | Q(parent_relation=PlaceRelation.MEMBER_OF, parent__status=PlaceStatus.SUPERSEDED)
     # Older outlines count too: the remainder can sit in a gap from the parcel's current outline.
     candidates = Place.objects.filter(standalone, kind=PlaceKind.PARCEL, status=PlaceStatus.CURRENT).filter(Q(geometry__intersects=new_geometry) | Q(geometry_versions__geometry__intersects=new_geometry)).exclude(pk=new_parcel.pk).distinct()
-    candidates = candidates.filter(provider=new_parcel.provider)
+    # Compared by who drew the outlines: Place.provider is a key namespace, and a place keeps it whoever refreshes the outline.
+    source = geometry_versions.outline_source(new_parcel)
+    candidates = candidates.filter(geometry_versions__provider=source)
     from urbanlens.dashboard.models.site_settings import SiteSettings
 
     horizon = timezone.now() - timedelta(days=SPLIT_VERSION_REFRESH_CYCLES * SiteSettings.get_current().boundary_cache_days)
@@ -224,9 +230,9 @@ def detect_split_from_versions(new_parcel: Place) -> Place | None:
             continue
         versions = list(previous.geometry_versions.filter(erroneous=False).order_by("-recorded_at", "-pk")[: 1 + MAX_VERSIONS_COMPARED])
         # A vote moves the outline without the provider saying the parcel changed, so only the provider's own earlier outlines count.
-        if not versions or versions[0].provider == VOTE_PROVIDER:
+        if not versions or versions[0].provider == VOTE_PROVIDER or versions[0].provider != source:
             continue
-        older = [version.geometry for version in versions[1:] if version.provider == versions[0].provider and version.recorded_at >= horizon]
+        older = [version.geometry for version in versions[1:] if version.provider == source and version.recorded_at >= horizon]
         before = max(older, key=lambda geometry: geometry.area, default=None)
         if before is None or before.area <= 0 or current.area / before.area >= SPLIT_KEEP_CEILING:
             continue
@@ -243,19 +249,20 @@ def detect_split_from_versions(new_parcel: Place) -> Place | None:
             logger.warning("version split of %s skipped: invalid provider outline", previous.pk)
             continue
         # process_split leaves out a new parcel whose domain has pins from outside previous, which leaves no split.
-        if process_split(previous, [current, new_geometry]).status == PlaceStatus.SUPERSEDED:
+        if process_split(previous, [current, new_geometry], source=source).status == PlaceStatus.SUPERSEDED:
             return previous
     return None
 
 
 @transaction.atomic
-def process_split(place: Place, successors: list[MultiPolygon]) -> Place:
+def process_split(place: Place, successors: list[MultiPolygon], *, source: str = CHAIN_PROVIDER) -> Place:
     """
     Retire a parcel in favour of the parcels it was divided into.
 
     Args:
         place: The parcel being superseded.
         successors: Official outlines for the new parcels.
+        source: The provider that drew ``successors``, recorded on their outlines so later version splits find them.
 
     Returns:
         The superseded place."""
@@ -274,8 +281,7 @@ def process_split(place: Place, successors: list[MultiPolygon]) -> Place:
             # Re-parenting it would grant place's holders a domain other people pinned in.
             logger.info("split successor skipped: it matches parcel %s, whose domain has pins from outside place %s", existing.pk, place.pk)
             continue
-        # The pieces come from the same source as place, and later version splits match on that provider.
-        child = upsert_place(PlaceKind.PARCEL, geometry, provider=place.provider, name=place.name, exclude_pk=place.pk, detect_splits=False)
+        child = upsert_place(PlaceKind.PARCEL, geometry, provider=source, name=place.name, exclude_pk=place.pk, detect_splits=False)
         if child is not None and child.pk != place.pk:
             previous_parents[child.pk] = (child.parent, child.parent_relation)
             lineage.set_parent(child, place, PlaceRelation.MEMBER_OF)

@@ -14,7 +14,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.place.lifecycle import PlaceLineageEdge
 from urbanlens.dashboard.models.place.model import GrantReason, Place, PlaceAccessGrant, PlaceKind, PlaceStatus
-from urbanlens.dashboard.services.places import provisioning, resolution
+from urbanlens.dashboard.services.places import geometry_versions, provisioning, resolution
 from urbanlens.dashboard.services.places.lineage_events import (
     LineageEvent,
     LineageEventKind,
@@ -107,13 +107,18 @@ class MildShrinkTests(_OldParcelCase):
 
     def test_another_providers_overlapping_neighbour_is_no_split_grant_or_reparent(self) -> None:
         neighbour = self.remainder_parcel(0.55, 1.0)
-        Place.objects.filter(pk=neighbour.pk).update(provider="other")
+        geometry_versions.record_version(neighbour, _strip(0.55, 1.0), provider="other")
         self.assertFalse(looks_like_a_split(self.old, _strip(0, 0.6)))
         with mock.patch(_CHAIN):
             self.assertIsNone(provisioning.detect_subdivision(self.pin.location, _strip(0, 0.6)))
         neighbour.refresh_from_db()
         self.assertIsNone(neighbour.parent_id)
         self.assertFalse(PlaceAccessGrant.objects.exists())
+
+    def test_a_remainder_another_provider_drew_does_not_count(self) -> None:
+        remainder = self.remainder_parcel()
+        geometry_versions.record_version(remainder, _strip(0.6, 1.0), provider="other")
+        self.assertFalse(looks_like_a_split(self.old, _strip(0, 0.6)))
 
     def test_a_neighbour_overlapping_the_new_outline_is_not_the_remainder(self) -> None:
         self.remainder_parcel(0.4, 1.0)

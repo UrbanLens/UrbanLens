@@ -26,6 +26,17 @@ def latest_version(place: Place) -> PlaceGeometryVersion | None:
     return PlaceGeometryVersion.objects.filter(place=place).order_by("-recorded_at", "-pk").first()
 
 
+def outline_source(place: Place) -> str:
+    """
+    Which provider drew the place's current outline: that of its latest sound version.
+
+    ``Place.provider`` is the namespace of the place's provider key and says nothing about who drew its outline.
+    Blank when the source is unknown (the backfill, or a place with no recorded outline) or is the unnamed provider chain.
+    """
+    latest = PlaceGeometryVersion.objects.filter(place=place, erroneous=False).order_by("-recorded_at", "-pk").values_list("provider", flat=True).first()
+    return latest or ""
+
+
 def record_version(place: Place, polygon: MultiPolygon, *, provider: str = "", recorded_at: datetime | None = None) -> PlaceGeometryVersion | None:
     """
     Append an outline unless it is the one already on record.
@@ -43,6 +54,7 @@ def set_geometry(place: Place, polygon: MultiPolygon, *, provider: str = "", rec
     """
     Make ``polygon`` the place's current outline, keeping the previous one as a version.
 
+    ``provider`` is where ``polygon`` came from; ``Place.provider`` is a key namespace and is not used for it.
     The caller refreshes derived values (``resolution.refresh_area``) and re-resolves locations.
 
     Returns:
@@ -54,9 +66,9 @@ def set_geometry(place: Place, polygon: MultiPolygon, *, provider: str = "", rec
         stored, stored_at = locked[0] if locked else (None, None)
         had_versions = PlaceGeometryVersion.objects.filter(place=place).exists()
         if not had_versions and stored is not None:
-            # The outline stored under the lock, not the caller's possibly stale copy.
-            record_version(place, stored, provider=place.provider, recorded_at=stored_at or place.created)
-        changed = record_version(place, polygon, provider=provider or place.provider, recorded_at=recorded_at) is not None
+            # The outline stored under the lock, not the caller's possibly stale copy. Who drew it is unknown, as in the backfill.
+            record_version(place, stored, provider="", recorded_at=stored_at or place.created)
+        changed = record_version(place, polygon, provider=provider, recorded_at=recorded_at) is not None
         Place.objects.filter(pk=place.pk).update(geometry=polygon, updated=timezone.now())
     place.geometry = polygon
     return changed
