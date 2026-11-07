@@ -305,3 +305,36 @@ class VersionSplitDetectionTests(TestCase):
             assert splits.detect_split_from_versions(remainder) is None
         original.refresh_from_db()
         assert original.status == PlaceStatus.CURRENT
+
+    def test_a_split_successor_keeps_the_provider_and_can_split_again(self) -> None:
+        original = upsert_place(PlaceKind.PARCEL, rect(-74.004, -73.996), provider="county")
+        assert original is not None
+        geometry_versions.set_geometry(original, rect(-74.004, -73.998), provider="county")
+        upsert_place(PlaceKind.PARCEL, rect(-73.998, -73.996), provider="county")
+        original.refresh_from_db()
+        assert original.status == PlaceStatus.SUPERSEDED
+        piece = Place.objects.get(parent=original, geometry__equals=rect(-74.004, -73.998))
+        assert piece.provider == "county"
+
+        geometry_versions.set_geometry(piece, rect(-74.004, -74.0005), provider="county")
+        upsert_place(PlaceKind.PARCEL, rect(-74.0005, -73.998), provider="county")
+        piece.refresh_from_db()
+        assert piece.status == PlaceStatus.SUPERSEDED
+        assert PlaceLineageEdge.objects.filter(predecessor=piece, kind=LineageEdgeKind.SPLIT_INTO).count() == 2
+
+    def test_an_invalid_outline_skips_the_candidate_instead_of_failing(self) -> None:
+        from unittest import mock
+
+        from django.contrib.gis.geos import GEOSException, GEOSGeometry
+
+        from urbanlens.dashboard.services.places import splits
+
+        original = upsert_place(PlaceKind.PARCEL, rect(-74.004, -73.996), provider="county")
+        assert original is not None
+        geometry_versions.set_geometry(original, rect(-74.004, -73.998), provider="county")
+        remainder = upsert_place(PlaceKind.PARCEL, rect(-73.998, -73.996), provider="county", detect_splits=False)
+        assert remainder is not None
+        with mock.patch.object(GEOSGeometry, "intersection", side_effect=GEOSException("TopologyException")):
+            assert splits.detect_split_from_versions(remainder) is None
+        original.refresh_from_db()
+        assert original.status == PlaceStatus.CURRENT

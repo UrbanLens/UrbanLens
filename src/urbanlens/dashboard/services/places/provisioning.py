@@ -10,6 +10,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.gis.db.models.functions import Distance
+from django.contrib.gis.geos import GEOSException
 from django.db import transaction
 from django.utils import timezone
 
@@ -313,16 +314,20 @@ def detect_subdivision(location: Location, new_parcel_polygon: MultiPolygon | No
         return None
 
     successors = [new_parcel_polygon]
-    if not heavy:
-        # Stored parcels first: when they explain the remainder no provider needs asking.
-        if not splits.looks_like_a_split(previous, new_parcel_polygon):
+    try:
+        if not heavy:
+            # Stored parcels first: when they explain the remainder no provider needs asking.
+            if not splits.looks_like_a_split(previous, new_parcel_polygon):
+                successors += _probe_neighbours(location, previous, new_parcel_polygon, successors)
+                if not splits.looks_like_a_split(previous, new_parcel_polygon, seen=successors[1:]):
+                    return None
+            stored = splits.candidate_parcels(previous, new_parcel_polygon)
+            successors.extend(geometry for geometry in stored if not any(candidate.equals(geometry) for candidate in successors))
+        else:
             successors += _probe_neighbours(location, previous, new_parcel_polygon, successors)
-            if not splits.looks_like_a_split(previous, new_parcel_polygon, seen=successors[1:]):
-                return None
-        stored = splits.candidate_parcels(previous, new_parcel_polygon)
-        successors.extend(geometry for geometry in stored if not any(candidate.equals(geometry) for candidate in successors))
-    else:
-        successors += _probe_neighbours(location, previous, new_parcel_polygon, successors)
+    except GEOSException:
+        logger.warning("subdivision check of %s skipped: invalid provider outline", previous.pk)
+        return None
     if len(successors) < 2:
         return None
     return splits.process_split(previous, successors)

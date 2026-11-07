@@ -11,10 +11,17 @@ from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.location.model import Location
+from urbanlens.dashboard.models.place.lifecycle import PlaceLineageEdge
 from urbanlens.dashboard.models.place.model import GrantReason, Place, PlaceAccessGrant, PlaceKind, PlaceStatus
-from urbanlens.dashboard.services.places import provisioning
-from urbanlens.dashboard.services.places.lineage_events import LineageEvent, LineageEventKind, handle_lineage_event
-from urbanlens.dashboard.services.places.splits import looks_like_a_split
+from urbanlens.dashboard.services.places import provisioning, resolution
+from urbanlens.dashboard.services.places.lineage_events import (
+    LineageEvent,
+    LineageEventKind,
+    handle_lineage_event,
+    retract_erroneous_event,
+)
+from urbanlens.dashboard.services.places.splits import looks_like_a_split, process_split
 
 from .test_places_access_predicate import pin_on
 from .test_places_campus import make_place
@@ -178,3 +185,34 @@ class LineageHandlerTests(_OldParcelCase):
         self.pin.delete()
         handle_lineage_event(event)
         self.assertEqual(PlaceAccessGrant.objects.count(), before)
+
+
+class ProcessSplitTests(_OldParcelCase):
+    def test_a_successor_matching_a_parcel_with_strangers_pins_is_left_alone(self) -> None:
+        neighbour = self.remainder_parcel()
+        pin_on(baker.make(User).profile, neighbour, lat=SOUTH + SIZE / 2, lng=WEST + SIZE * 0.8)
+        process_split(self.old, [_strip(0, 0.6), _strip(0.6, 1.0)])
+        self.old.refresh_from_db()
+        neighbour.refresh_from_db()
+        self.assertEqual(self.old.status, PlaceStatus.CURRENT)
+        self.assertIsNone(neighbour.parent_id)
+        self.assertFalse(PlaceAccessGrant.objects.filter(profile=self.holder, place=neighbour).exists())
+
+    def test_retracting_a_split_detaches_its_successors_and_the_old_parcel_resolves_again(self) -> None:
+        process_split(self.old, [_strip(0, 0.4), _strip(0.4, 0.8)])
+        self.old.refresh_from_db()
+        self.assertTrue(self.old.is_aggregate)
+        successors = list(self.old.children.all())
+        self.assertEqual(len(successors), 2)
+        uncovered = Location.objects.create(latitude=round(SOUTH + SIZE / 2, 6), longitude=round(WEST + SIZE * 0.9, 6))
+        self.assertNotEqual(resolution.resolve_location_place(uncovered), self.old)
+
+        retract_erroneous_event(list(PlaceLineageEdge.objects.filter(predecessor=self.old)), "test")
+
+        self.old.refresh_from_db()
+        self.assertEqual(self.old.status, PlaceStatus.CURRENT)
+        self.assertFalse(self.old.is_aggregate)
+        self.assertTrue(Place.objects.resolvable().filter(pk=self.old.pk).exists())
+        self.assertFalse(Place.objects.filter(pk__in=[s.pk for s in successors], parent=self.old).exists())
+        uncovered.refresh_from_db()
+        self.assertEqual(uncovered.place_id, self.old.pk)

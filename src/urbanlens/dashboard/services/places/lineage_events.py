@@ -11,7 +11,8 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 
 from urbanlens.dashboard.models.place.lifecycle import LineageEdgeKind, PlaceLineageEdge
-from urbanlens.dashboard.models.place.model import GrantReason, Place, PlaceAccessGrant, PlaceStatus
+from urbanlens.dashboard.models.place.model import GrantReason, Place, PlaceAccessGrant, PlaceRelation, PlaceStatus
+from urbanlens.dashboard.services.places import lineage, resolution
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -118,13 +119,25 @@ def repoint_pin_subjects(event: LineageEvent) -> None:
     # TODO(UL-361): repoint Pin.subject_place here, for pins whose subject is in event.predecessors.
 
 
+def _restore_predecessor(predecessor: Place, successor_ids: set[int]) -> None:
+    """Detach the successors a split made members of a reopened predecessor, so it is no longer an aggregate, and let it resolve locations again."""
+    for successor in Place.objects.filter(pk__in=successor_ids, parent_id=predecessor.pk, parent_relation=PlaceRelation.MEMBER_OF):
+        # Refreshes the predecessor's is_aggregate as it goes.
+        lineage.set_parent(successor, None)
+    if predecessor.geometry is not None:
+        resolution.resolve_locations_in(predecessor.geometry)
+
+
 def retract_erroneous_event(edges: Sequence[PlaceLineageEdge], reason: str) -> int:
     """
     Undo the access an event gave, because the event itself was a mistake.
 
     This is the only path that removes a grant, and it is for corrections flagged erroneous. A grant goes only when
     it has sources and every one is an erroneous edge: grants with no sources pre-date source tracking, and a grant
-    that a sound event also justified stays. Predecessors the edges retired are reopened unless another sound edge retires them.
+    that a sound event also justified stays. Predecessors the edges retired are reopened unless another sound edge retires them;
+    a reopened predecessor loses the ``MEMBER_OF`` successors the event attached and resolves locations again.
+    Buildings a split re-homed onto its successors stay there: which of a successor's buildings came from the
+    predecessor is not recorded, and moving the wrong one would join two domains.
 
     Args:
         edges: The edges the mistaken event wrote.
@@ -134,6 +147,7 @@ def retract_erroneous_event(edges: Sequence[PlaceLineageEdge], reason: str) -> i
         The number of grants removed.
     """
     removed: list[tuple[int, int]] = []
+    reopened: set[int] = set()
     ids = [edge.pk for edge in edges]
     with transaction.atomic():
         PlaceLineageEdge.objects.filter(pk__in=ids).update(erroneous=True)
@@ -144,7 +158,10 @@ def retract_erroneous_event(edges: Sequence[PlaceLineageEdge], reason: str) -> i
         for edge in edges:
             if not PlaceLineageEdge.objects.filter(predecessor_id=edge.predecessor_id, erroneous=False).exists():
                 # Only reopen a place these edges closed; one retired by another mechanism keeps its valid_to.
-                Place.objects.filter(pk=edge.predecessor_id, valid_to=edge.learned_at).update(valid_to=None, status=PlaceStatus.CURRENT)
+                if Place.objects.filter(pk=edge.predecessor_id, valid_to=edge.learned_at).update(valid_to=None, status=PlaceStatus.CURRENT):
+                    reopened.add(edge.predecessor_id)
+        for predecessor in Place.objects.filter(pk__in=reopened):
+            _restore_predecessor(predecessor, {edge.successor_id for edge in edges if edge.predecessor_id == predecessor.pk})
     logger.warning("erroneous lineage event retracted (%s): removed %s grants (profile, place): %s", reason, len(removed), removed)
     return len(removed)
 
