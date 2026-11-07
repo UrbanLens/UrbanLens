@@ -757,6 +757,7 @@ PIN_FIELD_POLICY: dict[str, str] = {
     "date_abandoned": _GAP_FILL,
     "date_last_active": _GAP_FILL,
     "wiki": _GAP_FILL,
+    "subject_place": _GAP_FILL,
     "priority": _HIGHER,
     "vulnerability": _HIGHER,
     "danger": _HIGHER,

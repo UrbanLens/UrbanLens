@@ -837,10 +837,15 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             lng = coordinate_or_none(longitude, bound=LONGITUDE_BOUND)
             if lat is None or lng is None:
                 return JsonResponse({"error": "That isn't a place on the map."}, status=400)
-            pin.location, _ = Location.objects.get_nearby_or_create(lat, lng)
+            location, _ = Location.objects.get_nearby_or_create(lat, lng)
+            # The subject follows only a real change of Location, so re-saving the current point keeps a subject
+            # that has since diverged from the Location's place.
+            if location.pk != pin.location_id:
+                pin.location = location
+                pin.subject_place_id = location.place_id
             if pin.parent_pin_id is None and Pin.objects.root_pins().filter(profile=pin.profile, location=pin.location).exclude(pk=pin.pk).exists():
                 return JsonResponse({"error": _ALREADY_PINNED_THERE}, status=400)
-            touched.append("location")
+            touched += ["location", "subject_place"]
         if icon is not None:
             pin.icon = clean_icon(icon)
             touched.append("icon")

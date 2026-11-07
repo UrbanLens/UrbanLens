@@ -186,6 +186,15 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
         blank=True,
         related_name="pins",
     )
+    # The place this pin is *about*: set on create, move and late place resolution, repointed only by lineage events.
+    # It never grants access; it only picks which already-visible wiki leads (``services.pins.primary_wiki``).
+    subject_place = ForeignKey(
+        "dashboard.Place",
+        on_delete=SET_NULL,
+        null=True,
+        blank=True,
+        related_name="subject_pins",
+    )
     labels = ManyToManyField(
         "dashboard.Label",
         blank=True,
@@ -283,6 +292,11 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
         The alias list is the full set of names a pin has ever had, including the current one - so whenever a meaningful ``name`` is persisted, an alias row for it is ensured.
         """
         update_fields = kwargs.get("update_fields")
+        if self._state.adding and self.subject_place_id is None and self.location_id is not None:
+            # Safety net for create paths that did not resolve a subject themselves.
+            from urbanlens.dashboard.services.pins.primary_wiki import current_place_id_for_location
+
+            self.subject_place_id = current_place_id_for_location(self.location_id)
         if update_fields is None or "name" in update_fields:
             self.name = sanitize_name(self.name)
         if update_fields is None or not _COLOR_FIELDS.isdisjoint(update_fields):
@@ -701,14 +715,12 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
     @property
     def community_wiki(self):
         """
-        The community page for the place this pin stands on, if there is one.
-        Not the same as ``self.wiki``, which is a cache set only when a pin is explicitly linked, nor as ``self.location.wiki``, which is the page anchored to this exact coordinate.
+        The pin's primary wiki as its owner sees it, if there is one.
+        Delegates to :func:`~urbanlens.dashboard.services.pins.primary_wiki.primary_wiki_for_pin`; the one rule that replaced both this property's old re-resolution and ``Pin.wiki`` as the answer.
         """
-        from urbanlens.dashboard.models.wiki.model import Wiki
+        from urbanlens.dashboard.services.pins.primary_wiki import primary_wiki_for_pin
 
-        if self.wiki_id and self.wiki is not None:
-            return self.wiki
-        return Wiki.objects.get_for_location(self.location) if self.location_id else None
+        return primary_wiki_for_pin(self, self.profile, primary_only=True).primary
 
     @property
     def effective_name(self) -> str:

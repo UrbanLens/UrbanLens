@@ -156,8 +156,9 @@ def repair_legacy_pin_coordinates(
         return None
 
     candidate.location = correct_location
+    candidate.subject_place_id = correct_location.place_id
     try:
-        candidate.save(update_fields=["location", "updated"])
+        candidate.save(update_fields=["location", "subject_place", "updated"])
     except DatabaseError as exc:
         logger.warning("Legacy coordinate repair could not move pin %s: %s", candidate.pk, exc)
         return None
