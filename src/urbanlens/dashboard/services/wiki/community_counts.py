@@ -25,14 +25,14 @@ _FUZZ_CACHE_TIMEOUT = 60 * 60 * 24
 _CACHE_KEY_TEMPLATE = "wiki_pin_count_fuzz:{wiki_id}:{scope}"
 
 
-def approximate_pin_count(wiki_id: int, exact_count: int, scope: str = "place") -> dict[str, object]:
+def approximate_pin_count(wiki_id: int, exact_count: int, scope: str) -> dict[str, object]:
     """
     Build the privacy-preserving display form of a wiki's pinned-user count.
 
     Args:
         wiki_id: Primary key of the wiki the count belongs to (cache key).
         exact_count: The exact number of distinct users with this place pinned.
-        scope: What the count covers (``"place"`` or ``"location:<pk>"``), so counts of different extent never share a cached value.
+        scope: What the count covers (``"place"``, ``"location:<pk>"`` or ``"stat"``), so counts of different extent never share a cached value. Required, so a caller cannot silently share another scope's key.
 
     Returns:
         Dict with ``is_low`` (True when the count is under :data:`MIN_VISIBLE_PIN_COUNT` and no number should be shown) and ``value`` (the fuzzed count to display, or None when ``is_low``)."""
