@@ -97,7 +97,7 @@ class GeometryVersionTests(TestCase):
 
     def test_a_versions_provider_is_who_drew_it_not_the_places_key_namespace(self) -> None:
         place = Place.objects.create(
-            kind=PlaceKind.PARCEL, geometry=rect(-74.002, -73.998), provider="redata", provider_key="k"
+            kind=PlaceKind.PARCEL, geometry=rect(-74.002, -73.998), provider="assessor", provider_key="k"
         )
         geometry_versions.set_geometry(place, rect(-74.0015, -73.998), provider="county")
         geometry_versions.set_geometry(place, rect(-74.0012, -73.998))

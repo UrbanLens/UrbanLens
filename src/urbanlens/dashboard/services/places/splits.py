@@ -282,7 +282,8 @@ def process_split(place: Place, successors: list[MultiPolygon], *, source: str =
             logger.info("split successor skipped: it matches parcel %s, whose domain has pins from outside place %s", existing.pk, place.pk)
             continue
         child = upsert_place(PlaceKind.PARCEL, geometry, provider=source, name=place.name, exclude_pk=place.pk, detect_splits=False)
-        if child is not None and child.pk != place.pk:
+        # Two outlines that resolve to one place are one successor; counting it twice would retire place for a single piece.
+        if child is not None and child.pk != place.pk and child.pk not in previous_parents:
             previous_parents[child.pk] = (child.parent, child.parent_relation)
             lineage.set_parent(child, place, PlaceRelation.MEMBER_OF)
             children.append(child)

@@ -203,6 +203,14 @@ class ProcessSplitTests(_OldParcelCase):
         self.assertIsNone(neighbour.parent_id)
         self.assertFalse(PlaceAccessGrant.objects.filter(profile=self.holder, place=neighbour).exists())
 
+    def test_two_outlines_resolving_to_one_place_are_not_a_split(self) -> None:
+        piece = _strip(0, 0.6)
+        process_split(self.old, [piece, piece])
+        self.old.refresh_from_db()
+        self.assertEqual(self.old.status, PlaceStatus.CURRENT)
+        self.assertFalse(Place.objects.filter(parent=self.old).exists())
+        self.assertFalse(PlaceLineageEdge.objects.filter(predecessor=self.old).exists())
+
     def test_retracting_a_split_detaches_its_successors_and_the_old_parcel_resolves_again(self) -> None:
         process_split(self.old, [_strip(0, 0.4), _strip(0.4, 0.8)])
         self.old.refresh_from_db()
