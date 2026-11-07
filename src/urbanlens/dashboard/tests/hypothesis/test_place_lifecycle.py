@@ -157,7 +157,9 @@ class LineageEdgeTests(TestCase):
         ).exists()
         with self.assertLogs("urbanlens.dashboard.services.places.lineage_events", level="WARNING") as logs:
             removed = retract_erroneous_event(list(PlaceLineageEdge.objects.all()), "test")
-        assert removed >= 2
+        # One grant each on the predecessor, new_a and new_b, all justified only by the retracted edges.
+        assert removed == 3
+        assert not PlaceAccessGrant.objects.filter(profile=self.holder).exists()
         assert not PlaceAccessGrant.objects.filter(profile=self.holder, place=self.new_a).exists()
         assert any(str(self.new_a.pk) in line for line in logs.output)
         assert PlaceLineageEdge.objects.filter(erroneous=True).count() == 2
@@ -191,8 +193,9 @@ class LineageEdgeTests(TestCase):
             profile=self.holder, place=self.new_a, reason=GrantReason.GRANDFATHERED_SPLIT
         )
         handle_lineage_event(self._event(LineageEventKind.SPLIT))
-        assert retract_erroneous_event(list(PlaceLineageEdge.objects.all()), "test") >= 1
-        assert PlaceAccessGrant.objects.filter(pk=legacy.pk).exists()
+        # The sourced grants on the predecessor and new_b go; the legacy grant on new_a stays.
+        assert retract_erroneous_event(list(PlaceLineageEdge.objects.all()), "test") == 2
+        assert list(PlaceAccessGrant.objects.filter(profile=self.holder).values_list("pk", flat=True)) == [legacy.pk]
 
     def test_retraction_reopens_the_predecessor(self) -> None:
         handle_lineage_event(self._event(LineageEventKind.SPLIT))
@@ -368,3 +371,43 @@ class VersionSplitDetectionTests(TestCase):
             assert splits.detect_split_from_versions(remainder) is None
         original.refresh_from_db()
         assert original.status == PlaceStatus.CURRENT
+
+
+class FailedSplitLeavesNoTraceTests(TestCase):
+    """A split with fewer than two usable successors undoes everything it wrote while trying."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.holder = baker.make(User).profile
+        self.outsider = baker.make(User).profile
+        self.original = upsert_place(PlaceKind.PARCEL, rect(-74.004, -73.996), provider="county")
+        assert self.original is not None
+        pin_on(self.holder, self.original, lat=40.0, lng=-74.003)
+        # The east half is already a parcel someone else pinned, so it can never be handed to the holder.
+        self.pinned = upsert_place(PlaceKind.PARCEL, rect(-74.0, -73.996), provider="county", detect_splits=False)
+        assert self.pinned is not None
+        pin_on(self.outsider, self.pinned, lat=40.0, lng=-73.998)
+
+    def test_a_successor_created_for_a_failed_split_is_removed(self) -> None:
+        from urbanlens.dashboard.services.places.splits import process_split
+
+        before = set(Place.objects.values_list("pk", flat=True))
+        result = process_split(self.original, [rect(-74.004, -74.0), rect(-74.0, -73.996)], source="county")
+        assert result.status == PlaceStatus.CURRENT
+        assert set(Place.objects.values_list("pk", flat=True)) == before
+        assert not PlaceLineageEdge.objects.exists()
+
+    def test_a_matched_successor_keeps_its_outline_and_parent_after_a_failed_split(self) -> None:
+        from urbanlens.dashboard.services.places.splits import process_split
+
+        west = upsert_place(PlaceKind.PARCEL, rect(-74.004, -74.0), provider="county", detect_splits=False)
+        assert west is not None
+        versions = west.geometry_versions.count()
+        process_split(self.original, [rect(-74.0041, -74.0), rect(-74.0, -73.996)], source="county")
+        west.refresh_from_db()
+        assert west.geometry.equals(rect(-74.004, -74.0))
+        assert west.geometry_versions.count() == versions
+        assert west.parent_id is None
+        self.original.refresh_from_db()
+        assert self.original.status == PlaceStatus.CURRENT
+        assert not self.original.is_aggregate

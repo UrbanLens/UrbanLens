@@ -273,7 +273,10 @@ def process_split(place: Place, successors: list[MultiPolygon], *, source: str =
     holders = holders_of([place], learned_at)
 
     children: list[Place] = []
-    previous_parents: dict[int, tuple[Place | None, str]] = {}
+    seen: set[int] = set()
+    # Upserting a successor creates places, rewrites matched ones' outlines and re-parents them before the split is decided.
+    # A split that falls short rolls all of that back, so no successor outlives it as an orphan duplicate.
+    savepoint = transaction.savepoint()
     for geometry in successors:
         # place is still CURRENT, so without exclude_pk a piece holding its centroid would alias back onto it.
         existing = find_matching_place(PlaceKind.PARCEL, geometry, exclude_pk=place.pk)
@@ -283,20 +286,18 @@ def process_split(place: Place, successors: list[MultiPolygon], *, source: str =
             continue
         child = upsert_place(PlaceKind.PARCEL, geometry, provider=source, name=place.name, exclude_pk=place.pk, detect_splits=False)
         # Two outlines that resolve to one place are one successor; counting it twice would retire place for a single piece.
-        if child is not None and child.pk != place.pk and child.pk not in previous_parents:
-            previous_parents[child.pk] = (child.parent, child.parent_relation)
+        if child is not None and child.pk != place.pk and child.pk not in seen:
+            seen.add(child.pk)
             lineage.set_parent(child, place, PlaceRelation.MEMBER_OF)
             children.append(child)
 
     if len(children) < 2:
         logger.info("process_split: place %s produced fewer than two successors; leaving it current", place.pk)
-        for child in children:
-            old_parent, old_relation = previous_parents[child.pk]
-            if old_parent is None:
-                lineage.set_parent(child, None)
-            else:
-                lineage.set_parent(child, old_parent, old_relation)
+        transaction.savepoint_rollback(savepoint)
+        # set_parent refreshed place's derived flags while the successors hung under it.
+        place.refresh_from_db()
         return place
+    transaction.savepoint_commit(savepoint)
 
     Place.objects.filter(pk=place.pk).update(status=PlaceStatus.SUPERSEDED)
     place.status = PlaceStatus.SUPERSEDED
