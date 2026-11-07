@@ -282,8 +282,14 @@ class ProcessSplitTests(_OldParcelCase):
     def test_an_outline_overlapping_another_successor_is_no_successor(self) -> None:
         self._assert_nothing_split(process_split(self.old, [_strip(0, 0.6), _strip(0.3, 1.0)]))
 
-    def test_the_same_outline_twice_is_one_successor(self) -> None:
+    def test_one_outline_offered_twice_is_too_few_successors_to_split(self) -> None:
         self._assert_nothing_split(process_split(self.old, [_strip(0, 0.6), _strip(0, 0.6)]))
+
+    def test_an_outline_offered_twice_becomes_one_child(self) -> None:
+        self.assertEqual(process_split(self.old, [_strip(0, 0.6), _strip(0, 0.6), _strip(0.6, 1.0)]), self.old)
+        self.old.refresh_from_db()
+        self.assertEqual(self.old.status, PlaceStatus.SUPERSEDED)
+        self.assertEqual(self.old.children.count(), 2)
 
     def test_pieces_of_the_old_parcel_split_it(self) -> None:
         self.assertEqual(process_split(self.old, [_strip(0, 0.6), _strip(0.6, 1.0)]), self.old)
