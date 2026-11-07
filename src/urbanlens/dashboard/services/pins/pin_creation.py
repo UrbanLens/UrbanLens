@@ -99,35 +99,44 @@ class PinCreationForbiddenError(PinCreationError):
 
 
 def resolve_child_pin_location(
-    profile: Profile,
     latitude: float | str | Decimal,
     longitude: float | str | Decimal,
     *,
-    exclude_pin: Pin | None = None,
     defaults: dict | None = None,
 ) -> Location:
     """
-    Resolve the Location a child (detail) pin sits at, refusing an exact overlap.
+    Resolve the Location a child (detail) pin sits at.
     A child pin records its own precise coordinates near its parent, so - unlike a top-level pin - this never applies the fuzzy proximity radius, which would collapse a door, a window, and a sign on one building onto the parent's own Location.
+    A child may share its parent's exact point, or a sibling's: only top-level pins are unique per Location.
 
     Args:
-        profile: Owner of the child pin being placed or moved.
         latitude: Submitted latitude.
         longitude: Submitted longitude.
-        exclude_pin: A pin to ignore when looking for an overlap - the pin being moved, so re-submitting its current point stays a no-op instead of colliding with itself.
         defaults: Field defaults used only when creating a new Location.
+
+    Returns:
+        The Location at exactly these coordinates, created if it didn't exist."""
+    location, _created = Location.objects.get_exact_or_create(latitude, longitude, defaults=defaults)
+    return location
+
+
+def resolve_unclaimed_child_pin_location(profile: Profile, latitude: float | str | Decimal, longitude: float | str | Decimal) -> Location:
+    """
+    Resolve a child pin's Location for an automatic generator, refusing a point the profile already has a pin on.
+    Generators (building sweeps, wiki pulls) use an existing pin at the point as evidence the place is already covered; a person placing a pin by hand may stack it (see :func:`resolve_child_pin_location`).
+
+    Args:
+        profile: Owner of the pin being generated.
+        latitude: Candidate latitude.
+        longitude: Candidate longitude.
 
     Returns:
         The Location at exactly these coordinates, created if it didn't exist.
 
     Raises:
-        PinCreationError: This profile already has another pin at that point."""
-    location, _created = Location.objects.get_exact_or_create(latitude, longitude, defaults=defaults)
-
-    overlapping = Pin.objects.filter(profile=profile, location=location)  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
-    if exclude_pin is not None and exclude_pin.pk is not None:
-        overlapping = overlapping.exclude(pk=exclude_pin.pk)
-    if overlapping.exists():
+        DuplicateCoordinatesError: The profile already has a pin at that point."""
+    location = resolve_child_pin_location(latitude, longitude)
+    if Pin.objects.filter(profile=profile, location=location).exists():  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
         raise DuplicateCoordinatesError("Duplicate pin at these exact coordinates.")
     return location
 
@@ -229,9 +238,8 @@ def create_pin_for_profile(
         raise InvalidCoordinatesError("The coordinates are not a place on the globe.")
 
     if new_parent is not None:
-        # A child pin keeps its own exact point (and may not stack on another of
-        # this profile's pins) - see resolve_child_pin_location.
-        location = resolve_child_pin_location(profile, lat_f, lon_f)
+        # A child pin keeps its own exact point, which may be its parent's or a sibling's.
+        location = resolve_child_pin_location(lat_f, lon_f)
     else:
         # The user's exact coordinate is kept, always.
         # Consolidating two drops at one place is the *place's* job now: they resolve onto the same

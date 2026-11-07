@@ -30,6 +30,7 @@ from asgiref.sync import async_to_sync
 from celery import shared_task
 from celery.exceptions import SoftTimeLimitExceeded
 from channels.layers import get_channel_layer
+from django.db import OperationalError as DatabaseOperationalError
 from django.utils import timezone
 
 from urbanlens.dashboard.services.core.capacity import ALBUM_PHOTOS, CapacityExceededError, ensure_room
@@ -4842,6 +4843,67 @@ def sweep_achievements_range(start_pk: int, end_pk: int) -> int:
     from urbanlens.dashboard.services.achievements.evaluate import evaluate_profiles_in_range
 
     return evaluate_profiles_in_range(start_pk, end_pk)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+def refresh_trust_signals(chunk_size: int = 500) -> int:
+    """
+    Fan the nightly ``ProfileTrustSignals`` rebuild out as bounded profile-range subtasks.
+
+    Args:
+        chunk_size: Maximum profiles per subtask.
+
+    Returns:
+        How many range subtasks were enqueued.
+    """
+    from urbanlens.dashboard.models.profile import Profile
+    from urbanlens.dashboard.services.core.celery import dispatch_pk_ranges
+
+    return dispatch_pk_ranges(Profile.objects.all(), refresh_trust_signals_range, chunk_size=chunk_size)
+
+
+@shared_task(bind=True, autoretry_for=(OSError, DatabaseOperationalError), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+def refresh_trust_signals_range(self, start_pk: int, end_pk: int) -> int:
+    """
+    Rebuild the signals row of every profile with ``start_pk <= pk <= end_pk``.
+
+    Idempotent: rows are replaced, never accumulated. A profile with no activity in 90 days whose row is
+    younger than ``UL_TRUST_DORMANT_REFRESH_DAYS`` is skipped.
+
+    Returns:
+        How many profiles were rebuilt.
+    """
+    from datetime import timedelta
+
+    from django.conf import settings
+    from django.utils import timezone
+
+    from urbanlens.dashboard.models.achievements.model import ProfileActivityDay
+    from urbanlens.dashboard.models.profile import Profile
+    from urbanlens.dashboard.models.trust_signals import ProfileTrustSignals
+    from urbanlens.dashboard.services.trust import compute_signals
+    from urbanlens.dashboard.services.trust.signals import ACTIVITY_WINDOW_DAYS, MEANINGFUL_ACTIVITY_KINDS
+
+    dormant_cutoff = timezone.now() - timedelta(days=settings.UL_TRUST_DORMANT_REFRESH_DAYS)
+    skip = set(ProfileTrustSignals.objects.filter(profile_id__gte=start_pk, profile_id__lte=end_pk, active_weeks_90=0, computed_at__gte=dormant_cutoff).values_list("profile_id", flat=True))
+    # A dormant row may be stale because the profile became active again since it was computed.
+    skip.difference_update(ProfileActivityDay.objects.filter(profile_id__in=skip, kind__in=MEANINGFUL_ACTIVITY_KINDS, day__gte=timezone.localdate() - timedelta(days=ACTIVITY_WINDOW_DAYS)).values_list("profile_id", flat=True))
+    rebuilt = 0
+    for profile in Profile.objects.filter(pk__gte=start_pk, pk__lte=end_pk).exclude(pk__in=skip).iterator(chunk_size=200):
+        try:
+            compute_signals(profile)
+        except (OSError, DatabaseOperationalError):
+            # Transient: retry the whole range (rebuilds are idempotent) rather than skip the profile until tomorrow.
+            # On the final attempt, isolate the profile so a persistent timeout can't block the rest of the range.
+            if self.request.retries < (self.max_retries or 0):
+                raise
+            logger.exception("Trust signals refresh failed for profile %s after retries", profile.pk)
+            continue
+        except Exception:
+            logger.exception("Trust signals refresh failed for profile %s", profile.pk)
+            continue
+        rebuilt += 1
+    return rebuilt
 
 
 @shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
