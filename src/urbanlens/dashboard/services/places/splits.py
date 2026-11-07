@@ -108,6 +108,27 @@ def is_remainder_piece(geometry: MultiPolygon | None, new_geometry: MultiPolygon
     return geometry.intersection(remainder).area / geometry.area >= SPLIT_REMAINDER_SHARE
 
 
+def is_piece_of(place: Place, geometry: MultiPolygon | None, pieces: Iterable[MultiPolygon]) -> bool:
+    """
+    Whether an outline can be one more of the parcels ``place`` was divided into, beside ``pieces``.
+
+    The geometric rule :func:`process_split` holds every successor to, whichever path found it, so no caller can hand
+    it a neighbour: a plausible parcel lying mostly (:data:`SPLIT_REMAINDER_SHARE`) inside the old outline and
+    essentially disjoint (:data:`SPLIT_OVERLAP_TOLERANCE`) from every piece already taken. It needs no remainder, so
+    it holds for the refreshed outline too; with that outline first it is what :func:`is_remainder_piece` asks upstream.
+
+    Args:
+        place: The parcel being split.
+        geometry: The candidate outline.
+        pieces: Outlines already accepted as successors.
+    """
+    if place.geometry is None or geometry is None or geometry.area <= 0 or not is_plausible_area(PlaceKind.PARCEL, area_sqm(geometry)):
+        return False
+    if geometry.intersection(place.geometry).area / geometry.area < SPLIT_REMAINDER_SHARE:
+        return False
+    return all(geometry.intersection(piece).area / geometry.area <= SPLIT_OVERLAP_TOLERANCE for piece in pieces)
+
+
 def has_stranger_pins(place: Place, other: Place, holders: set[int]) -> bool:
     """
     Whether ``other``'s domain holds pins from anyone outside ``holders``; re-parenting it would hand them access.
@@ -189,7 +210,8 @@ def remainder_is_covered(place: Place, new_geometry: MultiPolygon, seen: Iterabl
     Args:
         place: The parcel being refreshed.
         new_geometry: Its refreshed outline.
-        seen: Parcel outlines returned in the same refresh.
+        seen: Parcel outlines returned in the same refresh. Only those passing :func:`is_remainder_piece` count, the
+            rule stored candidates answer to, so an overlapping or outlying neighbour cannot make up the coverage.
 
     Returns:
         True when :func:`candidate_parcels` and ``seen`` cover at least :data:`SPLIT_REMAINDER_COVERAGE` of the
@@ -198,7 +220,7 @@ def remainder_is_covered(place: Place, new_geometry: MultiPolygon, seen: Iterabl
     remainder = remainder_of(place, new_geometry)
     if place.geometry is None or remainder is None:
         return False
-    candidates = [*candidate_parcels(place, new_geometry), *seen]
+    candidates = [*candidate_parcels(place, new_geometry), *(outline for outline in seen if is_remainder_piece(outline, new_geometry, remainder))]
     if not candidates:
         return False
     union = GeometryCollection(*candidates).unary_union
@@ -231,19 +253,20 @@ def looks_like_a_split(place: Place, new_geometry: MultiPolygon | None, seen: It
 
 
 @transaction.atomic
-def process_split(place: Place, successors: list[MultiPolygon]) -> Place:
+def process_split(place: Place, successors: list[MultiPolygon]) -> Place | None:
     """
     Retire a parcel in favour of the parcels it was divided into.
 
-    An outline that describes a stored parcel failing :func:`is_safe_successor` is left out, whichever path found
-    it: this is the one place every successor passes through, the refreshed outline included.
+    This is the one place every successor passes through, the refreshed outline included, so the successor rules
+    are enforced here whichever path found the outline: one failing :func:`is_piece_of`, or describing a stored
+    parcel that fails :func:`is_safe_successor`, is left out.
 
     Args:
         place: The parcel being superseded.
-        successors: Official outlines for the new parcels.
+        successors: Official outlines for the new parcels, the refreshed outline first when there is one.
 
     Returns:
-        The superseded place."""
+        The superseded place, or None when fewer than two successors survive and the parcel stays current."""
     from urbanlens.dashboard.services.places.provisioning import find_matching_place, upsert_place
 
     learned_at = timezone.now()
@@ -254,6 +277,9 @@ def process_split(place: Place, successors: list[MultiPolygon]) -> Place:
     accepted: list[MultiPolygon] = []
     holders: set[int] | None = None
     for geometry in successors:
+        if not is_piece_of(place, geometry, accepted):
+            logger.info("process_split: an outline offered for place %s is not a piece of it; left out", place.pk)
+            continue
         matched = find_matching_place(PlaceKind.PARCEL, geometry, exclude_pk=place.pk)
         if matched is not None:
             if holders is None:
@@ -263,7 +289,7 @@ def process_split(place: Place, successors: list[MultiPolygon]) -> Place:
         accepted.append(geometry)
     if len(accepted) < 2:
         logger.info("process_split: place %s has fewer than two safe successors; leaving it current", place.pk)
-        return place
+        return None
 
     children: list[Place] = []
     for geometry in accepted:
@@ -274,7 +300,7 @@ def process_split(place: Place, successors: list[MultiPolygon]) -> Place:
 
     if len(children) < 2:
         logger.info("process_split: place %s produced fewer than two successors; leaving it current", place.pk)
-        return place
+        return None
 
     # Snapshot before anything moves: once buildings re-home, containment can
     # no longer prove what these profiles already had.

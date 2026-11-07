@@ -27,7 +27,7 @@ from urbanlens.dashboard.services.places.lineage_events import (
     handle_lineage_event,
     holders_of,
 )
-from urbanlens.dashboard.services.places.splits import looks_like_a_split
+from urbanlens.dashboard.services.places.splits import looks_like_a_split, process_split
 
 from .test_places_access_predicate import pin_on
 from .test_places_campus import make_place
@@ -124,6 +124,12 @@ class MildShrinkTests(_OldParcelCase):
     def test_a_neighbour_overlapping_the_new_outline_is_not_the_remainder(self) -> None:
         self.remainder_parcel(0.4, 1.0)
         self.assertFalse(looks_like_a_split(self.old, _strip(0, 0.6)))
+
+    def test_an_outline_seen_in_the_same_refresh_answers_to_the_stored_parcels_rule(self) -> None:
+        # Fills the whole remainder, but overlaps the new outline: a different parcel, not the rest of this one.
+        self.assertFalse(looks_like_a_split(self.old, _strip(0, 0.6), seen=[_strip(0.3, 1.0)]))
+        # Beside the old outline rather than in its remainder.
+        self.assertFalse(looks_like_a_split(self.old, _strip(0, 0.6), seen=[_strip(0.6, 1.8)]))
 
     def test_a_neighbour_that_already_has_a_parent_is_untouched(self) -> None:
         site = make_place(PlaceKind.PARCEL, _strip(2, 3), name="Site")
@@ -235,7 +241,7 @@ class RefreshedOutlineTests(_OldParcelCase):
         remainder = self.remainder_parcel()
         with mock.patch(_CHAIN):
             superseded = provisioning.detect_subdivision(self.pin.location, _strip(0, 0.6))
-        self.assertEqual(superseded, self.old)
+        self.assertIsNone(superseded)
         self.old.refresh_from_db()
         self.assertEqual(self.old.status, PlaceStatus.CURRENT)
         for place in (theirs, remainder):
@@ -250,7 +256,7 @@ class RefreshedOutlineTests(_OldParcelCase):
         )
         remainder = self.remainder_parcel()
         with mock.patch(_CHAIN):
-            provisioning.detect_subdivision(self.pin.location, _strip(0, 0.6))
+            self.assertIsNone(provisioning.detect_subdivision(self.pin.location, _strip(0, 0.6)))
         self.old.refresh_from_db()
         self.assertEqual(self.old.status, PlaceStatus.CURRENT)
         taken.refresh_from_db()
@@ -258,6 +264,32 @@ class RefreshedOutlineTests(_OldParcelCase):
         remainder.refresh_from_db()
         self.assertIsNone(remainder.parent_id)
         self.assertFalse(PlaceAccessGrant.objects.exists())
+
+
+class ProcessSplitTests(_OldParcelCase):
+    """Every successor passes through process_split, so it holds them to the successor rules whoever called it."""
+
+    def _assert_nothing_split(self, superseded: Place | None) -> None:
+        self.assertIsNone(superseded)
+        self.old.refresh_from_db()
+        self.assertEqual(self.old.status, PlaceStatus.CURRENT)
+        self.assertFalse(self.old.children.exists())
+        self.assertFalse(PlaceAccessGrant.objects.exists())
+
+    def test_an_outline_beside_the_old_parcel_is_no_successor(self) -> None:
+        self._assert_nothing_split(process_split(self.old, [_strip(0, 0.6), _strip(1.0, 1.8)]))
+
+    def test_an_outline_overlapping_another_successor_is_no_successor(self) -> None:
+        self._assert_nothing_split(process_split(self.old, [_strip(0, 0.6), _strip(0.3, 1.0)]))
+
+    def test_the_same_outline_twice_is_one_successor(self) -> None:
+        self._assert_nothing_split(process_split(self.old, [_strip(0, 0.6), _strip(0, 0.6)]))
+
+    def test_pieces_of_the_old_parcel_split_it(self) -> None:
+        self.assertEqual(process_split(self.old, [_strip(0, 0.6), _strip(0.6, 1.0)]), self.old)
+        self.old.refresh_from_db()
+        self.assertEqual(self.old.status, PlaceStatus.SUPERSEDED)
+        self.assertEqual(self.old.children.count(), 2)
 
 
 class BrokenGeometryTests(_OldParcelCase):
