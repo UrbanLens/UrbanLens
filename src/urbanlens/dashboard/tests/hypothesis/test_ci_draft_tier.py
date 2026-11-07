@@ -113,6 +113,40 @@ class AnEditIsTheFullRunTests(SimpleTestCase):
         run, _ = self.script.is_full_run("fix the map", [self.status(1, "success"), self.status(2, "failure")])
         self.assertTrue(run)
 
+    def test_statuses_that_cannot_be_read_make_it_the_full_run(self) -> None:
+        """Fail closed: skipping would leave the suite skipped on a ready head, and skipped can pass the merge."""
+        self.script.RETRY_DELAY = 0
+        calls = []
+
+        def unreachable() -> list[dict]:
+            calls.append(1)
+            raise OSError("connection refused")
+
+        run, why = self.script.decide("fix the map", unreachable)
+        self.assertTrue(run)
+        self.assertIn("connection refused", why)
+        self.assertEqual(len(calls), self.script.ATTEMPTS)
+
+    def test_a_read_that_fails_once_is_retried(self) -> None:
+        self.script.RETRY_DELAY = 0
+        answers = [ValueError("bad JSON"), [self.status(1, "success")]]
+
+        def flaky() -> list[dict]:
+            answer = answers.pop(0)
+            if isinstance(answer, Exception):
+                raise answer
+            return answer
+
+        run, _ = self.script.decide("fix the map", flaky)
+        self.assertFalse(run)
+
+    def test_a_draft_reads_no_statuses(self) -> None:
+        def never() -> list[dict]:
+            raise AssertionError("a draft's edit reads nothing")
+
+        run, _ = self.script.decide("WIP: fix the map", never)
+        self.assertFalse(run)
+
     def test_the_context_names_the_workflow_s_full_tier_job(self) -> None:
         name = _workflow()["jobs"]["docker"]["name"]
         self.assertIn("'Docker image build'", name)
