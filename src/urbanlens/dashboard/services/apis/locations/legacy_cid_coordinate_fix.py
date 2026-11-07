@@ -129,11 +129,11 @@ def repair_legacy_pin_coordinates(
         # finds this same pin and reports it as an existing one.
         return None
 
-    # Moving onto a Location this profile already has a pin for would violate
-    # db_pin_unique_location_per_profile.
+    # Moving onto a Location this profile already has a root pin for would violate
+    # db_pin_unique_location_per_profile (which only constrains root pins, so a child alone doesn't block).
     # Leave the legacy pin where it is and suggest merging it into the pin that's already correctly
     # placed instead - merging the two is a user decision, not something an import should do
-    existing_pin = Pin.objects.filter(profile=profile, location=correct_location).exclude(pk=candidate.pk).first()
+    existing_pin = Pin.objects.filter(profile=profile, location=correct_location, parent_pin__isnull=True).exclude(pk=candidate.pk).first()
     if existing_pin is not None:
         from urbanlens.dashboard.models.pin_merge_suggestions.model import PinMergeSuggestion, PinMergeSuggestionOrigin
 
