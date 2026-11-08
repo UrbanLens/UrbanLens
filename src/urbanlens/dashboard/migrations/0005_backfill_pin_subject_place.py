@@ -36,7 +36,7 @@ class Migration(migrations.Migration):
     atomic = False
 
     dependencies = [
-        ("dashboard", "0003_pin_subject_place"),
+        ("dashboard", "0004_pin_subject_place"),
     ]
 
     operations = [
