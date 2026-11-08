@@ -144,7 +144,7 @@ class PrimaryWikiTests(_Fixture):
 
     def test_a_merge_moves_every_pin_onto_the_one_survivor(self) -> None:
         survivor = make_place(PlaceKind.BUILDING, square(-60.0, 30.0, 0.001), parent=self.parcel, name="Far Mill")
-        self.assertEqual(repoint_subjects(self.building, [self.building, survivor], contained_only=False), 1)
+        self.assertEqual(repoint_subjects(self.building, [survivor], contained_only=False), 1)
         self.pin.refresh_from_db()
         self.assertEqual(self.pin.subject_place_id, survivor.pk)
 
