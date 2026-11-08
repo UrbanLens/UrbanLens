@@ -42,9 +42,9 @@ def evidence_for_source(source: str) -> str:
 
 def evidence_for_record(building: dict) -> str:
     """
-    The :class:`PlaceEvidence` of a cached building record, by its richest source.
+    The :class:`PlaceEvidence` of a cached building record, by its first-listed source (the one the record's geometry comes from).
 
-    Overture records carry no per-feature dataset here, and Overture mixes machine-derived footprints with OSM, so they count as footprint.
+    Overture records carry no per-feature dataset here, and Overture mixes machine-derived footprints with OSM, so a record led by Overture counts as footprint.
     County GIS, assessor, CRIS and OSM records are official.
     """
     sources = [entry for entry in building.get("sources") or [] if isinstance(entry, dict)]
@@ -284,11 +284,14 @@ def provision_outcome_for_coordinate(location: Location, *, name: str | None = N
     footprints: list[Place] = []
     if resolved.building_polygon is not None:
         if parcel is None and not _parcel_covers(location):
-            footprints = ensure_footprint_places(resolved.building_candidates or [("", resolved.building_polygon)])
+            # An outline with no attributed source is not known to be surveyed, so it counts as a footprint, never official.
+            footprints = ensure_footprint_places(resolved.building_candidates) if resolved.building_candidates else _footprint_places([(PlaceEvidence.FOOTPRINT, resolved.building_polygon)])
             building = next((place for place in footprints if place.geometry is not None and place.geometry.contains(location.point)), None) or (footprints[0] if footprints else None)
         else:
             source = resolved.building_candidates[0][0] if resolved.building_candidates else ""
-            building = upsert_place(PlaceKind.BUILDING, resolved.building_polygon, name="", parent=parcel, evidence=evidence_for_source(source))
+            # No parcel came back this time, but a stored one may hold the point: nest under it so the building stays in its access domain.
+            container = parcel or Place.objects.containing_point(location.point).filter(kind__in=(PlaceKind.PARCEL, PlaceKind.SITE)).first()
+            building = upsert_place(PlaceKind.BUILDING, resolved.building_polygon, name="", parent=container, evidence=evidence_for_source(source))
 
     if parcel is not None:
         record_boundary_candidates(parcel, resolved.property_candidates)
