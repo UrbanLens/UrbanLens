@@ -160,7 +160,7 @@ class LineageEdgeTests(TestCase):
         assert removed == 3
         assert not PlaceAccessGrant.objects.filter(profile=self.holder).exists()
         assert not PlaceAccessGrant.objects.filter(profile=self.holder, place=self.new_a).exists()
-        assert any(str(self.new_a.pk) in line for line in logs.output)
+        assert any(str((self.holder.pk, self.new_a.pk)) in line for line in logs.output)
         assert PlaceLineageEdge.objects.filter(erroneous=True).count() == 2
 
     def test_a_sound_earlier_grant_survives_a_later_erroneous_event_into_the_same_successor(self) -> None:
