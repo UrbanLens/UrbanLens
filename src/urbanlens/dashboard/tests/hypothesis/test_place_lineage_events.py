@@ -195,6 +195,16 @@ def _chain_answering(outline: MultiPolygon) -> type:
     return _Chain
 
 
+def _chain_from(*answers: tuple[str, MultiPolygon]) -> type:
+    """A provider chain that answers every probe with ``answers``, as (provider, outline) pairs in chain order."""
+
+    class _Chain:
+        def get_boundaries(self, latitude: float, longitude: float, *, name: str | None = None) -> ResolvedBoundaries:
+            return ResolvedBoundaries(property_polygon=answers[0][1], property_candidates=list(answers))
+
+    return _Chain
+
+
 class ProbedSuccessorTests(_OldParcelCase):
     """A probed outline answers to the same rules as a stored one."""
 
@@ -270,6 +280,87 @@ class ProbedSuccessorTests(_OldParcelCase):
         self.old.refresh_from_db()
         with mock.patch(_CHAIN, _chain_answering(_strip(0.2, 1.0))):
             self.assertEqual(provisioning.detect_subdivision(self.pin.location, _strip(0, 0.2)), self.old)
+
+
+class OneSourceTests(_OldParcelCase):
+    """Every outline a split is built from comes from one provider, whether or not the parcel recorded its own."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.other = pin_on(self.holder, self.old, lat=SOUTH + SIZE / 2, lng=WEST + SIZE * 0.9)
+        self.assertEqual(self.old.provider, "")
+
+    def _assert_no_split(self, superseded: Place | None) -> None:
+        self.assertIsNone(superseded)
+        self.old.refresh_from_db()
+        self.assertEqual(self.old.status, PlaceStatus.CURRENT)
+        self.assertFalse(self.old.children.exists())
+        self.assertFalse(PlaceAccessGrant.objects.exists())
+
+    def test_a_probe_only_another_provider_answered_is_no_successor(self) -> None:
+        with mock.patch(_CHAIN, _chain_from(("other", _strip(0.3, 1.0)))):
+            self._assert_no_split(provisioning.detect_subdivision(self.pin.location, _strip(0, 0.3), source="refresh"))
+
+    def test_a_probe_uses_the_refreshing_providers_outline_over_the_chains_choice(self) -> None:
+        chain = _chain_from(("other", _strip(1.0, 1.8)), ("refresh", _strip(0.3, 1.0)))
+        with mock.patch(_CHAIN, chain):
+            superseded = provisioning.detect_subdivision(self.pin.location, _strip(0, 0.3), source="refresh")
+        self.assertEqual(superseded, self.old)
+        self.assertEqual(self.old.children.count(), 2)
+
+    def test_a_refresh_from_another_provider_than_the_parcels_own_is_not_a_shrink(self) -> None:
+        Place.objects.filter(pk=self.old.pk).update(provider="recorded")
+        self.old.refresh_from_db()
+        self.pin.location.refresh_from_db()
+        with mock.patch(_CHAIN) as chain:
+            self._assert_no_split(provisioning.detect_subdivision(self.pin.location, _strip(0, 0.3), source="other"))
+        chain.assert_not_called()
+
+    def _refresh_with_probe_from(self, provider: str) -> None:
+        kept, rest = _strip(0, 0.3), _strip(0.3, 1.0)
+
+        class _Chain:
+            def get_boundaries(
+                self, latitude: float, longitude: float, *, name: str | None = None
+            ) -> ResolvedBoundaries:
+                if longitude < WEST + SIZE * 0.5:
+                    return ResolvedBoundaries(property_polygon=kept, property_candidates=[("refresh", kept)])
+                return ResolvedBoundaries(property_polygon=rest, property_candidates=[(provider, rest)])
+
+        with mock.patch(_CHAIN, _Chain):
+            provisioning.ensure_place_for_location(self.pin.location, force=True)
+        self.old.refresh_from_db()
+
+    def test_a_refresh_passes_on_which_provider_answered_it(self) -> None:
+        self._refresh_with_probe_from("other")
+        self.assertEqual(self.old.status, PlaceStatus.CURRENT)
+        self.assertFalse(self.old.children.exists())
+
+    def test_a_refresh_and_probe_from_one_provider_split_the_parcel(self) -> None:
+        self._refresh_with_probe_from("refresh")
+        self.assertEqual(self.old.status, PlaceStatus.SUPERSEDED)
+        self.assertEqual(self.old.children.count(), 2)
+
+
+class HeavyShrinkStoredRemainderTests(_OldParcelCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.other = pin_on(self.holder, self.old, lat=SOUTH + SIZE / 2, lng=WEST + SIZE * 0.9)
+
+    def test_a_stored_remainder_splits_it_with_no_provider_asked(self) -> None:
+        remainder = self.remainder_parcel(0.2, 1.0)
+        with mock.patch(_CHAIN) as chain:
+            self.assertEqual(provisioning.detect_subdivision(self.pin.location, _strip(0, 0.2)), self.old)
+        chain.assert_not_called()
+        self.assertIn(remainder.pk, set(self.old.children.values_list("pk", flat=True)))
+        self.assertEqual(self.old.children.count(), 2)
+
+    def test_a_probe_adds_the_piece_stored_parcels_leave_out(self) -> None:
+        stored = self.remainder_parcel(0.2, 0.5)
+        with mock.patch(_CHAIN, _chain_answering(_strip(0.5, 1.0))):
+            self.assertEqual(provisioning.detect_subdivision(self.pin.location, _strip(0, 0.2)), self.old)
+        self.assertIn(stored.pk, set(self.old.children.values_list("pk", flat=True)))
+        self.assertEqual(self.old.children.count(), 3)
 
 
 class RefreshedOutlineTests(_OldParcelCase):
