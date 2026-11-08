@@ -12,7 +12,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase, TransactionTestCase
 from urbanlens.dashboard.models.location.model import Location
-from urbanlens.dashboard.models.place.model import Place, PlaceEvidence, PlaceKind
+from urbanlens.dashboard.models.place.model import Place, PlaceEvidence, PlaceKind, PlaceStatus
 from urbanlens.dashboard.services.apis.locations.base import BoundaryProviderDeferredError
 from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain, ResolvedBoundaries
 from urbanlens.dashboard.services.places import provisioning
@@ -80,7 +80,7 @@ class EvidenceResolutionOrderTests(TestCase):
         footprint = make_place(PlaceKind.BUILDING, _box(20))
         Place.objects.filter(pk=footprint.pk).update(evidence=PlaceEvidence.FOOTPRINT)
         self.assertEqual(Place.objects.resolve_for_point(LAT, LON), footprint)
-        Place.objects.filter(pk=footprint.pk).update(status="superseded")
+        Place.objects.filter(pk=footprint.pk).update(status=PlaceStatus.SUPERSEDED)
         self.assertEqual(Place.objects.resolve_for_point(LAT, LON), middle)
 
     def test_a_smaller_provisional_place_loses_to_a_larger_official_one(self) -> None:
@@ -152,6 +152,17 @@ class FootprintWithoutParcelTests(TestCase):
         outside.refresh_from_db()
         self.assertEqual(outside.place_id, place.pk)
         self.assertEqual(Place.objects.resolve_for_point(outside.latitude, outside.longitude), place)
+
+    def test_a_pin_beyond_the_buffer_is_not_bound_to_the_footprint_the_chain_returned(self) -> None:
+        footprint = _box(10)
+        beyond = _pin(north_m=10 + provisioning.FOOTPRINT_BUFFER_METERS + 5)
+        place = _provision(
+            beyond, building_polygon=footprint, building_candidates=[("microsoft_building_footprints", footprint)]
+        )
+        self.assertIsNone(place)
+        beyond.refresh_from_db()
+        self.assertIsNone(beyond.place_id)
+        self.assertEqual(Place.objects.filter(kind=PlaceKind.BUILDING).count(), 1)
 
     def test_a_pin_8m_outside_a_footprint_does_not_resolve_to_it_when_a_parcel_exists(self) -> None:
         footprint = _box(10)

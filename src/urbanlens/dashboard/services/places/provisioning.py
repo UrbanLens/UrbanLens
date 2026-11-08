@@ -280,8 +280,8 @@ def provision_outcome_for_coordinate(location: Location, *, name: str | None = N
     footprints: list[Place] = []
     if resolved.building_polygon is not None:
         if parcel is None and not _parcel_covers(location):
+            # Stored, not bound: the pin reaches one of these only through resolution below, which allows the buffer and no further.
             footprints = ensure_footprint_places(resolved.building_candidates or [("", resolved.building_polygon)])
-            building = next((place for place in footprints if place.geometry is not None and place.geometry.contains(location.point)), None) or (footprints[0] if footprints else None)
         else:
             source = resolved.building_candidates[0][0] if resolved.building_candidates else ""
             # No parcel came back this time, but a stored one may hold the point: nest under it so the building stays in its access domain.
