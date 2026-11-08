@@ -43,6 +43,13 @@ def _strip(start: float, end: float, *, height: float = SIZE) -> MultiPolygon:
     return MultiPolygon(Polygon(ring, srid=4326), srid=4326)
 
 
+def _each_holding_the_others_centroid() -> tuple[MultiPolygon, MultiPolygon]:
+    """Two disjoint multi-part outlines that find_matching_place takes for the same parcel, by mutual centroid containment."""
+    first = MultiPolygon(*_strip(0, 0.2), *_strip(0.6, 0.8), srid=4326)
+    second = MultiPolygon(*_strip(0.35, 0.45), *_strip(0.8, 1.0), srid=4326)
+    return first, second
+
+
 class _OldParcelCase(TestCase):
     def setUp(self) -> None:
         super().setUp()
@@ -290,6 +297,26 @@ class ProcessSplitTests(_OldParcelCase):
         self.old.refresh_from_db()
         self.assertEqual(self.old.status, PlaceStatus.SUPERSEDED)
         self.assertEqual(self.old.children.count(), 2)
+
+    def test_two_outlines_landing_on_one_new_parcel_create_nothing(self) -> None:
+        first, second = _each_holding_the_others_centroid()
+        places_before = Place.objects.count()
+
+        self._assert_nothing_split(process_split(self.old, [first, second]))
+
+        self.assertEqual(Place.objects.count(), places_before)
+
+    def test_two_outlines_landing_on_one_stored_parcel_leave_it_as_it_was(self) -> None:
+        first, second = _each_holding_the_others_centroid()
+        # Matches the first outline, which then rewrites it into something the second outline matches too.
+        original = MultiPolygon(*_strip(0.35, 0.45), *_strip(0.8, 0.95), srid=4326)
+        stored = make_place(PlaceKind.PARCEL, original, name="Stored")
+
+        self._assert_nothing_split(process_split(self.old, [first, second]))
+
+        stored.refresh_from_db()
+        self.assertIsNone(stored.parent_id)
+        self.assertTrue(stored.geometry.equals(original))
 
     def test_pieces_of_the_old_parcel_split_it(self) -> None:
         self.assertEqual(process_split(self.old, [_strip(0, 0.6), _strip(0.6, 1.0)]), self.old)

@@ -266,7 +266,7 @@ def process_split(place: Place, successors: list[MultiPolygon]) -> Place | None:
         successors: Official outlines for the new parcels, the refreshed outline first when there is one.
 
     Returns:
-        The superseded place, or None when fewer than two successors survive and the parcel stays current."""
+        The superseded place, or None, with nothing written, when the outlines do not make two or more separate parcels."""
     from urbanlens.dashboard.services.places.provisioning import find_matching_place, upsert_place
 
     learned_at = timezone.now()
@@ -291,16 +291,18 @@ def process_split(place: Place, successors: list[MultiPolygon]) -> Place | None:
         logger.info("process_split: place %s has fewer than two safe successors; leaving it current", place.pk)
         return None
 
+    # The check above cannot see parcels this loop creates or rewrites, so two outlines can still land on one parcel.
+    # upsert_place has written by the time that shows, and returning alone would commit it.
     children: list[Place] = []
     for geometry in accepted:
         child = upsert_place(PlaceKind.PARCEL, geometry, name=place.name, exclude_pk=place.pk)
-        if child is not None and child.pk != place.pk:
-            lineage.set_parent(child, place, PlaceRelation.MEMBER_OF)
-            children.append(child)
-
-    if len(children) < 2:
-        logger.info("process_split: place %s produced fewer than two successors; leaving it current", place.pk)
-        return None
+        if child is None or any(child.pk == taken.pk for taken in children):
+            logger.info("process_split: place %s has outlines that are not separate parcels; leaving it current", place.pk)
+            transaction.set_rollback(True)
+            return None
+        children.append(child)
+    for child in children:
+        lineage.set_parent(child, place, PlaceRelation.MEMBER_OF)
 
     # Snapshot before anything moves: once buildings re-home, containment can
     # no longer prove what these profiles already had.
