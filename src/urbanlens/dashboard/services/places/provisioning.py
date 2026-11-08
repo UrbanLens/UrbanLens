@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from django.contrib.gis.geos import MultiPolygon
 
     from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.services.locations.boundaries import ResolvedBoundaries
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,19 @@ MAX_SUBDIVISION_PROBES = 20
 #: Boundary-provider keys whose building outlines are machine-learned footprints rather than surveyed or registry
 #: geometry. Every other named source (OSM, registry records) is official.
 FOOTPRINT_SOURCES: frozenset[str] = frozenset({"microsoft_building_footprints", "overture", "overture_maps", "google_open_buildings"})
+
+#: The name a split check that could not decide goes by in :attr:`ProvisionOutcome.deferred`.
+SPLIT_CHECK = "split_check"
+
+
+class SplitCheckDeferredError(Exception):
+    """A neighbour's provider declined, so finding no successor there does not mean there is none."""
+
+    def __init__(self, deferred: list[str], retry_after: int | None, *, backs_off: bool) -> None:
+        super().__init__(f"split check waiting on {', '.join(deferred)}")
+        self.deferred = deferred
+        self.retry_after = retry_after
+        self.backs_off = backs_off
 
 
 def evidence_for_source(source: str) -> str:
@@ -184,7 +198,7 @@ class ProvisionOutcome:
 
     Attributes:
         place: The most specific place now covering the coordinate, or None.
-        deferred: Providers that declined for now rather than answering.
+        deferred: What has not answered yet, so the coordinate must be asked again: providers that declined for now, or :data:`SPLIT_CHECK`.
         retry_after: The longest wait a deferring provider asked for, in seconds.
         backs_off: Whether a retry should back off; False when every deferring provider was computing its answer.
     """
@@ -277,12 +291,11 @@ def provision_outcome_for_coordinate(location: Location, *, name: str | None = N
         try:
             detect_subdivision(location, resolved.property_polygon)
         except GEOSException:
-            # Whether the parcel was split is unknown, so the smaller outline must not replace it; it stays stale and a later refresh asks again.
             logger.warning("split check for location %s failed: geometry overlay error; keeping the outline on record", location.pk, exc_info=True)
-            known = Place.objects.resolve_for_point(location.latitude, location.longitude)
-            if known is not None:
-                resolution.attach_location(location, known)
-            return ProvisionOutcome(place=known)
+            return _outline_kept(location, [SPLIT_CHECK])
+        except SplitCheckDeferredError as undecided:
+            logger.info("split check for location %s is waiting on %s; keeping the outline on record", location.pk, undecided.deferred)
+            return _outline_kept(location, undecided.deferred, retry_after=undecided.retry_after, backs_off=undecided.backs_off)
 
     parcel = upsert_place(PlaceKind.PARCEL, resolved.property_polygon, name=name or location.official_name or "")
     building = None
@@ -315,6 +328,14 @@ def provision_outcome_for_coordinate(location: Location, *, name: str | None = N
         standing_on = building or parcel
         resolution.attach_location(location, standing_on)
     return ProvisionOutcome(place=standing_on, deferred=list(resolved.deferred), retry_after=resolved.retry_after, backs_off=resolved.backs_off)
+
+
+def _outline_kept(location: Location, deferred: list[str], *, retry_after: int | None = None, backs_off: bool = True) -> ProvisionOutcome:
+    """The outcome of a split check that could not decide: the smaller outline must not replace the parcel, and reporting ``deferred`` is what brings the question back."""
+    known = Place.objects.resolve_for_point(location.latitude, location.longitude)
+    if known is not None:
+        resolution.attach_location(location, known)
+    return ProvisionOutcome(place=known, deferred=deferred, retry_after=retry_after, backs_off=backs_off)
 
 
 def _resolve_locations_around(place: Place | None) -> None:
@@ -360,24 +381,47 @@ def _footprint_places(outlines: list[tuple[str, MultiPolygon]]) -> list[Place]:
     return places
 
 
-def _probe_neighbours(location: Location, previous: Place, new_parcel_polygon: MultiPolygon, known: list[MultiPolygon]) -> list[MultiPolygon]:
+@dataclass(slots=True)
+class _NeighbourProbes:
+    """What asking about a parcel's other locations turned up."""
+
+    found: list[MultiPolygon] = field(default_factory=list)
+    deferred: list[str] = field(default_factory=list)
+    retry_after: int | None = None
+    backs_off: bool = False
+
+    def note_deferred(self, answer: ResolvedBoundaries) -> None:
+        """Remember that ``answer``'s silence is not a "nothing here"."""
+        self.deferred.extend(name for name in answer.deferred if name not in self.deferred)
+        if answer.retry_after is not None:
+            self.retry_after = max(self.retry_after or 0, answer.retry_after)
+        self.backs_off = self.backs_off or answer.backs_off
+
+    def raise_if_deferred(self) -> None:
+        """Call before concluding "not a split" from these probes."""
+        if self.deferred:
+            raise SplitCheckDeferredError(self.deferred, self.retry_after, backs_off=self.backs_off)
+
+
+def _probe_neighbours(location: Location, previous: Place, new_parcel_polygon: MultiPolygon, known: list[MultiPolygon]) -> _NeighbourProbes:
     """Ask the provider chain about the domain's locations that fall outside the new outline, at most :data:`MAX_SUBDIVISION_PROBES` times."""
     from urbanlens.dashboard.models.location.model import Location as LocationModel
     from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain
 
-    found: list[MultiPolygon] = []
+    result = _NeighbourProbes()
     probes = 0
     neighbours = LocationModel.objects.filter(place__domain_root_id=previous.domain_root_id).exclude(pk=location.pk).exclude(point__within=new_parcel_polygon).annotate(distance=Distance("point", location.point)).order_by("distance")
     for other in neighbours.iterator():
-        if any(successor.contains(other.point) for successor in [*known, *found]):
+        if any(successor.contains(other.point) for successor in [*known, *result.found]):
             continue
         if probes >= MAX_SUBDIVISION_PROBES:
             break
         probes += 1
         chain_result = BoundaryProviderChain().get_boundaries(float(other.latitude), float(other.longitude), name=other.official_name or None)
-        if chain_result.property_polygon is not None and not any(candidate.equals(chain_result.property_polygon) for candidate in [*known, *found]):
-            found.append(chain_result.property_polygon)
-    return found
+        result.note_deferred(chain_result)
+        if chain_result.property_polygon is not None and not any(candidate.equals(chain_result.property_polygon) for candidate in [*known, *result.found]):
+            result.found.append(chain_result.property_polygon)
+    return result
 
 
 def detect_subdivision(location: Location, new_parcel_polygon: MultiPolygon | None) -> Place | None:
@@ -389,7 +433,12 @@ def detect_subdivision(location: Location, new_parcel_polygon: MultiPolygon | No
         new_parcel_polygon: The parcel outline the providers now return here.
 
     Returns:
-        The superseded place, or None when nothing was subdivided."""
+        The superseded place, or None when nothing was subdivided.
+
+    Raises:
+        SplitCheckDeferredError: The only sign of "no split" was a neighbour whose provider did not answer.
+        GEOSException: An overlay failed, so whether the parcel was split is unknown.
+    """
     from urbanlens.dashboard.services.places import splits
 
     previous = location.place.parcel if (location.place_id and location.place is not None) else None
@@ -402,17 +451,22 @@ def detect_subdivision(location: Location, new_parcel_polygon: MultiPolygon | No
         return None
 
     successors = [new_parcel_polygon]
+    probes = _NeighbourProbes()
     if not heavy:
         # Stored parcels first: when they explain the remainder no provider needs asking.
         if not splits.looks_like_a_split(previous, new_parcel_polygon):
-            successors += _probe_neighbours(location, previous, new_parcel_polygon, successors)
+            probes = _probe_neighbours(location, previous, new_parcel_polygon, successors)
+            successors += probes.found
             if not splits.looks_like_a_split(previous, new_parcel_polygon, seen=successors[1:]):
+                probes.raise_if_deferred()
                 return None
         stored = splits.candidate_parcels(previous, new_parcel_polygon)
         successors.extend(geometry for geometry in stored if not any(candidate.equals(geometry) for candidate in successors))
     else:
-        successors += _probe_neighbours(location, previous, new_parcel_polygon, successors)
+        probes = _probe_neighbours(location, previous, new_parcel_polygon, successors)
+        successors += probes.found
     if len(successors) < 2:
+        probes.raise_if_deferred()
         return None
     return splits.process_split(previous, successors)
 

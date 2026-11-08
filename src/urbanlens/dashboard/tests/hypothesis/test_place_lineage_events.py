@@ -12,10 +12,11 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.place.model import GrantReason, Place, PlaceAccessGrant, PlaceKind, PlaceStatus
-from urbanlens.dashboard.services.locations.boundaries import ResolvedBoundaries
+from urbanlens.dashboard.services.locations.boundaries import ResolvedBoundaries, generate_location_boundaries
 from urbanlens.dashboard.services.places import provisioning, splits
 from urbanlens.dashboard.services.places.lineage_events import LineageEvent, LineageEventKind, handle_lineage_event
 from urbanlens.dashboard.services.places.splits import looks_like_a_split
+from urbanlens.dashboard.tasks import generate_boundaries_for_location
 
 from .test_places_access_predicate import pin_on
 from .test_places_campus import make_place
@@ -82,6 +83,80 @@ class MildShrinkTests(_OldParcelCase):
         self.assertTrue(self.old.geometry.equals(old_geometry))
         self.assertEqual(outcome.place, self.old)
         self.assertFalse(PlaceAccessGrant.objects.exists())
+        self.assertTrue(outcome.deferred, "a split check that could not decide must be reported as unfinished")
+
+    def test_a_failed_overlay_on_a_forced_refresh_schedules_a_forced_retry(self) -> None:
+        self.remainder_parcel()
+        resolved = ResolvedBoundaries(property_polygon=_strip(0, 0.6))
+        with (
+            mock.patch(f"{_CHAIN}.get_boundaries", return_value=resolved),
+            mock.patch.object(splits, "remainder_is_covered", side_effect=GEOSException("overlay failed")),
+            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+        ):
+            generate_location_boundaries(self.pin.location, force=True)
+
+        retries = [call for call in enqueue.call_args_list if call.args[0] is generate_boundaries_for_location]
+        self.assertEqual(len(retries), 1)
+        self.assertEqual(retries[0].kwargs["force"], True)
+        self.assertEqual(retries[0].kwargs["attempt"], 1)
+
+    def _provision_with_probes(self, kept: MultiPolygon, *probes: ResolvedBoundaries) -> provisioning.ProvisionOutcome:
+        with mock.patch(f"{_CHAIN}.get_boundaries", side_effect=[ResolvedBoundaries(property_polygon=kept), *probes]):
+            return provisioning.provision_outcome_for_coordinate(self.pin.location)
+
+    def _assert_old_outline_kept(self, old_geometry: MultiPolygon | None) -> None:
+        self.old.refresh_from_db()
+        self.assertEqual(self.old.status, PlaceStatus.CURRENT)
+        assert self.old.geometry is not None and old_geometry is not None
+        self.assertTrue(
+            self.old.geometry.equals(old_geometry), "the smaller outline replaced one that may have been split"
+        )
+
+    def test_a_deferred_probe_on_a_mild_shrink_leaves_the_split_undecided(self) -> None:
+        pin_on(self.holder, self.old, lat=SOUTH + SIZE / 2, lng=WEST + SIZE * 0.9)
+        old_geometry = self.old.geometry
+
+        outcome = self._provision_with_probes(_strip(0, 0.6), ResolvedBoundaries(deferred=["slow"], retry_after=120))
+
+        self._assert_old_outline_kept(old_geometry)
+        self.assertEqual(outcome.deferred, ["slow"])
+        self.assertEqual(outcome.retry_after, 120)
+        self.assertEqual(outcome.place, self.old)
+
+    def test_a_deferred_probe_on_a_heavy_shrink_leaves_the_split_undecided(self) -> None:
+        pin_on(self.holder, self.old, lat=SOUTH + SIZE / 2, lng=WEST + SIZE * 0.9)
+        old_geometry = self.old.geometry
+
+        outcome = self._provision_with_probes(
+            _strip(0, 0.3), ResolvedBoundaries(deferred=["slow"], computing=["slow"], retry_after=60)
+        )
+
+        self._assert_old_outline_kept(old_geometry)
+        self.assertEqual(outcome.deferred, ["slow"])
+        self.assertFalse(outcome.backs_off, "a provider computing its answer should be asked again as soon as it said")
+
+    def test_probes_that_all_answered_nothing_are_a_real_no(self) -> None:
+        pin_on(self.holder, self.old, lat=SOUTH + SIZE / 2, lng=WEST + SIZE * 0.9)
+        kept = _strip(0, 0.6)
+
+        outcome = self._provision_with_probes(kept, ResolvedBoundaries())
+
+        self.old.refresh_from_db()
+        assert self.old.geometry is not None
+        self.assertTrue(self.old.geometry.equals(kept))
+        self.assertEqual(outcome.deferred, [])
+
+    def test_a_split_another_probe_proved_is_not_held_up_by_a_deferred_one(self) -> None:
+        pin_on(self.holder, self.old, lat=SOUTH + SIZE / 2, lng=WEST + SIZE * 0.5)
+        pin_on(self.holder, self.old, lat=SOUTH + SIZE / 2, lng=WEST + SIZE * 0.9)
+
+        outcome = self._provision_with_probes(
+            _strip(0, 0.3), ResolvedBoundaries(deferred=["slow"]), ResolvedBoundaries(property_polygon=_strip(0.3, 1))
+        )
+
+        self.old.refresh_from_db()
+        self.assertEqual(self.old.status, PlaceStatus.SUPERSEDED)
+        self.assertEqual(outcome.deferred, [])
 
     def test_a_60_40_shrink_with_nothing_else_there_is_not_a_split(self) -> None:
         self.assertFalse(looks_like_a_split(self.old, _strip(0, 0.6)))

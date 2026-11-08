@@ -19,7 +19,7 @@ from django.db import connection
 from django.urls import reverse
 from model_bakery import baker
 
-from urbanlens.core.tests.explain import rows_examined
+from urbanlens.core.tests.explain import relations_read
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.labels.customization.model import LabelCustomization
 from urbanlens.dashboard.models.labels.model import Label
@@ -29,8 +29,6 @@ from urbanlens.dashboard.services.map_pins import document as map_document
 from urbanlens.dashboard.services.map_pins.payload import MapPinPayloadService
 
 MAP_PAGE_SCRIPT = Path(__file__).resolve().parents[2] / "frontend" / "ts" / "entries" / "map-page.ts"
-
-MORE_PINS = 25
 
 
 class _HeadWrittenError(Exception):
@@ -65,7 +63,7 @@ class TheDocumentHeadTests(TestCase):
             body = gzip.decompress(body)
         return [json.loads(line) for line in body.splitlines() if line]
 
-    def _head_rows_examined(self) -> int:
+    def _relations_the_head_reads(self) -> set[str]:
         captured: list[tuple[str, Any]] = []
 
         def capture(execute, sql, params, many, context):  # noqa: ANN001, ANN202
@@ -80,14 +78,13 @@ class TheDocumentHeadTests(TestCase):
         ):
             next(map_document.stream(self.profile, query, etag="head", total=0))
         self.assertTrue(captured, "the head read nothing, so there was nothing to measure")
-        return sum(rows_examined(sql, params) for sql, params in captured)
+        return {relation for sql, params in captured for relation in relations_read(sql, params)}
 
-    def test_the_head_reads_no_more_rows_for_more_labelled_pins(self) -> None:
-        before = self._head_rows_examined()
+    def test_the_head_cost_cannot_follow_the_pins(self) -> None:
+        # Which relations a statement touches is fixed by its SQL. How many rows it reads is not: the label read alone is 51 rows on a bitmap scan and 98 on a seq scan, and the planner may flip between them mid-test.
+        pin_tables = {Pin._meta.db_table, Pin.labels.through._meta.db_table}
 
-        self._pin_with(self.labels, count=MORE_PINS)
-
-        self.assertEqual(self._head_rows_examined(), before)
+        self.assertEqual(self._relations_the_head_reads() & pin_tables, set())
 
     def test_every_label_is_defined_before_the_pin_that_names_it(self) -> None:
         carried_over = baker.make(Label, profile=baker.make(User).profile, kind="tag", name="Carried over", order=5)
