@@ -176,6 +176,7 @@ from urbanlens.dashboard.models.trivia import (
     TriviaSessionParticipantStatus,
     TriviaSessionStatus,
 )
+from urbanlens.dashboard.models.trust_signals import ProfileTrustSignals
 from urbanlens.dashboard.models.undo import UndoAction
 from urbanlens.dashboard.models.upload_retry import UploadRetry
 from urbanlens.dashboard.models.visit_suggestions import VisitSuggestion, VisitSuggestionStatus
