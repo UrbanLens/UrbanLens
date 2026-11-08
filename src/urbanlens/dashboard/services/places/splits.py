@@ -8,17 +8,20 @@ from typing import TYPE_CHECKING
 
 from django.contrib.gis.geos import GeometryCollection, GEOSException
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 
+from urbanlens.dashboard.models.place.lifecycle import PlaceGeometryVersion
 from urbanlens.dashboard.models.place.model import Place, PlaceKind, PlaceRelation, PlaceStatus, is_plausible_area
 from urbanlens.dashboard.services.places import geometry_versions, lineage, resolution
 from urbanlens.dashboard.services.places.lineage_events import LineageEvent, LineageEventKind, handle_lineage_event
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+    from datetime import datetime
 
     from django.contrib.gis.geos import MultiPolygon
+    from django.db.models import QuerySet
 
 logger = logging.getLogger(__name__)
 
@@ -197,6 +200,27 @@ def looks_like_a_split(place: Place, new_geometry: MultiPolygon | None, seen: It
     return ratio < SPLIT_KEEP_CEILING and remainder_is_covered(place, new_geometry, seen)
 
 
+def _version_split_candidates(new_geometry: MultiPolygon, source: str, horizon: datetime) -> QuerySet[Place]:
+    """
+    Standalone current parcels with a single earlier outline that could have held ``new_geometry``.
+
+    That outline must be one ``source`` drew, not flagged erroneous, recorded since ``horizon`` and reaching ``new_geometry``,
+    all on the same version row. It is the outline :func:`detect_split_from_versions` compares against, so a parcel without one cannot be split by the new parcel.
+
+    Args:
+        new_geometry: The outline of the parcel that just arrived.
+        source: The provider that drew it.
+        horizon: Earliest ``recorded_at`` that still counts.
+
+    Returns:
+        Candidate places, without duplicates.
+    """
+    outline = PlaceGeometryVersion.objects.filter(place=OuterRef("pk"), provider=source, erroneous=False, recorded_at__gte=horizon, geometry__intersects=new_geometry)
+    # A piece of an earlier split is a parcel in its own right and can be divided again.
+    standalone = Q(parent__isnull=True) | Q(parent_relation=PlaceRelation.MEMBER_OF, parent__status=PlaceStatus.SUPERSEDED)
+    return Place.objects.filter(standalone, Exists(outline), kind=PlaceKind.PARCEL, status=PlaceStatus.CURRENT)
+
+
 def detect_split_from_versions(new_parcel: Place) -> Place | None:
     """
     Notice a split that completes only when the remainder parcel arrives.
@@ -214,16 +238,12 @@ def detect_split_from_versions(new_parcel: Place) -> Place | None:
     new_geometry = new_parcel.geometry
     if new_geometry is None or new_geometry.area <= 0 or new_parcel.kind != PlaceKind.PARCEL:
         return None
-    # A piece of an earlier split is a parcel in its own right and can be divided again.
-    standalone = Q(parent__isnull=True) | Q(parent_relation=PlaceRelation.MEMBER_OF, parent__status=PlaceStatus.SUPERSEDED)
-    # Older outlines count too: the remainder can sit in a gap from the parcel's current outline.
-    candidates = Place.objects.filter(standalone, kind=PlaceKind.PARCEL, status=PlaceStatus.CURRENT).filter(Q(geometry__intersects=new_geometry) | Q(geometry_versions__geometry__intersects=new_geometry)).exclude(pk=new_parcel.pk).distinct()
     # Compared by who drew the outlines: Place.provider is a key namespace, and a place keeps it whoever refreshes the outline.
     source = geometry_versions.outline_source(new_parcel)
-    candidates = candidates.filter(geometry_versions__provider=source)
     from urbanlens.dashboard.models.site_settings import SiteSettings
 
     horizon = timezone.now() - timedelta(days=SPLIT_VERSION_REFRESH_CYCLES * SiteSettings.get_current().boundary_cache_days)
+    candidates = _version_split_candidates(new_geometry, source, horizon).exclude(pk=new_parcel.pk)
     for previous in candidates:
         current = previous.geometry
         if current is None or current.area <= 0 or not is_plausible_area(previous.kind, previous.area_sqm):

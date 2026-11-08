@@ -164,15 +164,22 @@ class LineageEdgeTests(TestCase):
         assert PlaceLineageEdge.objects.filter(erroneous=True).count() == 2
 
     def test_a_sound_earlier_grant_survives_a_later_erroneous_event_into_the_same_successor(self) -> None:
-        now = self._event(LineageEventKind.SPLIT).learned_at
-        handle_lineage_event(LineageEvent(LineageEventKind.SPLIT, [self.old], [self.new_a], now))
+        handle_lineage_event(self._event(LineageEventKind.SPLIT))
         grant = PlaceAccessGrant.objects.get(profile=self.holder, place=self.new_a)
         other = upsert_place(PlaceKind.PARCEL, rect(-73.99, -73.98), provider="x", provider_key="c")
         assert other is not None
         pin_on(self.holder, other, lat=40.0, lng=-73.985)
-        handle_lineage_event(LineageEvent(LineageEventKind.SPLIT, [other], [self.new_a], now))
+        # Learned after that pin, or the event would find no holders and record no source to retract.
+        later = LineageEvent(
+            LineageEventKind.SPLIT, [other], [self.new_a], self._event(LineageEventKind.SPLIT).learned_at
+        )
+        handle_lineage_event(later)
+        assert PlaceAccessGrantSource.objects.filter(grant=grant).count() == 2
+        on_other = PlaceAccessGrant.objects.get(profile=self.holder, place=other)
         bad = list(PlaceLineageEdge.objects.filter(predecessor=other))
-        assert retract_erroneous_event(bad, "test") == 0
+        # The grant on other rests only on the bad edge; the one on new_a also rests on the sound split.
+        assert retract_erroneous_event(bad, "test") == 1
+        assert not PlaceAccessGrant.objects.filter(pk=on_other.pk).exists()
         assert PlaceAccessGrant.objects.filter(pk=grant.pk).exists()
 
     def test_a_grant_justified_by_a_sound_and_an_erroneous_edge_survives(self) -> None:
@@ -359,6 +366,52 @@ class VersionSplitDetectionTests(TestCase):
         piece.refresh_from_db()
         assert piece.status == PlaceStatus.SUPERSEDED
         assert PlaceLineageEdge.objects.filter(predecessor=piece, kind=LineageEdgeKind.SPLIT_INTO).count() == 2
+
+    def _candidates(self, new_geometry: MultiPolygon, source: str = "county") -> set[int]:
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from urbanlens.dashboard.services.places import splits
+
+        horizon = timezone.now() - timedelta(days=30)
+        return set(splits._version_split_candidates(new_geometry, source, horizon).values_list("pk", flat=True))
+
+    def test_candidate_needs_an_outline_from_the_new_parcels_provider_that_reaches_it(self) -> None:
+        reaches = upsert_place(PlaceKind.PARCEL, rect(-74.004, -73.996), provider="county")
+        assert reaches is not None
+        # This parcel's county outline is elsewhere; only another provider's outline reaches the new parcel.
+        other_drew_it = upsert_place(PlaceKind.PARCEL, rect(-73.9, -73.89), provider="county")
+        assert other_drew_it is not None
+        geometry_versions.set_geometry(other_drew_it, rect(-74.004, -73.996), provider="osm")
+        assert self._candidates(rect(-73.998, -73.996)) == {reaches.pk}
+
+    def test_an_erroneous_outline_does_not_make_a_candidate(self) -> None:
+        original = upsert_place(PlaceKind.PARCEL, rect(-74.004, -73.996), provider="county")
+        assert original is not None
+        reaching = geometry_versions.latest_version(original)
+        assert reaching is not None
+        geometry_versions.mark_erroneous([reaching])
+        # A sound county outline elsewhere must not lend its row to the erroneous one that reaches the new parcel.
+        geometry_versions.set_geometry(original, rect(-73.9, -73.89), provider="county")
+        assert self._candidates(rect(-73.998, -73.996)) == set()
+
+    def test_an_outline_past_the_window_does_not_make_a_candidate(self) -> None:
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        original = upsert_place(PlaceKind.PARCEL, rect(-74.004, -73.996), provider="county")
+        assert original is not None
+        assert (
+            PlaceGeometryVersion.objects.filter(place=original).update(
+                recorded_at=timezone.now() - timedelta(days=3650)
+            )
+            == 1
+        )
+        # A recent county outline elsewhere must not lend its date to the old one that reaches the new parcel.
+        geometry_versions.set_geometry(original, rect(-73.9, -73.89), provider="county")
+        assert self._candidates(rect(-73.998, -73.996)) == set()
 
     def test_an_invalid_outline_skips_the_candidate_instead_of_failing(self) -> None:
         from unittest import mock
