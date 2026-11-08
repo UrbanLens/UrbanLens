@@ -6,9 +6,11 @@ from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.contrib.gis.geos import MultiPolygon, Point, Polygon
+from django.db import connection
+from django.db.migrations.executor import MigrationExecutor
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import TestCase, TransactionTestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.place.model import Place, PlaceEvidence, PlaceKind
 from urbanlens.dashboard.services.apis.locations.base import BoundaryProviderDeferredError
@@ -97,6 +99,26 @@ class EvidenceResolutionOrderTests(TestCase):
 
     def test_existing_places_default_to_official(self) -> None:
         self.assertEqual(make_place(PlaceKind.PARCEL, _box(50)).evidence, PlaceEvidence.OFFICIAL)
+
+
+class EvidenceMigrationTests(TransactionTestCase):
+    """Migration 0004 backfills rows that existed before the column as official."""
+
+    def tearDown(self) -> None:
+        executor = MigrationExecutor(connection)
+        executor.migrate(executor.loader.graph.leaf_nodes())
+        super().tearDown()
+
+    def test_existing_places_are_backfilled_as_official(self) -> None:
+        before = [("dashboard", "0003_place_grant_reasons")]
+        executor = MigrationExecutor(connection)
+        executor.migrate(before)
+        old_place = executor.loader.project_state(before).apps.get_model("dashboard", "Place")
+        pk = old_place.objects.create(kind=PlaceKind.PARCEL).pk
+
+        executor = MigrationExecutor(connection)
+        executor.migrate([("dashboard", "0004_place_evidence")])
+        self.assertEqual(Place.objects.get(pk=pk).evidence, PlaceEvidence.OFFICIAL)
 
 
 class FootprintWithoutParcelTests(TestCase):
@@ -295,9 +317,10 @@ class FootprintResolutionTests(TestCase):
         self.assertEqual(len(places), 2)
 
     def test_a_pin_just_outside_picks_the_nearest_footprint(self) -> None:
+        # Both are inside the buffer; the farther one is created first, so pk order alone would pick it.
+        self._footprint(5, lat=LAT + 22 * M_LAT)  # south edge at 17 m: 8 m from the pin
         near = self._footprint(5)
-        self._footprint(5, lat=LAT + 30 * M_LAT)
-        pin = _pin(north_m=9)  # 4 m past the near edge, 16 m from the other
+        pin = _pin(north_m=9)  # 4 m past the near edge
         self.assertEqual(Place.objects.resolve_for_point(pin.latitude, pin.longitude), near)
 
     def test_nothing_resolves_beyond_the_buffer(self) -> None:
