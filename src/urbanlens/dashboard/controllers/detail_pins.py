@@ -326,12 +326,6 @@ class LocationDetailPinJsonView(LoginRequiredMixin, View):
 
         include_children = request.GET.get("children") == "1"
         child_qs = wiki.descendants().select_related("location", "parent_wiki") if include_children else wiki.child_wikis.select_related("location")
-        if include_children:
-            # A shared wiki's own subtree is not the parcel's content either: leave it for the shared wiki's page.
-            shared_roots = list(child_qs.exclude(pk__in=without_shared_placeless(child_qs).values("pk")).values_list("pk", flat=True))
-            if shared_roots:
-                hidden = list(Wiki.objects.filter(pk__in=shared_roots).with_descendants().values_list("pk", flat=True))
-                child_qs = child_qs.exclude(pk__in=hidden)
         child_wikis = visible_rows(without_shared_placeless(child_qs), wiki, profile).order_by("pin_type", "name")
         payload = []
         for cw in child_wikis:

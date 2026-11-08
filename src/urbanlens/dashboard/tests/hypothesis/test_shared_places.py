@@ -28,6 +28,8 @@ from urbanlens.dashboard.models.place.shared import (
 )
 from urbanlens.dashboard.models.visits.model import VisitSource
 from urbanlens.dashboard.models.wiki.model import Wiki
+from urbanlens.dashboard.models.wiki_edit.model import WikiEdit
+from urbanlens.dashboard.services.core.text_limits import MAX_WIKI_DESCRIPTION_LENGTH
 from urbanlens.dashboard.services.places import shared_places
 from urbanlens.dashboard.services.wiki import wiki_access
 
@@ -200,6 +202,56 @@ class TierTwoTests(SharedPlaceTestCase):
         self.assertFalse(Place.objects.filter(evidence=PlaceEvidence.PROVISIONAL).exists())
 
 
+class AdmissionToAnExistingPlaceTests(SharedPlaceTestCase):
+    """Admission is decided by the admitted pin's own distance from the place's one anchor, whichever route reached it."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.pair()
+        self.place = Place.objects.get(evidence=PlaceEvidence.PROVISIONAL)
+        self.dave, self.erin = _profile(), _profile()
+
+    def is_member(self, profile, place=None) -> bool:
+        return SharedPlaceMember.objects.filter(place=place or self.place, profile=profile).exists()
+
+    def test_an_older_neighbour_inside_a_place_does_not_carry_in_a_pin_outside_it(self) -> None:
+        _pin(self.carol, 20, age_days=40)
+        outside = _pin(self.dave, 36)  # 36 m from the anchor, 16 m from Carol's older pin
+        self.assertIsNone(shared_places.evaluate_pin(outside.pk))
+        self.assertFalse(self.is_member(self.dave))
+        self.assertTrue(self.is_member(self.carol), "Carol stands inside the place on her own account")
+
+    def test_a_public_reference_inside_a_place_does_not_carry_in_a_pin_outside_it(self) -> None:
+        baker.make(GooglePlace, latitude=round(LAT + 20 * M_LAT, 6), longitude=LON, cid=None)
+        outside = _pin(self.dave, 45)  # 25 m from the reference, 45 m from the anchor
+        self.assertIsNone(shared_places.evaluate_pin(outside.pk))
+        self.assertFalse(self.is_member(self.dave))
+
+    def test_a_pin_refused_by_one_candidates_place_still_tries_the_next_candidate(self) -> None:
+        _pin(self.carol, 20, age_days=50)
+        erins = _pin(self.erin, 50, age_days=40)
+        outside = _pin(self.dave, 36)
+        formed = shared_places.evaluate_pin(outside.pk)
+        self.assertIsNotNone(formed)
+        self.assertNotEqual(formed.pk, self.place.pk)
+        self.assertAlmostEqual(formed.anchor.y, erins.location.point.y, places=6)
+        self.assertTrue(self.is_member(self.dave, formed))
+        self.assertFalse(self.is_member(self.dave))
+
+    def test_a_pin_refused_independence_is_not_reported_as_having_joined(self) -> None:
+        carols = _pin(self.carol, 20)
+        daves = _pin(self.dave, 15)
+        with patch(f"{MODULE}.are_independent", side_effect=lambda a, b, exclude_cell=None: a != self.dave):
+            placed = shared_places._create_place(self.place.anchor, PlaceEvidence.PROVISIONAL, [daves, carols])
+        self.assertIsNone(placed)
+        self.assertFalse(self.is_member(self.dave))
+        self.assertTrue(self.is_member(self.carol))
+
+    def test_a_members_pin_outside_the_place_does_not_count_as_joining_it(self) -> None:
+        far = _pin(self.bob, 36)
+        self.assertIsNone(shared_places._join(self.place, far))
+
+
 class EmptyWikiAndConsentTests(SharedPlaceTestCase):
     def setUp(self) -> None:
         super().setUp()
@@ -261,6 +313,77 @@ class EmptyWikiAndConsentTests(SharedPlaceTestCase):
             self.assertNotIn(self.alice.user.username, notice.message)
             self.assertNotIn(self.bob.user.username, notice.message)
             self.assertIsNone(notice.source_profile_id)
+
+    def accept(self, offer) -> int:
+        self.client.force_login(self.alice.user)
+        url = reverse("shared_place.offer", kwargs={"offer_id": offer.pk, "action": "accept"})
+        return self.client.post(url).status_code
+
+    def assertNothingBrought(self, offer) -> None:
+        self.assertFalse(NotesOffer.objects.filter(pk=offer.pk, status=NotesOfferStatus.ACCEPTED).exists())
+        self.shared_wiki.refresh_from_db()
+        self.assertNotIn("gate", self.shared_wiki.description or "")
+
+    def test_accepting_after_losing_membership_brings_nothing_and_says_so(self) -> None:
+        offer = NotesOffer.objects.get()
+        SharedPlaceMember.objects.filter(place=self.place, profile=self.alice).delete()
+        self.assertEqual(self.accept(offer), 404)
+        self.assertNothingBrought(offer)
+
+    def test_accepting_when_the_notes_are_gone_is_not_recorded_as_accepted(self) -> None:
+        offer = NotesOffer.objects.get()
+        Wiki.objects.filter(location=self.first.location).update(description="  ")
+        self.assertEqual(self.accept(offer), 404)
+        self.assertNothingBrought(offer)
+
+    def test_accepting_when_the_shared_wiki_is_full_is_not_recorded_as_accepted(self) -> None:
+        offer = NotesOffer.objects.get()
+        Wiki.objects.filter(pk=self.shared_wiki.pk).update(description="x" * MAX_WIKI_DESCRIPTION_LENGTH)
+        self.assertEqual(self.accept(offer), 404)
+        self.assertNothingBrought(offer)
+
+    def test_accepting_cannot_publish_what_another_editor_wrote(self) -> None:
+        offer = NotesOffer.objects.get()
+        source = Wiki.objects.get(location=self.first.location)
+        baker.make(WikiEdit, wiki=source, editor=self.carol, changes={"description": {"from": "", "to": "Carol's"}})
+        self.assertEqual(self.accept(offer), 404)
+        self.assertNothingBrought(offer)
+
+    def test_a_correction_to_some_other_field_does_not_block_the_notes(self) -> None:
+        offer = NotesOffer.objects.get()
+        source = Wiki.objects.get(location=self.first.location)
+        baker.make(WikiEdit, wiki=source, editor=self.carol, changes={"name": {"from": "A", "to": "B"}})
+        self.assertEqual(self.accept(offer), 204)
+        offer.refresh_from_db()
+        self.assertEqual(offer.status, NotesOfferStatus.ACCEPTED)
+
+    def test_notes_someone_else_edited_are_never_offered(self) -> None:
+        carols = _pin(self.carol, 12)
+        Wiki.objects.get_or_create_for_location(carols.location)
+        source = Wiki.objects.get(location=carols.location)
+        Wiki.objects.filter(pk=source.pk).update(description="Mostly Alice's text.")
+        baker.make(WikiEdit, wiki=source, editor=self.alice, changes={"description": {"from": "", "to": "x"}})
+        shared_places.evaluate_pin(carols.pk)
+        self.assertTrue(SharedPlaceMember.objects.filter(place=self.place, profile=self.carol).exists())
+        self.assertFalse(NotesOffer.objects.filter(profile=self.carol).exists())
+
+    def test_losing_membership_withdraws_a_pending_offer_and_rejoining_offers_again(self) -> None:
+        self.first.delete()
+        shared_places.revalidate_memberships(self.alice)
+        self.assertFalse(NotesOffer.objects.filter(profile=self.alice).exists())
+        again = _pin(self.alice, 3)
+        Wiki.objects.get_or_create_for_location(again.location)
+        Wiki.objects.filter(location=again.location).update(description="Alice's notes, again.")
+        shared_places.evaluate_pin(again.pk)
+        self.assertEqual(NotesOffer.objects.get(profile=self.alice).status, NotesOfferStatus.PENDING)
+
+    def test_losing_membership_keeps_an_answer_already_given(self) -> None:
+        offer = NotesOffer.objects.get()
+        self.assertTrue(shared_places.answer_notes_offer(offer, self.alice, accept=False))
+        self.first.delete()
+        shared_places.revalidate_memberships(self.alice)
+        offer.refresh_from_db()
+        self.assertEqual(offer.status, NotesOfferStatus.DECLINED)
 
 
 class AccessTests(SharedPlaceTestCase):
@@ -501,6 +624,51 @@ class InParcelDomainTests(SharedPlaceTestCase):
             numbers = [float(match) for match in re.findall(r"-?\d+\.\d+", body)]
             for value in forbidden:
                 self.assertFalse(any(abs(number - value) < 1e-6 for number in numbers), f"{name}{query} leaked {value}")
+
+    def nest_under_the_shared_wiki(self) -> Wiki:
+        location = baker.make(Location, latitude=round(LAT + 2 * M_LAT, 6), longitude=round(LON + 2 * M_LON, 6))
+        return baker.make(Wiki, location=location, parent_wiki=self.wiki, name="Inside the shared place")
+
+    def test_a_shared_wiki_and_everything_under_it_leave_a_parents_descendants(self) -> None:
+        nested = self.nest_under_the_shared_wiki()
+        remaining = set(
+            wiki_access.without_shared_placeless(self.parcel_wiki.descendants()).values_list("pk", flat=True)
+        )
+        self.assertNotIn(self.wiki.pk, remaining)
+        self.assertNotIn(nested.pk, remaining)
+
+    def test_an_ordinary_child_stays_among_a_parents_descendants(self) -> None:
+        location = baker.make(Location, latitude=round(LAT + 90 * M_LAT, 6), longitude=LON)
+        child = baker.make(Wiki, location=location, parent_wiki=self.parcel_wiki, name="Gatehouse")
+        remaining = set(
+            wiki_access.without_shared_placeless(self.parcel_wiki.descendants()).values_list("pk", flat=True)
+        )
+        self.assertIn(child.pk, remaining)
+
+    def test_pulling_the_parcels_children_makes_no_pin_on_the_hub(self) -> None:
+        from urbanlens.dashboard.services.pins.pin_wiki_sync import pull_children_from_wiki
+
+        nested = self.nest_under_the_shared_wiki()
+        parent = baker.make(Pin, profile=self.carol, location=self.parcel_wiki.location)
+        self.assertEqual(pull_children_from_wiki(parent), 0)
+        self.assertFalse(Pin.objects.filter(location__in=[self.hub, nested.location]).exists())
+
+    def test_sending_child_pins_to_the_parcel_is_not_answered_by_the_shared_wiki(self) -> None:
+        from urbanlens.dashboard.services.pins.pin_wiki_sync import send_pins_to_wiki
+
+        parent = baker.make(Pin, profile=self.carol, location=self.parcel_wiki.location)
+        beside_hub = baker.make(
+            Location, latitude=round(float(self.hub.latitude) + 2 * M_LAT, 6), longitude=float(self.hub.longitude)
+        )
+        child = baker.make(Pin, profile=self.carol, location=beside_hub, parent_pin=parent, name="Beside the hub")
+        self.assertEqual(send_pins_to_wiki(parent, [child], self.carol), 1)
+
+    def test_a_shared_wiki_alone_does_not_give_the_parcel_a_child_wiki_affordance(self) -> None:
+        self.client.force_login(self.carol.user)
+        parcel_slug = self.parcel_wiki.location.slug or str(self.parcel_wiki.location.uuid)
+        response = self.client.get(reverse("location.wiki", kwargs={"location_slug": parcel_slug}))
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.context["has_child_wikis"])
 
     def test_a_parcel_holder_cannot_draw_on_the_shared_wiki(self) -> None:
         self.client.force_login(self.carol.user)

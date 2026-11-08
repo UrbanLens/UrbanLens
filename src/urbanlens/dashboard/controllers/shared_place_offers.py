@@ -18,5 +18,6 @@ class NotesOfferAnswerView(LoginRequiredMixin, View):
         if action not in {"accept", "decline"}:
             raise Http404
         offer = get_object_or_404(NotesOffer, pk=offer_id, profile__user=request.user)
-        answer_notes_offer(offer, offer.profile, accept=action == "accept")
+        if not answer_notes_offer(offer, offer.profile, accept=action == "accept"):
+            raise Http404
         return HttpResponse(status=204)

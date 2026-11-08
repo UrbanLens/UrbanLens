@@ -114,13 +114,14 @@ def send_pins_to_wiki(parent_pin: Pin, children: list[Pin], profile: Profile) ->
     from urbanlens.dashboard.controllers.detail_pins import ChildWikiLocationError, _location_for_child_wiki
     from urbanlens.dashboard.models.wiki.model import Wiki
     from urbanlens.dashboard.models.wiki_edit import WikiEdit
+    from urbanlens.dashboard.services.wiki.wiki_access import without_shared_placeless
 
     wiki = Wiki.objects.get_for_location(parent_pin.location)
     if wiki is None:
         return 0
 
     buildings = site_scope.parcel_buildings(parent_pin.location) or []
-    unmatched_wikis = list(wiki.child_wikis.select_related("location"))
+    unmatched_wikis = list(without_shared_placeless(wiki.child_wikis.select_related("location")))
     created = 0
     with transaction.atomic():
         for child in children[:MAX_SYNC_ITEMS]:
@@ -173,12 +174,13 @@ def pull_children_from_wiki(parent_pin: Pin) -> int:
         How many child pins were created."""
     from urbanlens.dashboard.models.wiki.model import Wiki
     from urbanlens.dashboard.services.pins.pin_creation import PinCreationError, resolve_child_pin_location
+    from urbanlens.dashboard.services.wiki.wiki_access import without_shared_placeless
 
     wiki = Wiki.objects.get_for_location(parent_pin.location)
     if wiki is None:
         return 0
 
-    child_wikis = list(wiki.child_wikis.select_related("location"))
+    child_wikis = list(without_shared_placeless(wiki.child_wikis.select_related("location")))
     if not child_wikis:
         return 0
 

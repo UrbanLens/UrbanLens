@@ -273,7 +273,7 @@ class LocationWikiView(LoginRequiredMixin, View):
         # Page-wide "show child pin details" toggle: when on (?children=1), the map, photo gallery, and comments
         # all include content from this wiki's child wikis (any depth).
         include_children = request.GET.get("children", "1" if wiki_is_site_scope else "0") == "1"
-        has_child_wikis = visible_rows(wiki.child_wikis.all(), wiki, profile).exists()
+        has_child_wikis = visible_rows(without_shared_placeless(wiki.child_wikis.all()), wiki, profile).exists()
 
         from urbanlens.dashboard.services.pins.external_data import gallery_sources
 

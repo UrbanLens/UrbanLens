@@ -197,13 +197,14 @@ def is_synthetic_place(place: Place) -> bool:
 
 def without_shared_placeless[QuerySetT: QuerySet[Any]](wikis: QuerySetT) -> QuerySetT:
     """
-    A parent's child wikis, less the shared placeless ones.
+    A parent's child wikis, less the shared placeless ones and everything nested under them.
 
     Their location is the hub, a stand-in coordinate that is never rendered (ADR35 section 2), so they are no marker, row or outline on the parent's map.
     """
     from urbanlens.dashboard.models.place.model import SYNTHETIC_EVIDENCE
+    from urbanlens.dashboard.models.wiki.model import Wiki
 
-    return wikis.exclude(place__evidence__in=SYNTHETIC_EVIDENCE)
+    return wikis.exclude(pk__in=Wiki.objects.filter(place__evidence__in=SYNTHETIC_EVIDENCE).with_descendants().values("pk"))
 
 
 def is_members_only_place(place: Place) -> bool:

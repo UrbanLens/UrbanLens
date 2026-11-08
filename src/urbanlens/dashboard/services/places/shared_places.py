@@ -35,6 +35,7 @@ from urbanlens.dashboard.models.place.shared import NotesOffer, NotesOfferStatus
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.models.wiki.model import Wiki
+from urbanlens.dashboard.models.wiki_edit.model import WikiEdit
 from urbanlens.dashboard.services.core.text_limits import MAX_WIKI_DESCRIPTION_LENGTH
 from urbanlens.dashboard.services.geo.area import buffer_meters
 from urbanlens.dashboard.services.locations.site_scope import meters_between
@@ -214,7 +215,9 @@ def _form(pin: Pin, reference: Point | None, evidence: str, candidates: list[Pin
             continue
         earlier = min((pin, other), key=lambda candidate: (candidate.created, candidate.pk))
         anchor = reference if reference is not None else earlier.location.point
-        return _create_place(anchor, evidence, [pin, other])
+        place = _create_place(anchor, evidence, [pin, other])
+        if place is not None:
+            return place
     return None
 
 
@@ -225,8 +228,20 @@ def _independent_of_all_members(place: Place, pin: Pin) -> bool:
     return all(are_independent(pin.profile, member, exclude_cell=cell) for member in members)
 
 
+def _within_reach(place: Place, pin: Pin) -> bool:
+    """Whether the pin stands within the place's radius of its single anchor."""
+    return place.anchor is not None and _distance(pin.location.point, place.anchor) <= _radius(place.evidence)
+
+
 def _join(place: Place, pin: Pin) -> Place | None:
-    """Admit the pin's profile by distance to the anchor alone, provided it is independent of every current member."""
+    """
+    Admit the pin's profile by the pin's own distance to the anchor, provided it is independent of every current member.
+
+    Returns:
+        The place when the profile is a member on this pin's account, else None.
+    """
+    if not _within_reach(place, pin):
+        return None
     if SharedPlaceMember.objects.filter(place=place, profile=pin.profile).exists():
         return place
     with transaction.atomic():
@@ -276,13 +291,26 @@ def _hub_location(anchor: Point, radius: float) -> Location:
 
 
 def _create_place(anchor: Point, evidence: str, pins: list[Pin]) -> Place | None:
+    """
+    Make the place for a qualifying pair, unless one already holds the anchor: then each pin is put to that place on its own merit.
+
+    Args:
+        anchor: The pair's fixed point.
+        evidence: The tier to create.
+        pins: The evaluated pin first, then its partner.
+
+    Returns:
+        The place the evaluated pin's profile now belongs to, or None when the existing place would not admit it.
+    """
     with transaction.atomic():
         _lock_creation()
         existing = _nearest_synthetic_place(anchor)
         if existing is not None:
-            for pin in pins:
-                _join(existing, pin)
-            return existing
+            evaluated, *partners = pins
+            joined = _join(existing, evaluated)
+            for partner in partners:
+                _join(existing, partner)
+            return joined
         parent = _official_parent(anchor)
         place = Place.objects.create(kind=PlaceKind.SITE, evidence=evidence, geometry=_circle(anchor, _radius(evidence)), anchor=Point(anchor.x, anchor.y, srid=4326))
         resolution.refresh_area(place)
@@ -324,7 +352,7 @@ def _hub_url(place: Place) -> str:
 def _offer_notes(place: Place, pin: Pin) -> None:
     """Tell a newly admitted member someone else pinned here too, and offer to bring their own exact-point notes. Identical for everyone."""
     own = Wiki.objects.filter(location=pin.location).exclude(place=place).first()
-    if own is not None and (own.description or "").strip():
+    if own is not None and (own.description or "").strip() and _notes_are_their_own(own, pin.profile):
         NotesOffer.objects.get_or_create(profile=pin.profile, place=place, defaults={"source_location": pin.location})
     NotificationLog.objects.notify(
         profile=pin.profile,
@@ -335,8 +363,15 @@ def _offer_notes(place: Place, pin: Pin) -> None:
     )
 
 
+def _notes_are_their_own(wiki: Wiki, profile: Profile) -> bool:
+    """Whether nobody else started the wiki or wrote to its description: only the author can consent to moving the text (ADR35 section 2)."""
+    if wiki.created_by_id not in (None, profile.pk):
+        return False
+    return not WikiEdit.objects.filter(wiki=wiki, changes__has_key="description", editor__isnull=False).exclude(editor=profile).exists()
+
+
 def revalidate_memberships(profile: Profile) -> int:
-    """Drop memberships whose profile no longer holds a pin within the place's reach of its anchor. Returns how many were dropped."""
+    """Drop memberships whose profile no longer holds a pin within the place's reach of its anchor, with any offer still unanswered. Returns how many were dropped."""
     dropped = 0
     for member in SharedPlaceMember.objects.filter(profile=profile).select_related("place"):
         anchor = member.place.anchor
@@ -345,6 +380,7 @@ def revalidate_memberships(profile: Profile) -> int:
         reach = _radius(member.place.evidence)
         near = Pin.objects.filter(profile=profile, location__point__dwithin=(anchor, D(m=reach)))
         if not any(_distance(p.location.point, anchor) <= reach for p in near.select_related("location")):
+            NotesOffer.objects.filter(place=member.place, profile=profile, status=NotesOfferStatus.PENDING).delete()
             member.delete()
             dropped += 1
     return dropped
@@ -359,23 +395,47 @@ def merged_description(shared: str | None, notes: str) -> str:
     return (f"{shared}\n\n{notes}" if shared else notes)[:MAX_WIKI_DESCRIPTION_LENGTH]
 
 
+def _notes_to_bring(offer: NotesOffer, profile: Profile) -> tuple[Wiki, str] | None:
+    """
+    What accepting the offer would write.
+
+    Returns:
+        The shared wiki and its new description, or None when the offer can no longer be honoured: the profile left the place, either wiki
+        or the notes are gone, someone else wrote them, or the shared wiki has no room for them.
+    """
+    if offer.source_location_id is None or not SharedPlaceMember.objects.filter(place_id=offer.place_id, profile=profile).exists():
+        return None
+    source = Wiki.objects.filter(location_id=offer.source_location_id).first()
+    shared = Wiki.objects.filter(place_id=offer.place_id).first()
+    notes = (source.description or "").strip() if source is not None else ""
+    if shared is None or not notes or not _notes_are_their_own(source, profile):
+        return None
+    merged = merged_description(shared.description, notes)
+    return (shared, merged) if notes in merged else None
+
+
 def answer_notes_offer(offer: NotesOffer, profile: Profile, *, accept: bool) -> bool:
     """
     Record the owner's answer; on accept, copy their own tier-0 notes into the shared wiki.
 
+    An accept that cannot be honoured withdraws the offer instead of recording an answer that brought nothing.
+
     Returns:
-        Whether the offer was pending and belonged to *profile*.
+        Whether the answer took effect: the offer was pending, belonged to *profile*, and an accept had notes to bring.
     """
     from urbanlens.dashboard.services.wiki.wiki_edits import apply_wiki_edit
 
     if offer.profile_id != profile.pk or offer.status != NotesOfferStatus.PENDING:
         return False
-    if accept:
-        source = Wiki.objects.filter(location_id=offer.source_location_id).first() if offer.source_location_id else None
-        shared = Wiki.objects.filter(place_id=offer.place_id).first()
-        if source is not None and shared is not None and SharedPlaceMember.objects.filter(place_id=offer.place_id, profile=profile).exists():
-            apply_wiki_edit(shared, profile, {"description": merged_description(shared.description, source.description or "")})
-    offer.status = NotesOfferStatus.ACCEPTED if accept else NotesOfferStatus.DECLINED
-    offer.answered_at = timezone.now()
-    offer.save(update_fields=["status", "answered_at", "updated"])
+    bringing = _notes_to_bring(offer, profile) if accept else None
+    if accept and bringing is None:
+        offer.delete()
+        return False
+    with transaction.atomic():
+        if bringing is not None:
+            shared, description = bringing
+            apply_wiki_edit(shared, profile, {"description": description})
+        offer.status = NotesOfferStatus.ACCEPTED if accept else NotesOfferStatus.DECLINED
+        offer.answered_at = timezone.now()
+        offer.save(update_fields=["status", "answered_at", "updated"])
     return True
