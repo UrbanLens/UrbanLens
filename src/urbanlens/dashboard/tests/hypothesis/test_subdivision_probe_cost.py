@@ -95,7 +95,9 @@ class SubdivisionProbeCostTests(TestCase):
                 self, latitude: float, longitude: float, *, name: str | None = None
             ) -> ResolvedBoundaries:
                 resolved = super().get_boundaries(latitude, longitude, name=name)
-                resolved.property_candidates = [("other_provider", resolved.property_polygon)]
+                # The parcel's own provider draws the refresh, or the shrink is never read as one and nothing is probed.
+                if type(self).calls > 1:
+                    resolved.property_candidates = [("other_provider", resolved.property_polygon)]
                 return resolved
 
         with (
@@ -104,6 +106,7 @@ class SubdivisionProbeCostTests(TestCase):
         ):
             provisioning.ensure_place_for_location(self.locations[0], force=True)
 
+        self.assertGreater(_Foreign.calls, 1, "no neighbour was probed")
         split.assert_not_called()
 
 
