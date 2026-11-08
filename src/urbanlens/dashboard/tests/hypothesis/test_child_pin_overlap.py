@@ -1,4 +1,4 @@
-"""Tests for the child-pin exact-coordinate overlap rule."""
+"""Tests for child pins sharing exact coordinates with their parent and siblings."""
 
 from __future__ import annotations
 
@@ -14,9 +14,9 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.pins.pin_creation import (
     DuplicateCoordinatesError,
-    PinCreationError,
     create_pin_for_profile,
     resolve_child_pin_location,
+    resolve_unclaimed_child_pin_location,
 )
 
 # DB-backed @given tests never touch self.client - only ORM/service calls - per
@@ -30,7 +30,7 @@ _db_settings = settings(
 
 
 class ChildPinExactOverlapViewTests(TestCase):
-    """POST /map/pin/<slug>/detail-pins/ rejects a child pin stacked on another pin."""
+    """POST /map/pin/<slug>/detail-pins/ lets a child pin share its parent's or a sibling's point."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -54,19 +54,23 @@ class ChildPinExactOverlapViewTests(TestCase):
             content_type="application/json",
         )
 
-    def test_child_pin_at_a_siblings_exact_coordinates_is_rejected(self) -> None:
-        self.assertEqual(self._create("First", 42.00010, -73.00010).status_code, 200)
-        response = self._create("Second", 42.00010, -73.00010)
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("exact coordinates", response.json()["error"])
-        self.assertEqual(Pin.objects.filter(profile=self.profile, parent_pin=self.root).count(), 1)
+    def test_child_pin_at_a_siblings_exact_coordinates_is_allowed(self) -> None:
+        first = self._create("First", 42.00010, -73.00010)
+        second = self._create("Second", 42.00010, -73.00010)
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(Pin.objects.filter(profile=self.profile, parent_pin=self.root).count(), 2)
+        self.assertEqual(
+            Pin.objects.get(uuid=first.json()["uuid"]).location_id,
+            Pin.objects.get(uuid=second.json()["uuid"]).location_id,
+        )
 
-    def test_child_pin_at_the_parents_exact_coordinates_is_rejected(self) -> None:
-        """The parent occupies its own point; a child stacked on it is unclickable."""
-        response = self._create("Stacked on parent", 42.0, -73.0)
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("exact coordinates", response.json()["error"])
-        self.assertFalse(Pin.objects.filter(profile=self.profile, parent_pin=self.root).exists())
+    def test_child_pin_at_the_parents_exact_coordinates_is_allowed(self) -> None:
+        response = self._create("On parent", 42.0, -73.0)
+        self.assertEqual(response.status_code, 200)
+        child = Pin.objects.get(uuid=response.json()["uuid"])
+        self.assertEqual(child.parent_pin_id, self.root.pk)
+        self.assertEqual(child.location_id, self.root.location_id)
 
     def test_nearby_child_pins_are_still_allowed(self) -> None:
         """~15m apart - the door/window/sign case child pins exist for."""
@@ -89,17 +93,15 @@ class ChildPinExactOverlapViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(Pin.objects.get(uuid=response.json()["uuid"]).location_id, shared.pk)
 
-    def test_moving_a_child_pin_onto_another_pins_exact_point_is_rejected(self) -> None:
-        self._create("First", 42.00010, -73.00010)
+    def test_moving_a_child_pin_onto_another_pins_exact_point_is_allowed(self) -> None:
+        first = Pin.objects.get(uuid=self._create("First", 42.00010, -73.00010).json()["uuid"])
         second = Pin.objects.get(uuid=self._create("Second", 42.00020, -73.00020).json()["uuid"])
-        location_before = second.location_id
 
         response = self._move(second, 42.00010, -73.00010)
 
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("exact coordinates", response.json()["error"])
+        self.assertEqual(response.status_code, 200)
         second.refresh_from_db()
-        self.assertEqual(second.location_id, location_before)
+        self.assertEqual(second.location_id, first.location_id)
 
     def test_a_move_to_coordinates_that_are_not_numbers_is_a_400(self) -> None:
         child = Pin.objects.get(uuid=self._create("First", 42.00010, -73.00010).json()["uuid"])
@@ -177,19 +179,36 @@ class ChildWikiCoordinateTests(TestCase):
 
 
 class ChildPinExactOverlapServiceTests(TestCase):
-    """``create_pin_for_profile(parent_id=...)`` enforces the same rule as the map UI."""
+    """``create_pin_for_profile(parent_id=...)`` lets a child share its parent's point; root pins stay unique per Location."""
 
     def setUp(self) -> None:
         super().setUp()
         self.profile = baker.make(User).profile
         self.root = baker.make(Pin, profile=self.profile, location=baker.make(Location, latitude=41.0, longitude=-75.0))
 
-    def test_child_stacked_on_its_parent_is_rejected(self) -> None:
-        with self.assertRaises(PinCreationError):
-            create_pin_for_profile(
-                self.profile, name="Stacked", latitude=41.0, longitude=-75.0, parent_id=self.root.uuid
-            )
-        self.assertFalse(Pin.objects.filter(profile=self.profile, parent_pin=self.root).exists())
+    def test_child_at_its_parents_exact_point_is_accepted(self) -> None:
+        result = create_pin_for_profile(
+            self.profile, name="Stacked", latitude=41.0, longitude=-75.0, parent_id=self.root.uuid
+        )
+
+        self.assertTrue(result.created)
+        self.assertEqual(result.pin.parent_pin_id, self.root.pk)
+        self.assertEqual(result.pin.location_id, self.root.location_id)
+
+    def test_two_children_at_one_point_are_accepted(self) -> None:
+        first = create_pin_for_profile(
+            self.profile, name="A", latitude=41.0005, longitude=-75.0005, parent_id=self.root.uuid
+        )
+        second = create_pin_for_profile(
+            self.profile, name="B", latitude=41.0005, longitude=-75.0005, parent_id=self.root.uuid
+        )
+
+        self.assertEqual(first.pin.location_id, second.pin.location_id)
+        self.assertNotEqual(first.pin.pk, second.pin.pk)
+
+    def test_a_root_pin_at_an_existing_root_point_is_still_rejected(self) -> None:
+        with self.assertRaises(DuplicateCoordinatesError):
+            create_pin_for_profile(self.profile, name="Dup", latitude=41.0, longitude=-75.0)
 
     def test_child_near_its_parent_is_accepted(self) -> None:
         result = create_pin_for_profile(
@@ -200,30 +219,29 @@ class ChildPinExactOverlapServiceTests(TestCase):
         self.assertEqual(result.pin.parent_pin_id, self.root.pk)
         self.assertNotEqual(result.pin.location_id, self.root.location_id)
 
-    def test_resolver_rejects_a_point_the_profile_already_pinned(self) -> None:
-        with self.assertRaises(DuplicateCoordinatesError):
-            resolve_child_pin_location(self.profile, 41.0, -75.0)
+    def test_resolver_returns_a_point_the_profile_already_pinned(self) -> None:
+        self.assertEqual(resolve_child_pin_location(41.0, -75.0).pk, self.root.location_id)
 
-    def test_resolver_ignores_the_pin_being_moved(self) -> None:
-        """Re-resolving a pin's own current point is what a no-op move does."""
-        location = resolve_child_pin_location(self.profile, 41.0, -75.0, exclude_pin=self.root)
-        self.assertEqual(location.pk, self.root.location_id)
+    def test_unclaimed_resolver_rejects_a_point_the_profile_already_pinned(self) -> None:
+        """Generators treat an existing pin at the point as the place already being covered."""
+        with self.assertRaises(DuplicateCoordinatesError):
+            resolve_unclaimed_child_pin_location(self.profile, 41.0, -75.0)
 
     def test_resolver_reuses_an_existing_location_row(self) -> None:
-        """Locations are shared; only the *pin* is barred from stacking."""
+        """Locations are shared; a pin never gets its own row."""
         other = baker.make(User).profile
         existing = Location.objects.create(latitude=41.00020, longitude=-75.00020)
         baker.make(Pin, profile=other, location=existing)
 
-        self.assertEqual(resolve_child_pin_location(self.profile, 41.00020, -75.00020).pk, existing.pk)
+        self.assertEqual(resolve_child_pin_location(41.00020, -75.00020).pk, existing.pk)
 
     def test_resolver_quantizes_to_the_stored_precision(self) -> None:
         """
         Location identity is (lat, lon) at the field's 6dp, so two inputs that
         round to the same stored coordinate must resolve to the same row rather
         than racing the (latitude, longitude) unique constraint."""
-        first = resolve_child_pin_location(self.profile, 41.00030004, -75.00030004)
-        second = resolve_child_pin_location(self.profile, 41.00030001, -75.00030001)
+        first = resolve_child_pin_location(41.00030004, -75.00030004)
+        second = resolve_child_pin_location(41.00030001, -75.00030001)
 
         self.assertEqual(first.pk, second.pk)
 
@@ -246,10 +264,9 @@ class ChildPinLocationResolutionPropertyTests(TestCase):
         self, lat: float, lon: float, lat_offset: float, lon_offset: float
     ) -> None:
         """Nearby-but-distinct child pins keep their own coordinates - no proximity snap."""
-        profile = baker.make(User).profile
 
-        first = resolve_child_pin_location(profile, lat, lon)
-        second = resolve_child_pin_location(profile, lat + lat_offset, lon + lon_offset)
+        first = resolve_child_pin_location(lat, lon)
+        second = resolve_child_pin_location(lat + lat_offset, lon + lon_offset)
 
         self.assertNotEqual(first.pk, second.pk)
 
@@ -258,10 +275,9 @@ class ChildPinLocationResolutionPropertyTests(TestCase):
         lon=st.floats(min_value=-170.0, max_value=170.0, allow_nan=False, allow_infinity=False),
     )
     @_db_settings
-    def test_a_point_the_profile_already_pinned_is_always_rejected(self, lat: float, lon: float) -> None:
+    def test_a_point_the_profile_already_pinned_resolves_to_the_same_location(self, lat: float, lon: float) -> None:
         profile = baker.make(User).profile
-        location = resolve_child_pin_location(profile, lat, lon)
+        location = resolve_child_pin_location(lat, lon)
         baker.make(Pin, profile=profile, location=location)
 
-        with self.assertRaises(PinCreationError):
-            resolve_child_pin_location(profile, lat, lon)
+        self.assertEqual(resolve_child_pin_location(lat, lon).pk, location.pk)
