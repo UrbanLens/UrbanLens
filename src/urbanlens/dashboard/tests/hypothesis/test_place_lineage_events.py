@@ -365,8 +365,10 @@ class BrokenGeometryTests(_OldParcelCase):
             mock.patch(
                 "urbanlens.dashboard.services.places.splits.remainder_of", side_effect=GEOSException("bad ring")
             ),
+            self.assertLogs(provisioning.logger, level="WARNING") as logs,
         ):
             self.assertIsNone(provisioning.detect_subdivision(self.pin.location, _strip(0, 0.6)))
+        self.assertIn("split detection skipped", logs.output[0])
         self.old.refresh_from_db()
         self.assertEqual(self.old.status, PlaceStatus.CURRENT)
 
