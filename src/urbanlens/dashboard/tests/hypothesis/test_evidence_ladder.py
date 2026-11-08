@@ -392,6 +392,35 @@ class FootprintResolutionTests(TestCase):
         self.assertNotEqual(place.pk, existing.pk)
         self.assertEqual(Place.objects.resolve_for_point(pin.latitude, pin.longitude), place)
 
+    def test_a_deferred_answer_keeps_an_official_outline_nothing_stored_matches(self) -> None:
+        existing = self._footprint(3, lat=LAT + 4 * M_LAT)  # makes the pin already resolve
+        official = _box(10)
+        place = _provision(
+            _pin(), building_polygon=official, building_candidates=[("overpass", official)], deferred=["overture"]
+        )
+        assert place is not None
+        self.assertNotEqual(place.pk, existing.pk)
+        self.assertEqual(place.evidence, PlaceEvidence.OFFICIAL)
+
+    def test_a_deferred_answer_never_overwrites_a_stored_outline_with_an_official_one(self) -> None:
+        stored = provisioning.ensure_footprint_places([("county_gis", _box(10))])[0]
+        before = stored.geometry.wkt
+        fallback = _box(12)
+        place = _provision(
+            _pin(), building_polygon=fallback, building_candidates=[("overpass", fallback)], deferred=["county_gis"]
+        )
+        self.assertEqual(place, stored)
+        stored.refresh_from_db()
+        self.assertEqual(stored.geometry.wkt, before)
+        self.assertEqual(Place.objects.filter(kind=PlaceKind.BUILDING).count(), 1)
+
+    def test_a_deferred_answer_keeps_an_unattributed_outline_as_a_footprint(self) -> None:
+        self._footprint(3, lat=LAT + 4 * M_LAT)  # makes the pin already resolve
+        place = _provision(_pin(), building_polygon=_box(10), deferred=["overture"])
+        assert place is not None
+        self.assertEqual(place.evidence, PlaceEvidence.FOOTPRINT)
+        self.assertEqual(Place.objects.filter(kind=PlaceKind.BUILDING).count(), 2)
+
     def test_the_chain_keeps_the_first_footprint_when_a_later_source_defers(self) -> None:
         class Answers:
             service_key = "microsoft_building_footprints"

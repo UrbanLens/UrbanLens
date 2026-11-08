@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from django.contrib.gis.geos import MultiPolygon
 
     from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.services.locations.boundaries import ResolvedBoundaries
 
 logger = logging.getLogger(__name__)
 
@@ -263,9 +264,8 @@ def provision_outcome_for_coordinate(location: Location, *, name: str | None = N
 
     if resolved.deferred and (known := Place.objects.resolve_for_point(location.latitude, location.longitude)) is not None:
         # A fallback's outline must not overwrite one the deferring provider gave earlier; keep it until that provider answers.
-        # A footprint is never an overwrite of an official outline, so what the answering providers found is kept.
         if not _parcel_covers(location):
-            kept = ensure_footprint_places([(source, outline) for source, outline in resolved.building_candidates if evidence_for_source(source) == PlaceEvidence.FOOTPRINT])
+            kept = ensure_footprint_places([(source, outline) for source, outline in _building_outlines(resolved) if not _would_overwrite(source, outline)])
             for place in kept:
                 _resolve_locations_around(place)
             known = Place.objects.resolve_for_point(location.latitude, location.longitude) or known
@@ -281,7 +281,7 @@ def provision_outcome_for_coordinate(location: Location, *, name: str | None = N
     if resolved.building_polygon is not None:
         if parcel is None and not _parcel_covers(location):
             # Stored, not bound: the pin reaches one of these only through resolution below, which allows the buffer and no further.
-            footprints = ensure_footprint_places(resolved.building_candidates or [("", resolved.building_polygon)])
+            footprints = ensure_footprint_places(_building_outlines(resolved))
         else:
             source = resolved.building_candidates[0][0] if resolved.building_candidates else ""
             # No parcel came back this time, but a stored one may hold the point: nest under it so the building stays in its access domain.
@@ -491,6 +491,18 @@ def _resolve_locations_around(place: Place | None) -> None:
 def _parcel_covers(location: Location) -> bool:
     """Whether a stored, resolvable parcel or site already holds the location's point."""
     return Place.objects.containing_point(location.point).filter(kind__in=(PlaceKind.PARCEL, PlaceKind.SITE)).exists()
+
+
+def _building_outlines(resolved: ResolvedBoundaries) -> list[tuple[str, MultiPolygon]]:
+    """Every building outline the chain returned, as ``(source, outline)``; one with no attributed source gets a blank source."""
+    if resolved.building_candidates:
+        return list(resolved.building_candidates)
+    return [("", resolved.building_polygon)] if resolved.building_polygon is not None else []
+
+
+def _would_overwrite(source: str, outline: MultiPolygon) -> bool:
+    """Whether storing this outline would replace a stored place's geometry; only an official one can, and only by matching that place."""
+    return evidence_for_source(source) != PlaceEvidence.FOOTPRINT and find_matching_place(PlaceKind.BUILDING, outline) is not None
 
 
 def ensure_footprint_places(candidates: list[tuple[str, MultiPolygon]]) -> list[Place]:
