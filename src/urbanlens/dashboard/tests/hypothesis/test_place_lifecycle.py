@@ -22,7 +22,6 @@ from urbanlens.dashboard.services.places.lineage_events import (
     retract_erroneous_event,
 )
 from urbanlens.dashboard.services.places.provisioning import find_matching_place, upsert_place
-from urbanlens.dashboard.services.places.splits import SPLIT_SHRINK_RATIO
 
 from .test_places_access_predicate import pin_on
 
@@ -268,13 +267,19 @@ class VersionSplitDetectionTests(TestCase):
         assert original.status == PlaceStatus.CURRENT
 
     def test_a_late_remainder_parcel_completes_the_split(self) -> None:
+        from urbanlens.dashboard.services.places import splits
+
         holder = baker.make(User).profile
         original = upsert_place(PlaceKind.PARCEL, rect(-74.004, -73.996), provider="county", provider_key="")
         assert original is not None
         pin_on(holder, original, lat=40.0, lng=-74.003)
-        # Keeps 75% - between the heavy threshold and the keep ceiling, so the refresh alone is not a split.
-        assert (1 - SPLIT_SHRINK_RATIO) < 0.75
-        shrunk = geometry_versions.set_geometry(original, rect(-74.004, -73.998), provider="county")
+        outline = rect(-74.004, -73.998)
+        ratio = splits.shrink_ratio(original, outline)
+        assert ratio is not None
+        self.assertAlmostEqual(ratio, 0.75, places=6)
+        # Between the heavy threshold and the keep ceiling, so the refresh alone is not a split.
+        assert splits.is_mild_shrink(original, outline)
+        shrunk = geometry_versions.set_geometry(original, outline, provider="county")
         assert shrunk
         original.refresh_from_db()
         assert original.status == PlaceStatus.CURRENT
