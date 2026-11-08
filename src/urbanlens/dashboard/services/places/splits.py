@@ -169,6 +169,43 @@ def is_safe_successor(place: Place, other: Place, holders: set[int]) -> bool:
     return not has_stranger_pins(place, other, holders)
 
 
+def is_safe_outline(place: Place, geometry: MultiPolygon) -> bool:
+    """Whether an outline is free to become a successor of ``place``: it describes no stored parcel, or one :func:`is_safe_successor` passes."""
+    from urbanlens.dashboard.services.places.provisioning import find_matching_place
+
+    # exclude_pk=place.pk: place is still CURRENT until the split commits, and its centroid often lands inside one
+    # of its own pieces, which would otherwise alias back onto it. This is the lookup upsert_place makes.
+    matched = find_matching_place(PlaceKind.PARCEL, geometry, exclude_pk=place.pk)
+    return matched is None or is_safe_successor(place, matched, holders_of([place], timezone.now()))
+
+
+def accepted_pieces(place: Place, outlines: Iterable[MultiPolygon]) -> list[MultiPolygon]:
+    """
+    The outlines that can become successors of ``place``: each passes :func:`is_piece_of` and :func:`is_safe_outline`.
+
+    Coverage and the split both read this set, so a split is never judged on an outline it would then leave out.
+
+    Args:
+        place: The parcel being split.
+        outlines: The outlines on offer, the refreshed outline first when there is one.
+    """
+    accepted: list[MultiPolygon] = []
+    for geometry in outlines:
+        if not is_piece_of(place, geometry, accepted):
+            logger.info("split of place %s: an outline offered is not a piece of it; left out", place.pk)
+        elif is_safe_outline(place, geometry):
+            accepted.append(geometry)
+    return accepted
+
+
+def rebuilds_old_outline(place: Place, pieces: list[MultiPolygon]) -> bool:
+    """Whether ``pieces`` together hold at least :data:`SPLIT_REBUILD_RATIO` of ``place``'s outline."""
+    if place.geometry is None or not pieces:
+        return False
+    rebuilt = place.geometry.intersection(GeometryCollection(*pieces).unary_union)
+    return (rebuilt.area / place.geometry.area) >= SPLIT_REBUILD_RATIO
+
+
 def candidate_parcels(place: Place, new_geometry: MultiPolygon) -> list[MultiPolygon]:
     """
     Outlines of stored parcels that could be the rest of ``place``.
@@ -210,24 +247,23 @@ def remainder_is_covered(place: Place, new_geometry: MultiPolygon, seen: Iterabl
     Args:
         place: The parcel being refreshed.
         new_geometry: Its refreshed outline.
-        seen: Parcel outlines returned in the same refresh. Only those passing :func:`is_remainder_piece` count, the
-            rule stored candidates answer to, so an overlapping or outlying neighbour cannot make up the coverage.
+        seen: Parcel outlines returned in the same refresh. Only those passing :func:`is_remainder_piece` count.
 
     Returns:
-        True when :func:`candidate_parcels` and ``seen`` cover at least :data:`SPLIT_REMAINDER_COVERAGE` of the
-        remainder and, with the new outline, rebuild at least :data:`SPLIT_REBUILD_RATIO` of the old one.
+        True when :func:`accepted_pieces`, the refreshed outline among them, cover at least
+        :data:`SPLIT_REMAINDER_COVERAGE` of the remainder and rebuild at least :data:`SPLIT_REBUILD_RATIO` of the old outline.
     """
     remainder = remainder_of(place, new_geometry)
     if place.geometry is None or remainder is None:
         return False
-    candidates = [*candidate_parcels(place, new_geometry), *(outline for outline in seen if is_remainder_piece(outline, new_geometry, remainder))]
-    if not candidates:
+    offered = [*candidate_parcels(place, new_geometry), *(outline for outline in seen if is_remainder_piece(outline, new_geometry, remainder))]
+    accepted = accepted_pieces(place, [new_geometry, *offered])
+    if len(accepted) < 2:
         return False
-    union = GeometryCollection(*candidates).unary_union
+    union = GeometryCollection(*accepted).unary_union
     if (remainder.intersection(union).area / remainder.area) < SPLIT_REMAINDER_COVERAGE:
         return False
-    rebuilt = place.geometry.intersection(new_geometry.union(union))
-    return (rebuilt.area / place.geometry.area) >= SPLIT_REBUILD_RATIO
+    return rebuilds_old_outline(place, accepted)
 
 
 def looks_like_a_split(place: Place, new_geometry: MultiPolygon | None, seen: Iterable[MultiPolygon] = ()) -> bool:
@@ -258,8 +294,8 @@ def process_split(place: Place, successors: list[MultiPolygon]) -> Place | None:
     Retire a parcel in favour of the parcels it was divided into.
 
     This is the one place every successor passes through, the refreshed outline included, so the successor rules
-    are enforced here whichever path found the outline: one failing :func:`is_piece_of`, or describing a stored
-    parcel that fails :func:`is_safe_successor`, is left out.
+    are enforced here whichever path found the outline (:func:`accepted_pieces`). When an outline is left out, the
+    rest have to rebuild the old one (:func:`rebuilds_old_outline`) or the parcel stays current.
 
     Args:
         place: The parcel being superseded.
@@ -267,28 +303,18 @@ def process_split(place: Place, successors: list[MultiPolygon]) -> Place | None:
 
     Returns:
         The superseded place, or None, with nothing written, when the outlines do not make two or more separate parcels."""
-    from urbanlens.dashboard.services.places.provisioning import find_matching_place, upsert_place
+    from urbanlens.dashboard.services.places.provisioning import upsert_place
 
     learned_at = timezone.now()
 
-    # exclude_pk=place.pk: place is still CURRENT until the split commits, and its centroid often lands inside one
-    # of its own pieces, which would otherwise alias back onto it. This is the lookup upsert_place makes, and all
-    # are checked before any is touched, so a split that falls short re-parents nothing.
-    accepted: list[MultiPolygon] = []
-    holders: set[int] | None = None
-    for geometry in successors:
-        if not is_piece_of(place, geometry, accepted):
-            logger.info("process_split: an outline offered for place %s is not a piece of it; left out", place.pk)
-            continue
-        matched = find_matching_place(PlaceKind.PARCEL, geometry, exclude_pk=place.pk)
-        if matched is not None:
-            if holders is None:
-                holders = holders_of([place], learned_at)
-            if not is_safe_successor(place, matched, holders):
-                continue
-        accepted.append(geometry)
+    # All are checked before any is touched, so a split that falls short re-parents nothing.
+    accepted = accepted_pieces(place, successors)
     if len(accepted) < 2:
         logger.info("process_split: place %s has fewer than two safe successors; leaving it current", place.pk)
+        return None
+    # Only when one was left out: probes are capped, so a heavy shrink may legitimately offer just some of the pieces.
+    if len(accepted) < len(successors) and not rebuilds_old_outline(place, accepted):
+        logger.info("process_split: the successors left for place %s do not rebuild it; leaving it current", place.pk)
         return None
 
     # The check above cannot see parcels this loop creates or rewrites, so two outlines can still land on one parcel.

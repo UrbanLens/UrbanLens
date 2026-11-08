@@ -264,19 +264,17 @@ def _probe_neighbours(location: Location, previous: Place, new_parcel_polygon: M
 
     A probed outline answers to the rules :func:`~urbanlens.dashboard.services.places.splits.candidate_parcels` holds
     stored parcels to: drawn by ``source``, :func:`~urbanlens.dashboard.services.places.splits.is_remainder_piece`,
-    and, when it describes a stored parcel, :func:`~urbanlens.dashboard.services.places.splits.is_safe_successor`.
+    and :func:`~urbanlens.dashboard.services.places.splits.is_safe_outline`.
     With no ``source`` there is nothing to match against, so the chain's selected outline stands in.
     """
     from urbanlens.dashboard.models.location.model import Location as LocationModel
     from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain
     from urbanlens.dashboard.services.places import splits
-    from urbanlens.dashboard.services.places.lineage_events import holders_of
 
     remainder = splits.remainder_of(previous, new_parcel_polygon)
     if remainder is None:
         return []
     found: list[MultiPolygon] = []
-    holders: set[int] | None = None
     probes = 0
     # Filtering on a null root would be IS NULL, matching every rootless place and every placeless location.
     if previous.domain_root_id is None:
@@ -299,12 +297,8 @@ def _probe_neighbours(location: Location, previous: Place, new_parcel_polygon: M
             continue
         if any(candidate.equals(polygon) for candidate in [*known, *found]):
             continue
-        matched = find_matching_place(PlaceKind.PARCEL, polygon, exclude_pk=previous.pk)
-        if matched is not None:
-            if holders is None:
-                holders = holders_of([previous], timezone.now())
-            if not splits.is_safe_successor(previous, matched, holders):
-                continue
+        if not splits.is_safe_outline(previous, polygon):
+            continue
         found.append(polygon)
     return found
 

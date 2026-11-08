@@ -139,6 +139,21 @@ class MildShrinkTests(_OldParcelCase):
         # Beside the old outline rather than in its remainder.
         self.assertFalse(looks_like_a_split(self.old, _strip(0, 0.6), seen=[_strip(0.6, 1.8)]))
 
+    def test_an_outline_seen_in_the_same_refresh_answers_to_the_stored_parcels_safety_rule(self) -> None:
+        theirs = self.remainder_parcel()
+        pin_on(baker.make(User).profile, theirs, lat=SOUTH + SIZE / 2, lng=WEST + SIZE * 0.8)
+        self.assertFalse(looks_like_a_split(self.old, _strip(0, 0.6), seen=[_strip(0.6, 1.0)]))
+
+    def test_an_outline_seen_in_the_same_refresh_cannot_be_another_familys_parcel(self) -> None:
+        site = make_place(PlaceKind.PARCEL, _strip(2, 3), name="Site")
+        make_place(PlaceKind.PARCEL, _strip(0.6, 1.0), parent=site, relation=PlaceRelation.MEMBER_OF, name="Taken")
+        self.assertFalse(looks_like_a_split(self.old, _strip(0, 0.6), seen=[_strip(0.6, 1.0)]))
+
+    def test_a_refreshed_outline_that_cannot_be_a_successor_counts_for_nothing(self) -> None:
+        theirs = make_place(PlaceKind.PARCEL, _strip(0, 0.6), name="Theirs")
+        pin_on(baker.make(User).profile, theirs, lat=SOUTH + SIZE / 2, lng=WEST + SIZE * 0.3)
+        self.assertFalse(looks_like_a_split(self.old, _strip(0, 0.6), seen=[_strip(0.6, 1.0)]))
+
     def test_a_neighbour_that_already_has_a_parent_is_untouched(self) -> None:
         site = make_place(PlaceKind.PARCEL, _strip(2, 3), name="Site")
         neighbour = self.remainder_parcel()
@@ -396,6 +411,18 @@ class RefreshedOutlineTests(_OldParcelCase):
         self.assertIsNone(remainder.parent_id)
         self.assertFalse(PlaceAccessGrant.objects.exists())
 
+    def test_two_remainder_pieces_do_not_split_it_without_the_refreshed_outline(self) -> None:
+        theirs = make_place(PlaceKind.PARCEL, _strip(0, 0.6), name="Theirs")
+        pin_on(baker.make(User).profile, theirs, lat=SOUTH + SIZE / 2, lng=WEST + SIZE * 0.3)
+        self.remainder_parcel(0.6, 0.8)
+        self.remainder_parcel(0.8, 1.0)
+        with mock.patch(_CHAIN):
+            self.assertIsNone(provisioning.detect_subdivision(self.pin.location, _strip(0, 0.6)))
+        self.old.refresh_from_db()
+        self.assertEqual(self.old.status, PlaceStatus.CURRENT)
+        self.assertFalse(self.old.children.exists())
+        self.assertFalse(PlaceAccessGrant.objects.exists())
+
 
 class ProcessSplitTests(_OldParcelCase):
     """Every successor passes through process_split, so it holds them to the successor rules whoever called it."""
@@ -446,6 +473,27 @@ class ProcessSplitTests(_OldParcelCase):
         self.assertEqual(process_split(self.old, [_strip(0, 0.6), _strip(0.6, 1.0)]), self.old)
         self.old.refresh_from_db()
         self.assertEqual(self.old.status, PlaceStatus.SUPERSEDED)
+        self.assertEqual(self.old.children.count(), 2)
+
+    def _unsafe_parcel(self, start: float, end: float) -> Place:
+        theirs = make_place(PlaceKind.PARCEL, _strip(start, end), name="Theirs")
+        pin_on(baker.make(User).profile, theirs, lat=SOUTH + SIZE / 2, lng=WEST + SIZE * (start + end) / 2)
+        return theirs
+
+    def test_a_left_out_outline_stops_a_split_the_rest_cannot_rebuild(self) -> None:
+        self._unsafe_parcel(0, 0.6)
+        self._assert_nothing_split(process_split(self.old, [_strip(0, 0.6), _strip(0.6, 0.8), _strip(0.8, 1.0)]))
+
+    def test_a_small_left_out_outline_does_not_stop_the_split(self) -> None:
+        theirs = self._unsafe_parcel(0, 0.1)
+        self.assertEqual(process_split(self.old, [_strip(0, 0.1), _strip(0.1, 0.6), _strip(0.6, 1.0)]), self.old)
+        self.assertEqual(self.old.children.count(), 2)
+        theirs.refresh_from_db()
+        self.assertIsNone(theirs.parent_id)
+
+    def test_pieces_found_only_in_part_still_split_a_heavy_shrink(self) -> None:
+        # Probes are capped, so a heavy shrink is allowed to find only some of the pieces.
+        self.assertEqual(process_split(self.old, [_strip(0, 0.2), _strip(0.2, 0.5)]), self.old)
         self.assertEqual(self.old.children.count(), 2)
 
 
