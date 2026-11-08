@@ -31,13 +31,17 @@ logger = logging.getLogger(__name__)
 MAX_SUBDIVISION_PROBES = 20
 
 #: Boundary-provider keys whose building outlines are machine-learned footprints rather than surveyed or registry
-#: geometry. Every other source (OSM, registry records) is official.
+#: geometry. Every other named source (OSM, registry records) is official.
 FOOTPRINT_SOURCES: frozenset[str] = frozenset({"microsoft_building_footprints", "overture", "overture_maps", "google_open_buildings"})
 
 
 def evidence_for_source(source: str) -> str:
-    """The :class:`PlaceEvidence` a building outline from provider ``source`` carries."""
-    return PlaceEvidence.FOOTPRINT if source in FOOTPRINT_SOURCES else PlaceEvidence.OFFICIAL
+    """
+    The :class:`PlaceEvidence` a building outline from provider ``source`` carries.
+
+    A blank ``source`` means nobody attributed the outline: it is not known to be surveyed, so it counts as footprint, never official.
+    """
+    return PlaceEvidence.OFFICIAL if source and source not in FOOTPRINT_SOURCES else PlaceEvidence.FOOTPRINT
 
 
 def evidence_for_record(building: dict) -> str:
@@ -45,11 +49,12 @@ def evidence_for_record(building: dict) -> str:
     The :class:`PlaceEvidence` of a cached building record, by its first-listed source (the one the record's geometry comes from).
 
     Overture records carry no per-feature dataset here, and Overture mixes machine-derived footprints with OSM, so a record led by Overture counts as footprint.
-    County GIS, assessor, CRIS and OSM records are official.
+    County GIS, assessor, CRIS and OSM records are official; a record naming no source is footprint (see :func:`evidence_for_source`).
     """
-    sources = [entry for entry in building.get("sources") or [] if isinstance(entry, dict)]
-    source = str(sources[0].get("source") or "") if sources else str(building.get("source") or "")
-    return evidence_for_source(source)
+    from urbanlens.dashboard.plugins.builtin.parcel_buildings import record_sources
+
+    sources = record_sources(building)
+    return evidence_for_source(str(sources[0]) if sources else "")
 
 
 def geometry_stale(place: Place) -> bool:
@@ -284,8 +289,7 @@ def provision_outcome_for_coordinate(location: Location, *, name: str | None = N
     footprints: list[Place] = []
     if resolved.building_polygon is not None:
         if parcel is None and not _parcel_covers(location):
-            # An outline with no attributed source is not known to be surveyed, so it counts as a footprint, never official.
-            footprints = ensure_footprint_places(resolved.building_candidates) if resolved.building_candidates else _footprint_places([(PlaceEvidence.FOOTPRINT, resolved.building_polygon)])
+            footprints = ensure_footprint_places(resolved.building_candidates or [("", resolved.building_polygon)])
             building = next((place for place in footprints if place.geometry is not None and place.geometry.contains(location.point)), None) or (footprints[0] if footprints else None)
         else:
             source = resolved.building_candidates[0][0] if resolved.building_candidates else ""

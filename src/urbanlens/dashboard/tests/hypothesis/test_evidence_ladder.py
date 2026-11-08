@@ -197,6 +197,77 @@ class FootprintWithoutParcelTests(TestCase):
         self.assertEqual(created[0].evidence, PlaceEvidence.FOOTPRINT)
 
 
+class UnattributedOutlineTests(TestCase):
+    """An outline nobody attributed is not known to be surveyed, so every path stores it as a footprint."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)
+
+    @staticmethod
+    def _record(outline: MultiPolygon, **extra) -> dict:
+        return {
+            "ref": "a",
+            "geometry": {"type": "Polygon", "coordinates": [list(map(list, outline[0].coords[0]))]},
+            **extra,
+        }
+
+    def test_with_no_parcel_anywhere(self) -> None:
+        place = _provision(_pin(), building_polygon=_box(10))
+        assert place is not None
+        self.assertEqual((place.evidence, place.parent_id), (PlaceEvidence.FOOTPRINT, None))
+
+    def test_under_the_parcel_the_chain_returned(self) -> None:
+        _provision(_pin(), property_polygon=_box(60), building_polygon=_box(10))
+        building = Place.objects.get(kind=PlaceKind.BUILDING)
+        self.assertEqual(building.evidence, PlaceEvidence.FOOTPRINT)
+        self.assertEqual(building.parent, Place.objects.get(kind=PlaceKind.PARCEL))
+
+    def test_inside_a_stored_parcel(self) -> None:
+        parcel = make_place(PlaceKind.PARCEL, _box(60))
+        _provision(_pin(), building_polygon=_box(10))
+        building = Place.objects.get(kind=PlaceKind.BUILDING)
+        self.assertEqual((building.evidence, building.parent_id), (PlaceEvidence.FOOTPRINT, parcel.pk))
+
+    def test_it_does_not_replace_an_official_outline(self) -> None:
+        parcel = make_place(PlaceKind.PARCEL, _box(60))
+        official = provisioning.upsert_place(
+            PlaceKind.BUILDING, _box(10), parent=parcel, evidence=PlaceEvidence.OFFICIAL
+        )
+        assert official is not None
+        area = official.area_sqm or 0
+        _provision(_pin(), building_polygon=_box(9))
+        official.refresh_from_db()
+        self.assertEqual(official.evidence, PlaceEvidence.OFFICIAL)
+        self.assertAlmostEqual(official.area_sqm or 0, area, delta=1)
+
+    def test_a_named_source_stays_official(self) -> None:
+        _provision(
+            _pin(), property_polygon=_box(60), building_polygon=_box(10), building_candidates=[("overpass", _box(10))]
+        )
+        self.assertEqual(Place.objects.get(kind=PlaceKind.BUILDING).evidence, PlaceEvidence.OFFICIAL)
+
+    def test_a_bulk_record_with_no_source_under_a_parcel(self) -> None:
+        parcel = make_place(PlaceKind.PARCEL, _box(60))
+        created = provisioning.ensure_building_places(parcel, [self._record(_box(10))])
+        self.assertEqual(created[0].evidence, PlaceEvidence.FOOTPRINT)
+
+    def test_a_bulk_record_with_no_source_and_no_parcel(self) -> None:
+        created = provisioning.ensure_building_places(None, [self._record(_box(10))])
+        self.assertEqual(created[0].evidence, PlaceEvidence.FOOTPRINT)
+
+    def test_record_shapes_that_name_no_source(self) -> None:
+        for record in ({}, {"sources": []}, {"source": ""}, {"sources": [{"name": "x"}]}, {"sources": "not-a-list"}):
+            self.assertEqual(provisioning.evidence_for_record(record), PlaceEvidence.FOOTPRINT, record)
+
+    def test_the_first_entry_that_names_a_source_decides(self) -> None:
+        record = {"sources": [{"name": "x"}, {"source": "county_gis"}, {"source": "overture"}]}
+        self.assertEqual(provisioning.evidence_for_record(record), PlaceEvidence.OFFICIAL)
+
+    def test_a_flat_record_is_read_by_its_source(self) -> None:
+        self.assertEqual(provisioning.evidence_for_record({"source": "overpass"}), PlaceEvidence.OFFICIAL)
+
+
 class FootprintResolutionTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
@@ -211,8 +282,9 @@ class FootprintResolutionTests(TestCase):
 
     def test_a_pin_on_a_roof_2m_from_a_shed_resolves_to_the_house(self) -> None:
         house = self._footprint(10)
-        shed = self._footprint(1.5, lat=LAT + 13 * M_LAT)  # 2.5 m past the house's north edge
-        pin = _pin(north_m=9)
+        shed = self._footprint(1.5, lat=LAT + 13 * M_LAT)  # south edge at 11.5 m; the house's north edge is at 10 m
+        pin = _pin(north_m=9.5)  # on the roof, 2 m from the shed
+        self.assertTrue(Place.objects.footprints_near(pin.point).filter(pk=shed.pk).exists())
         self.assertEqual(Place.objects.resolve_for_point(pin.latitude, pin.longitude), house)
         self.assertNotEqual(house, shed)
 
