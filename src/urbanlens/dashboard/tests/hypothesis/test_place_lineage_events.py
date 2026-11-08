@@ -149,12 +149,10 @@ class MildShrinkTests(_OldParcelCase):
             provisioning.detect_subdivision(self.pin.location, _strip(0, 0.6))
         chain.assert_not_called()
 
-    def test_a_shrink_under_34_percent_still_splits_alone(self) -> None:
+    def test_a_shrink_under_34_percent_looks_like_a_split_but_one_successor_leaves_it_current(self) -> None:
         self.assertTrue(looks_like_a_split(self.old, _strip(0, 0.2)))
         with mock.patch(_CHAIN):
-            provisioning.detect_subdivision(
-                self.pin.location, _strip(0, 0.2)
-            )  # only one successor found: stays current
+            self.assertIsNone(provisioning.detect_subdivision(self.pin.location, _strip(0, 0.2)))
         self.old.refresh_from_db()
         self.assertEqual(self.old.status, PlaceStatus.CURRENT)
 

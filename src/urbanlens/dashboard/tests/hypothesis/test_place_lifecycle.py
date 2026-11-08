@@ -13,14 +13,23 @@ from urbanlens.dashboard.models.place.lifecycle import (
     PlaceGeometryVersion,
     PlaceLineageEdge,
 )
-from urbanlens.dashboard.models.place.model import GrantReason, Place, PlaceAccessGrant, PlaceKind, PlaceStatus
-from urbanlens.dashboard.services.places import geometry_versions
+from urbanlens.dashboard.models.place.model import (
+    MAX_PLAUSIBLE_AREA_SQM,
+    GrantReason,
+    Place,
+    PlaceAccessGrant,
+    PlaceKind,
+    PlaceRelation,
+    PlaceStatus,
+)
+from urbanlens.dashboard.services.places import geometry_versions, lineage
 from urbanlens.dashboard.services.places.lineage_events import (
     LineageEvent,
     LineageEventKind,
     handle_lineage_event,
     retract_erroneous_event,
 )
+from urbanlens.dashboard.services.places.oversized import detach_oversized_place
 from urbanlens.dashboard.services.places.provisioning import find_matching_place, upsert_place
 
 from .test_places_access_predicate import pin_on
@@ -223,6 +232,45 @@ class LineageEdgeTests(TestCase):
         self.old.refresh_from_db()
         assert self.old.valid_to is None
 
+    def test_retraction_leaves_a_place_later_detached_as_oversized_retired(self) -> None:
+        event = self._event(LineageEventKind.SPLIT)
+        handle_lineage_event(event)
+        Place.objects.filter(pk=self.old.pk).update(area_sqm=MAX_PLAUSIBLE_AREA_SQM[PlaceKind.PARCEL] + 1)
+        self.old.refresh_from_db()
+        detach_oversized_place(self.old)
+        self.old.refresh_from_db()
+        assert self.old.status == PlaceStatus.SUPERSEDED
+        assert self.old.valid_to == event.learned_at
+
+        retract_erroneous_event(list(PlaceLineageEdge.objects.all()), "test")
+
+        self.old.refresh_from_db()
+        assert self.old.status == PlaceStatus.SUPERSEDED
+        assert self.old.valid_to == event.learned_at
+
+    def test_events_retracted_one_at_a_time_reopen_the_predecessor_and_free_every_successor(self) -> None:
+        from datetime import timedelta
+
+        first = self._event(LineageEventKind.SPLIT)
+        handle_lineage_event(first)
+        lineage.set_parent(self.new_a, self.old, PlaceRelation.MEMBER_OF)
+        closing = list(PlaceLineageEdge.objects.filter(predecessor=self.old))
+        handle_lineage_event(
+            LineageEvent(LineageEventKind.REPLACE, [self.old], [self.new_b], first.learned_at + timedelta(hours=1))
+        )
+        later = list(PlaceLineageEdge.objects.filter(kind=LineageEdgeKind.REPLACED_BY))
+
+        retract_erroneous_event(closing, "test")
+        self.old.refresh_from_db()
+        assert self.old.valid_to == first.learned_at
+
+        retract_erroneous_event(later, "test")
+        self.old.refresh_from_db()
+        self.new_a.refresh_from_db()
+        assert self.old.valid_to is None
+        assert self.old.status == PlaceStatus.CURRENT
+        assert self.new_a.parent_id is None
+
     def test_a_same_domain_merge_writes_the_edge_and_no_grants(self) -> None:
         sibling = upsert_place(PlaceKind.PARCEL, rect(-74.004, -74.0005), provider="y", provider_key="s")
         assert sibling is not None
@@ -263,12 +311,15 @@ class VersionSplitDetectionTests(TestCase):
 
         original = upsert_place(PlaceKind.PARCEL, rect(-74.004, -73.996), provider="county")
         assert original is not None
+        wider = geometry_versions.latest_version(original)
+        assert wider is not None
         geometry_versions.set_geometry(original, rect(-74.004, -73.998), provider="county")
-        PlaceGeometryVersion.objects.filter(place=original).update(recorded_at=timezone.now() - timedelta(days=3650))
-        touched = PlaceGeometryVersion.objects.filter(place=original, geometry__equals=rect(-74.004, -73.998)).update(
-            recorded_at=timezone.now()
+        assert (
+            PlaceGeometryVersion.objects.filter(pk=wider.pk).update(recorded_at=timezone.now() - timedelta(days=3650))
+            == 1
         )
-        assert touched == 1
+        # The recent narrow outline touches the remainder, so the parcel is still examined; only the aged wider outline could show it shrank.
+        assert self._candidates(rect(-73.998, -73.996)) == {original.pk}
         upsert_place(PlaceKind.PARCEL, rect(-73.998, -73.996), provider="county")
         original.refresh_from_db()
         assert original.status == PlaceStatus.CURRENT
@@ -325,10 +376,11 @@ class VersionSplitDetectionTests(TestCase):
         original = upsert_place(PlaceKind.PARCEL, rect(-74.004, -73.996), provider="county")
         assert original is not None
         geometry_versions.set_geometry(original, rect(-74.004, -73.998), provider="county")
-        with mock.patch.object(splits, "process_split", side_effect=lambda place, successors, **_: place):
-            remainder = upsert_place(PlaceKind.PARCEL, rect(-73.998, -73.996), provider="county")
-            assert remainder is not None
+        remainder = upsert_place(PlaceKind.PARCEL, rect(-73.998, -73.996), provider="county", detect_splits=False)
+        assert remainder is not None
+        with mock.patch.object(splits, "process_split", side_effect=lambda place, successors, **_: place) as process:
             assert splits.detect_split_from_versions(remainder) is None
+        process.assert_called_once()
         original.refresh_from_db()
         assert original.status == PlaceStatus.CURRENT
 
@@ -425,8 +477,9 @@ class VersionSplitDetectionTests(TestCase):
         geometry_versions.set_geometry(original, rect(-74.004, -73.998), provider="county")
         remainder = upsert_place(PlaceKind.PARCEL, rect(-73.998, -73.996), provider="county", detect_splits=False)
         assert remainder is not None
-        with mock.patch.object(GEOSGeometry, "intersection", side_effect=GEOSException("TopologyException")):
+        with mock.patch.object(GEOSGeometry, "intersection", side_effect=GEOSException("TopologyException")) as patched:
             assert splits.detect_split_from_versions(remainder) is None
+        patched.assert_called()
         original.refresh_from_db()
         assert original.status == PlaceStatus.CURRENT
 

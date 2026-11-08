@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 
 from urbanlens.dashboard.models.place.lifecycle import LineageEdgeKind, PlaceLineageEdge
-from urbanlens.dashboard.models.place.model import GrantReason, Place, PlaceAccessGrant, PlaceRelation, PlaceStatus
+from urbanlens.dashboard.models.place.model import GrantReason, Place, PlaceAccessGrant, PlaceRelation, PlaceStatus, implausible_area_q
 from urbanlens.dashboard.services.places import lineage, resolution
 
 if TYPE_CHECKING:
@@ -134,8 +134,8 @@ def retract_erroneous_event(edges: Sequence[PlaceLineageEdge], reason: str) -> i
 
     This is the only path that removes a grant, and it is for corrections flagged erroneous. A grant goes only when
     it has sources and every one is an erroneous edge: grants with no sources pre-date source tracking, and a grant
-    that a sound event also justified stays. Predecessors the edges retired are reopened unless another sound edge retires them;
-    a reopened predecessor loses the ``MEMBER_OF`` successors the event attached and resolves locations again.
+    that a sound event also justified stays. Predecessors the edges retired are reopened unless another sound edge retires them
+    or their area is implausible; a reopened predecessor loses the ``MEMBER_OF`` successors the event attached and resolves locations again.
     Buildings a split re-homed onto its successors stay there: which of a successor's buildings came from the
     predecessor is not recorded, and moving the wrong one would join two domains.
 
@@ -155,13 +155,16 @@ def retract_erroneous_event(edges: Sequence[PlaceLineageEdge], reason: str) -> i
         doomed = affected.exclude(sources__edge__erroneous=False)
         removed = list(doomed.values_list("profile_id", "place_id"))
         PlaceAccessGrant.objects.filter(pk__in=list(doomed.values_list("pk", flat=True))).delete()
-        for edge in edges:
-            if not PlaceLineageEdge.objects.filter(predecessor_id=edge.predecessor_id, erroneous=False).exists():
-                # Only reopen a place these edges closed; one retired by another mechanism keeps its valid_to.
-                if Place.objects.filter(pk=edge.predecessor_id, valid_to=edge.learned_at).update(valid_to=None, status=PlaceStatus.CURRENT):
-                    reopened.add(edge.predecessor_id)
+        for predecessor_id in {edge.predecessor_id for edge in edges}:
+            own_edges = PlaceLineageEdge.objects.filter(predecessor_id=predecessor_id)
+            if own_edges.filter(erroneous=False).exists():
+                continue
+            # valid_to shows a lineage edge closed it. detach_oversized_place keeps that valid_to, so an implausible place is excluded by its area.
+            closed_by_lineage = Place.objects.filter(pk=predecessor_id, valid_to__in=own_edges.values("learned_at")).exclude(implausible_area_q())
+            if closed_by_lineage.update(valid_to=None, status=PlaceStatus.CURRENT):
+                reopened.add(predecessor_id)
         for predecessor in Place.objects.filter(pk__in=reopened):
-            _restore_predecessor(predecessor, {edge.successor_id for edge in edges if edge.predecessor_id == predecessor.pk})
+            _restore_predecessor(predecessor, set(PlaceLineageEdge.objects.filter(predecessor=predecessor).values_list("successor_id", flat=True)))
     logger.warning("erroneous lineage event retracted (%s): removed %s grants (profile, place): %s", reason, len(removed), removed)
     return len(removed)
 
