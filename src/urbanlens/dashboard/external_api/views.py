@@ -950,10 +950,10 @@ class PinDetailView(OwnedPinMixin, ExternalApiView):
             return Response({"error": "That edit couldn't be applied."}, status=400)
         except PinMoveError as exc:
             logger.info("external API pin move rejected: %s", exc)
-            return Response({"error": "You already have a pin at these exact coordinates."}, status=400)
+            return Response({"error": "You already have a top-level pin at these exact coordinates.", "code": "root_location_conflict"}, status=400)
         except ReparentLocationConflictError as exc:
             logger.info("external API pin reparent rejected: %s", exc)
-            return Response({"error": "You already have a top-level pin at this exact location - move it before detaching."}, status=400)
+            return Response({"error": "You already have a top-level pin at this exact location - move it before detaching.", "code": "root_location_conflict"}, status=400)
         except CircularParentChainError as exc:
             logger.info("external API pin reparent rejected: %s", exc)
             return Response({"error": "That parent change would create a circular parent chain."}, status=400)
@@ -1587,7 +1587,11 @@ class VisitSuggestionsView(ExternalApiView):
 
         # One query for every suggestion's pin instead of one per row.
         location_ids = {s.location_id for s in suggestions if s.location_id}
-        pins_by_location = {pin.location_id: pin for pin in Pin.objects.filter(profile=profile, location_id__in=location_ids).select_related("location")} if location_ids else {}
+        # A root pin and a child can share a Location; the root, then the oldest, stands for it.
+        pins_by_location: dict[int, Pin] = {}
+        if location_ids:
+            for loc_pin in Pin.objects.filter(profile=profile, location_id__in=location_ids).select_related("location").preferring_root():
+                pins_by_location.setdefault(loc_pin.location_id, loc_pin)
 
         payload = []
         for suggestion in suggestions:
