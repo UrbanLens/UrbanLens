@@ -10,7 +10,6 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.gis.db.models.functions import Distance
-from django.contrib.gis.geos import GEOSException
 from django.db import transaction
 from django.utils import timezone
 
@@ -23,7 +22,6 @@ if TYPE_CHECKING:
     from django.contrib.gis.geos import MultiPolygon
 
     from urbanlens.dashboard.models.location.model import Location
-    from urbanlens.dashboard.services.locations.boundaries import ResolvedBoundaries
 
 logger = logging.getLogger(__name__)
 
@@ -34,19 +32,6 @@ MAX_SUBDIVISION_PROBES = 20
 #: Boundary-provider keys whose building outlines are machine-learned footprints rather than surveyed or registry
 #: geometry. Every other named source (OSM, registry records) is official.
 FOOTPRINT_SOURCES: frozenset[str] = frozenset({"microsoft_building_footprints", "overture", "overture_maps", "google_open_buildings"})
-
-#: The name a split check that could not decide goes by in :attr:`ProvisionOutcome.deferred`.
-SPLIT_CHECK = "split_check"
-
-
-class SplitCheckDeferredError(Exception):
-    """A neighbour's provider declined, so finding no successor there does not mean there is none."""
-
-    def __init__(self, deferred: list[str], retry_after: int | None, *, backs_off: bool) -> None:
-        super().__init__(f"split check waiting on {', '.join(deferred)}")
-        self.deferred = deferred
-        self.retry_after = retry_after
-        self.backs_off = backs_off
 
 
 def evidence_for_source(source: str) -> str:
@@ -198,7 +183,7 @@ class ProvisionOutcome:
 
     Attributes:
         place: The most specific place now covering the coordinate, or None.
-        deferred: What has not answered yet, so the coordinate must be asked again: providers that declined for now, or :data:`SPLIT_CHECK`.
+        deferred: Providers that declined for now rather than answering.
         retry_after: The longest wait a deferring provider asked for, in seconds.
         backs_off: Whether a retry should back off; False when every deferring provider was computing its answer.
     """
@@ -288,14 +273,7 @@ def provision_outcome_for_coordinate(location: Location, *, name: str | None = N
         return ProvisionOutcome(place=known, deferred=list(resolved.deferred), retry_after=resolved.retry_after, backs_off=resolved.backs_off)
 
     if detect_splits and not resolved.deferred:
-        try:
-            detect_subdivision(location, resolved.property_polygon)
-        except GEOSException:
-            logger.warning("split check for location %s failed: geometry overlay error; keeping the outline on record", location.pk, exc_info=True)
-            return _outline_kept(location, [SPLIT_CHECK])
-        except SplitCheckDeferredError as undecided:
-            logger.info("split check for location %s is waiting on %s; keeping the outline on record", location.pk, undecided.deferred)
-            return _outline_kept(location, undecided.deferred, retry_after=undecided.retry_after, backs_off=undecided.backs_off)
+        detect_subdivision(location, resolved.property_polygon)
 
     parcel = upsert_place(PlaceKind.PARCEL, resolved.property_polygon, name=name or location.official_name or "")
     building = None
@@ -330,98 +308,24 @@ def provision_outcome_for_coordinate(location: Location, *, name: str | None = N
     return ProvisionOutcome(place=standing_on, deferred=list(resolved.deferred), retry_after=resolved.retry_after, backs_off=resolved.backs_off)
 
 
-def _outline_kept(location: Location, deferred: list[str], *, retry_after: int | None = None, backs_off: bool = True) -> ProvisionOutcome:
-    """The outcome of a split check that could not decide: the smaller outline must not replace the parcel, and reporting ``deferred`` is what brings the question back."""
-    known = Place.objects.resolve_for_point(location.latitude, location.longitude)
-    if known is not None:
-        resolution.attach_location(location, known)
-    return ProvisionOutcome(place=known, deferred=deferred, retry_after=retry_after, backs_off=backs_off)
-
-
-def _resolve_locations_around(place: Place | None) -> None:
-    """Re-resolve the locations a place can claim: those in its outline, plus the buffer ring when it is a parcel-less footprint."""
-    if place is None or place.geometry is None:
-        return
-    reach = buffer_meters(place.geometry, FOOTPRINT_BUFFER_METERS) if place.evidence == PlaceEvidence.FOOTPRINT and place.parent_id is None else place.geometry
-    resolution.resolve_locations_in(reach)
-
-
-def _parcel_covers(location: Location) -> bool:
-    """Whether a stored, resolvable parcel or site already holds the location's point."""
-    return Place.objects.containing_point(location.point).filter(kind__in=(PlaceKind.PARCEL, PlaceKind.SITE)).exists()
-
-
-def ensure_footprint_places(candidates: list[tuple[str, MultiPolygon]]) -> list[Place]:
-    """
-    Create the top-level building places for outlines found where no parcel exists.
-
-    Outlines of one building from several sources reconcile by mutual centroid containment (see
-    :func:`find_matching_place`), so the first source in ``candidates`` wins and later duplicates add nothing.
-    The true outline is stored; resolution reaches :data:`FOOTPRINT_BUFFER_METERS` past it only while no place
-    contains the point (``PlaceQuerySet.footprints_near``). An implausibly large outline is refused.
-
-    Args:
-        candidates: ``(provider service_key, outline)`` pairs, in chain order.
-
-    Returns:
-        The places, one per distinct building.
-    """
-    return _footprint_places([(evidence_for_source(source), outline) for source, outline in candidates])
-
-
-def _footprint_places(outlines: list[tuple[str, MultiPolygon]]) -> list[Place]:
-    """:func:`ensure_footprint_places` for outlines whose evidence is already decided."""
-    places: list[Place] = []
-    for evidence, outline in outlines:
-        if not is_plausible_area(PlaceKind.BUILDING, area_sqm(outline)):
-            continue
-        place = upsert_place(PlaceKind.BUILDING, outline, evidence=evidence)
-        if place is not None and all(place.pk != other.pk for other in places):
-            places.append(place)
-    return places
-
-
-@dataclass(slots=True)
-class _NeighbourProbes:
-    """What asking about a parcel's other locations turned up."""
-
-    found: list[MultiPolygon] = field(default_factory=list)
-    deferred: list[str] = field(default_factory=list)
-    retry_after: int | None = None
-    backs_off: bool = False
-
-    def note_deferred(self, answer: ResolvedBoundaries) -> None:
-        """Remember that ``answer``'s silence is not a "nothing here"."""
-        self.deferred.extend(name for name in answer.deferred if name not in self.deferred)
-        if answer.retry_after is not None:
-            self.retry_after = max(self.retry_after or 0, answer.retry_after)
-        self.backs_off = self.backs_off or answer.backs_off
-
-    def raise_if_deferred(self) -> None:
-        """Call before concluding "not a split" from these probes."""
-        if self.deferred:
-            raise SplitCheckDeferredError(self.deferred, self.retry_after, backs_off=self.backs_off)
-
-
-def _probe_neighbours(location: Location, previous: Place, new_parcel_polygon: MultiPolygon, known: list[MultiPolygon]) -> _NeighbourProbes:
+def _probe_neighbours(location: Location, previous: Place, new_parcel_polygon: MultiPolygon, known: list[MultiPolygon]) -> list[MultiPolygon]:
     """Ask the provider chain about the domain's locations that fall outside the new outline, at most :data:`MAX_SUBDIVISION_PROBES` times."""
     from urbanlens.dashboard.models.location.model import Location as LocationModel
     from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain
 
-    result = _NeighbourProbes()
+    found: list[MultiPolygon] = []
     probes = 0
     neighbours = LocationModel.objects.filter(place__domain_root_id=previous.domain_root_id).exclude(pk=location.pk).exclude(point__within=new_parcel_polygon).annotate(distance=Distance("point", location.point)).order_by("distance")
     for other in neighbours.iterator():
-        if any(successor.contains(other.point) for successor in [*known, *result.found]):
+        if any(successor.contains(other.point) for successor in [*known, *found]):
             continue
         if probes >= MAX_SUBDIVISION_PROBES:
             break
         probes += 1
         chain_result = BoundaryProviderChain().get_boundaries(float(other.latitude), float(other.longitude), name=other.official_name or None)
-        result.note_deferred(chain_result)
-        if chain_result.property_polygon is not None and not any(candidate.equals(chain_result.property_polygon) for candidate in [*known, *result.found]):
-            result.found.append(chain_result.property_polygon)
-    return result
+        if chain_result.property_polygon is not None and not any(candidate.equals(chain_result.property_polygon) for candidate in [*known, *found]):
+            found.append(chain_result.property_polygon)
+    return found
 
 
 def detect_subdivision(location: Location, new_parcel_polygon: MultiPolygon | None) -> Place | None:
@@ -433,12 +337,7 @@ def detect_subdivision(location: Location, new_parcel_polygon: MultiPolygon | No
         new_parcel_polygon: The parcel outline the providers now return here.
 
     Returns:
-        The superseded place, or None when nothing was subdivided.
-
-    Raises:
-        SplitCheckDeferredError: The only sign of "no split" was a neighbour whose provider did not answer.
-        GEOSException: An overlay failed, so whether the parcel was split is unknown.
-    """
+        The superseded place, or None when nothing was subdivided."""
     from urbanlens.dashboard.services.places import splits
 
     previous = location.place.parcel if (location.place_id and location.place is not None) else None
@@ -451,22 +350,17 @@ def detect_subdivision(location: Location, new_parcel_polygon: MultiPolygon | No
         return None
 
     successors = [new_parcel_polygon]
-    probes = _NeighbourProbes()
     if not heavy:
         # Stored parcels first: when they explain the remainder no provider needs asking.
         if not splits.looks_like_a_split(previous, new_parcel_polygon):
-            probes = _probe_neighbours(location, previous, new_parcel_polygon, successors)
-            successors += probes.found
+            successors += _probe_neighbours(location, previous, new_parcel_polygon, successors)
             if not splits.looks_like_a_split(previous, new_parcel_polygon, seen=successors[1:]):
-                probes.raise_if_deferred()
                 return None
         stored = splits.candidate_parcels(previous, new_parcel_polygon)
         successors.extend(geometry for geometry in stored if not any(candidate.equals(geometry) for candidate in successors))
     else:
-        probes = _probe_neighbours(location, previous, new_parcel_polygon, successors)
-        successors += probes.found
+        successors += _probe_neighbours(location, previous, new_parcel_polygon, successors)
     if len(successors) < 2:
-        probes.raise_if_deferred()
         return None
     return splits.process_split(previous, successors)
 
@@ -584,6 +478,49 @@ def ensure_building_places(parcel: Place | None, buildings: list[dict], *, provi
         if place.geometry is not None:
             resolution.resolve_locations_in(place.geometry)
     return created
+
+
+def _resolve_locations_around(place: Place | None) -> None:
+    """Re-resolve the locations a place can claim: those in its outline, plus the buffer ring when it is a parcel-less footprint."""
+    if place is None or place.geometry is None:
+        return
+    reach = buffer_meters(place.geometry, FOOTPRINT_BUFFER_METERS) if place.evidence == PlaceEvidence.FOOTPRINT and place.parent_id is None else place.geometry
+    resolution.resolve_locations_in(reach)
+
+
+def _parcel_covers(location: Location) -> bool:
+    """Whether a stored, resolvable parcel or site already holds the location's point."""
+    return Place.objects.containing_point(location.point).filter(kind__in=(PlaceKind.PARCEL, PlaceKind.SITE)).exists()
+
+
+def ensure_footprint_places(candidates: list[tuple[str, MultiPolygon]]) -> list[Place]:
+    """
+    Create the top-level building places for outlines found where no parcel exists.
+
+    Outlines of one building from several sources reconcile by mutual centroid containment (see
+    :func:`find_matching_place`), so the first source in ``candidates`` wins and later duplicates add nothing.
+    The true outline is stored; resolution reaches :data:`FOOTPRINT_BUFFER_METERS` past it only while no place
+    contains the point (``PlaceQuerySet.footprints_near``). An implausibly large outline is refused.
+
+    Args:
+        candidates: ``(provider service_key, outline)`` pairs, in chain order.
+
+    Returns:
+        The places, one per distinct building.
+    """
+    return _footprint_places([(evidence_for_source(source), outline) for source, outline in candidates])
+
+
+def _footprint_places(outlines: list[tuple[str, MultiPolygon]]) -> list[Place]:
+    """:func:`ensure_footprint_places` for outlines whose evidence is already decided."""
+    places: list[Place] = []
+    for evidence, outline in outlines:
+        if not is_plausible_area(PlaceKind.BUILDING, area_sqm(outline)):
+            continue
+        place = upsert_place(PlaceKind.BUILDING, outline, evidence=evidence)
+        if place is not None and all(place.pk != other.pk for other in places):
+            places.append(place)
+    return places
 
 
 def _footprints_without_parcel(buildings: list[dict]) -> dict[int, Place]:
