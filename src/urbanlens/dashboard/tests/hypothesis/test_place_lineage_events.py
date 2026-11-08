@@ -11,6 +11,7 @@ from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.place.model import (
     GrantReason,
     Place,
@@ -237,6 +238,38 @@ class ProbedSuccessorTests(_OldParcelCase):
         theirs.refresh_from_db()
         self.assertIsNone(theirs.parent_id)
         self.assertFalse(PlaceAccessGrant.objects.exists())
+
+    def test_a_nulled_domain_root_limits_probes_to_the_parcels_own_pins(self) -> None:
+        Place.objects.filter(pk=self.old.pk).update(domain_root=None)
+        self.old.refresh_from_db()
+        elsewhere = make_place(PlaceKind.PARCEL, _strip(5, 6), name="Elsewhere")
+        Place.objects.filter(pk=elsewhere.pk).update(domain_root=None)
+        pin_on(baker.make(User).profile, elsewhere, lat=SOUTH + SIZE / 2, lng=WEST + SIZE * 5.5)
+        placeless = baker.make(Location, latitude=SOUTH + SIZE / 2, longitude=WEST + SIZE * 7.5)
+        self.assertIsNone(placeless.place_id)
+
+        probed: list[float] = []
+
+        class _Recording(_chain_answering(_strip(0.2, 1.0))):
+            def get_boundaries(
+                self, latitude: float, longitude: float, *, name: str | None = None
+            ) -> ResolvedBoundaries:
+                probed.append(longitude)
+                return super().get_boundaries(latitude, longitude, name=name)
+
+        with mock.patch(_CHAIN, _Recording):
+            self.assertEqual(provisioning.detect_subdivision(self.pin.location, _strip(0, 0.2)), self.old)
+        self.assertEqual(probed, [float(self.other.location.longitude)])
+
+    def test_a_nulled_domain_root_still_probes_pins_on_the_parcels_buildings(self) -> None:
+        building = make_place(
+            PlaceKind.BUILDING, _strip(0.85, 0.95), parent=self.old, relation=PlaceRelation.PART_OF, name="Shed"
+        )
+        Location.objects.filter(pk=self.other.location_id).update(place=building)
+        Place.objects.filter(pk__in=[self.old.pk, building.pk]).update(domain_root=None)
+        self.old.refresh_from_db()
+        with mock.patch(_CHAIN, _chain_answering(_strip(0.2, 1.0))):
+            self.assertEqual(provisioning.detect_subdivision(self.pin.location, _strip(0, 0.2)), self.old)
 
 
 class RefreshedOutlineTests(_OldParcelCase):

@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.geos import GEOSException
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from urbanlens.dashboard.models.place.model import Place, PlaceKind, PlaceRelation, is_plausible_area
@@ -276,7 +277,12 @@ def _probe_neighbours(location: Location, previous: Place, new_parcel_polygon: M
     found: list[MultiPolygon] = []
     holders: set[int] | None = None
     probes = 0
-    neighbours = LocationModel.objects.filter(place__domain_root_id=previous.domain_root_id).exclude(pk=location.pk).exclude(point__within=new_parcel_polygon).annotate(distance=Distance("point", location.point)).order_by("distance")
+    # Filtering on a null root would be IS NULL, matching every rootless place and every placeless location.
+    if previous.domain_root_id is None:
+        in_domain = Q(place=previous) | Q(place__parent=previous, place__parent_relation=PlaceRelation.PART_OF)
+    else:
+        in_domain = Q(place__domain_root_id=previous.domain_root_id)
+    neighbours = LocationModel.objects.filter(in_domain).exclude(pk=location.pk).exclude(point__within=new_parcel_polygon).annotate(distance=Distance("point", location.point)).order_by("distance")
     for other in neighbours.iterator():
         if any(successor.contains(other.point) for successor in [*known, *found]):
             continue
