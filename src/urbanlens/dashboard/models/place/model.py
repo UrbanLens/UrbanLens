@@ -139,7 +139,10 @@ class Place(abstract.DashboardModel):
             place is earned, never resolved onto (see
             ``PlaceQuerySet.resolvable``).
         provider / provider_key: The external record this place came from, for
-            idempotent re-matching across provider runs.
+            idempotent re-matching across provider runs. Blank when the provider has no stable id.
+        valid_from / valid_to: When this place began and stopped describing the ground, as far as we know.
+            ``valid_to`` is set when a lineage event retires it (``services.places.lineage_events``).
+            ``geometry`` is the current outline; every outline it has had is a ``PlaceGeometryVersion``.
     """
 
     kind = CharField(max_length=20, choices=PlaceKind.choices, default=PlaceKind.PARCEL)
@@ -185,6 +188,9 @@ class Place(abstract.DashboardModel):
 
     provider = CharField(max_length=20, blank=True, default="")
     provider_key = CharField(max_length=255, blank=True, default="")
+
+    valid_from = DateTimeField(null=True, blank=True)
+    valid_to = DateTimeField(null=True, blank=True)
 
     objects = PlaceManager()
 

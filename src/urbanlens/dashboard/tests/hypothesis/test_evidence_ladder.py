@@ -102,7 +102,7 @@ class EvidenceResolutionOrderTests(TestCase):
 
 
 class EvidenceMigrationTests(TransactionTestCase):
-    """Migration 0004 backfills rows that existed before the column as official."""
+    """Migration 0006 backfills rows that existed before the column as official."""
 
     def tearDown(self) -> None:
         executor = MigrationExecutor(connection)
@@ -110,14 +110,14 @@ class EvidenceMigrationTests(TransactionTestCase):
         super().tearDown()
 
     def test_existing_places_are_backfilled_as_official(self) -> None:
-        before = [("dashboard", "0003_place_grant_reasons")]
+        before = [("dashboard", "0005_place_lifecycle_backfill")]
         executor = MigrationExecutor(connection)
         executor.migrate(before)
         old_place = executor.loader.project_state(before).apps.get_model("dashboard", "Place")
         pk = old_place.objects.create(kind=PlaceKind.PARCEL).pk
 
         executor = MigrationExecutor(connection)
-        executor.migrate([("dashboard", "0004_place_evidence")])
+        executor.migrate([("dashboard", "0006_place_evidence")])
         self.assertEqual(Place.objects.get(pk=pk).evidence, PlaceEvidence.OFFICIAL)
 
 

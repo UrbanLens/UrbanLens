@@ -463,6 +463,10 @@ FULL_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.sweep_achievements",
         "schedule": crontab(hour=3, minute=10),
     },
+    "trust-signals-refresh": {
+        "task": "urbanlens.dashboard.tasks.refresh_trust_signals",
+        "schedule": crontab(hour=3, minute=40),
+    },
     "safety-checkin-due-reminders": {
         "task": "urbanlens.dashboard.tasks.send_due_checkin_reminders",
         "schedule": 5 * 60,
@@ -891,7 +895,8 @@ GOOGLE_PSE_CSP: dict[str, tuple[str, ...]] = {
 
 
 def allow_google_pse(directives: dict[str, list[str]], cx: str) -> list[str]:
-    """Admit the hosts Google's Programmable Search Element needs, when an engine is configured.
+    """
+    Admit the hosts Google's Programmable Search Element needs, when an engine is configured.
 
     Args:
         directives: The CSP directive lists, modified in place.
@@ -1502,3 +1507,34 @@ LOGGING = {
         },
     },
 }
+
+
+# Real-user and independence gates (ADR35 section 5; services/trust). Start strict; tune from production distributions.
+# Scores are 0-1. Never surface them or the signals behind them to another user.
+# Callers evaluate the checks in Celery tasks, never in request handlers: a stale row recomputes inline.
+#: Minimum real-user score for ``is_real_user``.
+UL_TRUST_REAL_USER_THRESHOLD = float(os.getenv("UL_TRUST_REAL_USER_THRESHOLD", "0.6"))
+#: Profiles with fewer (mature) pins than this have no usable geography for the independence check.
+UL_TRUST_MIN_PINS_FOR_GEOGRAPHY = int(os.getenv("UL_TRUST_MIN_PINS_FOR_GEOGRAPHY", "5"))
+#: The real-user score a profile without usable geography must reach instead of the Jaccard test.
+#: Minimum pin cells (in the window, after removing the decided place's cell) a profile needs for the Jaccard check to count; fewer means the no-geography bar applies.
+UL_TRUST_MIN_CELLS_FOR_GEOGRAPHY = int(os.getenv("UL_TRUST_MIN_CELLS_FOR_GEOGRAPHY", "1"))
+UL_TRUST_NO_GEOGRAPHY_THRESHOLD = float(os.getenv("UL_TRUST_NO_GEOGRAPHY_THRESHOLD", "0.8"))
+#: Two profiles are independent only when the Jaccard overlap of their pin cells is below this.
+UL_TRUST_MAX_CELL_JACCARD = float(os.getenv("UL_TRUST_MAX_CELL_JACCARD", "0.5"))
+#: The raised Jaccard limit for a pair with an accepted friendship at least ``UL_TRUST_FRIENDSHIP_MIN_AGE_DAYS`` old. It only ever loosens the check.
+UL_TRUST_FRIENDSHIP_JACCARD_LIMIT = float(os.getenv("UL_TRUST_FRIENDSHIP_JACCARD_LIMIT", "0.7"))
+#: A friendship counts only once it is this old.
+UL_TRUST_FRIENDSHIP_MIN_AGE_DAYS = int(os.getenv("UL_TRUST_FRIENDSHIP_MIN_AGE_DAYS", "30"))
+#: Hard floors for ``is_real_user``, whatever the score: account age and distinct ISO weeks with meaningful activity in the last 90 days.
+UL_TRUST_MIN_AGE_DAYS = int(os.getenv("UL_TRUST_MIN_AGE_DAYS", "30"))
+UL_TRUST_MIN_ACTIVE_WEEKS = int(os.getenv("UL_TRUST_MIN_ACTIVE_WEEKS", "3"))
+#: Only pins created within this window feed the independence cells, so a move to a new city fades the old one.
+UL_TRUST_CELL_WINDOW_DAYS = int(os.getenv("UL_TRUST_CELL_WINDOW_DAYS", "730"))
+#: Accounts created closer together than this must both be older than ``UL_TRUST_BOTH_ESTABLISHED_DAYS`` to count as independent.
+UL_TRUST_MIN_CREATION_GAP_DAYS = int(os.getenv("UL_TRUST_MIN_CREATION_GAP_DAYS", "30"))
+UL_TRUST_BOTH_ESTABLISHED_DAYS = int(os.getenv("UL_TRUST_BOTH_ESTABLISHED_DAYS", "180"))
+#: Cached signals older than this many seconds are recomputed on read.
+UL_TRUST_SIGNALS_MAX_AGE_SECONDS = int(os.getenv("UL_TRUST_SIGNALS_MAX_AGE_SECONDS", str(36 * 3600)))
+#: The nightly refresh skips a profile with no activity in 90 days while its row is younger than this.
+UL_TRUST_DORMANT_REFRESH_DAYS = int(os.getenv("UL_TRUST_DORMANT_REFRESH_DAYS", "7"))

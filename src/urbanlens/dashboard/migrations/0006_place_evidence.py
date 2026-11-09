@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('dashboard', '0003_place_grant_reasons'),
+        ('dashboard', '0005_place_lifecycle_backfill'),
     ]
 
     operations = [
