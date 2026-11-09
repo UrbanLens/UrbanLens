@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.wiki.model import Wiki
 
 
-def stash_pin_move(pin: Pin, *, before_lat: float, before_lng: float, after_lat: float, after_lng: float) -> None:
+def stash_pin_move(pin: Pin, *, before_lat: float, before_lng: float, after_lat: float, after_lng: float, before_subject_id: int | None, after_subject_id: int | None) -> None:
     """Record a pin coordinate change, if the point actually moved."""
     if (round(before_lat, 6), round(before_lng, 6)) == (round(after_lat, 6), round(after_lng, 6)):
         return
@@ -35,6 +35,9 @@ def stash_pin_move(pin: Pin, *, before_lat: float, before_lng: float, after_lat:
             "before_lng": before_lng,
             "after_lat": after_lat,
             "after_lng": after_lng,
+            # A move re-derives the subject, so undo/redo put the recorded one back (it may be a superseded place).
+            "before_subject_id": before_subject_id,
+            "after_subject_id": after_subject_id,
         },
         description=f"Moved pin: {pin.effective_name}",
     )

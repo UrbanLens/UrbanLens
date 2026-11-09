@@ -282,6 +282,8 @@ def create_pin_for_profile(
         # discovered later.
         "name_is_user_provided": name_is_user_provided and bool((name or "").strip()),
         "location": location,
+        # What the pin is about, fixed now; a later resolution only fills it when empty.
+        "subject_place_id": location.place_id,
         # Link to the place's community wiki when one already exists; wikis
         # are only ever created explicitly from the pin page.
         "wiki": Wiki.objects.get_for_location(location),

@@ -111,12 +111,11 @@ def _same_domain(event: LineageEvent) -> bool:
 
 
 def repoint_pin_subjects(event: LineageEvent) -> None:
-    """
-    Hook for moving ``Pin.subject_place`` from a predecessor to the successor containing the pin's point.
+    """Move ``Pin.subject_place`` from each predecessor to the successor that continues it for the pin's point (ADR34 section 5)."""
+    from urbanlens.dashboard.services.pins.primary_wiki import repoint_for_lineage
 
-    ADR34 §5 makes the lineage handler the only writer of that field. It does nothing until UL-361 (``Pin.subject_place``) lands.
-    """
-    # TODO(UL-361): repoint Pin.subject_place here, for pins whose subject is in event.predecessors.
+    for predecessor in event.predecessors:
+        repoint_for_lineage(predecessor, event.successors, split=event.kind == LineageEventKind.SPLIT)
 
 
 def _restore_predecessor(predecessor: Place, successor_ids: set[int]) -> None:

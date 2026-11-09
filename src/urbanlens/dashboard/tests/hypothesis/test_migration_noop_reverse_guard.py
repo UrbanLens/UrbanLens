@@ -15,6 +15,8 @@ REVIEWED: dict[str, str] = {
     "0001_initial.py": "seed_rows - a new install's starting rows; reversing 0001 drops the tables they are in.",
     "0002_describe_seeded_labels.py": "describe_seeded_labels - fills empty label descriptions with plain text the "
     "previous code already reads and edits; there is nothing to undo, and clearing them could erase a user's edit.",
+    "0007_backfill_pin_subject_place.py": "backfill - fills the new subject_place column, which the previous code never "
+    "reads; reversing 0006 drops the column, so there is nothing to undo.",
 }
 
 
