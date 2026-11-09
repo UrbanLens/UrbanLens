@@ -5,18 +5,21 @@ from __future__ import annotations
 from django.contrib.auth.models import User
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
+from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.place.model import PlaceKind, PlaceStatus
+from urbanlens.dashboard.models.place.lifecycle import LineageEdgeKind, PlaceLineageEdge
+from urbanlens.dashboard.models.place.model import Place, PlaceKind, PlaceStatus
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.pins.pin_creation import create_pin_for_profile
 from urbanlens.dashboard.services.pins.pin_detail import build_pin_detail
 from urbanlens.dashboard.services.pins.pin_edit import move_pin_to_coordinates
 from urbanlens.dashboard.services.pins.primary_wiki import primary_wiki_for_pin, repoint_subjects
 from urbanlens.dashboard.services.places import resolution
+from urbanlens.dashboard.services.places.lineage_events import LineageEvent, LineageEventKind, handle_lineage_event
 from urbanlens.dashboard.services.undo.handlers.pin import PinUndoHandler
 from urbanlens.dashboard.services.undo.service import undo_latest
 
@@ -103,6 +106,87 @@ class SubjectPlaceTests(_Fixture):
         self.assertEqual(self.building_location.place_id, other.pk, "the location really did move onto the shed")
         self.pin.refresh_from_db()
         self.assertEqual(self.pin.subject_place_id, self.building.pk)
+
+
+class LineageHandlerRepointsSubjectsTests(_Fixture):
+    def _far(self, name: str, lng: float = -60.0) -> Place:
+        return make_place(PlaceKind.BUILDING, square(lng, 30.0, 0.001), parent=self.parcel, name=name)
+
+    def _event(self, kind: LineageEventKind, *successors: Place) -> None:
+        handle_lineage_event(LineageEvent(kind, [self.building], list(successors), timezone.now()))
+        self.pin.refresh_from_db()
+
+    def test_a_split_moves_the_pin_onto_the_successor_holding_its_point(self) -> None:
+        near = make_place(PlaceKind.BUILDING, square(-74.0, 40.0, 0.0002), parent=self.parcel, name="East Wing")
+        self._event(LineageEventKind.SPLIT, self._far("Far Wing"), near)
+        self.assertEqual(self.pin.subject_place_id, near.pk)
+
+    def test_a_split_leaves_a_pin_in_no_successor_on_its_subject(self) -> None:
+        self._event(LineageEventKind.SPLIT, self._far("Far Wing"), self._far("Farther Wing", -61.0))
+        self.assertEqual(self.pin.subject_place_id, self.building.pk)
+
+    def test_a_merge_takes_the_pin_wherever_its_point_is(self) -> None:
+        survivor = self._far("Survivor")
+        self._event(LineageEventKind.MERGE, survivor)
+        self.assertEqual(self.pin.subject_place_id, survivor.pk)
+
+    def test_several_successors_of_a_replacement_need_the_point_inside_one(self) -> None:
+        self._event(LineageEventKind.REPLACE, self._far("One"), self._far("Two", -61.0))
+        self.assertEqual(self.pin.subject_place_id, self.building.pk)
+
+
+class UndoFollowsLineageTests(_Fixture):
+    """The pin was moved off the building, the building was retired, then the move is undone."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        move_pin_to_coordinates(self.pin, 40.002, -74.002)
+        self.pin.refresh_from_db()
+        self.far = make_place(PlaceKind.BUILDING, square(-60.0, 30.0, 0.001), parent=self.parcel, name="Far Mill")
+
+    def _retire(
+        self, kind: LineageEdgeKind, successor: Place, predecessor: Place | None = None, **fields: object
+    ) -> None:
+        PlaceLineageEdge.objects.create(
+            predecessor=predecessor or self.building, successor=successor, kind=kind, **fields
+        )
+
+    def _undone_subject(self) -> int | None:
+        undo_latest(self.viewer)
+        self.pin.refresh_from_db()
+        self.assertEqual(self.pin.location_id, self.building_location.pk)
+        return self.pin.subject_place_id
+
+    def test_a_merge_carries_the_restored_subject_to_the_survivor(self) -> None:
+        self._retire(LineageEdgeKind.MERGED_INTO, self.far)
+        self.assertEqual(self._undone_subject(), self.far.pk)
+
+    def test_a_split_into_one_successor_keeps_a_pin_outside_it(self) -> None:
+        self._retire(LineageEdgeKind.SPLIT_INTO, self.far)
+        self.assertEqual(self._undone_subject(), self.building.pk)
+
+    def test_a_split_into_one_successor_carries_a_pin_inside_it(self) -> None:
+        near = make_place(PlaceKind.BUILDING, square(-74.0, 40.0, 0.0002), parent=self.parcel, name="East Wing")
+        self._retire(LineageEdgeKind.SPLIT_INTO, near)
+        self.assertEqual(self._undone_subject(), near.pk)
+
+    def test_a_chain_of_events_is_followed_to_its_end(self) -> None:
+        last = make_place(PlaceKind.BUILDING, square(-61.0, 30.0, 0.001), parent=self.parcel, name="Last Mill")
+        self._retire(LineageEdgeKind.MERGED_INTO, self.far)
+        self._retire(LineageEdgeKind.REPLACED_BY, last, predecessor=self.far)
+        self.assertEqual(self._undone_subject(), last.pk)
+
+    def test_an_erroneous_edge_is_not_followed(self) -> None:
+        self._retire(LineageEdgeKind.MERGED_INTO, self.far, erroneous=True)
+        self.assertEqual(self._undone_subject(), self.building.pk)
+
+    def test_undoing_one_pin_leaves_another_profiles_pin_alone(self) -> None:
+        other = Pin.objects.create(profile=baker.make(User).profile, location=self.building_location, name="Theirs")
+        Pin.objects.filter(pk=other.pk).update(subject_place=self.building)
+        self._retire(LineageEdgeKind.MERGED_INTO, self.far)
+        self.assertEqual(self._undone_subject(), self.far.pk)
+        other.refresh_from_db()
+        self.assertEqual(other.subject_place_id, self.building.pk)
 
 
 class PrimaryWikiTests(_Fixture):

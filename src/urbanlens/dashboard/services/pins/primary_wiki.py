@@ -16,12 +16,15 @@ from django.db.models import Q
 
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.place.lifecycle import LineageEdgeKind, PlaceLineageEdge
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.places.lineage import ancestors_of
 from urbanlens.dashboard.services.wiki.wiki_access import visible_locations_filter
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Sequence
+
+    from django.db.models import QuerySet
 
     from urbanlens.dashboard.models.place.model import Place
     from urbanlens.dashboard.models.profile.model import Profile
@@ -123,17 +126,17 @@ def primary_wiki_for_pin(pin: Pin, viewer: Profile, *, primary_only: bool = Fals
     return PinWikis(primary=primary, related=related)
 
 
-def repoint_subjects(predecessor: Place, successors: Iterable[Place], *, contained_only: bool = True) -> int:
+def repoint_subjects(predecessor: Place, successors: Iterable[Place], *, contained_only: bool = True, pins: QuerySet[Pin] | None = None) -> int:
     """
     Move pins whose subject was *predecessor* onto the successor containing each pin's point.
 
-    The hook for the lineage-event handler (UL-358); nothing in this story calls it.
     A pin whose point falls in no successor keeps its subject, so history stays about what it was about.
 
     Args:
         predecessor: The superseded place.
         successors: The places that replaced it.
         contained_only: Require the pin's point inside the successor's geometry (splits); a merge passes False because the survivor takes every pin.
+        pins: Limit the move to these pins; every pin on *predecessor* when omitted.
 
     Returns:
         How many pins were repointed.
@@ -143,15 +146,56 @@ def repoint_subjects(predecessor: Place, successors: Iterable[Place], *, contain
     successors = [successor for successor in successors if successor.pk != predecessor.pk]
     if not contained_only and len(successors) > 1:
         raise ValueError("a merge has one survivor; pass contained_only=True to split a place among several successors")
+    scope = Pin.objects.all() if pins is None else pins
     moved = 0
     for successor in successors:
         if contained_only and successor.geometry is None:
             continue
-        pins = Pin.objects.filter(subject_place=predecessor)
+        matching = scope.filter(subject_place=predecessor)
         if contained_only:
-            pins = pins.filter(location__point__within=successor.geometry)
-        moved += pins.update(subject_place=successor)
+            matching = matching.filter(location__point__within=successor.geometry)
+        moved += matching.update(subject_place=successor)
     return moved
+
+
+def repoint_for_lineage(predecessor: Place, successors: Sequence[Place], *, split: bool, pins: QuerySet[Pin] | None = None) -> int:
+    """
+    Apply a lineage event to the pins on *predecessor*: a lone successor of a merge or replacement takes every pin, otherwise the point decides.
+
+    Args:
+        predecessor: The retired place.
+        successors: The places that continue it.
+        split: The event was a split, so the point decides even with one successor.
+        pins: Limit the move to these pins; every pin on *predecessor* when omitted.
+
+    Returns:
+        How many pins were repointed."""
+    return repoint_subjects(predecessor, successors, contained_only=split or len(successors) > 1, pins=pins)
+
+
+def carry_subject_forward(pin: Pin) -> None:
+    """
+    Follow one pin's subject along sound lineage edges to the place that continues it now.
+
+    For a subject the lineage handler could not have repointed because the pin was not on it then, such as one restored by an undo.
+    It stops at a place with no successor, or where the pin's point is in no successor of a split.
+
+    Args:
+        pin: The pin; its ``subject_place_id`` is updated in place."""
+    one_pin = Pin.objects.filter(pk=pin.pk)
+    seen: set[int] = set()
+    place_id = pin.subject_place_id
+    while place_id is not None and place_id not in seen:
+        seen.add(place_id)
+        edges = list(PlaceLineageEdge.objects.filter(predecessor_id=place_id, erroneous=False).select_related("predecessor", "successor"))
+        if not edges:
+            break
+        successors = list({edge.successor_id: edge.successor for edge in edges}.values())
+        split = any(edge.kind == LineageEdgeKind.SPLIT_INTO for edge in edges)
+        if not repoint_for_lineage(edges[0].predecessor, successors, split=split, pins=one_pin):
+            break
+        place_id = one_pin.values_list("subject_place_id", flat=True).get()
+    pin.subject_place_id = place_id
 
 
 def adopt_subject_for_location(location_id: int, place_id: int | None) -> int:

@@ -41,36 +41,13 @@ def _move(pin: Pin, latitude: float, longitude: float, subject_id: int | None = 
         _expired("This move can't be replayed: another pin now occupies that exact location.")
     if restore_subject:
         from urbanlens.dashboard.models.place.model import Place
+        from urbanlens.dashboard.services.pins.primary_wiki import carry_subject_forward
 
         # The place may have been deleted since (the FK is SET_NULL): then the re-derived subject stands.
         if subject_id is None or Place.objects.filter(pk=subject_id).exists():
             Pin.objects.filter(pk=pin.pk).update(subject_place_id=subject_id)
             pin.subject_place_id = subject_id
-            if subject_id is not None:
-                _follow_lineage(pin, subject_id)
-
-
-def _follow_lineage(pin: Pin, place_id: int) -> None:
-    """
-    Move a restored subject on to its successor, if the place was retired by a lineage event since the move was recorded.
-
-    Only the lineage handler repoints subjects (ADR34 §5), and it ran for the pin's *then* subject, so an undo that
-    brings back an older, since-retired place would otherwise leave the pin on a place nothing will ever repoint.
-    A pin whose point falls in no successor of a split keeps the recorded subject, as in ``repoint_subjects``.
-    """
-    from urbanlens.dashboard.models.place.lifecycle import PlaceLineageEdge
-    from urbanlens.dashboard.models.place.model import Place
-    from urbanlens.dashboard.services.pins.primary_wiki import repoint_subjects
-
-    successor_ids = list(PlaceLineageEdge.objects.filter(predecessor_id=place_id, erroneous=False).values_list("successor_id", flat=True))
-    if not successor_ids:
-        return
-    predecessor = Place.objects.filter(pk=place_id).first()
-    if predecessor is None:
-        return
-    successors = list(Place.objects.filter(pk__in=successor_ids))
-    repoint_subjects(predecessor, successors, contained_only=len(successors) > 1)
-    pin.refresh_from_db(fields=["subject_place"])
+            carry_subject_forward(pin)
 
 
 def _apply_fields(pin: Pin, fields: dict[str, Any]) -> None:
