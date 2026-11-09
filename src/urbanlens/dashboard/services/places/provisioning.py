@@ -10,12 +10,13 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.gis.db.models.functions import Distance
+from django.contrib.gis.geos import GEOSException
 from django.db import transaction
 from django.utils import timezone
 
 from urbanlens.dashboard.models.place.model import Place, PlaceKind, PlaceRelation, is_plausible_area
 from urbanlens.dashboard.services.geo.area import area_sqm
-from urbanlens.dashboard.services.places import lineage, resolution
+from urbanlens.dashboard.services.places import geometry_versions, lineage, resolution
 
 if TYPE_CHECKING:
     from django.contrib.gis.geos import MultiPolygon
@@ -66,12 +67,14 @@ def find_matching_place(kind: str, polygon: MultiPolygon, *, provider: str = "",
     # need tuning per kind; mutual centroid containment needs none and cannot match two side-by-side
     centroid = polygon.centroid
     centroid_holders = Place.objects.current().of_kind(kind).filter(geometry__isnull=False, geometry__contains=centroid).exclude(pk=exclude_pk)
-    for candidate in centroid_holders:
-        # A place already claimed by a *different* id from this same provider is not this record,
-        # whatever the geometry says - the provider has just told us they are two things.
-        # This matters most for nested buildings: a source that reconciles a block and the wings inside it
-        # into separate records on purpose, and an L-shaped block can contain a wing's centroid
-        if provider and provider_key and candidate.provider == provider and candidate.provider_key and candidate.provider_key != provider_key:
+    # A keyed place is the better home for a keyless record, so look at it first.
+    keyed = bool(provider and provider_key)
+    for candidate in sorted(centroid_holders, key=lambda place: not place.provider_key):
+        # Two records that each carry a provider id are two things, whatever the geometry says: the
+        # provider (or two providers) has told us so. This matters most for nested buildings - a
+        # source that reconciles a block and the wings inside it into separate records on purpose, and an
+        # L-shaped block can contain a wing's centroid.
+        if keyed and candidate.provider_key:
             continue
         if candidate.geometry is not None and polygon.contains(candidate.geometry.centroid):
             return candidate
@@ -89,6 +92,7 @@ def upsert_place(
     parent: Place | None = None,
     relation: str = PlaceRelation.PART_OF,
     exclude_pk: int | None = None,
+    detect_splits: bool = True,
 ) -> Place | None:
     """
     Create or update the place a provider record describes.
@@ -102,6 +106,7 @@ def upsert_place(
         parent: The containing or aggregating place.
         relation: How it attaches to ``parent``.
         exclude_pk: Passed through to :func:`find_matching_place` - a place that must never be matched, however well its geometry fits.
+        detect_splits: For a newly created root parcel, look in the older outlines of nearby parcels for a split it completes.
 
     Returns:
         The place, or None when there is neither plausible geometry nor a provider key to identify it by."""
@@ -116,13 +121,16 @@ def upsert_place(
         place = Place.objects.filter(provider=provider, provider_key=provider_key, kind=kind).exclude(pk=exclude_pk).first()
 
     now = timezone.now()
+    created = place is None
     if place is None:
-        place = Place(kind=kind, name=name[:255], provider=provider, provider_key=provider_key, geometry=polygon, geometry_generated_at=now)
+        place = Place(kind=kind, name=(name or "")[:255], provider=provider, provider_key=provider_key, geometry=polygon, geometry_generated_at=now, valid_from=now)
         place.save()
+        if polygon is not None:
+            geometry_versions.record_version(place, polygon, provider=provider, recorded_at=now)
     else:
         updates: dict = {"geometry_generated_at": now, "updated": now}
         if polygon is not None:
-            updates["geometry"] = polygon
+            geometry_versions.set_geometry(place, polygon, provider=provider, recorded_at=now)
         if name and not place.name:
             updates["name"] = name[:255]
         if provider and provider_key and not place.provider_key:
@@ -134,6 +142,11 @@ def upsert_place(
         resolution.refresh_area(place)
     if parent is not None and place.parent_id != parent.pk:
         lineage.set_parent(place, parent, relation)
+    if created and detect_splits and kind == PlaceKind.PARCEL and parent is None and polygon is not None:
+        from urbanlens.dashboard.services.places import splits
+
+        splits.detect_split_from_versions(place)
+        place.refresh_from_db()
     return place
 
 
@@ -230,7 +243,7 @@ def provision_outcome_for_coordinate(location: Location, *, name: str | None = N
     if detect_splits and not resolved.deferred:
         detect_subdivision(location, resolved.property_polygon)
 
-    parcel = upsert_place(PlaceKind.PARCEL, resolved.property_polygon, name=name or location.official_name or "")
+    parcel = upsert_place(PlaceKind.PARCEL, resolved.property_polygon, name=name or location.official_name or "", detect_splits=detect_splits)
     building = None
     if resolved.building_polygon is not None:
         building = upsert_place(PlaceKind.BUILDING, resolved.building_polygon, name="", parent=parcel)
@@ -256,6 +269,29 @@ def provision_outcome_for_coordinate(location: Location, *, name: str | None = N
     return ProvisionOutcome(place=standing_on, deferred=list(resolved.deferred), retry_after=resolved.retry_after, backs_off=resolved.backs_off)
 
 
+def _probe_neighbours(location: Location, previous: Place, new_parcel_polygon: MultiPolygon, known: list[MultiPolygon]) -> list[MultiPolygon]:
+    """Ask the provider chain about the domain's locations that fall outside the new outline, at most :data:`MAX_SUBDIVISION_PROBES` times."""
+    from urbanlens.dashboard.models.location.model import Location as LocationModel
+    from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain
+
+    found: list[MultiPolygon] = []
+    if previous.domain_root_id is None:
+        # Filtering on None would match every unrooted place's locations.
+        return found
+    probes = 0
+    neighbours = LocationModel.objects.filter(place__domain_root_id=previous.domain_root_id).exclude(pk=location.pk).exclude(point__within=new_parcel_polygon).annotate(distance=Distance("point", location.point)).order_by("distance")
+    for other in neighbours.iterator():
+        if any(successor.contains(other.point) for successor in [*known, *found]):
+            continue
+        if probes >= MAX_SUBDIVISION_PROBES:
+            break
+        probes += 1
+        chain_result = BoundaryProviderChain().get_boundaries(float(other.latitude), float(other.longitude), name=other.official_name or None)
+        if chain_result.property_polygon is not None and not any(candidate.equals(chain_result.property_polygon) for candidate in [*known, *found]):
+            found.append(chain_result.property_polygon)
+    return found
+
+
 def detect_subdivision(location: Location, new_parcel_polygon: MultiPolygon | None) -> Place | None:
     """
     Only the shrink case is detected from a single coordinate: the provider now returns a much smaller parcel here than the one on record, which means the rest of the old parcel became something else.
@@ -266,27 +302,32 @@ def detect_subdivision(location: Location, new_parcel_polygon: MultiPolygon | No
 
     Returns:
         The superseded place, or None when nothing was subdivided."""
-    from urbanlens.dashboard.models.location.model import Location as LocationModel
-    from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain
     from urbanlens.dashboard.services.places import splits
 
     previous = location.place.parcel if (location.place_id and location.place is not None) else None
-    if previous is None or new_parcel_polygon is None or not splits.looks_like_a_split(previous, new_parcel_polygon):
+    if previous is None or new_parcel_polygon is None:
+        return None
+    ratio = splits.shrink_ratio(previous, new_parcel_polygon)
+    heavy = ratio is not None and ratio < (1 - splits.SPLIT_SHRINK_RATIO)
+    # A mild shrink only counts once the missing part turns up as another parcel; a stored one is enough.
+    if not heavy and not splits.is_mild_shrink(previous, new_parcel_polygon):
         return None
 
     successors = [new_parcel_polygon]
-    probes = 0
-    neighbours = LocationModel.objects.filter(place__domain_root_id=previous.domain_root_id).exclude(pk=location.pk).exclude(point__within=new_parcel_polygon).annotate(distance=Distance("point", location.point)).order_by("distance")
-    for other in neighbours.iterator():
-        if any(successor.contains(other.point) for successor in successors):
-            continue
-        if probes >= MAX_SUBDIVISION_PROBES:
-            break
-        probes += 1
-        chain_result = BoundaryProviderChain().get_boundaries(float(other.latitude), float(other.longitude), name=other.official_name or None)
-        if chain_result.property_polygon is not None and not any(candidate.equals(chain_result.property_polygon) for candidate in successors):
-            successors.append(chain_result.property_polygon)
-
+    try:
+        if not heavy:
+            # Stored parcels first: when they explain the remainder no provider needs asking.
+            if not splits.looks_like_a_split(previous, new_parcel_polygon):
+                successors += _probe_neighbours(location, previous, new_parcel_polygon, successors)
+                if not splits.looks_like_a_split(previous, new_parcel_polygon, seen=successors[1:]):
+                    return None
+            stored = splits.candidate_parcels(previous, new_parcel_polygon)
+            successors.extend(geometry for geometry in stored if not any(candidate.equals(geometry) for candidate in successors))
+        else:
+            successors += _probe_neighbours(location, previous, new_parcel_polygon, successors)
+    except GEOSException:
+        logger.warning("subdivision check of %s skipped: invalid provider outline", previous.pk)
+        return None
     if len(successors) < 2:
         return None
     return splits.process_split(previous, successors)
