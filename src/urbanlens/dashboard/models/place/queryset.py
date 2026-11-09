@@ -28,6 +28,9 @@ Coordinate = float | Decimal | str | None
 
 logger = logging.getLogger(__name__)
 
+#: How far past its outline a parcel-less footprint place still resolves a coordinate, in metres; absorbs GPS error only.
+FOOTPRINT_BUFFER_METERS = 10.0
+
 
 class PlaceQuerySet(abstract.DashboardQuerySet["Place"]):
     """QuerySet for Place - the real-world parcels and buildings pins resolve onto."""
@@ -64,10 +67,38 @@ class PlaceQuerySet(abstract.DashboardQuerySet["Place"]):
     def containing_point(self, point: Point) -> Self:
         """
         Resolvable places whose official geometry contains a coordinate.
-        Ordered most-specific first: smallest area wins.
+        Ordered most-specific first: an official or footprint place beats any synthetic one whatever its size, and within each of those two groups the smallest area wins.
         A building footprint is always smaller than the parcel enclosing it, so area ordering subsumes "deepest in the containment tree" without needing to walk it, and it stays deterministic for two unrelated parcels that overlap through bad county geometry.
         """
-        return self.resolvable().filter(geometry__contains=point).order_by("area_sqm", "pk")
+        return self.resolvable().filter(geometry__contains=point).most_specific_first()
+
+    def most_specific_first(self) -> Self:
+        """Order strong evidence (official, footprint) before synthetic, then smallest area, then pk."""
+        from django.db.models import Case, IntegerField, Value, When
+
+        from urbanlens.dashboard.models.place.model import STRONG_EVIDENCE
+
+        return self.annotate(evidence_rank=Case(When(evidence__in=STRONG_EVIDENCE, then=Value(0)), default=Value(1), output_field=IntegerField())).order_by("evidence_rank", "area_sqm", "pk")
+
+    def footprints_near(self, point: Point) -> Self:
+        """
+        Top-level footprint places within :data:`FOOTPRINT_BUFFER_METERS` of a coordinate, nearest first.
+        A footprint with no parcel is only a machine-derived outline, so a GPS pin a few metres off it still means the building.
+        """
+        from django.contrib.gis.db.models.functions import Distance
+        from django.contrib.gis.measure import D
+
+        from urbanlens.dashboard.models.place.model import PlaceEvidence
+
+        return self.resolvable().filter(evidence=PlaceEvidence.FOOTPRINT, parent__isnull=True, geometry__dwithin=(point, D(m=FOOTPRINT_BUFFER_METERS))).annotate(footprint_distance=Distance("geometry", point)).order_by("footprint_distance", "pk")
+
+    def candidates_for_point(self, point: Point) -> Self:
+        """
+        The places a coordinate may resolve onto, best first.
+        Places containing the point decide it. Only when none does are nearby parcel-less footprints considered, so a parcel that arrives later wins without any re-ranking.
+        """
+        containing = self.containing_point(point)
+        return containing if containing.exists() else self.footprints_near(point)
 
 
 _PlaceManagerBase = abstract.DashboardManager.from_queryset(PlaceQuerySet)
@@ -84,20 +115,21 @@ class PlaceManager(_PlaceManagerBase["Place"]):
 
     def resolve_for_point(self, latitude: Coordinate, longitude: Coordinate) -> Place | None:
         """
-        The most specific current place containing a coordinate, or None.
+        The most specific current place for a coordinate, or None.
 
         Args:
             latitude: WGS-84 latitude; None is tolerated.
             longitude: WGS-84 longitude; None is tolerated.
 
         Returns:
-            The smallest resolvable Place containing the point, or None when
-            the coordinate is on no known parcel or building.
+            The first of :meth:`PlaceQuerySet.containing_point`; when no place contains the point, the nearest
+            top-level footprint within :data:`FOOTPRINT_BUFFER_METERS` (see :meth:`PlaceQuerySet.footprints_near`);
+            otherwise None.
         """
         point = point_for_coordinates(latitude, longitude)
         if point is None:
             return None
-        return self.containing_point(point).first()
+        return self.containing_point(point).first() or self.footprints_near(point).first()
 
     def competing_for_point(self, latitude: Coordinate, longitude: Coordinate, *, resolved: Place | None) -> PlaceQuerySet:
         """
@@ -116,7 +148,7 @@ class PlaceManager(_PlaceManagerBase["Place"]):
         point = point_for_coordinates(latitude, longitude)
         if point is None:
             return self.none()
-        candidates = self.containing_point(point)
+        candidates = self.candidates_for_point(point)
         if resolved is not None:
             candidates = candidates.exclude(domain_root_id=resolved.domain_root_id)
         return candidates

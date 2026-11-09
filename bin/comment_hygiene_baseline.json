@@ -101,7 +101,7 @@
   "src/urbanlens/dashboard/services/pins/pin_detail.py": 1,
   "src/urbanlens/dashboard/services/pins/pin_restructure.py": 1,
   "src/urbanlens/dashboard/services/pins/pin_subresources.py": 1,
-  "src/urbanlens/dashboard/services/places/provisioning.py": 2,
+  "src/urbanlens/dashboard/services/places/provisioning.py": 1,
   "src/urbanlens/dashboard/services/places/resolution.py": 1,
   "src/urbanlens/dashboard/services/places/scope.py": 1,
   "src/urbanlens/dashboard/services/security/throttle.py": 1,

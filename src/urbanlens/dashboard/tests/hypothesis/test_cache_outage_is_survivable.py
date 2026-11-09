@@ -178,7 +178,7 @@ class TheWholeRequestPaysOneTimeoutTests(SimpleTestCase):
 
     def test_one_call_is_let_through_once_the_window_ends(self) -> None:
         """Recovery needs no signal, so nothing has to notice Dragonfly came back."""
-        cache = _cache(BREAKER_SECONDS=0.05)
+        cache = _cache()
         with mock.patch.object(RedisCache, "get", side_effect=RedisConnectionError("down")) as attempted:
             cache.get("k")
             cache.get("k")

@@ -675,7 +675,7 @@ class ArticleImageScanIsLinearTests(SimpleTestCase):
     Every save runs the image scan in the request, so text built to make its patterns backtrack must not hold a
     worker."""
 
-    # A two-second wall-clock bound, which a loaded pytest-xdist neighbour pushed to 2.4 s.
+    # Counts this process's CPU time, the cost a backtracking pattern adds: other jobs on a busy runner took a 0.4 s scan past 2 s of wall clock.
     pytestmark = pytest.mark.serial
 
     def _assert_fast(self, content: str) -> None:
@@ -685,9 +685,9 @@ class ArticleImageScanIsLinearTests(SimpleTestCase):
         from urbanlens.dashboard.services.wiki import articles
 
         with mock.patch.object(articles, "_copies_of", side_effect=lambda urls: dict.fromkeys(urls, "/copy/")):
-            started = time.perf_counter()
+            started = time.process_time()
             articles.localize_article_images(content)
-            self.assertLess(time.perf_counter() - started, 2.0)
+            self.assertLess(time.process_time() - started, 2.0)
 
     def test_a_long_run_of_backticks(self) -> None:
         self._assert_fast("`" * 1000)
