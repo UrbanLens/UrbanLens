@@ -93,7 +93,9 @@ class GrantReason(TextChoices):
     """Why a profile holds access that containment can no longer prove."""
 
     GRANDFATHERED_BACKFILL = "backfill", "Held before places existed"
-    GRANDFATHERED_SPLIT = "split", "Held the split family - originally, or by earning every current member"
+    GRANDFATHERED_SPLIT = "split", "Held the parcel when it was subdivided"
+    GRANDFATHERED_LINEAGE = "lineage", "Held a place when it was merged or reclassified"
+    EARNED_FAMILY = "earned_family", "Pinned every current member of a split family"
     GRANDFATHERED_ENGAGEMENT = "engagement", "Viewed the wiki or shared content to it while access was held"
 
 
@@ -119,7 +121,10 @@ class Place(abstract.DashboardModel):
             place is earned, never resolved onto (see
             ``PlaceQuerySet.resolvable``).
         provider / provider_key: The external record this place came from, for
-            idempotent re-matching across provider runs.
+            idempotent re-matching across provider runs. Blank when the provider has no stable id.
+        valid_from / valid_to: When this place began and stopped describing the ground, as far as we know.
+            ``valid_to`` is set when a lineage event retires it (``services.places.lineage_events``).
+            ``geometry`` is the current outline; every outline it has had is a ``PlaceGeometryVersion``.
     """
 
     kind = CharField(max_length=20, choices=PlaceKind.choices, default=PlaceKind.PARCEL)
@@ -164,6 +169,9 @@ class Place(abstract.DashboardModel):
 
     provider = CharField(max_length=20, blank=True, default="")
     provider_key = CharField(max_length=255, blank=True, default="")
+
+    valid_from = DateTimeField(null=True, blank=True)
+    valid_to = DateTimeField(null=True, blank=True)
 
     objects = PlaceManager()
 
@@ -250,7 +258,7 @@ class Place(abstract.DashboardModel):
 class PlaceAccessGrant(abstract.DashboardModel):
     """
     Materialised access that containment can no longer prove.
-    Written by four callers, all through ``PlaceAccessGrantManager`` rather than a public "grant access" API surface:
+    Written by lineage events (``services.places.lineage_events``), earned split families, engagement and the backfill, all through ``PlaceAccessGrantManager`` rather than a public "grant access" API surface:
 
     Attributes:
         profile: Who holds the access.
