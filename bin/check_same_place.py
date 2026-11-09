@@ -134,6 +134,14 @@ def _call_name(call: ast.Call) -> str:
     return func.id if isinstance(func, ast.Name) else getattr(func, "attr", "")
 
 
+def _is_outer_location(value: ast.expr) -> bool:
+    """Whether *value* is ``OuterRef`` of a Location column: against a Location key that compares two rows' Locations, whatever the queryset is called."""
+    if not isinstance(value, ast.Call) or _call_name(value) != "OuterRef" or not value.args:
+        return False
+    target = value.args[0]
+    return isinstance(target, ast.Constant) and target.value in LOCATION_COLUMNS
+
+
 def _filter_keys(call: ast.Call) -> list[tuple[str, ast.expr]]:
     """Return (key, value) for each keyword of *call*, including literal keys of a ``**{...}`` argument."""
     keys: list[tuple[str, ast.expr]] = []
@@ -208,9 +216,10 @@ def find_violations(source: str, rel_path: str) -> list[str]:
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):
             name = _call_name(node)
-            if name in FILTER_CALLS and _about_pins_or_wikis(node, name):
+            if name in FILTER_CALLS:
+                about_pins = _about_pins_or_wikis(node, name)
                 for key, value in _filter_keys(node):
-                    if not _is_identity_key(key) or _is_literal(value):
+                    if not _is_identity_key(key) or _is_literal(value) or not (about_pins or _is_outer_location(value)):
                         continue
                     if "dwithin" in key or "distance_lt" in key:
                         if rel_path not in RADIUS_FILES:

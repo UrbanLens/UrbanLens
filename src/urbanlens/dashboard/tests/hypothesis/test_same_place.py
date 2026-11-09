@@ -315,6 +315,7 @@ class SamePlaceLintTests(SimpleTestCase):
             "in_ids": "def f(ids):\n    return Pin.objects.filter(location__in=ids)\n",
             "pk_in": "def f(ids):\n    return Pin.objects.filter(location__pk__in=ids)\n",
             "exists": "def f():\n    return Exists(Pin.objects.filter(location_id=OuterRef('location_id')))\n",
+            "outer_location_on_unnamed_queryset": "def f(mine):\n    return Exists(mine.filter(location_id=OuterRef('location_id')))\n",
             "q_dict": "def f(key, ids):\n    return Q(**{'location_id__in': ids})\n",
             "dwithin": "def f(p):\n    return Pin.objects.filter(location__point__dwithin=(p, D(m=5)))\n",
             "distance": "def f(p):\n    return Pin.objects.filter(location__point__distance_lte=(p, D(m=5)))\n",
@@ -325,6 +326,10 @@ class SamePlaceLintTests(SimpleTestCase):
         for name, source in probes.items():
             with self.subTest(name):
                 self.assertGreaterEqual(self._found(source), 1)
+
+    def test_a_row_hanging_off_the_outer_location_is_not_an_identity_test(self):
+        source = "def f():\n    return Exists(LocationCache.objects.filter(location=OuterRef('pk')))\n"
+        self.assertEqual(self._found(source), 0)
 
     def test_a_dynamic_name_search_is_not_an_identity_test(self):
         source = "def f(lookup, term):\n    return Pin.objects.filter(**{f'location__official_name__{lookup}': term})\n"
