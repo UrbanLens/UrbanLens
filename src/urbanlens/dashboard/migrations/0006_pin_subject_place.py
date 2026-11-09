@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("dashboard", "0003_profiletrustsignals"),
+        ("dashboard", "0005_place_lifecycle_backfill"),
     ]
 
     operations = [
