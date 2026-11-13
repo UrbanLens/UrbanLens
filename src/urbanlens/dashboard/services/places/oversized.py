@@ -12,7 +12,9 @@ from dataclasses import dataclass
 import logging
 
 from django.db import transaction
-from django.db.models import Q, QuerySet
+from django.db.models import Q, QuerySet, Value
+from django.db.models.functions import Coalesce
+from django.utils import timezone
 
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import PinType
@@ -87,9 +89,9 @@ def detach_oversized_place(place: Place) -> DetachOutcome:
 
     outcome = DetachOutcome(place_id=place.pk)
     location_ids = list(locations_standing_on(place).values_list("pk", flat=True))
-    domain_wikis = list(Wiki.objects.filter(Q(location_id__in=location_ids) | Q(place=place)).values_list("pk", flat=True))
+    domain_wikis = list(Wiki.objects.filter(Q(location_id__in=location_ids) | Q(place=place)).values_list("pk", flat=True))  # same-place: a wiki is anchored to one exact Location
 
-    Place.objects.filter(pk=place.pk).update(status=PlaceStatus.SUPERSEDED)
+    Place.objects.filter(pk=place.pk).update(status=PlaceStatus.SUPERSEDED, valid_to=Coalesce("valid_to", Value(timezone.now())))
     # A superseded building no longer counts toward its parcel's building_child_count.
     lineage.refresh_derived_flags([place.parent_id])
     for child in list(place.children.all()):
@@ -100,7 +102,7 @@ def detach_oversized_place(place: Place) -> DetachOutcome:
     for location in Location.objects.filter(pk__in=location_ids).select_related("place"):
         resolution.resolve_location_place(location)
         implied = pin_type_for_place(location.place) or PinType.LOCATION_MARKER
-        Wiki.objects.filter(location=location, pin_type_is_user_provided=False, pin_type__in=_SCOPED_PIN_TYPES).exclude(pin_type=implied).update(pin_type=implied)
+        Wiki.objects.filter(location=location, pin_type_is_user_provided=False, pin_type__in=_SCOPED_PIN_TYPES).exclude(pin_type=implied).update(pin_type=implied)  # same-place: a wiki is anchored to one exact Location
     outcome.locations = len(location_ids)
     outcome.unplaced = Location.objects.filter(pk__in=location_ids, place__isnull=True).update(place_resolved_at=None)
 

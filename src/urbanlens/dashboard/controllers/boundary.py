@@ -268,7 +268,7 @@ class BoundaryController(LoginRequiredMixin, GenericViewSet):
                 defaults={"profile": profile, "location": pin.location},
             )
             row.polygon = geom
-            if row.location_id != pin.location_id:
+            if row.location_id != pin.location_id:  # same-place: structural parent/child or row-sync rule on the exact Location
                 row.location = pin.location
             row.save(update_fields=["polygon", "location", "updated"])
         else:

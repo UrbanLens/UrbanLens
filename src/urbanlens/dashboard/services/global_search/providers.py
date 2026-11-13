@@ -475,7 +475,7 @@ class PinSearchProvider(SearchProvider):
             # so this also finds shares the recipient already had pinned - accepting those never
             # sets source_share, since no new Pin was created (see PinShare.resulting_pin).
             sharer_ann, sharer_q = person_match("from_profile", parsed.person, profile)
-            shared_with_me = PinShare.objects.filter(to_profile=profile, status=PinShareStatus.ACCEPTED, location_id=OuterRef("location_id")).annotate(**sharer_ann).filter(sharer_q)
+            shared_with_me = PinShare.objects.filter(to_profile=profile, status=PinShareStatus.ACCEPTED, location_id=OuterRef("location_id")).annotate(**sharer_ann).filter(sharer_q)  # same-place: per-Location share row, not a sameness decision
             queryset = queryset.filter(Exists(shared_with_me))
         queryset = queryset.filter(date_range_filter("created", parsed))
         queryset = apply_label_clause(queryset, parsed)
@@ -556,7 +556,7 @@ class PhotoSearchProvider(SearchProvider):
                 # net, and visible_to() below is the gate.
                 # It follows wiki reach so the candidates match what that gate now admits - a photo
                 # on a wiki reached through the place domain.
-                Q(profile=profile) | Q(pin__profile=profile) | Q(location_id__in=visible_wiki_locations_cached(profile)),
+                Q(profile=profile) | Q(pin__profile=profile) | Q(location_id__in=visible_wiki_locations_cached(profile)),  # same-place: wiki visibility is wiki_access's decision, not pin sameness
             )
             .select_related("pin", "location__wiki", "profile")
             .exclude(image="")
@@ -643,7 +643,7 @@ class WikiSearchProvider(SearchProvider):
             return []
         # Asks the access authority rather than restating one of its clauses.
         queryset = Wiki.objects.filter(
-            location_id__in=visible_wiki_locations_cached(profile),
+            location_id__in=visible_wiki_locations_cached(profile),  # same-place: wiki visibility is wiki_access's decision, not pin sameness
         ).select_related("location")
         if parsed.place:
             queryset = queryset.filter(place_filter("location", parsed.place))

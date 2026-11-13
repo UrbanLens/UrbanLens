@@ -23,6 +23,7 @@ HOOKS=(
     versioned-writes
     signal-reachable
     projected-writes
+    same-place
     pin-not-published-to-wiki
     migration-graph
     static-url-literals
