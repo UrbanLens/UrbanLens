@@ -391,8 +391,8 @@ def prioritized_location_candidates(missing: Q, *, limit: int, geo_boundary: Geo
     queryset = (
         Location.objects.filter(missing)
         .annotate(
-            has_wiki=Exists(Wiki.objects.filter(location=OuterRef("pk"))),
-            has_pin=Exists(Pin.objects.filter(location=OuterRef("pk"))),
+            has_wiki=Exists(Wiki.objects.filter(location=OuterRef("pk"))),  # same-place: a wiki is anchored to one exact Location
+            has_pin=Exists(Pin.objects.filter(location=OuterRef("pk"))),  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
         )
         .filter(Q(has_wiki=True) | Q(has_pin=True))
         .annotate(

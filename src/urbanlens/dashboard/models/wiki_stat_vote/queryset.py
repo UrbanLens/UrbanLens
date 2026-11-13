@@ -84,7 +84,7 @@ class WikiStatVoteQuerySet(abstract.DashboardQuerySet["WikiStatVote"]):
         # (real Wiki pks are always positive) keeps this fuzz-cache entry from colliding with the
         field_ordinal = _STAT_FIELD_ORDINALS.get(field, len(_STAT_FIELD_ORDINALS))
         fuzz_id = -((wiki.pk * 100) + field_ordinal) - 1
-        fuzzed = approximate_pin_count(fuzz_id, count)
+        fuzzed = approximate_pin_count(fuzz_id, count, "stat")
         display_count = 0
         if not fuzzed["is_low"]:
             fuzzed_value = fuzzed["value"]

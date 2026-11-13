@@ -454,7 +454,7 @@ def _resolve_title_context(request: HttpRequest, body: dict) -> Pin | Wiki | Non
         location = Location.objects.filter(visible_locations_filter(profile)).from_url_slug(location_slug)
         if location is None:
             return None
-        return Wiki.objects.filter(location=location).first()
+        return Wiki.objects.filter(location=location).first()  # same-place: a wiki is anchored to one exact Location
     return None
 
 
