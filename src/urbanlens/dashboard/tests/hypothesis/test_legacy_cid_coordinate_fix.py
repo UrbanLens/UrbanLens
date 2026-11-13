@@ -204,6 +204,22 @@ class RepairLegacyPinCoordinatesTests(TestCase):
         legacy_pin.refresh_from_db()
         self.assertEqual(legacy_pin.location_id, wrong.pk)
 
+    def test_child_pin_at_corrected_location_does_not_block_the_move(self):
+        wrong = self._location(WRONG_LATITUDE, WRONG_LONGITUDE)
+        self._set_cid(wrong, 12345)
+        legacy_pin = self._pin(wrong, name="Old Tower")
+        right = self._location(RIGHT_LATITUDE, RIGHT_LONGITUDE)
+        parent = self._pin(self._location(10.0, 10.0), name="Parent")
+        Pin.objects.create(profile=self.profile, location=right, name="Child Here", parent_pin=parent)
+
+        # The unique constraint only covers root pins, so a child alone is no collision.
+        repaired = self._repair(cid=12345, name="Old Tower")
+
+        self.assertIsNotNone(repaired)
+        self.assertEqual(repaired.pk, legacy_pin.pk)
+        legacy_pin.refresh_from_db()
+        self.assertEqual(legacy_pin.location_id, right.pk)
+
     def test_unknown_cid_matches_nothing(self):
         self._pin(self._location(WRONG_LATITUDE, WRONG_LONGITUDE), name="Old Tower")
         self.assertIsNone(self._repair(cid=999999, name="Old Tower"))

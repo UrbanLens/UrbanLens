@@ -95,7 +95,23 @@ from urbanlens.dashboard.models.pin_merge_suggestions import PinMergeSuggestion,
 from urbanlens.dashboard.models.pin_share import ExposureSource, LocationExposure, PinShare, PinShareOrigin, PinShareStatus
 from urbanlens.dashboard.models.pin_suggestions import PinSuggestion, PinSuggestionOrigin, PinSuggestionStatus
 from urbanlens.dashboard.models.pin_tombstone import PinTombstone
-from urbanlens.dashboard.models.place import ExternalTagGroup, ExternalTagSource, ExternalTagVocabularyEntry, ExtractedTag, GrantReason, Place, PlaceAccessGrant, PlaceExternalTag, PlaceKind, PlaceMerge, PlaceRelation, PlaceStatus
+from urbanlens.dashboard.models.place import (
+    ExternalTagGroup,
+    ExternalTagSource,
+    ExternalTagVocabularyEntry,
+    ExtractedTag,
+    GrantReason,
+    LineageEdgeKind,
+    Place,
+    PlaceAccessGrant,
+    PlaceExternalTag,
+    PlaceGeometryVersion,
+    PlaceKind,
+    PlaceLineageEdge,
+    PlaceMerge,
+    PlaceRelation,
+    PlaceStatus,
+)
 from urbanlens.dashboard.models.profile import Profile
 from urbanlens.dashboard.models.profile.email import ProfileEmail
 from urbanlens.dashboard.models.profile.nickname import ProfileNickname
@@ -160,6 +176,7 @@ from urbanlens.dashboard.models.trivia import (
     TriviaSessionParticipantStatus,
     TriviaSessionStatus,
 )
+from urbanlens.dashboard.models.trust_signals import ProfileTrustSignals
 from urbanlens.dashboard.models.undo import UndoAction
 from urbanlens.dashboard.models.upload_retry import UploadRetry
 from urbanlens.dashboard.models.visit_suggestions import VisitSuggestion, VisitSuggestionStatus

@@ -137,8 +137,7 @@ def apply_winning_boundary(place: Place | None) -> Boundary | None:
 
     Returns:
         The winning candidate that was applied, or None when nothing changed hands (no votes, no candidates, or no geometry)."""
-    from urbanlens.dashboard.models.place.model import Place as PlaceModel
-    from urbanlens.dashboard.services.places import resolution
+    from urbanlens.dashboard.services.places import geometry_versions, resolution
 
     if place is None or not BoundaryVote.objects.for_place(place).exists():
         return None
@@ -147,8 +146,7 @@ def apply_winning_boundary(place: Place | None) -> Boundary | None:
         return None
     if place.geometry is not None and place.geometry.wkb == winner.generated_polygon.wkb:
         return winner
-    PlaceModel.objects.filter(pk=place.pk).update(geometry=winner.generated_polygon, updated=timezone.now())
-    place.geometry = winner.generated_polygon
+    geometry_versions.set_geometry(place, winner.generated_polygon, provider="vote")
     resolution.refresh_area(place)
     # The winning outline may cover ground the losing one didn't (or stop
     # covering ground it did), so who stands on this place can change.

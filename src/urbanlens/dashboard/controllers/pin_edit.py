@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
@@ -18,7 +18,7 @@ from django.views import View
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY
 from urbanlens.dashboard.models.labels.model import Label
-from urbanlens.dashboard.models.pin.model import Pin, PinType
+from urbanlens.dashboard.models.pin.model import Pin, PinType, SwapLocationConflictError
 from urbanlens.dashboard.models.pin.note import PinNote
 from urbanlens.dashboard.models.reviews.model import Review
 from urbanlens.dashboard.services.core.capacity import CapacityExceededError
@@ -424,7 +424,9 @@ class PinDetachChildView(LoginRequiredMixin, View):
         pin = result
         if pin.parent_pin_id is None:
             return HttpResponse("This pin is already a top-level pin.", status=400)
-        conflict = Pin.objects.root_pins().filter(profile=pin.profile, location_id=pin.location_id).exclude(pk=pin.pk).exists()
+        conflict = (
+            Pin.objects.root_pins().filter(profile=pin.profile, location_id=pin.location_id).exclude(pk=pin.pk).exists()
+        )  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
         if conflict:
             return HttpResponse("You already have a top-level pin at this exact location. Move this child pin slightly before detaching it.", status=400)
         logger.info("User %s detached child pin %s from parent %s", request.user.id, pin.id, pin.parent_pin_id)
@@ -454,9 +456,13 @@ class PinPromoteChildrenView(LoginRequiredMixin, View):
         child_count = Pin.objects.filter(parent_pin=pin).count()
         if not child_count:
             return JsonResponse({"error": "This pin has no child pins to promote."}, status=400)
-        promoted = pin.promote_children()
+        promoted, skipped = pin.promote_children()
         logger.info("User %s promoted %s child pin(s) of pin %s", request.user.id, promoted, pin.id)
-        return JsonResponse({"ok": True, "promoted": promoted})
+        payload: dict[str, Any] = {"ok": True, "promoted": promoted}
+        if skipped:
+            payload["skipped"] = skipped
+            payload["message"] = f"{skipped} child pin(s) sit at this pin's exact location and stay nested under it; two top-level pins can't share one location."
+        return JsonResponse(payload)
 
 
 class PinSwapParentView(LoginRequiredMixin, View):
@@ -477,13 +483,13 @@ class PinSwapParentView(LoginRequiredMixin, View):
         pin = result
         try:
             old_parent = pin.swap_with_parent()
-        except ValueError as exc:
-            # swap_with_parent() raises one of exactly two developer-authored literals; match on it rather than
-            # echoing exc so a future raise site added there can't smuggle unsafe text into this response.
+        except SwapLocationConflictError as exc:
             logger.info("swap_with_parent rejected for pin %s: %s", pin.pk, exc)
-            if str(exc) == "This pin has no parent to swap with.":
-                return JsonResponse({"error": "This pin has no parent to swap with."}, status=400)
-            return JsonResponse({"error": "Can't complete the swap - you already have a top-level pin at this pin's own location."}, status=400)
+            return JsonResponse({"error": "Can't complete the swap - you already have a top-level pin at this pin's own location.", "code": "root_location_conflict"}, status=400)
+        except ValueError as exc:
+            # The only other raise site is the no-parent literal; don't echo exc.
+            logger.info("swap_with_parent rejected for pin %s: %s", pin.pk, exc)
+            return JsonResponse({"error": "This pin has no parent to swap with."}, status=400)
         logger.info("User %s swapped pin %s with its parent %s", request.user.id, pin.id, old_parent.id)
         return JsonResponse({"ok": True, "new_parent_slug": pin.slug, "new_child_slug": old_parent.slug})
 
@@ -526,7 +532,9 @@ class PinRelinkView(LoginRequiredMixin, View):
         # A profile can only ever have one root pin per location (db_pin_unique_location_per_profile) - if one
         # already exists at the location we are about to point at, reassigning `pin.location` would collide with
         # it.
-        existing = Pin.objects.root_pins().filter(profile=pin.profile, location=location).exclude(pk=pin.pk).first()
+        existing = (
+            Pin.objects.root_pins().filter(profile=pin.profile, location=location).exclude(pk=pin.pk).first()
+        )  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
         if existing is not None:
             if not pin.would_create_cycle(existing):
                 pin.parent_pin = existing

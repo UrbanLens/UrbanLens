@@ -226,7 +226,7 @@ def plan_for(pin: Pin) -> RestructurePlan:
 def already_pinned_points(pin: Pin, buildings: list[dict[str, Any]]) -> set[tuple[Any, Any]]:
     """
     Which of ``buildings``' centroids this profile already has a pin on.
-    Mirrors the rule ``pin_creation.resolve_child_pin_location`` enforces: a profile may not hold two pins at one exact point, counting *every* pin it owns rather than only this parcel's children.
+    Mirrors ``pin_creation.resolve_unclaimed_child_pin_location``: generated pins skip a point the profile already has any pin on, not only this parcel's children.
 
     Args:
         pin: The parent pin, for whose profile the check runs.
@@ -460,7 +460,7 @@ def _quantized(point: tuple[float, float]) -> tuple[Any, Any]:
 
 
 def _taken_points(pin: Pin, points: Sequence[tuple[float, float]]) -> set[tuple[Any, Any]]:
-    """Which of these points the pin's owner already has a pin on (see ``pin_creation.resolve_child_pin_location``)."""
+    """Which of these points the pin's owner already has a pin on (see ``pin_creation.resolve_unclaimed_child_pin_location``)."""
     return already_pinned_points(pin, [{"latitude": latitude, "longitude": longitude} for latitude, longitude in points])
 
 
@@ -797,7 +797,7 @@ class BuildingNester:
 
     def _pin_location(self, cluster: BuildingCluster, wiki: Wiki | None) -> Location | None:
         """The first point on the building this profile has no pin on yet, its wiki's own point first."""
-        from urbanlens.dashboard.services.pins.pin_creation import PinCreationError, resolve_child_pin_location
+        from urbanlens.dashboard.services.pins.pin_creation import PinCreationError, resolve_unclaimed_child_pin_location
 
         candidates = self.points(cluster)
         if wiki is not None and wiki.location_id is not None:
@@ -806,7 +806,7 @@ class BuildingNester:
                 candidates.insert(0, point)
         for latitude, longitude in candidates:
             try:
-                return resolve_child_pin_location(self.pin.profile, latitude, longitude)
+                return resolve_unclaimed_child_pin_location(self.pin.profile, latitude, longitude)
             except PinCreationError:
                 continue
         return None
