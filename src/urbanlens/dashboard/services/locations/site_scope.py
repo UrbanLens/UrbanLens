@@ -225,8 +225,8 @@ def nested_locations(location: Location) -> list[Location]:
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.wiki.model import Wiki
 
-    pin_locations = Pin.objects.filter(location=location).with_descendants().values_list("location_id", flat=True)
-    wiki_locations = Wiki.objects.filter(location=location).with_descendants().values_list("location_id", flat=True)
+    pin_locations = Pin.objects.filter(location=location).with_descendants().values_list("location_id", flat=True)  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
+    wiki_locations = Wiki.objects.filter(location=location).with_descendants().values_list("location_id", flat=True)  # same-place: a wiki is anchored to one exact Location
     ids = {location_id for location_id in (*pin_locations, *wiki_locations) if location_id is not None and location_id != location.pk}
     return list(LocationModel.objects.filter(pk__in=ids).select_related("place").order_by("pk"))
 
@@ -246,8 +246,8 @@ def enclosing_site_locations(location: Location) -> list[Location]:
 
     roots: dict[int, Location] = {}
     markers: list[Pin | Wiki] = [
-        *Pin.objects.filter(location=location, parent_pin__isnull=False).order_by("pk"),
-        *Wiki.objects.filter(location=location, parent_wiki__isnull=False).order_by("pk"),
+        *Pin.objects.filter(location=location, parent_pin__isnull=False).order_by("pk"),  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
+        *Wiki.objects.filter(location=location, parent_wiki__isnull=False).order_by("pk"),  # same-place: a wiki is anchored to one exact Location
     ]
     for marker in markers:
         root = _outermost(marker)
@@ -336,7 +336,7 @@ def reclassify_markers_on_place(place, *, owner=None) -> int:
 
     scoped = {PinType.LOCATION_MARKER, PinType.PARCEL, PinType.BUILDING}
     wikis = Wiki.objects.filter(place=place, pin_type_is_user_provided=False, pin_type__in=scoped).exclude(pin_type=implied)
-    pins = Pin.objects.filter(profile=owner, location__place=place, pin_type_is_user_provided=False, pin_type__in=scoped).exclude(pin_type=implied) if owner is not None else Pin.objects.none()
+    pins = Pin.objects.filter(profile=owner, location__place=place, pin_type_is_user_provided=False, pin_type__in=scoped).exclude(pin_type=implied) if owner is not None else Pin.objects.none()  # same-place: pins on a Place, by Place
     if implied == PinType.PARCEL:
         # The parcel's own buildings - see implied_pin_type.
         wikis = wikis.exclude(pin_type=PinType.BUILDING, parent_wiki__isnull=False)

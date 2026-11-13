@@ -68,7 +68,6 @@ def apply_trip_visibility_filter(
         viewer: The profile viewing the trip.
         hidden_out: Mutable set to add hidden activity IDs into."""
     from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
-    from urbanlens.dashboard.models.pin.model import Pin
 
     # Activities where the adder's account was deleted: treat as most restrictive.
     hidden_out.update(a.id for a in sensitive if a.added_by is None)
@@ -94,23 +93,14 @@ def apply_trip_visibility_filter(
         viewer_friend_ids.discard(viewer.id)
 
     if common_pin_acts:
-        # Place-aware, not a raw Location match: the viewer's own pin fifty metres away on the same
-        # parcel must still qualify as "common pin" (see services.pins.common_pins.pins_sharing_a_place_with).
-        from urbanlens.dashboard.models.location.model import Location
+        # Place-aware, not a raw Location match: see services.pins.same_place.
+        from urbanlens.dashboard.services.pins.same_place import locations_sharing_a_place_with
 
-        loc_ids = {a.location_id for a in common_pin_acts if a.location_id is not None}
-        loc_to_place: dict[int, int | None] = dict(Location.objects.filter(pk__in=loc_ids).values_list("pk", "place_id"))
-        viewer_place_ids: set[int] = set()
-        viewer_location_ids: set[int] = set()
-        at_these_stops = Q(location__place_id__in={place for place in loc_to_place.values() if place is not None}) | Q(location_id__in={loc for loc, place in loc_to_place.items() if place is None})
-        for location_id, place_id in Pin.objects.filter(at_these_stops, profile=viewer).values_list("location_id", "location__place_id").distinct():
-            (viewer_place_ids if place_id is not None else viewer_location_ids).add(place_id if place_id is not None else location_id)
+        shared_location_ids = locations_sharing_a_place_with(viewer, (a.location_id for a in common_pin_acts))
         for act in common_pin_acts:
             if act.added_by_id in viewer_friend_ids:
                 continue
-            act_place_id = loc_to_place.get(act.location_id) if act.location_id is not None else None
-            matches = (act_place_id in viewer_place_ids) if act_place_id is not None else (act.location_id in viewer_location_ids)
-            if not matches:
+            if act.location_id not in shared_location_ids:
                 hidden_out.add(act.id)
 
     for act in friends_acts:

@@ -52,7 +52,7 @@ def mirror_wiki_alias_to_pins(alias_id: int) -> int:
         return 0
 
     pins = Pin.objects.filter(
-        location_id=instance.wiki.location_id,
+        location_id=instance.wiki.location_id,  # same-place: a wiki is anchored to one exact Location
         profile__sync_aliases__in=(SyncAliasesDirection.FROM_WIKI, SyncAliasesDirection.BOTH),
     )
     removed_pin_ids = set(

@@ -417,13 +417,15 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
         skipped = 0
         with transaction.atomic(), deferring_child_boundary_refits():
             for child in Pin.objects.filter(parent_pin=self):
-                if new_parent_id is None and child.location_id == self.location_id:
+                if new_parent_id is None and child.location_id == self.location_id:  # same-place: structural parent/child or row-sync rule on the exact Location
                     skipped += 1
                     continue
                 if new_parent_id is not None:
                     child.parent_pin_id = new_parent_id
                 else:
-                    other_root = Pin.objects.root_pins().filter(profile_id=self.profile_id, location_id=child.location_id).exclude(pk=child.pk).first()
+                    other_root = (
+                        Pin.objects.root_pins().filter(profile_id=self.profile_id, location_id=child.location_id).exclude(pk=child.pk).first()
+                    )  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
                     child.parent_pin_id = other_root.pk if other_root is not None else None
                 child.save(update_fields=["parent_pin", "updated"])
                 promoted += 1
@@ -460,7 +462,9 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
             with transaction.atomic():
                 if grandparent_id is None:
                     # The old parent is a root now but is about to become this pin's child, so it doesn't count.
-                    if Pin.objects.root_pins().filter(profile_id=self.profile_id, location_id=self.location_id).exclude(pk__in=[self.pk, old_parent.pk]).exists():
+                    if (
+                        Pin.objects.root_pins().filter(profile_id=self.profile_id, location_id=self.location_id).exclude(pk__in=[self.pk, old_parent.pk]).exists()
+                    ):  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
                         raise SwapLocationConflictError(conflict_message)
                     self.parent_pin = None
                     # Demote the old parent first: this pin may share its Location, and two top-level pins can't.
@@ -475,7 +479,9 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
                 request_child_boundary_refit(self.pk)
                 request_child_boundary_refit(old_parent.pk)
         except IntegrityError as exc:
-            if Pin.objects.root_pins().filter(profile_id=self.profile_id, location_id=self.location_id).exclude(pk__in=[self.pk, old_parent.pk]).exists():
+            if (
+                Pin.objects.root_pins().filter(profile_id=self.profile_id, location_id=self.location_id).exclude(pk__in=[self.pk, old_parent.pk]).exists()
+            ):  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
                 raise SwapLocationConflictError(conflict_message) from exc
             raise
 

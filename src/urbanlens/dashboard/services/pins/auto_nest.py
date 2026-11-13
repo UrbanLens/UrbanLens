@@ -141,7 +141,7 @@ def auto_nest_location(location: Location) -> int:
     from urbanlens.dashboard.models.pin.model import Pin as PinModel
 
     created = 0
-    for pin in PinModel.objects.root_pins().filter(location=location).select_related("location", "profile"):
+    for pin in PinModel.objects.root_pins().filter(location=location).select_related("location", "profile"):  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
         try:
             created += auto_nest_pin(pin)
         except Exception:
@@ -160,7 +160,7 @@ def request_location_sweep(location: Location) -> None:
     """
     from urbanlens.dashboard.models.pin.model import Pin as PinModel
 
-    pin_ids = list(PinModel.objects.root_pins().filter(location=location).values_list("pk", flat=True))
+    pin_ids = list(PinModel.objects.root_pins().filter(location=location).values_list("pk", flat=True))  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
     for pin_id in pin_ids:
         _enqueue_sweep(pin_id)
 

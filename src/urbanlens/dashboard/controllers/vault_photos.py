@@ -412,7 +412,7 @@ class PhotoActionView(LoginRequiredMixin, View):
         if image.media_type == MediaKind.DOCUMENT:
             return _toast("Documents can't be sent to a wiki.", "error")
         location_slug = (request.POST.get("location_slug") or "").strip()
-        wiki = Wiki.objects.filter(location__slug=location_slug, location_id__in=visible_wiki_locations_cached(profile)).select_related("location").first()
+        wiki = Wiki.objects.filter(location__slug=location_slug, location_id__in=visible_wiki_locations_cached(profile)).select_related("location").first()  # same-place: wiki visibility is wiki_access's decision, not pin sameness
         if wiki is None:
             return _toast("That wiki could not be found.", "error")
         if image.wiki_id == wiki.pk:

@@ -519,7 +519,7 @@ def building_list_cached(location: Location) -> None:
     from urbanlens.dashboard.services.pins.auto_nest import auto_nest_location
 
     auto_nest_location(location)
-    if not Wiki.objects.filter(location_id=location.pk, place__isnull=False).exists():
+    if not Wiki.objects.filter(location_id=location.pk, place__isnull=False).exists():  # same-place: a wiki is anchored to one exact Location
         return
 
     def _enqueue() -> None:
