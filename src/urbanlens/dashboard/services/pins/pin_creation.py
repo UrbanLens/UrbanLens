@@ -136,7 +136,7 @@ def resolve_unclaimed_child_pin_location(profile: Profile, latitude: float | str
     Raises:
         DuplicateCoordinatesError: The profile already has a pin at that point."""
     location = resolve_child_pin_location(latitude, longitude)
-    if Pin.objects.filter(profile=profile, location=location).exists():
+    if Pin.objects.filter(profile=profile, location=location).exists():  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
         raise DuplicateCoordinatesError("Duplicate pin at these exact coordinates.")
     return location
 
@@ -321,7 +321,7 @@ def create_pin_for_profile(
                 return PinCreationResult(pin=existing, all_locations=all_locations, created=False)
             if Pin.objects.filter(uuid=client_uuid).exists():
                 raise DuplicateUuidError("Client-supplied uuid already belongs to a different pin.") from exc
-        if Pin.objects.root_pins().filter(profile=profile, location=location).exists():
+        if Pin.objects.root_pins().filter(profile=profile, location=location).exists():  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
             # The location is this exact coordinate, so the collision is a duplicate of it - on a property or not.
             raise DuplicateCoordinatesError("Duplicate root pin at these exact coordinates.") from exc
         raise

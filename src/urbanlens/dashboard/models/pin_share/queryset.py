@@ -37,6 +37,7 @@ class LocationExposureQuerySet(abstract.DashboardQuerySet["LocationExposure"]):
         Returns:
             A queryset of matching exposure rows.
         """
+        # A radius on purpose, not services.pins.same_place: see share_provenance.find_profile_pin_near_location.
         return self.filter(
             profile_id=profile_id,
             location__point__dwithin=(location.point, D(m=radius_meters)),
