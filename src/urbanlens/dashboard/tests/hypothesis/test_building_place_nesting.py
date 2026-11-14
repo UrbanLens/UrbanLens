@@ -140,8 +140,9 @@ class BuildingPlaceNestingTests(TestCase):
             self.assertEqual(place.parent_id, self.parcel.pk)
 
     def test_no_parcel_creates_top_level_footprint_places(self) -> None:
+        """Off every stored parcel: one standing on a stored parcel nests under it (test_evidence_ladder)."""
         created = ensure_building_places(
-            None, [{"ref": "a", "geometry": _square(0.2, 0.2, 0.1), "sources": [{"source": "overture"}]}]
+            None, [{"ref": "a", "geometry": _square(3.2, 3.2, 0.1), "sources": [{"source": "overture"}]}]
         )
         self.assertEqual(len(created), 1)
         self.assertIsNone(created[0].parent_id)

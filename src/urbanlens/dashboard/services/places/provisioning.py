@@ -20,7 +20,7 @@ from urbanlens.dashboard.services.geo.area import area_sqm, buffer_meters
 from urbanlens.dashboard.services.places import geometry_versions, lineage, resolution
 
 if TYPE_CHECKING:
-    from django.contrib.gis.geos import MultiPolygon
+    from django.contrib.gis.geos import MultiPolygon, Point
 
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.services.locations.boundaries import ResolvedBoundaries
@@ -296,10 +296,9 @@ def provision_outcome_for_coordinate(location: Location, *, name: str | None = N
             # Stored, not bound: the pin reaches one of these only through resolution below, which allows the buffer and no further.
             footprints = ensure_footprint_places(_building_outlines(resolved))
         else:
-            source = resolved.building_candidates[0][0] if resolved.building_candidates else ""
             # No parcel came back this time, but a stored one may hold the point: nest under it so the building stays in its access domain.
-            container = parcel or Place.objects.containing_point(location.point).filter(kind__in=(PlaceKind.PARCEL, PlaceKind.SITE)).first()
-            building = upsert_place(PlaceKind.BUILDING, resolved.building_polygon, name="", parent=container, evidence=evidence_for_source(source))
+            container = parcel or _covering_parcel(location.point)
+            building = upsert_place(PlaceKind.BUILDING, resolved.building_polygon, name="", parent=container, evidence=evidence_for_source(_building_source(resolved)))
 
     if parcel is not None:
         record_boundary_candidates(parcel, resolved.property_candidates)
@@ -391,7 +390,9 @@ def ensure_building_places(parcel: Place | None, buildings: list[dict], *, provi
     It keeps identity, lineage, and the ability to hold its own wiki, and can never be resolved onto - which is the right answer for a structure we know exists but cannot locate precisely.
 
     Args:
-        parcel: The parcel these buildings stand on. With None, each record that has an outline becomes a top-level footprint place (see :func:`ensure_footprint_places`); records nest only under a parcel.
+        parcel: The parcel these buildings stand on. With None, a record whose outline lies on a stored parcel or site is
+            provisioned under that one, and every other record that has an outline becomes a top-level footprint place
+            (see :func:`ensure_footprint_places`).
         buildings: Cached building records (see ``services.places.building_records``).
         provider: Provider namespace for stable-id matching.
 
@@ -401,7 +402,7 @@ def ensure_building_places(parcel: Place | None, buildings: list[dict], *, provi
     from urbanlens.dashboard.services.places.building_records import building_key, place_provider
 
     if parcel is None:
-        return _footprints_without_parcel(buildings)
+        return _footprints_without_parcel(buildings, provider=provider)
     source = place_provider(provider)
     rekey = source.place_keyer() if source is not None else None
 
@@ -508,16 +509,41 @@ def _resolve_locations_around(place: Place | None) -> None:
     resolution.resolve_locations_in(reach)
 
 
+def _covering_parcel(point: Point) -> Place | None:
+    """The most specific stored, resolvable parcel or site holding ``point``, or None."""
+    return Place.objects.containing_point(point).filter(kind__in=(PlaceKind.PARCEL, PlaceKind.SITE)).first()
+
+
 def _parcel_covers(location: Location) -> bool:
     """Whether a stored, resolvable parcel or site already holds the location's point."""
-    return Place.objects.containing_point(location.point).filter(kind__in=(PlaceKind.PARCEL, PlaceKind.SITE)).exists()
+    return _covering_parcel(location.point) is not None
+
+
+def _parcel_under(outline: MultiPolygon) -> Place | None:
+    """The stored parcel or site a building outline stands on, judged at a point inside the outline, or None."""
+    try:
+        point = outline.point_on_surface
+    except GEOSException:
+        return None
+    point.srid = point.srid or 4326
+    return _covering_parcel(point)
 
 
 def _building_outlines(resolved: ResolvedBoundaries) -> list[tuple[str, MultiPolygon]]:
-    """Every building outline the chain returned, as ``(source, outline)``; one with no attributed source gets a blank source."""
-    if resolved.building_candidates:
-        return list(resolved.building_candidates)
-    return [("", resolved.building_polygon)] if resolved.building_polygon is not None else []
+    """
+    Every building outline the chain returned, as ``(source, outline)`` in chain order, ``building_polygon`` first.
+
+    An outline with no attributed source has a blank source, so it is never taken for another provider's.
+    """
+    outlines = list(resolved.building_candidates)
+    if resolved.building_polygon is not None and not any(outline == resolved.building_polygon for _source, outline in outlines):
+        outlines.insert(0, ("", resolved.building_polygon))
+    return outlines
+
+
+def _building_source(resolved: ResolvedBoundaries) -> str:
+    """The provider ``building_polygon`` came from; blank when no provider is attributed to that outline."""
+    return next((source for source, outline in _building_outlines(resolved) if outline == resolved.building_polygon), "")
 
 
 def _would_overwrite(source: str, outline: MultiPolygon) -> bool:
@@ -532,7 +558,8 @@ def ensure_footprint_places(candidates: list[tuple[str, MultiPolygon]]) -> list[
     Outlines of one building from several sources reconcile by mutual centroid containment (see
     :func:`find_matching_place`), so the first source in ``candidates`` wins and later duplicates add nothing.
     The true outline is stored; resolution reaches :data:`FOOTPRINT_BUFFER_METERS` past it only while no place
-    contains the point (``PlaceQuerySet.footprints_near``). An implausibly large outline is refused.
+    contains the point (``PlaceQuerySet.footprints_near``). An implausibly large outline is refused. An outline
+    that stands on a stored parcel or site nests under it instead, so it stays in that place's access domain.
 
     Args:
         candidates: ``(provider service_key, outline)`` pairs, in chain order.
@@ -549,25 +576,36 @@ def _footprint_places(outlines: list[tuple[str, MultiPolygon]]) -> list[Place]:
     for evidence, outline in outlines:
         if not is_plausible_area(PlaceKind.BUILDING, area_sqm(outline)):
             continue
-        place = upsert_place(PlaceKind.BUILDING, outline, evidence=evidence)
+        place = upsert_place(PlaceKind.BUILDING, outline, parent=_parcel_under(outline), evidence=evidence)
         if place is not None and all(place.pk != other.pk for other in places):
             places.append(place)
     return places
 
 
-def _footprints_without_parcel(buildings: list[dict]) -> dict[int, Place]:
-    """Top-level footprint places for the records that carry an outline, keyed by their index in ``buildings``."""
+def _footprints_without_parcel(buildings: list[dict], *, provider: str = "") -> dict[int, Place]:
+    """
+    :func:`ensure_building_places` with no parcel given, keyed by each record's index in ``buildings``.
+
+    A record standing on a stored parcel or site goes through the parcel path under that place; the rest become
+    top-level footprint places.
+    """
     from urbanlens.dashboard.services.pins.pin_restructure import building_footprint
 
     created: dict[int, Place] = {}
+    on_parcel: dict[int, tuple[Place, list[int]]] = {}
     for index, building in enumerate(buildings):
         outline = _as_multipolygon(building_footprint(building))
         if outline is None:
             continue
-        if places := _footprint_places([(evidence_for_record(building), outline)]):
+        if (container := _parcel_under(outline)) is not None:
+            on_parcel.setdefault(container.pk, (container, []))[1].append(index)
+        elif places := _footprint_places([(evidence_for_record(building), outline)]):
             created[index] = places[0]
     for place in created.values():
         _resolve_locations_around(place)
+    for container, indexes in on_parcel.values():
+        nested = ensure_building_places(container, [buildings[index] for index in indexes], provider=provider)
+        created.update((indexes[position], place) for position, place in nested.items())
     return created
 
 
