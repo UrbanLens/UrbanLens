@@ -37,6 +37,7 @@ from urbanlens.dashboard.models.links.model import PinLink
 from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
 from urbanlens.dashboard.models.markup.meta import MarkupType
 from urbanlens.dashboard.models.markup.model import CustomLayer, MarkupMap, PinMarkup
+from urbanlens.dashboard.models.pin.import_key import PinImportKey
 from urbanlens.dashboard.models.pin.note import PinNote
 from urbanlens.dashboard.models.pin_import_failures.model import PinImportFailure
 from urbanlens.dashboard.models.pin_list.model import PinListItem
@@ -727,9 +728,6 @@ PIN_FIELD_POLICY: dict[str, str] = {
     "profile": _IDENTITY,
     "location": _IDENTITY,
     "parent_pin": _IDENTITY,
-    # Unique per profile, so a keyed survivor keeps its own; a keyless one takes the loser's (see merge_pins).
-    "import_source": _IDENTITY,
-    "import_key": _IDENTITY,
     "last_visited": _DERIVED,
     "source_share": _LINEAGE,
     "inferred_source_share": _LINEAGE,
@@ -986,20 +984,16 @@ def _write_merge_note(survivor: Pin, record: _MergeRecord, labels: dict[int, str
         PinNote.objects.create(pin=survivor, text=text)
 
 
-def _inherit_import_key(survivor: Pin, import_source: str | None, import_key: str | None) -> None:
+def _merge_import_keys(survivor: Pin, loser: Pin) -> None:
     """
-    Give a keyless survivor the deleted loser's import key, so re-importing the loser's file finds the merged pin.
-    Runs after the loser's delete: the (profile, source, key) constraint rejects the pair on two pins at once.
-    A keyed survivor keeps its own; a pin has room for only one key."""
-    if not (import_source and import_key) or survivor.import_key:
-        return
-    manager = type(survivor).objects
-    # Another pin of the profile may already hold the pair (the constraint would reject a second): then it is already findable.
-    if manager.filter(profile_id=survivor.profile_id, import_source=import_source, import_key=import_key).exists():
-        return
-    if manager.filter(pk=survivor.pk, import_key__isnull=True).update(import_source=import_source, import_key=import_key):
-        # update() skips the in-memory object; keep it current so a later save() cannot write NULL back.
-        survivor.import_source, survivor.import_key = import_source, import_key
+    Move every import identity the loser held onto the survivor, and add the loser's own uuid as an archive identity.
+    A re-import of any file that named the loser then finds the merged pin instead of recreating the loser at its old point.
+    Nothing collides: an identity is unique per profile and both pins share one, so the loser's rows are not the survivor's."""
+    from urbanlens.dashboard.models.pin.model import PinImportSource
+
+    PinImportKey.objects.filter(pin=loser).update(pin=survivor)
+    # A JSON archive names each pin by its uuid; the uuid leaves with the loser, so it stays on as a key.
+    PinImportKey.attach(survivor, PinImportSource.JSON_ARCHIVE, str(loser.uuid))
 
 
 def merge_pins(survivor: Pin, loser: Pin, profile: Profile, resolutions: dict[str, int] | None = None) -> Pin:
@@ -1030,17 +1024,11 @@ def merge_pins(survivor: Pin, loser: Pin, profile: Profile, resolutions: dict[st
     if missing:
         raise UnresolvedMergeConflictError(missing)
 
-    from urbanlens.dashboard.models.pin.model import PinImportSource
     from urbanlens.dashboard.services.geo.child_pin_boundaries import deferring_child_boundary_refits
 
     # Captured before anything is rewritten, so the note and summaries name the pins as the user knew them.
     labels = {survivor.pk: _pin_label(survivor), loser.pk: _pin_label(loser)}
     loser_pk = loser.pk
-    loser_import = (loser.import_source, loser.import_key)
-    if not loser.import_key:
-        # A JSON archive names each pin by its uuid; with the loser gone, that key is what lets a re-import find the merged pin
-        # instead of recreating the loser at its old point.
-        loser_import = (PinImportSource.JSON_ARCHIVE, str(loser.uuid))
     record = _MergeRecord()
 
     with transaction.atomic(), deferring_child_boundary_refits():
@@ -1056,6 +1044,7 @@ def merge_pins(survivor: Pin, loser: Pin, profile: Profile, resolutions: dict[st
         _merge_boundaries(survivor, loser, resolutions, profile, record, labels)
         _merge_article(survivor, loser, resolutions, profile, record, labels)
         _merge_lineage(survivor, loser)
+        _merge_import_keys(survivor, loser)
         survivor.labels.add(*loser.labels.all())
 
         _merge_albums(survivor, loser)
@@ -1094,7 +1083,6 @@ def merge_pins(survivor: Pin, loser: Pin, profile: Profile, resolutions: dict[st
             markup_map.inferred_pins.add(survivor)
 
         loser.delete()
-        _inherit_import_key(survivor, *loser_import)
         _write_merge_note(survivor, record, labels, loser_pk)
 
         # last_visited is a denormalized copy of the newest PinVisit, and the visits above moved
