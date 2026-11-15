@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import math
+from typing import TYPE_CHECKING
+
 from django.contrib.auth.models import User
 from django.urls import reverse
 from model_bakery import baker
@@ -16,6 +19,9 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.global_search import GlobalSearchEngine
 from urbanlens.dashboard.services.wiki.articles import diff_revisions, render_article, save_article
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 class EditorDisplayNameTests(SimpleTestCase):
@@ -675,55 +681,102 @@ class ArticleImageScanIsLinearTests(SimpleTestCase):
     Every save runs the image scan in the request, so text built to make its patterns backtrack must not hold a
     worker."""
 
-    # Serial, since a loaded pytest-xdist neighbour pushed a run to 2.4 s. The scan takes about 0.5 s here and
-    # doubles with the input; CI's coverage tracing took it to 2.7 s, so the bound is 5 s, which a backtracking
-    # (quadratic) scan of these inputs still overshoots by far.
+    # Fails when the scan's time grows more than twice as fast as its input (16x longer here): a ratio holds under
+    # coverage and on a loaded runner, where a wall-clock bound does not. Under load 9 on 8 cores these inputs used
+    # at most 0.87 of the limit, and a code-span scan searching forward from each backtick run for its closer 1.6.
+    # Serial, since a pytest-xdist neighbour competes for the cache.
     pytestmark = pytest.mark.serial
 
-    def _assert_fast(self, content: str) -> None:
+    GROWTH = 16
+    REPEATS = 3
+    #: Fresh measurements before a test fails: a scan that really grows faster fails every one.
+    ATTEMPTS = 3
+    #: Times under this are mostly noise, so the bound never asks for less than this would allow.
+    FLOOR = 0.005
+
+    def _measure(self, small: str, large: str) -> tuple[float, float]:
+        """
+        The scan's CPU time on each input, the best of interleaved runs with the collector off.
+
+        Returns:
+            The times for *small* and *large*.
+        """
+        import gc
         import time
         from unittest import mock
 
         from urbanlens.dashboard.services.wiki import articles
 
-        with mock.patch.object(articles, "_copies_of", side_effect=lambda urls: dict.fromkeys(urls, "/copy/")):
-            started = time.perf_counter()
+        def cpu_time(content: str) -> float:
+            started = time.process_time()
             articles.localize_article_images(content)
-            self.assertLess(time.perf_counter() - started, 5.0)
+            return time.process_time() - started
+
+        small_times: list[float] = []
+        large_times: list[float] = []
+        gc.disable()
+        try:
+            with mock.patch.object(articles, "_copies_of", side_effect=lambda urls: dict.fromkeys(urls, "/copy/")):
+                # Interleaved, so a stretch of contention lands on both sizes rather than on one.
+                for _ in range(self.REPEATS):
+                    small_times.append(cpu_time(small))
+                    large_times.append(cpu_time(large))
+        finally:
+            gc.enable()
+        return min(small_times), min(large_times)
+
+    def _assert_linear(self, build: Callable[[int], str], n: int) -> None:
+        small, large = build(n), build(self.GROWTH * n)
+        growth = len(large) / len(small)
+        for _ in range(self.ATTEMPTS):
+            small_time, large_time = self._measure(small, large)
+            limit = 2 * growth * max(small_time, self.FLOOR)
+            if large_time < limit:
+                break
+        self.assertLess(
+            large_time,
+            limit,
+            f"{len(small)} characters took {small_time:.3f}s and {len(large)} took {large_time:.3f}s: "
+            f"the scan grew {large_time / small_time:.0f}x for {growth:.0f}x the input",
+        )
 
     def test_a_long_run_of_backticks(self) -> None:
-        self._assert_fast("`" * 1000)
+        self._assert_linear(lambda n: "`" * n, 50000)
 
     def test_backtick_runs_of_every_length(self) -> None:
-        self._assert_fast(" ".join("`" * n for n in range(1, 600)))
+        # Runs of 1 to k backticks are about k*k/2 characters, so k grows with the root of n.
+        self._assert_linear(lambda n: " ".join("`" * k for k in range(1, math.isqrt(2 * n))), 50000)
 
     def test_many_unclosed_img_tags(self) -> None:
-        self._assert_fast("<img " * 20000)
+        self._assert_linear(lambda n: "<img " * n, 15000)
 
     def test_many_unclosed_image_brackets(self) -> None:
-        self._assert_fast("![" * 50000)
+        self._assert_linear(lambda n: "![" * n, 30000)
 
     def test_unclosed_image_brackets_beside_a_definition(self) -> None:
-        self._assert_fast("![" * 50000 + "\n\n[a]: https://img.example/a.jpg")
+        self._assert_linear(lambda n: "![" * n + "\n\n[a]: https://img.example/a.jpg", 30000)
 
     def test_many_nested_parentheses(self) -> None:
-        self._assert_fast("![a](https://img.example/" + "(" * 20000)
+        self._assert_linear(lambda n: "![a](https://img.example/" + "(" * n, 100000)
 
     def test_many_images_opening_parentheses(self) -> None:
-        self._assert_fast("![a](https://img.example/x" * 20000)
+        self._assert_linear(lambda n: "![a](https://img.example/x" * n, 1000)
 
     def test_many_unterminated_titles(self) -> None:
-        self._assert_fast('![a](https://img.example/x "' * 20000)
+        self._assert_linear(lambda n: '![a](https://img.example/x "' * n, 1000)
 
     def test_many_unclosed_quoted_sources(self) -> None:
-        self._assert_fast('<img src="https://img.example/' * 20000)
+        self._assert_linear(lambda n: '<img src="https://img.example/' * n, 2500)
 
     def test_many_reference_images_and_definitions(self) -> None:
-        self._assert_fast(
-            " ".join(f"![x][a{n}]" for n in range(5000))
-            + "\n\n"
-            + "\n".join(f"[a{n}]: https://img.example/{n}.jpg" for n in range(5000))
+        self._assert_linear(
+            lambda n: (
+                " ".join(f"![x][a{k}]" for k in range(n))
+                + "\n\n"
+                + "\n".join(f"[a{k}]: https://img.example/{k}.jpg" for k in range(n))
+            ),
+            150,
         )
 
     def test_code_spans_beside_many_images(self) -> None:
-        self._assert_fast("`a` " * 20000 + "![a](/local.jpg) " * 20000)
+        self._assert_linear(lambda n: "`a` " * n + "![a](/local.jpg) " * n, 500)
