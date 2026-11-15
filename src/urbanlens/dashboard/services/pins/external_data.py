@@ -421,7 +421,7 @@ class LocationCachePanelSource(PanelSource, ABC):
         """
         chain = pin.ancestor_chain()
         site = chain[-1] if chain else None
-        if site is None or site.location_id is None or site.location_id == pin.location_id:
+        if site is None or site.location_id is None or site.location_id == pin.location_id:  # same-place: structural parent/child or row-sync rule on the exact Location
             return None
         from urbanlens.dashboard.services.geo.distance import haversine_meters
 

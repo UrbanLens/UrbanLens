@@ -72,7 +72,7 @@ def pick_next_location(
     # candidate (see _proxy_difficulty_rating) - with a large pool this loop runs once per attempt
     # of the caller's location-retry loop (session.get_or_create_round), so an O(pool size) query
     # count there compounds into thousands of round trips and was the dominant cause of SpotGuessr
-    pin_counts = dict(Pin.objects.filter(location_id__in=location_ids).values_list("location_id").annotate(n=Count("pk")).values_list("location_id", "n"))
+    pin_counts = dict(Pin.objects.filter(location_id__in=location_ids).values_list("location_id").annotate(n=Count("pk")).values_list("location_id", "n"))  # same-place: per-Location bookkeeping, not a sameness decision between people
     photo_counts = dict(Image.objects.filter(location_id__in=location_ids).values_list("location_id").annotate(n=Count("pk")).values_list("location_id", "n"))
 
     target_rating = target_rating_for_difficulty(difficulty)

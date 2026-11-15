@@ -59,12 +59,14 @@ class RadiusFiltersUseTheSpatialIndexTests(TestCase):
         Pin.objects.bulk_create(
             Pin(profile=self.profile, location=location, name=f"Far {i}") for i, location in enumerate(far)
         )
-        # Top-level footprints far away, so ``parent_id IS NULL`` matches every place and only the spatial index narrows them.
+        # A coordinate on no place still asks for a parcel-less footprint within a few metres; with no places at all
+        # the planner would answer that from the parent_id index, so the table holds far footprints as production does.
         Place.objects.bulk_create(
             Place(
                 kind=PlaceKind.BUILDING,
                 evidence=PlaceEvidence.FOOTPRINT,
-                geometry=MultiPolygon(Polygon.from_bbox((-100.0001, lat - 0.0001, -99.9999, lat + 0.0001)), srid=4326),
+                geometry=MultiPolygon(Polygon.from_bbox((-100.0, lat, -99.9999, lat + 0.0001)), srid=4326),
+                area_sqm=100.0,
             )
             for lat in (round(40 + i * 0.01, 6) for i in range(FAR_PINS))
         )

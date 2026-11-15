@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from django.conf import settings
 from django.contrib.gis.db.models.functions import GeoHash
+from django.db import transaction
 from django.db.models import Count, Q
 from django.db.models.functions import ExtractIsoYear, ExtractWeek, TruncDate
 from django.utils import timezone
@@ -103,26 +104,26 @@ def compute_signals(profile: Profile) -> ProfileTrustSignals:
     now = timezone.now()
     pin_count, cells, spread = _pin_geography(profile)
     claims, photos = _visit_days(profile)
-    row, _ = ProfileTrustSignals.objects.update_or_create(
-        profile=profile,
-        defaults={
-            "computed_at": now,
-            "account_age_days": max((now - profile.created).days, 0),
-            "active_weeks_90": _active_weeks(profile),
-            "pin_count": pin_count,
-            "pin_cells": cells,
-            "spread_cells": spread,
-            "trusted_friend_count": _trusted_friend_count(profile),
-            "claim_visit_days": claims,
-            "photo_visit_days": photos,
-        },
-    )
-    base = real_user_score(row, include_trusted_friends=False)
-    verdict = meets_floors(row) and real_user_score(row) >= settings.UL_TRUST_REAL_USER_THRESHOLD
-    if row.base_score != base or row.is_real_user != verdict:
-        row.base_score = base
-        row.is_real_user = verdict
-        row.save(update_fields=["base_score", "is_real_user", "updated"])
+    defaults = {
+        "computed_at": now,
+        "account_age_days": max((now - profile.created).days, 0),
+        "active_weeks_90": _active_weeks(profile),
+        "pin_count": pin_count,
+        "pin_cells": cells,
+        "spread_cells": spread,
+        "trusted_friend_count": _trusted_friend_count(profile),
+        "claim_visit_days": claims,
+        "photo_visit_days": photos,
+    }
+    # One transaction: a fresh computed_at must never sit beside a stale base_score.
+    with transaction.atomic():
+        row, _ = ProfileTrustSignals.objects.update_or_create(profile=profile, defaults=defaults)
+        base = real_user_score(row, include_trusted_friends=False)
+        verdict = meets_floors(row) and real_user_score(row) >= settings.UL_TRUST_REAL_USER_THRESHOLD
+        if row.base_score != base or row.is_real_user != verdict:
+            row.base_score = base
+            row.is_real_user = verdict
+            row.save(update_fields=["base_score", "is_real_user", "updated"])
     return row
 
 

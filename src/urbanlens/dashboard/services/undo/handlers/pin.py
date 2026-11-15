@@ -149,7 +149,9 @@ class PinUndoHandler(UndoHandler):
         live_labels = set(Label.objects.filter(pk__in=label_ids).values_list("pk", flat=True)) if label_ids else set()
         live_parents = {(pk, profile_id) for pk, profile_id in Pin.objects.filter(pk__in={pk for pk, _ in outside_parents}).values_list("pk", "profile_id")} if outside_parents else set()
         # Root pins already standing where this batch would restore one.
-        occupied_roots = {(location_id, profile_id) for location_id, profile_id in Pin.objects.root_pins().filter(location_id__in=location_ids, profile_id__in=profile_ids).values_list("location_id", "profile_id")} if payload else set()
+        occupied_roots = (
+            {(location_id, profile_id) for location_id, profile_id in Pin.objects.root_pins().filter(location_id__in=location_ids, profile_id__in=profile_ids).values_list("location_id", "profile_id")} if payload else set()
+        )  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
 
         for entry in payload:
             if entry["profile_id"] not in live_profiles:

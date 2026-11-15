@@ -6,6 +6,7 @@ from datetime import timedelta
 import itertools
 from unittest.mock import patch
 
+from django.db import OperationalError
 from django.test import override_settings
 from django.utils import timezone
 from model_bakery import baker
@@ -164,13 +165,20 @@ class RealUserTests(TestCase):
         self.assertEqual(compute_signals(me).trusted_friend_count, 1)
 
     def test_trusted_friend_count_does_not_feed_back(self) -> None:
-        a, b = _profile(), _profile()
-        baker.make("dashboard.Friendship", from_profile=a, to_profile=b, status=FriendshipStatus.ACCEPTED)
-        Friendship.objects.update(updated=timezone.now() - timedelta(days=60))
-        for _ in range(2):
-            compute_signals(a)
-            compute_signals(b)
-        self.assertEqual(ProfileTrustSignals.objects.get(profile=a).trusted_friend_count, 0)
+        now = timezone.now()
+        seeds = [_profile(), _profile()]
+        for seed in seeds:
+            ProfileTrustSignals.objects.create(
+                profile=seed, computed_at=now, base_score=0.67, account_age_days=400, active_weeks_90=6, pin_count=10
+            )
+        c, d = _profile(), _profile()
+        _weeks(c, 6)
+        for seed in seeds:
+            baker.make("dashboard.Friendship", from_profile=c, to_profile=seed, status=FriendshipStatus.ACCEPTED)
+        baker.make("dashboard.Friendship", from_profile=c, to_profile=d, status=FriendshipStatus.ACCEPTED)
+        Friendship.objects.update(updated=now - timedelta(days=60))
+        self.assertEqual(compute_signals(c).trusted_friend_count, 2)
+        self.assertEqual(compute_signals(d).trusted_friend_count, 0)
 
     def test_signals_count_visit_days_pins_and_cells(self) -> None:
         profile = _profile()
@@ -337,7 +345,9 @@ class NightlyRefreshTests(TestCase):
             _profile()
         with patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task", return_value="id") as safe:
             count = tasks.refresh_trust_signals(chunk_size=2)
-        self.assertGreaterEqual(count, 3)
+        total = Profile.objects.count()
+        self.assertEqual(count, -(-total // 2))
+        self.assertLess(count, total)
         self.assertEqual(safe.call_count, count)
 
     def test_range_is_idempotent(self) -> None:
@@ -353,6 +363,12 @@ class NightlyRefreshTests(TestCase):
         self.assertEqual(first, second)
         self.assertEqual(snapshot, list(ProfileTrustSignals.objects.order_by("profile_id").values_list(*fields)))
 
+    def test_dormant_row_is_rebuilt_once_the_profile_is_active_again(self) -> None:
+        profile = _profile()
+        ProfileTrustSignals.objects.create(profile=profile, computed_at=timezone.now(), active_weeks_90=0)
+        _weeks(profile, 1)
+        self.assertEqual(tasks.refresh_trust_signals_range(profile.pk, profile.pk), 1)
+
     def test_dormant_profile_with_a_fresh_row_is_skipped(self) -> None:
         profile = _profile()
         ProfileActivityDay.objects.filter(profile=profile).delete()
@@ -360,3 +376,41 @@ class NightlyRefreshTests(TestCase):
         self.assertEqual(tasks.refresh_trust_signals_range(profile.pk, profile.pk), 0)
         ProfileTrustSignals.objects.filter(profile=profile).update(computed_at=timezone.now() - timedelta(days=30))
         self.assertEqual(tasks.refresh_trust_signals_range(profile.pk, profile.pk), 1)
+
+    def test_one_broken_profile_does_not_stop_the_range(self) -> None:
+        profiles = [_profile() for _ in range(2)]
+        lo, hi = min(p.pk for p in profiles), max(p.pk for p in profiles)
+        real = compute_signals
+
+        def flaky(profile: Profile) -> ProfileTrustSignals:
+            if profile.pk == lo:
+                raise ValueError("bad data")
+            return real(profile)
+
+        with patch("urbanlens.dashboard.services.trust.compute_signals", side_effect=flaky):
+            self.assertEqual(tasks.refresh_trust_signals_range(lo, hi), 1)
+
+    def test_transient_database_error_escapes_for_retry(self) -> None:
+        profile = _profile()
+        with (
+            patch("urbanlens.dashboard.services.trust.compute_signals", side_effect=OperationalError("timeout")),
+            self.assertRaises(OperationalError),
+        ):
+            tasks.refresh_trust_signals_range(profile.pk, profile.pk)
+
+    def test_final_attempt_isolates_a_persistently_failing_profile(self) -> None:
+        bad, good = _profile(), _profile()
+        real = compute_signals
+
+        def flaky(profile):
+            if profile.pk == bad.pk:
+                raise OperationalError("timeout")
+            return real(profile)
+
+        with (
+            patch("urbanlens.dashboard.services.trust.compute_signals", side_effect=flaky),
+            patch.object(type(tasks.refresh_trust_signals_range.request), "retries", 3, create=True),
+        ):
+            rebuilt = tasks.refresh_trust_signals_range(min(bad.pk, good.pk), max(bad.pk, good.pk))
+        self.assertEqual(rebuilt, 1)
+        self.assertTrue(ProfileTrustSignals.objects.filter(profile=good).exists())

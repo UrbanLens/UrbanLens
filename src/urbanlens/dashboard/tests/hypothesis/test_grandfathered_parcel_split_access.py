@@ -112,6 +112,29 @@ class GrandfatheredParcelSplitAccessTests(TestCase):
         self._split()
         self.assertEqual(self._sees(self.user_a), {"m", "n", "o", "p"})
 
+    def test_holder_pinned_only_on_a_rehomed_building_is_grandfathered_on_every_successor(self) -> None:
+        building = make_place(
+            PlaceKind.BUILDING,
+            square(-74.002, 40.0, 0.0002),
+            parent=self.parcel,
+            relation=PlaceRelation.PART_OF,
+            name="Ward",
+        )
+        holder = baker.make(User).profile
+        pin_on(holder, building, lat=40.0001, lng=-74.0021)
+        self._split()
+        building.refresh_from_db()
+        self.assertNotEqual(
+            building.domain_root_id, self.parcel.domain_root_id, "the building must have re-homed to a successor"
+        )
+        for successor in (self.place_n, self.place_o, self.place_p):
+            self.assertTrue(
+                PlaceAccessGrant.objects.filter(
+                    profile=holder, place=successor, reason=GrantReason.GRANDFATHERED_SPLIT
+                ).exists(),
+                f"holder lost the grant on successor {successor.pk}",
+            )
+
     def test_user_a_keeps_the_whole_family_after_unpinning_everything(self) -> None:
         self._split()
         self.assertEqual(self._sees(self.user_a), {"m", "n", "o", "p"})
@@ -127,6 +150,19 @@ class GrandfatheredParcelSplitAccessTests(TestCase):
         # Re-pinning a *different* successor changes nothing: he already had it all.
         pin_on(self.user_a, self.place_p, lat=40.0, lng=-73.998)
         self.assertEqual(self._sees(self.user_a), {"m", "n", "o", "p"})
+
+    def test_a_holder_whose_only_pin_is_on_a_rehomed_building_is_still_grandfathered(self) -> None:
+        """The holder snapshot is taken before buildings move to a successor, or this profile would fall outside the old domain."""
+        building = make_place(
+            PlaceKind.BUILDING, _rect(-74.0025, -74.0015, 39.999, 40.001), parent=self.parcel, name="Annex"
+        )
+        user_c = baker.make(User).profile
+        pin_on(user_c, building, lat=40.0005, lng=-74.002)
+        self.pin_a.delete()
+
+        self._split()
+
+        self.assertEqual(self._sees(user_c), {"m", "n", "o", "p"})
 
     # ── User B: a new profile, never held the undivided parcel ─────────────
 

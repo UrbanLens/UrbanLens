@@ -27,7 +27,7 @@ from urbanlens.dashboard.services.core.request_body import posted_fields, text_f
 from urbanlens.dashboard.services.core.text_limits import column_length_error
 from urbanlens.dashboard.services.locations.site_scope import is_site_scope
 from urbanlens.dashboard.services.media.quota_rewards import revoke_community_bonuses_on_wiki_delete
-from urbanlens.dashboard.services.pins.pin_creation import DuplicateCoordinatesError, resolve_child_pin_location
+from urbanlens.dashboard.services.pins.pin_creation import resolve_child_pin_location
 from urbanlens.dashboard.services.undo.handlers.pin import MODEL_LABEL as PIN_MODEL_LABEL
 from urbanlens.dashboard.services.undo.handlers.wiki import MODEL_LABEL as WIKI_MODEL_LABEL, with_wiki_descendants
 from urbanlens.dashboard.services.undo.service import stash_for_undo
@@ -141,11 +141,7 @@ class DetailPinPanelView(LoginRequiredMixin, View):
         if parent.would_create_cycle(parent.parent_pin):
             return JsonResponse({"ok": False, "error": "Invalid parent pin."}, status=400)
 
-        try:
-            location = resolve_child_pin_location(parent.profile, latitude, longitude)
-        except DuplicateCoordinatesError as exc:
-            logger.info("detail pin location rejected: %s", exc)
-            return JsonResponse({"ok": False, "error": "You already have a pin at these exact coordinates."}, status=400)
+        location = resolve_child_pin_location(latitude, longitude)
 
         detail_name = text_field(body, "name") or None
         name_error = column_length_error(Pin, "name", detail_name, "Name")
@@ -195,11 +191,7 @@ class DetailPinEditView(LoginRequiredMixin, View):
             new_longitude = coordinate_or_none(body.get("longitude"), bound=LONGITUDE_BOUND)
             if new_latitude is None or new_longitude is None:
                 return JsonResponse({"ok": False, "error": "A valid latitude and longitude are required."}, status=400)
-            try:
-                new_location = resolve_child_pin_location(detail_pin.profile, new_latitude, new_longitude, exclude_pin=detail_pin)
-            except DuplicateCoordinatesError as exc:
-                logger.info("detail pin move rejected: %s", exc)
-                return JsonResponse({"ok": False, "error": "You already have a pin at these exact coordinates."}, status=400)
+            new_location = resolve_child_pin_location(new_latitude, new_longitude)
 
         if type_error := text_type_error(body, "name", "description"):
             return JsonResponse({"ok": False, "error": type_error}, status=400)
