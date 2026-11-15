@@ -102,6 +102,8 @@ from urbanlens.dashboard.models.place import (
     ExtractedTag,
     GrantReason,
     LineageEdgeKind,
+    NotesOffer,
+    NotesOfferStatus,
     Place,
     PlaceAccessGrant,
     PlaceExternalTag,
@@ -111,6 +113,7 @@ from urbanlens.dashboard.models.place import (
     PlaceMerge,
     PlaceRelation,
     PlaceStatus,
+    SharedPlaceMember,
 )
 from urbanlens.dashboard.models.profile import Profile
 from urbanlens.dashboard.models.profile.email import ProfileEmail

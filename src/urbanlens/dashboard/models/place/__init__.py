@@ -18,3 +18,4 @@ from urbanlens.dashboard.models.place.queryset import (
     PlaceQuerySet,
     point_for_coordinates,
 )
+from urbanlens.dashboard.models.place.shared import NotesOffer, NotesOfferStatus, SharedPlaceAttempt, SharedPlaceFlag, SharedPlaceMember

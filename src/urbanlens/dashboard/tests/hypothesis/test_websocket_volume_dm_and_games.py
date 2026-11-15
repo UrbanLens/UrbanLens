@@ -34,6 +34,8 @@ from urbanlens.dashboard.tests.hypothesis.websocket_helpers import (
 pytestmark = pytest.mark.serial
 
 _coordinate_counter = count()
+#: Thirty one-at-a-time writes outlast the default wait on a loaded runner; only a failing run spends this.
+BURST_WAIT = 60.0
 
 
 def _run(coro):
@@ -136,7 +138,7 @@ class DirectMessageVolumeTests(TransactionTestCase):
             if index % 10 == 0:
                 await comm.send_to(text_data=json.dumps({"type": "typing", "recipient": self.recipient.slug}))
             await comm.send_to(text_data=json.dumps({"recipient": self.recipient.slug, "body": f"{index}"}))
-        frames = await settle(comm, until=rows_at_least(self._acount_messages, 30))
+        frames = await settle(comm, until=rows_at_least(self._acount_messages, 30), wait=BURST_WAIT)
 
         self.assertEqual(await self._acount_messages(), 30)
         self.assertFalse([frame for frame in frames if frame.get("type") == "error"])

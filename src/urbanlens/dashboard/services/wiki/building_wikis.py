@@ -114,13 +114,14 @@ class CampusBuildings:
         from urbanlens.dashboard.services.pins.building_clusters import cluster_buildings, match_clusters
         from urbanlens.dashboard.services.pins.pin_restructure import MAX_RESTRUCTURE_ITEMS, building_markers, property_buildings
         from urbanlens.dashboard.services.places.scope import pin_type_for_place
+        from urbanlens.dashboard.services.wiki.wiki_access import without_shared_placeless
 
         place = campus_wiki.place if campus_wiki.place_id else None
         if place is None or place.kind == PlaceKind.BUILDING or pin_type_for_place(place) != PinType.PARCEL:
             return None
         records = property_buildings(parcel_buildings(campus_wiki.location) or [], place.geometry)[:MAX_RESTRUCTURE_ITEMS]
         clusters = cluster_buildings(records, place.geometry)
-        wikis = building_markers(campus_wiki.descendants().select_related("location__place", "place"))
+        wikis = building_markers(without_shared_placeless(campus_wiki.descendants()).select_related("location__place", "place"))
         matched, unmatched = match_clusters(clusters, wikis)
 
         buildings = [_Building(cluster=cluster, wiki=matched.get(index), footprint=_wiki_footprint(matched[index]) if index in matched else None) for index, cluster in enumerate(clusters)]
