@@ -320,7 +320,8 @@ def _reparent_children(survivor: Pin, loser: Pin) -> None:
         if child.would_create_cycle(survivor):
             logger.warning("Pin merge: detaching child pin %s to root - re-parenting under the survivor would create a cycle.", child.pk)
             child.parent_pin = None
-            if not _save_within_savepoint(child, ["parent_pin", "updated"]):
+            child.parenting_is_manual = True
+            if not _save_within_savepoint(child, ["parent_pin", "parenting_is_manual", "updated"]):
                 # It stays parented to the pin about to be deleted, and Pin.parent_pin CASCADEs - so
                 # this child, and the survivor somewhere beneath it, would both be destroyed by the
                 # delete this detach exists to prevent.
@@ -727,6 +728,9 @@ PIN_FIELD_POLICY: dict[str, str] = {
     "profile": _IDENTITY,
     "location": _IDENTITY,
     "parent_pin": _IDENTITY,
+    "parenting_is_manual": _IDENTITY,
+    "import_source": _IDENTITY,
+    "import_key": _IDENTITY,
     "last_visited": _DERIVED,
     "source_share": _LINEAGE,
     "inferred_source_share": _LINEAGE,
