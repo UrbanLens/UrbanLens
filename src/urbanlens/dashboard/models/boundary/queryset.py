@@ -478,7 +478,7 @@ class BoundaryManager(_BoundaryManagerBase["Boundary"]):
         by_place: dict[int, Wiki] = {}
         location_ids = {location.pk for _, location in unlinked}
         place_ids = {location.place_id for _, location in unlinked if location.place_id}
-        for wiki in Wiki.objects.filter(Q(location_id__in=location_ids) | Q(place_id__in=place_ids)).select_related("place", "location").order_by("pk"):
+        for wiki in Wiki.objects.filter(Q(location_id__in=location_ids) | Q(place_id__in=place_ids)).select_related("place", "location").order_by("pk"):  # same-place: a wiki is anchored to one exact Location
             if wiki.location_id in location_ids:
                 by_location.setdefault(wiki.location_id, wiki.pk)
             if wiki.place_id in place_ids:

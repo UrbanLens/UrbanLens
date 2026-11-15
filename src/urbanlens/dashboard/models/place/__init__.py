@@ -2,6 +2,7 @@
 
 from urbanlens.dashboard.models.place.external_tag import ExternalTagSource, ExtractedTag, PlaceExternalTag
 from urbanlens.dashboard.models.place.external_tag_group import ExternalTagGroup, ExternalTagVocabularyEntry
+from urbanlens.dashboard.models.place.lifecycle import LineageEdgeKind, PlaceAccessGrantSource, PlaceGeometryVersion, PlaceLineageEdge
 from urbanlens.dashboard.models.place.merge import PlaceMerge
 from urbanlens.dashboard.models.place.model import GrantReason, Place, PlaceAccessGrant, PlaceKind, PlaceRelation, PlaceStatus
 from urbanlens.dashboard.models.place.queryset import (
@@ -17,3 +18,4 @@ from urbanlens.dashboard.models.place.queryset import (
     PlaceQuerySet,
     point_for_coordinates,
 )
+from urbanlens.dashboard.models.place.shared import NotesOffer, NotesOfferStatus, SharedPlaceAttempt, SharedPlaceFlag, SharedPlaceMember

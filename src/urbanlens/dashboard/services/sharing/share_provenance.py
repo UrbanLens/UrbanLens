@@ -41,7 +41,9 @@ def find_profile_pin_near_location(profile_id: int, location: Location | None, *
         return None
     from urbanlens.dashboard.models.pin.model import Pin
 
-    exact = Pin.objects.root_pins().filter(profile_id=profile_id, location_id=location.pk).first()
+    # Deliberately a radius, not services.pins.same_place: provenance asks "could this pin have come from that
+    # share?", and a GPS-jittered re-pin near a shared point must count even when no Place covers it.
+    exact = Pin.objects.root_pins().filter(profile_id=profile_id, location_id=location.pk).first()  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
     if exact is not None:
         return exact
     return (

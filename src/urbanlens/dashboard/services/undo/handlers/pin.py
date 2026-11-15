@@ -8,6 +8,7 @@ from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.place.model import Place
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.media.held_upload import queue_held_upload
@@ -79,6 +80,7 @@ class PinUndoHandler(UndoHandler):
             "location_id": pin.location_id,
             "profile_id": pin.profile_id,
             "wiki_id": pin.wiki_id,
+            "subject_place_id": pin.subject_place_id,
             "parent_pin_old_pk": pin.parent_pin_id,
             "nested_by_boundary_pin_old_pk": pin.nested_by_boundary_pin_id,
             "label_ids": list(pin.labels.values_list("id", flat=True)),
@@ -137,15 +139,12 @@ class PinUndoHandler(UndoHandler):
         # (which imports this module) before UndoExpiredError is defined there.
         from urbanlens.dashboard.services.undo.service import UndoExpiredError
 
-        # One query per relation for the whole batch. Each set is what the batch
-        # references; what comes back is what survives.
+        # One query per relation for the whole batch; each set is what survives.
         profile_ids = {entry["profile_id"] for entry in payload}
         location_ids = {entry["location_id"] for entry in payload}
         wiki_ids = {entry["wiki_id"] for entry in payload if entry["wiki_id"] is not None}
         label_ids = {label_id for entry in payload for label_id in entry["label_ids"]}
-        # Parents outside the batch, which `_resolved_parent_pk` would otherwise
-        # look up one at a time. Kept per (pk, profile) because the original
-        # scoped the lookup to the pin's own owner.
+        # Parents outside the batch, per (pk, profile) so each lookup stays scoped to the pin's owner.
         outside_parents = {(entry["parent_pin_old_pk"], entry["profile_id"]) for entry in payload if entry["parent_pin_old_pk"] and entry["parent_pin_old_pk"] not in in_batch}
 
         live_profiles = set(Profile.objects.filter(pk__in=profile_ids).values_list("pk", flat=True))
@@ -154,7 +153,9 @@ class PinUndoHandler(UndoHandler):
         live_labels = set(Label.objects.filter(pk__in=label_ids).values_list("pk", flat=True)) if label_ids else set()
         live_parents = {(pk, profile_id) for pk, profile_id in Pin.objects.filter(pk__in={pk for pk, _ in outside_parents}).values_list("pk", "profile_id")} if outside_parents else set()
         # Root pins already standing where this batch would restore one.
-        occupied_roots = {(location_id, profile_id) for location_id, profile_id in Pin.objects.root_pins().filter(location_id__in=location_ids, profile_id__in=profile_ids).values_list("location_id", "profile_id")} if payload else set()
+        occupied_roots = (
+            {(location_id, profile_id) for location_id, profile_id in Pin.objects.root_pins().filter(location_id__in=location_ids, profile_id__in=profile_ids).values_list("location_id", "profile_id")} if payload else set()
+        )  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
 
         for entry in payload:
             if entry["profile_id"] not in live_profiles:
@@ -193,6 +194,9 @@ class PinUndoHandler(UndoHandler):
         # afterwards, and would be a root pin in the meantime. Repeated passes rather
         # than a sort, so an arbitrarily deep hierarchy in one batch still resolves.
         pending = list(payload)
+        # A subject place deleted meanwhile (the FK is SET_NULL) restores as none; save() then re-derives it from the location.
+        wanted_subjects = {entry.get("subject_place_id") for entry in payload} - {None}
+        subject_ids = {pk: pk for pk in Place.objects.filter(pk__in=wanted_subjects).values_list("pk", flat=True)}
         while pending:
             progressed = False
             deferred: list[dict[str, Any]] = []
@@ -209,6 +213,7 @@ class PinUndoHandler(UndoHandler):
                     location_id=entry["location_id"],
                     profile_id=entry["profile_id"],
                     wiki_id=entry["wiki_id"],
+                    subject_place_id=subject_ids.get(entry.get("subject_place_id") or 0),
                     parent_pin_id=parent_pk,
                     nested_by_boundary_pin_id=nested_by,
                     **{"parenting_is_manual": True, **entry["fields"]},

@@ -129,11 +129,13 @@ def repair_legacy_pin_coordinates(
         # finds this same pin and reports it as an existing one.
         return None
 
-    # Moving onto a Location this profile already has a pin for would violate
-    # db_pin_unique_location_per_profile.
+    # Moving onto a Location this profile already has a root pin for would violate
+    # db_pin_unique_location_per_profile (which only constrains root pins, so a child alone doesn't block).
     # Leave the legacy pin where it is and suggest merging it into the pin that's already correctly
     # placed instead - merging the two is a user decision, not something an import should do
-    existing_pin = Pin.objects.filter(profile=profile, location=correct_location).exclude(pk=candidate.pk).first()
+    existing_pin = (
+        Pin.objects.filter(profile=profile, location=correct_location, parent_pin__isnull=True).exclude(pk=candidate.pk).first()
+    )  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
     if existing_pin is not None:
         from urbanlens.dashboard.models.pin_merge_suggestions.model import PinMergeSuggestion, PinMergeSuggestionOrigin
 
@@ -156,8 +158,11 @@ def repair_legacy_pin_coordinates(
         return None
 
     candidate.location = correct_location
+    # A real move (the same Location returned above), off a subject derived from the wrong coordinates: the
+    # corrected point's place replaces it, or nothing when that point resolves to no place.
+    candidate.subject_place_id = correct_location.place_id
     try:
-        candidate.save(update_fields=["location", "updated"])
+        candidate.save(update_fields=["location", "subject_place", "updated"])
     except DatabaseError as exc:
         logger.warning("Legacy coordinate repair could not move pin %s: %s", candidate.pk, exc)
         return None
@@ -246,7 +251,7 @@ def _match_by_cid(profile: Profile, cid: int | None) -> Pin | None:
     location = Location.objects.by_cid(cid).first()
     if location is None:
         return None
-    return _legacy_pins(profile).filter(location=location).order_by("created").first()
+    return _legacy_pins(profile).filter(location=location).order_by("created").first()  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
 
 
 def _match_by_coordinate_name(profile: Profile, name: str) -> Pin | None:

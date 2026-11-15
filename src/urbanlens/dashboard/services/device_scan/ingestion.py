@@ -52,7 +52,7 @@ def _routable_wiki_ids(uploader: Profile, points: list[Point]) -> list[int]:
     if not points:
         return []
     places = Place.objects.current().filter(geometry__isnull=False, geometry__intersects=MultiPoint(points, srid=4326)).values("pk")
-    return list(Wiki.objects.filter(place_id__in=places, location_id__in=visible_wiki_locations(uploader)).values_list("pk", flat=True))
+    return list(Wiki.objects.filter(place_id__in=places, location_id__in=visible_wiki_locations(uploader)).values_list("pk", flat=True))  # same-place: wiki visibility is wiki_access's decision, not pin sameness
 
 
 def _ingest(uploader: Profile, *, attribute: bool, client_session_uuid: str, devices: list[dict[str, Any]]) -> DeviceScanUpload:

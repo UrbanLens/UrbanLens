@@ -312,7 +312,8 @@ def _reparent_children(survivor: Pin, loser: Pin) -> None:
     for child in list(loser.detail_pins.all()):
         if child.pk == survivor.pk:
             survivor.parent_pin = loser.parent_pin
-            survivor.nested_by_boundary_pin = None
+            # Taking the loser's slot under a boundary keeps the provenance, so later boundary edits still reach the survivor.
+            survivor.nested_by_boundary_pin = loser.parent_pin if loser.parent_pin_id is not None and loser.nested_by_boundary_pin_id == loser.parent_pin_id else None
             if not _save_within_savepoint(survivor, ["parent_pin", "nested_by_boundary_pin", "updated"]):
                 raise SurvivorRelocationCollisionError(
                     f"Pin merge blocked: survivor pin {survivor.pk} is loser pin {loser.pk}'s direct child and must relocate to loser.parent_pin_id={loser.parent_pin_id} to avoid CASCADE deletion, but a top-level pin already occupies that location.",
@@ -778,6 +779,7 @@ PIN_FIELD_POLICY: dict[str, str] = {
     "date_abandoned": _GAP_FILL,
     "date_last_active": _GAP_FILL,
     "wiki": _GAP_FILL,
+    "subject_place": _GAP_FILL,
     "priority": _HIGHER,
     "vulnerability": _HIGHER,
     "danger": _HIGHER,
