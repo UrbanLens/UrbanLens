@@ -128,6 +128,7 @@ def propagate_domain_root(place: Place) -> int:
         How many descendant rows were updated."""
     updated = 0
     roots: dict[int, int | None] = {place.pk: place.domain_root_id}
+    restamped: list[int] = []
     depth = 0
     while roots and depth < MAX_LINEAGE_DEPTH:
         children = list(Place.objects.filter(parent_id__in=list(roots), parent_relation=PlaceRelation.PART_OF).values("pk", "parent_id", "domain_root_id"))
@@ -142,10 +143,17 @@ def propagate_domain_root(place: Place) -> int:
                 stale.setdefault(root_id, []).append(child["pk"])
         for root_id, pks in stale.items():
             updated += Place.objects.filter(pk__in=pks).update(domain_root_id=root_id)
+            restamped.extend(pks)
         roots = next_roots
         depth += 1
     if depth >= MAX_LINEAGE_DEPTH:
         logger.error("Domain-root propagation from place %s hit the depth ceiling; lineage may contain a cycle", place.pk)
+    if restamped:
+        # Two properties that now share a domain root may hold one profile's pins.
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.services.pins.property_nesting import request_property_nesting_many
+
+        request_property_nesting_many(Location.objects.filter(place_id__in=restamped).values_list("pk", flat=True))
     return updated
 
 

@@ -278,3 +278,16 @@ class BackfillMigrationTests(_Base):
         self.assertEqual(
             keys(pin), {(PinImportSource.JSON_ARCHIVE, "archive-uuid"), (PinImportSource.GOOGLE_TAKEOUT, "cid:777")}
         )
+
+
+class LongPlaceIdKeyTests(_Base):
+    def test_a_place_id_too_long_for_the_key_column_is_digested(self) -> None:
+        from urbanlens.dashboard.services.pins.import_keys import takeout_import_key
+
+        kwargs = {"cid": None, "name": "x", "latitude": 1.0, "longitude": 1.0}
+        long_id = "p" * 400
+        key = takeout_import_key(place_id=long_id, **kwargs)
+        self.assertLessEqual(len(key), 255)
+        self.assertEqual(key, takeout_import_key(place_id=long_id, **kwargs))
+        self.assertNotEqual(key, takeout_import_key(place_id=long_id + "q", **kwargs))
+        self.assertEqual(takeout_import_key(place_id="abc", **kwargs), "place:abc")

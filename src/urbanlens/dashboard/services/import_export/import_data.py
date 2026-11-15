@@ -473,6 +473,12 @@ def _run_import_steps(profile: Any, data_dir: str, result: ImportResult, job_sta
         report_progress = _make_step_progress_reporter(job_status, key, step_start, step_end)
         importer(profile, data_dir, result, pin_uuid_map=pin_uuid_map, label_uuid_map=label_uuid_map, report_progress=report_progress)
 
+    from urbanlens.dashboard.services.pins.property_nesting import summary_warning, sweep_after_import
+
+    nested_warning = summary_warning(sweep_after_import(profile.pk))
+    if nested_warning:
+        result.warnings.append(nested_warning)
+
 
 def _store_deferred_files(profile: Any, data_dir: str, result: ImportResult, deferred: DeferredFiles, job_status: ImportJobStatus) -> None:
     """
@@ -974,6 +980,8 @@ def _import_pins(
         if uuid_str and not Pin.objects.filter(uuid=uuid_str).exists():
             defaults["uuid"] = uuid_str
 
+        # The archive is the user's own arrangement, so its roots stay where it put them.
+        defaults["parenting_is_manual"] = True
         parent_pin = None
         parent_uuid = row.get("parent_uuid")
         if parent_uuid:
@@ -985,6 +993,9 @@ def _import_pins(
                 result.inc_skipped("pins")
                 continue
 
+        # An archive uuid already held by this profile's own pin was skipped above; the uuid also keys the pin,
+        # so a re-import still finds it after the uuid was not carried (taken elsewhere) and the pin moved.
+        archive_key = _safe_uuid(uuid_str)
         try:
             if parent_pin is not None:
                 # Detail pins may share or sit beside their parent's Location (the one-root-pin-per-Location
@@ -999,9 +1010,6 @@ def _import_pins(
                 if pin is None:
                     pin = Pin.objects.create(profile=profile, location=location, parent_pin=parent_pin, **defaults)
             else:
-                # An archive uuid already held by this profile's own pin was skipped above; the uuid also keys the pin,
-                # so a re-import still finds it after the uuid was not carried (taken elsewhere) and the pin moved.
-                archive_key = _safe_uuid(uuid_str)
                 pin, created = Pin.objects.get_nearby_or_create(
                     lat,
                     lng,

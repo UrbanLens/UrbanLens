@@ -268,7 +268,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 return HttpResponse("Error: you already have a pin at these exact coordinates. Place it slightly apart to keep both.", status=400)
             except DuplicatePropertyError as e:
                 logger.info("pin creation rejected: %s", e)
-                return HttpResponse("Error: you already have a pin on this property.", status=400)
+                return HttpResponse("Error: you already have a pin on this property. Add it as a building on your pin instead.", status=400)
             except PinParentNotFoundError as e:
                 logger.info("pin creation rejected: %s", e)
                 return HttpResponse("Error: no such pin to set as parent.", status=400)
