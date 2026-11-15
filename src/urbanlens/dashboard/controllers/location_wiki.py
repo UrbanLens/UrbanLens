@@ -190,7 +190,7 @@ def _map_center(location, wiki, profile) -> dict[str, str]:
         return {"lat": str(location.latitude), "lng": str(location.longitude)}
     own = None
     if place.anchor is not None:
-        own = Pin.objects.filter(profile=profile, location__point__dwithin=(place.anchor, D(m=100))).select_related("location").first()
+        own = Pin.objects.filter(profile=profile, location__point__dwithin=(place.anchor, D(m=100))).select_related("location").first()  # same-place: the viewer's own pin near the anchor centres the map, nothing is matched
     if own is not None and own.location is not None:
         return {"lat": str(own.location.latitude), "lng": str(own.location.longitude)}
     parent = place.parent if place.parent_id is not None else None

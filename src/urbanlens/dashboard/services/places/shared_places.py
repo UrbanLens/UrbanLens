@@ -21,7 +21,7 @@ from django.contrib.gis.db.models.functions import GeoHash
 from django.contrib.gis.geos import MultiPolygon, Point, Polygon
 from django.contrib.gis.measure import D
 from django.db import connection, transaction
-from django.db.models import F
+from django.db.models import Exists, F, OuterRef, Q
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
@@ -65,11 +65,20 @@ def maturity_cutoff():
     return timezone.now() - timedelta(days=settings.UL_SHARED_PLACE_MIN_PIN_AGE_DAYS)
 
 
+def _verified_visits():
+    return PinVisit.objects.filter(tentative=False, source=VisitSource.PHOTO)
+
+
+def matured_q() -> Q:
+    """Pins old enough, or with a photo-verified visit: the database form of :func:`pin_has_matured`."""
+    return Q(created__lte=maturity_cutoff()) | Q(Exists(_verified_visits().filter(pin=OuterRef("pk"))))
+
+
 def pin_has_matured(pin: Pin) -> bool:
     """Whether the pin is old enough, or has a photo-verified visit; a fresh pin is cheap to scatter."""
     if pin.created <= maturity_cutoff():
         return True
-    return PinVisit.objects.filter(pin=pin, tentative=False, source=VisitSource.PHOTO).exists()
+    return _verified_visits().filter(pin=pin).exists()
 
 
 def pin_is_placeless(location: Location) -> bool:
@@ -152,8 +161,8 @@ def _nearest_reference(point: Point) -> Point | None:
 
 
 def _pins_near(point: Point, radius: float, *, excluding: Profile) -> list[Pin]:
-    """Other accounts' mature pins near *point*, oldest first; fresh pins are dropped before anything costlier runs."""
-    pins = Pin.objects.filter(location__point__dwithin=(point, D(m=radius)), created__lte=maturity_cutoff()).exclude(profile=excluding).select_related("location", "profile").order_by("created", "pk")
+    """Other accounts' matured pins near *point*, oldest first; fresh unverified pins are dropped before anything costlier runs."""
+    pins = Pin.objects.filter(matured_q(), location__point__dwithin=(point, D(m=radius))).exclude(profile=excluding).select_related("location", "profile").order_by("created", "pk")
     return [pin for pin in pins if _distance(pin.location.point, point) <= radius]
 
 
@@ -261,9 +270,14 @@ def _lock_creation() -> None:
 
 
 def _circle(anchor: Point, radius: float) -> MultiPolygon:
+    """The place's outline: a disc of *radius* metres, or the square around it when the disc cannot be projected."""
     ring = buffer_meters(Point(anchor.x, anchor.y, srid=4326), radius)
-    polygon = ring if isinstance(ring, Polygon) else Polygon.from_bbox((anchor.x - 0.0002, anchor.y - 0.0002, anchor.x + 0.0002, anchor.y + 0.0002))
-    return MultiPolygon(polygon, srid=4326)
+    if isinstance(ring, Polygon):
+        return MultiPolygon(ring, srid=4326)
+    logger.warning("Shared place outline at %.4f,%.4f fell back to a square: the disc could not be projected", anchor.y, anchor.x)
+    d_lat = radius / 111_320.0
+    d_lon = d_lat / max(math.cos(math.radians(anchor.y)), 0.01)
+    return MultiPolygon(Polygon.from_bbox((anchor.x - d_lon, anchor.y - d_lat, anchor.x + d_lon, anchor.y + d_lat)), srid=4326)
 
 
 def _random_offset_point(anchor: Point, radius: float) -> tuple[float, float]:
@@ -351,7 +365,7 @@ def _hub_url(place: Place) -> str:
 
 def _offer_notes(place: Place, pin: Pin) -> None:
     """Tell a newly admitted member someone else pinned here too, and offer to bring their own exact-point notes. Identical for everyone."""
-    own = Wiki.objects.filter(location=pin.location).exclude(place=place).first()
+    own = Wiki.objects.filter(location=pin.location).exclude(place=place).first()  # same-place: the wiki at the pin's own Location holds its tier-0 notes
     if own is not None and (own.description or "").strip() and _notes_are_their_own(own, pin.profile):
         NotesOffer.objects.get_or_create(profile=pin.profile, place=place, defaults={"source_location": pin.location})
     NotificationLog.objects.notify(
@@ -364,10 +378,19 @@ def _offer_notes(place: Place, pin: Pin) -> None:
 
 
 def _notes_are_their_own(wiki: Wiki, profile: Profile) -> bool:
-    """Whether nobody else started the wiki or wrote to its description: only the author can consent to moving the text (ADR35 section 2)."""
+    """
+    Whether the profile is known to have written all of the wiki's description: only the author can consent to moving the text (ADR35 section 2).
+
+    They must have started the wiki or edited its description, and no other hand may have: not another profile, nor an edit whose author is
+    gone or was never a profile (an import, a merge).
+    """
     if wiki.created_by_id not in (None, profile.pk):
         return False
-    return not WikiEdit.objects.filter(wiki=wiki, changes__has_key="description", editor__isnull=False).exclude(editor=profile).exists()
+    edits = WikiEdit.objects.filter(wiki=wiki, changes__has_key="description")
+    # exclude() keeps the rows with no editor, so they count as someone else's.
+    if edits.exclude(editor=profile).exists():
+        return False
+    return wiki.created_by_id == profile.pk or edits.filter(editor=profile).exists()
 
 
 def revalidate_memberships(profile: Profile) -> int:
@@ -397,18 +420,21 @@ def merged_description(shared: str | None, notes: str) -> str:
 
 def _notes_to_bring(offer: NotesOffer, profile: Profile) -> tuple[Wiki, str] | None:
     """
-    What accepting the offer would write.
+    What accepting the offer would write. Call inside a transaction: the shared wiki is read locked, so the description written is built
+    from the one it replaces.
 
     Returns:
-        The shared wiki and its new description, or None when the offer can no longer be honoured: the profile left the place, either wiki
-        or the notes are gone, someone else wrote them, or the shared wiki has no room for them.
+        The locked shared wiki and its new description, or None when the offer can no longer be honoured: the profile left the place, either
+        wiki or the notes are gone, someone else wrote them, or the shared wiki has no room for them.
     """
     if offer.source_location_id is None or not SharedPlaceMember.objects.filter(place_id=offer.place_id, profile=profile).exists():
         return None
-    source = Wiki.objects.filter(location_id=offer.source_location_id).first()
-    shared = Wiki.objects.filter(place_id=offer.place_id).first()
-    notes = (source.description or "").strip() if source is not None else ""
-    if shared is None or not notes or not _notes_are_their_own(source, profile):
+    source = Wiki.objects.filter(location_id=offer.source_location_id).first()  # same-place: the wiki at the Location the offer was made from
+    if source is None or not _notes_are_their_own(source, profile):
+        return None
+    notes = (source.description or "").strip()
+    shared = Wiki.objects.select_for_update().filter(place_id=offer.place_id).first()
+    if shared is None or not notes:
         return None
     merged = merged_description(shared.description, notes)
     return (shared, merged) if notes in merged else None
@@ -425,13 +451,16 @@ def answer_notes_offer(offer: NotesOffer, profile: Profile, *, accept: bool) -> 
     """
     from urbanlens.dashboard.services.wiki.wiki_edits import apply_wiki_edit
 
-    if offer.profile_id != profile.pk or offer.status != NotesOfferStatus.PENDING:
-        return False
-    bringing = _notes_to_bring(offer, profile) if accept else None
-    if accept and bringing is None:
-        offer.delete()
+    if offer.profile_id != profile.pk:
         return False
     with transaction.atomic():
+        # Locked so two answers to one offer cannot both be taken.
+        if NotesOffer.objects.select_for_update().filter(pk=offer.pk, status=NotesOfferStatus.PENDING).first() is None:
+            return False
+        bringing = _notes_to_bring(offer, profile) if accept else None
+        if accept and bringing is None:
+            offer.delete()
+            return False
         if bringing is not None:
             shared, description = bringing
             apply_wiki_edit(shared, profile, {"description": description})

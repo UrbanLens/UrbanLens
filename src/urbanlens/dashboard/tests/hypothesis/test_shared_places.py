@@ -6,7 +6,7 @@ from datetime import timedelta
 import re
 from unittest.mock import patch
 
-from django.contrib.gis.geos import MultiPolygon, Polygon
+from django.contrib.gis.geos import MultiPolygon, Point, Polygon
 from django.contrib.gis.measure import D
 from django.test import override_settings
 from django.urls import reverse
@@ -32,6 +32,7 @@ from urbanlens.dashboard.models.wiki_edit.model import WikiEdit
 from urbanlens.dashboard.services.core.text_limits import MAX_WIKI_DESCRIPTION_LENGTH
 from urbanlens.dashboard.services.places import shared_places
 from urbanlens.dashboard.services.wiki import wiki_access
+from urbanlens.dashboard.services.wiki.wiki_edits import apply_wiki_edit
 
 from .place_helpers import make_place
 
@@ -56,6 +57,13 @@ def _box(half_m: float) -> MultiPolygon:
         ),
         srid=4326,
     )
+
+
+def _write_notes(location: Location, profile, text: str) -> Wiki:
+    """The profile writes the description of the wiki at *location*, as the edit form does."""
+    wiki, _ = Wiki.objects.get_or_create_for_location(location)
+    apply_wiki_edit(wiki, profile, {"description": text})
+    return wiki
 
 
 def _profile():
@@ -110,6 +118,35 @@ class TierOneTests(SharedPlaceTestCase):
         )
         shared_places.evaluate_pin(fresh.pk)
         self.assertTrue(Place.objects.filter(evidence=PlaceEvidence.PROVISIONAL).exists())
+
+    def test_two_fresh_pins_with_photo_verified_visits_pair(self) -> None:
+        older = _pin(self.alice, age_days=2)
+        fresh = _pin(self.bob, 10, age_days=1)
+        for pin in (older, fresh):
+            baker.make(
+                "dashboard.PinVisit", pin=pin, source=VisitSource.PHOTO, tentative=False, visited_at=timezone.now()
+            )
+        shared_places.evaluate_pin(fresh.pk)
+        place = Place.objects.get(evidence=PlaceEvidence.PROVISIONAL)
+        self.assertEqual(set(place.shared_members.values_list("profile_id", flat=True)), {self.alice.pk, self.bob.pk})
+
+    def test_a_fresh_partner_with_only_a_tentative_visit_does_not_pair(self) -> None:
+        older = _pin(self.alice, age_days=2)
+        fresh = _pin(self.bob, 10, age_days=1)
+        baker.make("dashboard.PinVisit", pin=older, source=VisitSource.PHOTO, tentative=True, visited_at=timezone.now())
+        baker.make(
+            "dashboard.PinVisit", pin=fresh, source=VisitSource.PHOTO, tentative=False, visited_at=timezone.now()
+        )
+        shared_places.evaluate_pin(fresh.pk)
+        self.assertFalse(Place.objects.filter(evidence=PlaceEvidence.PROVISIONAL).exists())
+
+    def test_an_outline_that_cannot_be_projected_still_spans_the_radius(self) -> None:
+        anchor = Point(LON, LAT, srid=4326)
+        with patch(f"{MODULE}.buffer_meters", side_effect=lambda geometry, meters: geometry):
+            outline = shared_places._circle(anchor, 25)
+        self.assertTrue(outline.contains(anchor))
+        self.assertTrue(outline.contains(Point(LON, LAT + 24 * M_LAT, srid=4326)))
+        self.assertTrue(outline.contains(Point(LON + 24 * M_LON, LAT, srid=4326)))
 
     def test_a_profile_failing_the_real_user_gate_forms_nothing(self) -> None:
         _pin(self.alice)
@@ -256,8 +293,7 @@ class EmptyWikiAndConsentTests(SharedPlaceTestCase):
     def setUp(self) -> None:
         super().setUp()
         self.first = _pin(self.alice)
-        Wiki.objects.get_or_create_for_location(self.first.location)
-        Wiki.objects.filter(location=self.first.location).update(description="Alice's notes about the gate.")
+        _write_notes(self.first.location, self.alice, "Alice's notes about the gate.")
         self.second = _pin(self.bob, 10)
         shared_places.evaluate_pin(self.second.pk)
         self.place = Place.objects.get(evidence=PlaceEvidence.PROVISIONAL)
@@ -349,6 +385,36 @@ class EmptyWikiAndConsentTests(SharedPlaceTestCase):
         self.assertEqual(self.accept(offer), 404)
         self.assertNothingBrought(offer)
 
+    def test_an_edit_with_no_author_counts_as_someone_elses(self) -> None:
+        offer = NotesOffer.objects.get()
+        source = Wiki.objects.get(location=self.first.location)
+        baker.make(WikiEdit, wiki=source, editor=None, changes={"description": {"from": "", "to": "Imported"}})
+        self.assertEqual(self.accept(offer), 404)
+        self.assertNothingBrought(offer)
+
+    def test_text_nobody_is_known_to_have_written_is_never_offered(self) -> None:
+        carols = _pin(self.carol, 12)
+        Wiki.objects.get_or_create_for_location(carols.location)
+        Wiki.objects.filter(location=carols.location).update(description="Text from an import.")
+        shared_places.evaluate_pin(carols.pk)
+        self.assertTrue(SharedPlaceMember.objects.filter(place=self.place, profile=self.carol).exists())
+        self.assertFalse(NotesOffer.objects.filter(profile=self.carol).exists())
+
+    def test_an_offer_already_answered_cannot_be_answered_again_from_a_stale_copy(self) -> None:
+        stale = NotesOffer.objects.get()
+        self.assertTrue(shared_places.answer_notes_offer(NotesOffer.objects.get(), self.alice, accept=False))
+        self.assertFalse(shared_places.answer_notes_offer(stale, self.alice, accept=True))
+        self.assertEqual(NotesOffer.objects.get().status, NotesOfferStatus.DECLINED)
+        self.shared_wiki.refresh_from_db()
+        self.assertNotIn("gate", self.shared_wiki.description or "")
+
+    def test_accepting_adds_to_what_the_shared_wiki_holds_when_answered(self) -> None:
+        offer = NotesOffer.objects.get()
+        apply_wiki_edit(self.shared_wiki, self.bob, {"description": "Bob was here first."})
+        self.assertTrue(shared_places.answer_notes_offer(offer, self.alice, accept=True))
+        self.shared_wiki.refresh_from_db()
+        self.assertEqual(self.shared_wiki.description, "Bob was here first.\n\nAlice's notes about the gate.")
+
     def test_a_correction_to_some_other_field_does_not_block_the_notes(self) -> None:
         offer = NotesOffer.objects.get()
         source = Wiki.objects.get(location=self.first.location)
@@ -372,8 +438,7 @@ class EmptyWikiAndConsentTests(SharedPlaceTestCase):
         shared_places.revalidate_memberships(self.alice)
         self.assertFalse(NotesOffer.objects.filter(profile=self.alice).exists())
         again = _pin(self.alice, 3)
-        Wiki.objects.get_or_create_for_location(again.location)
-        Wiki.objects.filter(location=again.location).update(description="Alice's notes, again.")
+        _write_notes(again.location, self.alice, "Alice's notes, again.")
         shared_places.evaluate_pin(again.pk)
         self.assertEqual(NotesOffer.objects.get(profile=self.alice).status, NotesOfferStatus.PENDING)
 

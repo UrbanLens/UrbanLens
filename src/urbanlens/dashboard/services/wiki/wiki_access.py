@@ -234,7 +234,7 @@ def _holds_shared_place_wiki(location: Location, profile: Profile) -> bool:
     """Whether *location* is the hub of a shared placeless place the profile is a member of."""
     from urbanlens.dashboard.models.wiki.model import Wiki
 
-    return Wiki.objects.filter(location=location, place_id__in=_shared_place_ids(profile)).exists()
+    return Wiki.objects.filter(location=location, place_id__in=_shared_place_ids(profile)).exists()  # same-place: the wiki whose hub is this exact Location
 
 
 def _visible_given_pins(location: Location, pins, profile: Profile | None, *, extra_point=None) -> bool:
