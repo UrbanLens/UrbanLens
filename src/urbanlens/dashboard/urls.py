@@ -70,6 +70,7 @@ from urbanlens.dashboard.controllers import (
     search,
     settings,
     setup,
+    shared_place_offers,
     site_admin,
     site_admin_external_tags,
     site_admin_subscriptions,
@@ -112,6 +113,7 @@ router = routers.DefaultRouter()
 router.register("pins", PinViewSet, basename=PinViewSet.basename)
 
 urlpatterns = [
+    path("shared-places/offers/<int:offer_id>/<str:action>/", shared_place_offers.NotesOfferAnswerView.as_view(), name="shared_place.offer"),
     path(
         "rest/reviews/create_or_update/<int:pk>/",
         ReviewViewSet.as_view({"patch": "create_or_update"}),

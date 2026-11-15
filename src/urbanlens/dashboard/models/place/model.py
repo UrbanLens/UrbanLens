@@ -11,7 +11,7 @@ import logging
 import operator
 from typing import TYPE_CHECKING
 
-from django.contrib.gis.db.models import MultiPolygonField
+from django.contrib.gis.db.models import MultiPolygonField, PointField
 from django.db.models import CASCADE, SET_NULL, BooleanField, CharField, DateTimeField, FloatField, ForeignKey, Index, IntegerField, Q, TextChoices, UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
@@ -89,6 +89,26 @@ class PlaceStatus(TextChoices):
     SUPERSEDED = "superseded", "Superseded"
 
 
+class PlaceEvidence(TextChoices):
+    """
+    How strong the evidence is that a Place's geometry describes a real thing.
+    ``OFFICIAL`` and ``FOOTPRINT`` are strong and always outrank the synthetic tiers when a coordinate resolves, whatever their size.
+    """
+
+    OFFICIAL = "official", "Official"
+    FOOTPRINT = "footprint", "Building footprint"
+    STANDIN = "standin", "Stand-in"
+    ANCHORED = "anchored", "Anchored"
+    PROVISIONAL = "provisional", "Provisional"
+
+
+#: Evidence tiers that resolution prefers over every other, regardless of area.
+STRONG_EVIDENCE: tuple[str, ...] = (PlaceEvidence.OFFICIAL, PlaceEvidence.FOOTPRINT)
+
+#: Shared placeless tiers: places that never resolve a coordinate; members-only unless PART_OF a plausible parcel's domain.
+SYNTHETIC_EVIDENCE: tuple[str, ...] = (PlaceEvidence.PROVISIONAL, PlaceEvidence.ANCHORED)
+
+
 class GrantReason(TextChoices):
     """Why a profile holds access that containment can no longer prove."""
 
@@ -108,6 +128,7 @@ class Place(abstract.DashboardModel):
         parent: The containing or aggregating place, if any.
         parent_relation: How it is attached (see :class:`PlaceRelation`).
         status: Whether it still describes the ground (see :class:`PlaceStatus`).
+        evidence: How strong the evidence for its geometry is (see :class:`PlaceEvidence`).
         geometry: Official boundary. Written **only** by the provider chain and
             boundary voting - there is no user-writable path, which is what
             makes "user-drawn shapes can never widen access" structural rather
@@ -129,6 +150,7 @@ class Place(abstract.DashboardModel):
 
     kind = CharField(max_length=20, choices=PlaceKind.choices, default=PlaceKind.PARCEL)
     status = CharField(max_length=20, choices=PlaceStatus.choices, default=PlaceStatus.CURRENT)
+    evidence = CharField(max_length=20, choices=PlaceEvidence.choices, default=PlaceEvidence.OFFICIAL, db_default=PlaceEvidence.OFFICIAL)
 
     # Human-readable label for admin and logs only. The community-facing name
     # lives on Wiki; this is never rendered to users.
@@ -166,6 +188,9 @@ class Place(abstract.DashboardModel):
     # A non-null value with null geometry means "the providers were asked and
     # had nothing" - don't refetch on every page view.
     geometry_generated_at = DateTimeField(null=True, blank=True)
+
+    # The single fixed point a provisional or anchored (synthetic) place is measured from; later pins join by distance to it, never to each other. Null for every other place.
+    anchor = PointField(geography=True, srid=4326, null=True, blank=True)
 
     provider = CharField(max_length=20, blank=True, default="")
     provider_key = CharField(max_length=255, blank=True, default="")
