@@ -42,6 +42,11 @@ def resolve_location_place(location: Location, *, save: bool = True) -> Place | 
         # function calls no provider.
         stamped = timezone.now()
         Location.objects.filter(pk=location.pk).update(place=place, place_resolved_at=stamped)
+        # Pins imported before this point had nothing to be about; they are about what it resolved to.
+        if place is not None:
+            from urbanlens.dashboard.services.pins.primary_wiki import adopt_subject_for_location
+
+            adopt_subject_for_location(location.pk, place.pk)
         # Stepping onto one of the parcel's own buildings leaves the parcel - and what was fetched for it - unchanged.
         if previous_parcel is None or previous_parcel != enclosing_parcel(place):
             _drop_place_scoped_caches(location)
@@ -111,6 +116,10 @@ def attach_location(location: Location, place: Place | None) -> None:
     if location.place_id is not None and location.place is not None and location.place.evidence in SYNTHETIC_EVIDENCE:
         return
     Location.objects.filter(pk=location.pk).update(place=place, place_resolved_at=timezone.now())
+    if place is not None:
+        from urbanlens.dashboard.services.pins.primary_wiki import adopt_subject_for_location
+
+        adopt_subject_for_location(location.pk, place.pk)
     location.place = place
     location.place_resolved_at = timezone.now()
 

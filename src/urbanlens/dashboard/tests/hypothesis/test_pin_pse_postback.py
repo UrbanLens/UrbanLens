@@ -11,6 +11,7 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
+from urbanlens.dashboard.controllers.pin import USER_SEARCH_POST_RATE
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
@@ -25,6 +26,7 @@ from urbanlens.dashboard.services.search.user_provided_search import (
     store_user_provided_results,
     validate_submission,
 )
+from urbanlens.dashboard.services.security import throttle
 from urbanlens.UrbanLens.settings.app import settings as app_settings
 from urbanlens.UrbanLens.settings.base import GOOGLE_PSE_CSP, allow_google_pse
 
@@ -112,6 +114,11 @@ class PseViewTests(TestCase):
         patcher = patch.object(app_settings, "google_pse_cx", "engine123")
         patcher.start()
         self.addCleanup(patcher.stop)
+        # One fixed throttle window for the whole test: a run that crossed a window boundary started a fresh budget.
+        window = throttle._window_start(USER_SEARCH_POST_RATE)
+        window_patcher = patch.object(throttle, "_window_start", return_value=window)
+        window_patcher.start()
+        self.addCleanup(window_patcher.stop)
 
     def _post(self, body: object, *, csrf: bool = True, content_type: str = "application/json"):
         payload = body if isinstance(body, (bytes, str)) else json.dumps(body)
@@ -176,8 +183,6 @@ class PseViewTests(TestCase):
         self.assertFalse(LocationCache.objects.filter(source=USER_PROVIDED_SOURCE).exists())
 
     def test_rate_limited_per_user(self) -> None:
-        from urbanlens.dashboard.controllers.pin import USER_SEARCH_POST_RATE
-
         codes = [self._post(GOOD).status_code for _ in range(USER_SEARCH_POST_RATE.limit + 1)]
         self.assertEqual(codes[-1], 429)
         self.assertEqual(set(codes[:-1]), {200})
