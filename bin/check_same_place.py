@@ -75,6 +75,7 @@ RADIUS_FILES = {
     "src/urbanlens/dashboard/services/import_formats/gpx_tracks.py": "pins along a recorded track",
     "src/urbanlens/dashboard/services/pins/public_pins.py": "public candidates in a region",
     "src/urbanlens/dashboard/services/device_scan/clustering.py": "device markers near a marker",
+    "src/urbanlens/dashboard/services/places/shared_places.py": "pins within a shared place's radius of its anchor (ADR35 section 2)",
 }
 
 
