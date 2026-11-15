@@ -37,7 +37,7 @@ dependencies = [
     "defusedxml~=0.7.1",
     "nh3~=0.3.5",
     "orjson>=3.13.0,<3.14.0",
-    "pandas~=3.0.3",
+    "pandas~=3.1.0",
     "pdf2image~=1.17.0",
     "pillow>=13,<13.1",
     "pillow-heif>=0.18",
@@ -45,7 +45,7 @@ dependencies = [
     "pydantic-settings>=2.16.0,<2.17.0",
     "pypdf>=6.21,<6.22",
     "pytesseract~=0.3.13",
-    "python-dateutil~=2.9.0",
+    "python-dateutil~=3.0.0",
     "python-docx~=1.2.0",
     "python-dotenv~=1.2.2",
     "pyotp~=2.10.0",
@@ -289,10 +289,10 @@ convention = "google"
 dev = [
     "bandit>=1.8.6,<1.10.0",
     "codespell>=2.4.3",
-    "coverage>=7.14.1,<7.17.0",
+    "coverage>=7.17.0,<7.18.0",
     # Coverage of the lines a branch actually changed, rather than a whole-tree
     # percentage that moves too slowly to mean anything on any one commit.
-    "diff-cover~=10.6.0",
+    "diff-cover~=11.0.0",
     "django-debug-toolbar>=7.0,<8.1",
     # Records each view's query fingerprint to checked-in .perf.yml for reviewable N+1 diffs.
     # Runtime detectors miss this codebase's N+1s; see core/tests/query_scaling.py.

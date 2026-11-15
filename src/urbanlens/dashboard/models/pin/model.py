@@ -97,6 +97,10 @@ class PinImportSource(TextChoices):
     JSON_ARCHIVE = "json_archive", "UrbanLens JSON archive"
 
 
+class SwapLocationConflictError(ValueError):
+    """Swapping would leave two top-level pins of one profile at one Location."""
+
+
 class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel, abstract.AddressableModel, abstract.LabelledModel):
     """A user's personal record for a physical location. A Pin belongs to exactly one Profile (user)."""
 
@@ -193,6 +197,15 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
         null=True,
         blank=True,
         related_name="pins",
+    )
+    # The place this pin is *about*: set on create, move and late place resolution, repointed only by lineage events.
+    # It never grants access; it only picks which already-visible wiki leads (``services.pins.primary_wiki``).
+    subject_place = ForeignKey(
+        "dashboard.Place",
+        on_delete=SET_NULL,
+        null=True,
+        blank=True,
+        related_name="subject_pins",
     )
     labels = ManyToManyField(
         "dashboard.Label",
@@ -291,6 +304,11 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
         The alias list is the full set of names a pin has ever had, including the current one - so whenever a meaningful ``name`` is persisted, an alias row for it is ensured.
         """
         update_fields = kwargs.get("update_fields")
+        if self._state.adding and self.subject_place_id is None and self.location_id is not None:
+            # Safety net for create paths that did not resolve a subject themselves.
+            from urbanlens.dashboard.services.pins.primary_wiki import current_place_id_for_location
+
+            self.subject_place_id = current_place_id_for_location(self.location_id)
         if update_fields is None or "name" in update_fields:
             self.name = sanitize_name(self.name)
         if update_fields is None or not _COLOR_FIELDS.isdisjoint(update_fields):
@@ -408,30 +426,36 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
         """
         return Pin.objects.filter(pk=self.pk).with_descendants().exclude(pk=self.pk)
 
-    def promote_children(self) -> int:
+    def promote_children(self) -> tuple[int, int]:
         """
         Move this pin's direct children up one level, without deleting this pin.
         Children move to this pin's own parent, or become top-level pins if this pin has none.
 
+        A child at this pin's own Location stays put when this pin is top-level: promoting it would leave two top-level pins at one Location, which ``db_pin_unique_location_per_profile`` forbids.
+
         Returns:
-            The number of children actually promoted.
+            The number of children promoted and the number left in place, counted in the same pass that moves them.
         """
         from urbanlens.dashboard.services.geo.child_pin_boundaries import deferring_child_boundary_refits
 
         new_parent_id = self.parent_pin_id
         promoted = 0
+        skipped = 0
         with transaction.atomic(), deferring_child_boundary_refits():
             for child in Pin.objects.filter(parent_pin=self):
-                if new_parent_id is None and child.location_id == self.location_id:
+                if new_parent_id is None and child.location_id == self.location_id:  # same-place: structural parent/child or row-sync rule on the exact Location
+                    skipped += 1
                     continue
                 if new_parent_id is not None:
                     child.parent_pin_id = new_parent_id
                 else:
-                    other_root = Pin.objects.root_pins().filter(profile_id=self.profile_id, location_id=child.location_id).exclude(pk=child.pk).first()
+                    other_root = (
+                        Pin.objects.root_pins().filter(profile_id=self.profile_id, location_id=child.location_id).exclude(pk=child.pk).first()
+                    )  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
                     child.parent_pin_id = other_root.pk if other_root is not None else None
                 child.save(update_fields=["parent_pin", "updated"])
                 promoted += 1
-        return promoted
+        return promoted, skipped
 
     def swap_with_parent(self) -> Pin:
         """
@@ -443,7 +467,7 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
             The former parent pin, now this pin's child.
 
         Raises:
-            ValueError: This pin has no parent, or (only when the former
+            SwapLocationConflictError: (only when the former
                 parent had no parent of its own, i.e. this pin would become
                 a new top-level pin) this pin's own Location already has a
                 top-level pin for this profile - the one-root-pin-per-
@@ -455,17 +479,37 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
             raise ValueError("This pin has no parent to swap with.")
         grandparent_id = old_parent.parent_pin_id
 
-        if grandparent_id is None:
-            if Pin.objects.root_pins().filter(profile_id=self.profile_id, location_id=self.location_id).exclude(pk=self.pk).exists():
-                raise ValueError("Can't complete the swap - you already have a top-level pin at this pin's own location.")
-            self.parent_pin = None
-        else:
-            self.parent_pin_id = grandparent_id
+        from django.db import IntegrityError
 
-        with transaction.atomic():
-            self.save(update_fields=["parent_pin", "updated"])
-            old_parent.parent_pin = self
-            old_parent.save(update_fields=["parent_pin", "updated"])
+        from urbanlens.dashboard.services.geo.child_pin_boundaries import request_child_boundary_refit
+
+        conflict_message = "Can't complete the swap - you already have a top-level pin at this pin's own location."
+        try:
+            with transaction.atomic():
+                if grandparent_id is None:
+                    # The old parent is a root now but is about to become this pin's child, so it doesn't count.
+                    if (
+                        Pin.objects.root_pins().filter(profile_id=self.profile_id, location_id=self.location_id).exclude(pk__in=[self.pk, old_parent.pk]).exists()
+                    ):  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
+                        raise SwapLocationConflictError(conflict_message)
+                    self.parent_pin = None
+                    # Demote the old parent first: this pin may share its Location, and two top-level pins can't.
+                    # Raw update because the transient state (each the other's parent) must not run save() side effects.
+                    Pin.objects.filter(pk=old_parent.pk).update(parent_pin_id=self.pk)
+                else:
+                    self.parent_pin_id = grandparent_id
+                self.save(update_fields=["parent_pin", "updated"])
+                old_parent.parent_pin = self
+                old_parent.save(update_fields=["parent_pin", "updated"])
+                # The raw update above bypassed the pre_save receiver that tracks the old parent.
+                request_child_boundary_refit(self.pk)
+                request_child_boundary_refit(old_parent.pk)
+        except IntegrityError as exc:
+            if (
+                Pin.objects.root_pins().filter(profile_id=self.profile_id, location_id=self.location_id).exclude(pk__in=[self.pk, old_parent.pk]).exists()
+            ):  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
+                raise SwapLocationConflictError(conflict_message) from exc
+            raise
 
         return old_parent
 
@@ -689,14 +733,12 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
     @property
     def community_wiki(self):
         """
-        The community page for the place this pin stands on, if there is one.
-        Not the same as ``self.wiki``, which is a cache set only when a pin is explicitly linked, nor as ``self.location.wiki``, which is the page anchored to this exact coordinate.
+        The pin's primary wiki as its owner sees it, if there is one.
+        Delegates to :func:`~urbanlens.dashboard.services.pins.primary_wiki.primary_wiki_for_pin`; the one rule that replaced both this property's old re-resolution and ``Pin.wiki`` as the answer.
         """
-        from urbanlens.dashboard.models.wiki.model import Wiki
+        from urbanlens.dashboard.services.pins.primary_wiki import primary_wiki_for_pin
 
-        if self.wiki_id and self.wiki is not None:
-            return self.wiki
-        return Wiki.objects.get_for_location(self.location) if self.location_id else None
+        return primary_wiki_for_pin(self, self.profile, primary_only=True).primary
 
     @property
     def effective_name(self) -> str:

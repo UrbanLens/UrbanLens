@@ -46,5 +46,5 @@ def key_takeout_pins(apps, schema_editor):
 
 class Migration(migrations.Migration):
     atomic = False
-    dependencies = [("dashboard", "0003_pin_import_identity")]
+    dependencies = [("dashboard", "0010_pin_import_identity")]
     operations = [migrations.RunPython(key_takeout_pins, migrations.RunPython.noop)]
