@@ -6,11 +6,15 @@ from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.contrib.gis.geos import MultiPolygon, Point, Polygon
+from django.db import connection
+from django.db.migrations.executor import MigrationExecutor
+from django.db.migrations.loader import MigrationLoader
+from django.db.migrations.operations import AddField
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import TestCase, TransactionTestCase
 from urbanlens.dashboard.models.location.model import Location
-from urbanlens.dashboard.models.place.model import Place, PlaceEvidence, PlaceKind
+from urbanlens.dashboard.models.place.model import Place, PlaceEvidence, PlaceKind, PlaceStatus
 from urbanlens.dashboard.services.apis.locations.base import BoundaryProviderDeferredError
 from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain, ResolvedBoundaries
 from urbanlens.dashboard.services.places import provisioning
@@ -78,7 +82,7 @@ class EvidenceResolutionOrderTests(TestCase):
         footprint = make_place(PlaceKind.BUILDING, _box(20))
         Place.objects.filter(pk=footprint.pk).update(evidence=PlaceEvidence.FOOTPRINT)
         self.assertEqual(Place.objects.resolve_for_point(LAT, LON), footprint)
-        Place.objects.filter(pk=footprint.pk).update(status="superseded")
+        Place.objects.filter(pk=footprint.pk).update(status=PlaceStatus.SUPERSEDED)
         self.assertEqual(Place.objects.resolve_for_point(LAT, LON), middle)
 
     def test_a_smaller_provisional_place_loses_to_a_larger_official_one(self) -> None:
@@ -105,6 +109,46 @@ class EvidenceResolutionOrderTests(TestCase):
 
     def test_existing_places_default_to_official(self) -> None:
         self.assertEqual(make_place(PlaceKind.PARCEL, _box(50)).evidence, PlaceEvidence.OFFICIAL)
+
+
+def _evidence_migration(loader: MigrationLoader) -> tuple[tuple[str, str], list[tuple[str, str]]]:
+    """
+    The dashboard migration that adds ``Place.evidence``, and the dashboard migrations just before it.
+
+    Found by what it does rather than by name, so renumbering it at merge time (UL-371) does not break this test.
+    """
+    adds_evidence = [
+        key
+        for key, migration in loader.disk_migrations.items()
+        if key[0] == "dashboard"
+        and any(
+            isinstance(operation, AddField) and operation.model_name == "place" and operation.name == "evidence"
+            for operation in migration.operations
+        )
+    ]
+    assert len(adds_evidence) == 1, adds_evidence
+    key = adds_evidence[0]
+    return key, sorted(parent.key for parent in loader.graph.node_map[key].parents if parent.key[0] == "dashboard")
+
+
+class EvidenceMigrationTests(TransactionTestCase):
+    """The migration adding ``Place.evidence`` backfills rows that existed before the column as official."""
+
+    def tearDown(self) -> None:
+        executor = MigrationExecutor(connection)
+        executor.migrate(executor.loader.graph.leaf_nodes())
+        super().tearDown()
+
+    def test_existing_places_are_backfilled_as_official(self) -> None:
+        executor = MigrationExecutor(connection)
+        target, before = _evidence_migration(executor.loader)
+        executor.migrate(before)
+        old_place = executor.loader.project_state(before).apps.get_model("dashboard", "Place")
+        pk = old_place.objects.create(kind=PlaceKind.PARCEL).pk
+
+        executor = MigrationExecutor(connection)
+        executor.migrate([target])
+        self.assertEqual(Place.objects.get(pk=pk).evidence, PlaceEvidence.OFFICIAL)
 
 
 class FootprintWithoutParcelTests(TestCase):
@@ -138,6 +182,17 @@ class FootprintWithoutParcelTests(TestCase):
         outside.refresh_from_db()
         self.assertEqual(outside.place_id, place.pk)
         self.assertEqual(Place.objects.resolve_for_point(outside.latitude, outside.longitude), place)
+
+    def test_a_pin_beyond_the_buffer_is_not_bound_to_the_footprint_the_chain_returned(self) -> None:
+        footprint = _box(10)
+        beyond = _pin(north_m=10 + provisioning.FOOTPRINT_BUFFER_METERS + 5)
+        place = _provision(
+            beyond, building_polygon=footprint, building_candidates=[("microsoft_building_footprints", footprint)]
+        )
+        self.assertIsNone(place)
+        beyond.refresh_from_db()
+        self.assertIsNone(beyond.place_id)
+        self.assertEqual(Place.objects.filter(kind=PlaceKind.BUILDING).count(), 1)
 
     def test_a_pin_8m_outside_a_footprint_does_not_resolve_to_it_when_a_parcel_exists(self) -> None:
         footprint = _box(10)
@@ -205,6 +260,153 @@ class FootprintWithoutParcelTests(TestCase):
         self.assertEqual(created[0].evidence, PlaceEvidence.FOOTPRINT)
 
 
+class UnattributedOutlineTests(TestCase):
+    """An outline nobody attributed is not known to be surveyed, so every path stores it as a footprint."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)
+
+    @staticmethod
+    def _record(outline: MultiPolygon, **extra) -> dict:
+        return {
+            "ref": "a",
+            "geometry": {"type": "Polygon", "coordinates": [list(map(list, outline[0].coords[0]))]},
+            **extra,
+        }
+
+    def test_with_no_parcel_anywhere(self) -> None:
+        place = _provision(_pin(), building_polygon=_box(10))
+        assert place is not None
+        self.assertEqual((place.evidence, place.parent_id), (PlaceEvidence.FOOTPRINT, None))
+
+    def test_under_the_parcel_the_chain_returned(self) -> None:
+        _provision(_pin(), property_polygon=_box(60), building_polygon=_box(10))
+        building = Place.objects.get(kind=PlaceKind.BUILDING)
+        self.assertEqual(building.evidence, PlaceEvidence.FOOTPRINT)
+        self.assertEqual(building.parent, Place.objects.get(kind=PlaceKind.PARCEL))
+
+    def test_inside_a_stored_parcel(self) -> None:
+        parcel = make_place(PlaceKind.PARCEL, _box(60))
+        _provision(_pin(), building_polygon=_box(10))
+        building = Place.objects.get(kind=PlaceKind.BUILDING)
+        self.assertEqual((building.evidence, building.parent_id), (PlaceEvidence.FOOTPRINT, parcel.pk))
+
+    def test_it_does_not_replace_an_official_outline(self) -> None:
+        parcel = make_place(PlaceKind.PARCEL, _box(60))
+        official = provisioning.upsert_place(
+            PlaceKind.BUILDING, _box(10), parent=parcel, evidence=PlaceEvidence.OFFICIAL
+        )
+        assert official is not None
+        area = official.area_sqm or 0
+        _provision(_pin(), building_polygon=_box(9))
+        official.refresh_from_db()
+        self.assertEqual(official.evidence, PlaceEvidence.OFFICIAL)
+        self.assertAlmostEqual(official.area_sqm or 0, area, delta=1)
+
+    def test_a_named_source_stays_official(self) -> None:
+        _provision(
+            _pin(), property_polygon=_box(60), building_polygon=_box(10), building_candidates=[("overpass", _box(10))]
+        )
+        self.assertEqual(Place.objects.get(kind=PlaceKind.BUILDING).evidence, PlaceEvidence.OFFICIAL)
+
+    def test_a_bulk_record_with_no_source_under_a_parcel(self) -> None:
+        parcel = make_place(PlaceKind.PARCEL, _box(60))
+        created = provisioning.ensure_building_places(parcel, [self._record(_box(10))])
+        self.assertEqual(created[0].evidence, PlaceEvidence.FOOTPRINT)
+
+    def test_a_bulk_record_with_no_source_and_no_parcel(self) -> None:
+        created = provisioning.ensure_building_places(None, [self._record(_box(10))])
+        self.assertEqual(created[0].evidence, PlaceEvidence.FOOTPRINT)
+
+    def test_record_shapes_that_name_no_source(self) -> None:
+        for record in ({}, {"sources": []}, {"source": ""}, {"sources": [{"name": "x"}]}, {"sources": "not-a-list"}):
+            self.assertEqual(provisioning.evidence_for_record(record), PlaceEvidence.FOOTPRINT, record)
+
+    def test_the_first_entry_that_names_a_source_decides(self) -> None:
+        record = {"sources": [{"name": "x"}, {"source": "county_gis"}, {"source": "overture"}]}
+        self.assertEqual(provisioning.evidence_for_record(record), PlaceEvidence.OFFICIAL)
+
+    def test_a_flat_record_is_read_by_its_source(self) -> None:
+        self.assertEqual(provisioning.evidence_for_record({"source": "overpass"}), PlaceEvidence.OFFICIAL)
+
+    def test_an_unkeyed_providers_outline_does_not_take_the_next_providers_source(self) -> None:
+        unattributed, surveyed = _box(10), _box(9)
+
+        class Unkeyed:
+            service_key = ""
+            boundary_kind = "building"
+
+            def get_typed_boundaries(self, latitude, longitude, *, name=None):
+                return {"building": unattributed}
+
+        class Registry:
+            service_key = "overpass"
+            boundary_kind = "parcel"
+
+            def get_typed_boundaries(self, latitude, longitude, *, name=None):
+                return {"property": _box(60), "building": surveyed}
+
+        resolved = BoundaryProviderChain(providers=(Unkeyed(), Registry())).get_boundaries(LAT, LON)
+        self.assertIs(resolved.building_polygon, unattributed)
+        self.assertEqual([source for source, _ in resolved.building_candidates], ["", "overpass"])
+
+        with patch(
+            "urbanlens.dashboard.services.locations.boundaries.BoundaryProviderChain.get_boundaries",
+            return_value=resolved,
+        ):
+            provisioning.provision_places_for_coordinate(_pin(), detect_splits=False)
+        self.assertEqual(Place.objects.get(kind=PlaceKind.BUILDING).evidence, PlaceEvidence.FOOTPRINT)
+
+    def test_an_outline_missing_from_the_candidates_is_unattributed(self) -> None:
+        _provision(
+            _pin(), property_polygon=_box(60), building_polygon=_box(10), building_candidates=[("overpass", _box(9))]
+        )
+        self.assertEqual(Place.objects.get(kind=PlaceKind.BUILDING).evidence, PlaceEvidence.FOOTPRINT)
+
+
+def _record(outline: MultiPolygon, ref: str, source: str = "overture") -> dict:
+    return {
+        "ref": ref,
+        "geometry": {"type": "Polygon", "coordinates": [list(map(list, outline[0].coords[0]))]},
+        "sources": [{"source": source}],
+    }
+
+
+class FootprintsOnAStoredParcelTests(TestCase):
+    """A footprint standing on a stored parcel nests under it, so it never sits outside that parcel's access domain."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)
+
+    def test_a_bulk_record_on_a_stored_parcel_nests_under_it(self) -> None:
+        parcel = make_place(PlaceKind.PARCEL, _box(60))
+        elsewhere = _box(10, lat=LAT + 200 * M_LAT)
+        created = provisioning.ensure_building_places(None, [_record(elsewhere, "a"), _record(_box(10), "b")])
+        self.assertEqual(set(created), {0, 1})
+        self.assertIsNone(created[0].parent_id)
+        self.assertEqual(created[1].parent_id, parcel.pk)
+        self.assertEqual(created[1].domain_root_id, parcel.domain_root_id)
+        self.assertEqual(Place.objects.resolve_for_point(LAT, LON), created[1])
+
+    def test_a_chain_outline_on_a_stored_parcel_nests_under_it(self) -> None:
+        parcel = make_place(PlaceKind.PARCEL, _box(60))
+        place = provisioning.ensure_footprint_places([("overture", _box(10))])[0]
+        self.assertEqual(place.parent_id, parcel.pk)
+
+    def test_a_deferred_answer_nests_an_outline_that_stands_on_a_stored_parcel(self) -> None:
+        parcel = make_place(PlaceKind.PARCEL, _box(30, lat=LAT + 40 * M_LAT))
+        make_place(PlaceKind.BUILDING, _box(3))  # makes the pin already resolve
+        outline = _box(5, lat=LAT + 20 * M_LAT)  # on the parcel, which does not reach the pin
+        _provision(
+            _pin(), building_polygon=outline, building_candidates=[("overture", outline)], deferred=["county_gis"]
+        )
+        self.assertEqual(
+            Place.objects.get(kind=PlaceKind.BUILDING, evidence=PlaceEvidence.FOOTPRINT).parent_id, parcel.pk
+        )
+
+
 class FootprintResolutionTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
@@ -219,8 +421,9 @@ class FootprintResolutionTests(TestCase):
 
     def test_a_pin_on_a_roof_2m_from_a_shed_resolves_to_the_house(self) -> None:
         house = self._footprint(10)
-        shed = self._footprint(1.5, lat=LAT + 13 * M_LAT)  # 2.5 m past the house's north edge
-        pin = _pin(north_m=9)
+        shed = self._footprint(1.5, lat=LAT + 13 * M_LAT)  # south edge at 11.5 m; the house's north edge is at 10 m
+        pin = _pin(north_m=9.5)  # on the roof, 2 m from the shed
+        self.assertTrue(Place.objects.footprints_near(pin.point).filter(pk=shed.pk).exists())
         self.assertEqual(Place.objects.resolve_for_point(pin.latitude, pin.longitude), house)
         self.assertNotEqual(house, shed)
 
@@ -231,9 +434,10 @@ class FootprintResolutionTests(TestCase):
         self.assertEqual(len(places), 2)
 
     def test_a_pin_just_outside_picks_the_nearest_footprint(self) -> None:
+        # Both are inside the buffer; the farther one is created first, so pk order alone would pick it.
+        self._footprint(5, lat=LAT + 22 * M_LAT)  # south edge at 17 m: 8 m from the pin
         near = self._footprint(5)
-        self._footprint(5, lat=LAT + 30 * M_LAT)
-        pin = _pin(north_m=9)  # 4 m past the near edge, 16 m from the other
+        pin = _pin(north_m=9)  # 4 m past the near edge
         self.assertEqual(Place.objects.resolve_for_point(pin.latitude, pin.longitude), near)
 
     def test_nothing_resolves_beyond_the_buffer(self) -> None:
@@ -293,6 +497,35 @@ class FootprintResolutionTests(TestCase):
         assert place is not None
         self.assertNotEqual(place.pk, existing.pk)
         self.assertEqual(Place.objects.resolve_for_point(pin.latitude, pin.longitude), place)
+
+    def test_a_deferred_answer_keeps_an_official_outline_nothing_stored_matches(self) -> None:
+        existing = self._footprint(3, lat=LAT + 4 * M_LAT)  # makes the pin already resolve
+        official = _box(10)
+        place = _provision(
+            _pin(), building_polygon=official, building_candidates=[("overpass", official)], deferred=["overture"]
+        )
+        assert place is not None
+        self.assertNotEqual(place.pk, existing.pk)
+        self.assertEqual(place.evidence, PlaceEvidence.OFFICIAL)
+
+    def test_a_deferred_answer_never_overwrites_a_stored_outline_with_an_official_one(self) -> None:
+        stored = provisioning.ensure_footprint_places([("county_gis", _box(10))])[0]
+        before = stored.geometry.wkt
+        fallback = _box(12)
+        place = _provision(
+            _pin(), building_polygon=fallback, building_candidates=[("overpass", fallback)], deferred=["county_gis"]
+        )
+        self.assertEqual(place, stored)
+        stored.refresh_from_db()
+        self.assertEqual(stored.geometry.wkt, before)
+        self.assertEqual(Place.objects.filter(kind=PlaceKind.BUILDING).count(), 1)
+
+    def test_a_deferred_answer_keeps_an_unattributed_outline_as_a_footprint(self) -> None:
+        self._footprint(3, lat=LAT + 4 * M_LAT)  # makes the pin already resolve
+        place = _provision(_pin(), building_polygon=_box(10), deferred=["overture"])
+        assert place is not None
+        self.assertEqual(place.evidence, PlaceEvidence.FOOTPRINT)
+        self.assertEqual(Place.objects.filter(kind=PlaceKind.BUILDING).count(), 2)
 
     def test_the_chain_keeps_the_first_footprint_when_a_later_source_defers(self) -> None:
         class Answers:

@@ -1,7 +1,5 @@
 """
 Shared placeless places (ADR35 section 2, UL-367): a synthetic place's anchor, its members, and note-merge offers.
-
-Depends on both migration leaves (0003_profiletrustsignals and 0004_place_evidence) because the evidence-ladder and trust-signals stories were built in parallel; this is the join, linearised later (UL-371).
 """
 
 import django.contrib.gis.db.models.fields
@@ -11,8 +9,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("dashboard", "0003_profiletrustsignals"),
-        ("dashboard", "0004_place_evidence"),
+        ("dashboard", "0006_place_evidence"),
     ]
 
     operations = [

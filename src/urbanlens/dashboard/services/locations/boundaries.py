@@ -57,8 +57,9 @@ class ResolvedBoundaries:
     #: order - including polygons that lost the ``property_polygon`` slot to an earlier provider.
     #: Feeds the per-source candidate rows boundary voting chooses between; costs no extra API calls
     property_candidates: list[tuple[str, MultiPolygon]] = field(default_factory=list)
-    #: Every building outline any queried provider returned, as (service_key, polygon) pairs in chain order. With no
-    #: parcel to anchor them, footprints from several sources are reconciled into one place from these.
+    #: Every building outline any queried provider returned, as (service_key, polygon) pairs in chain order; a provider
+    #: with no service_key appears with a blank one, so the first entry is always ``building_polygon`` and its source.
+    #: With no parcel to anchor them, footprints from several sources are reconciled into one place from these.
     building_candidates: list[tuple[str, MultiPolygon]] = field(default_factory=list)
     #: Providers that declined for now (throttled, source budget spent). Their silence is not a "nothing here".
     deferred: list[str] = field(default_factory=list)
@@ -154,8 +155,8 @@ class BoundaryProviderChain:
             if resolved.property_polygon is None:
                 resolved.property_polygon = property_polygon
             building_polygon = _plausible(PlaceKind.BUILDING, _as_multipolygon(typed.get("building")), provider.service_key)
-            if building_polygon is not None and provider.service_key:
-                resolved.building_candidates.append((provider.service_key, building_polygon))
+            if building_polygon is not None:
+                resolved.building_candidates.append((provider.service_key or "", building_polygon))
             if resolved.building_polygon is None:
                 resolved.building_polygon = building_polygon
         return resolved
