@@ -70,7 +70,7 @@ def _accessible_wikis_q(viewer: Profile) -> Q:
     The viewer's domains are read once here, however many wikis the filter is later applied to.
     """
     visible = Location.objects.filter(visible_locations_filter(viewer)).values("pk")
-    return Q(parent_wiki__isnull=True, location__in=visible) | Q(parent_wiki__isnull=False, parent_wiki__location__in=visible)
+    return Q(parent_wiki__isnull=True, location__in=visible) | Q(parent_wiki__isnull=False, parent_wiki__location__in=visible)  # same-place: wiki visibility is wiki_access's decision, not pin sameness
 
 
 def primary_wiki_for_pin(pin: Pin, viewer: Profile, *, primary_only: bool = False) -> PinWikis:
@@ -210,4 +210,4 @@ def adopt_subject_for_location(location_id: int, place_id: int | None) -> int:
         How many pins were set."""
     if place_id is None:
         return 0
-    return Pin.objects.filter(location_id=location_id, subject_place__isnull=True).update(subject_place_id=place_id)
+    return Pin.objects.filter(location_id=location_id, subject_place__isnull=True).update(subject_place_id=place_id)  # same-place: per-Location bookkeeping, not a sameness decision between people
