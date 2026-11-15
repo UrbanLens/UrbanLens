@@ -158,6 +158,8 @@ def repair_legacy_pin_coordinates(
         return None
 
     candidate.location = correct_location
+    # A real move (the same Location returned above), off a subject derived from the wrong coordinates: the
+    # corrected point's place replaces it, or nothing when that point resolves to no place.
     candidate.subject_place_id = correct_location.place_id
     try:
         candidate.save(update_fields=["location", "subject_place", "updated"])
