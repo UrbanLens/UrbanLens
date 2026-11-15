@@ -148,7 +148,9 @@ class EvidenceMigrationTests(TransactionTestCase):
 
         executor = MigrationExecutor(connection)
         executor.migrate([target])
-        self.assertEqual(Place.objects.get(pk=pk).evidence, PlaceEvidence.OFFICIAL)
+        # Read through the model as of the target: later migrations' columns do not exist yet.
+        new_place = executor.loader.project_state([target]).apps.get_model("dashboard", "Place")
+        self.assertEqual(new_place.objects.get(pk=pk).evidence, PlaceEvidence.OFFICIAL)
 
 
 class FootprintWithoutParcelTests(TestCase):
