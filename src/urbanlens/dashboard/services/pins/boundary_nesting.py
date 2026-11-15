@@ -76,7 +76,7 @@ def _settle(pin_id: int) -> bool:
     if new_parent is None:
         if pin.nested_by_boundary_pin_id is None:
             return False
-        if PinModel.objects.root_pins().filter(profile_id=pin.profile_id, location_id=pin.location_id).exclude(pk=pin.pk).exists():  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
+        if PinModel.objects.root_pins().filter(profile_id=pin.profile_id, location_id=pin.location_id).exclude(pk=pin.pk).exists():  # same-place: one root pin per Location (db_pin_unique_location_per_profile)
             return False
     elif pin.parent_pin_id == new_parent.pk and pin.nested_by_boundary_pin_id == new_parent.pk:
         return False
