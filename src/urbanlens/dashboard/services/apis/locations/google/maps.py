@@ -13,7 +13,7 @@ import time
 from typing import IO, TYPE_CHECKING, Any, ClassVar
 
 from defusedxml.ElementTree import ParseError as XMLParseError, iterparse as iterparse_xml_defused
-from django.db import DatabaseError
+from django.db import DatabaseError, IntegrityError, transaction
 from fastkml.exceptions import KMLParseError
 from gpxpy.gpx import GPXException
 from lxml.etree import XMLSyntaxError
@@ -26,7 +26,7 @@ from shapely.geometry import GeometryCollection as ShapelyGeometryCollection, Li
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location import Location
-from urbanlens.dashboard.models.pin import Pin
+from urbanlens.dashboard.models.pin import Pin, PinImportSource
 from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, SatelliteViewProvider, StreetViewProvider, StreetViewSlide
 from urbanlens.dashboard.services.apis.locations.cid_validation import InvalidCidError, reconcile_cid
 from urbanlens.dashboard.services.apis.locations.google.geocoding import CoordinatesNeedNetworkError, GoogleGeocodingGateway
@@ -53,6 +53,7 @@ from urbanlens.dashboard.services.import_formats.json_stream import iter_geojson
 from urbanlens.dashboard.services.import_formats.streams import as_stream, iter_decoded, iter_lines
 from urbanlens.dashboard.services.labels.style_suggestions import resolve_or_create_styled_label
 from urbanlens.dashboard.services.pins.history_import import ImportedHistory
+from urbanlens.dashboard.services.pins.import_keys import takeout_import_key
 from urbanlens.dashboard.services.sandbox import untrusted_parse
 from urbanlens.dashboard.services.security.redact import redact_coordinate, redact_filename, redact_text
 from urbanlens.UrbanLens.settings.app import settings
@@ -157,6 +158,18 @@ def _on_the_globe(latitude: Any, longitude: Any) -> tuple[float, float] | None:
     return (lat, lng) if lat is not None and lng is not None else None
 
 
+def _takeout_key(pin_dict: dict[str, Any], name: str, latitude: float | Decimal | None, longitude: float | Decimal | None) -> str | None:
+    """The import key of a confirmed Takeout pin, or None when it has no cid, place_id or usable point."""
+    cid = pin_dict.get("cid")
+    place_id = pin_dict.get("place_id")
+    if cid in (None, "") and not place_id and (latitude is None or longitude is None):
+        return None
+    try:
+        return takeout_import_key(cid=cid, place_id=place_id, name=name, latitude=latitude, longitude=longitude)  # type: ignore[arg-type]
+    except (ArithmeticError, ValueError, TypeError):
+        return None
+
+
 def _create_pin_from_confirmed(
     pin_dict: dict[str, Any],
     *,
@@ -244,6 +257,8 @@ def _create_pin_from_confirmed(
                 longitude=lookup_lon,
                 profile=user_profile,
                 defaults=pin_defaults,
+                import_source=PinImportSource.GOOGLE_TAKEOUT,
+                import_key=_takeout_key(pin_dict, pin_name, lookup_lat, lookup_lon),
             )
         except (DatabaseError, ValueError, OSError) as exc:
             logger.warning("Failed to import pin '%s': %s", redact_text(pin_name), exc)
@@ -283,10 +298,15 @@ def _create_pin_from_confirmed(
     if cid and not location and pin.location_id and not pin.location.cid:
         if legacy_cid_location is not None:
             repoint_cid_to_corrected_location(legacy_cid_location, pin.location, cid)
-        else:
-            # fetch_if_missing=False: never block the import loop on a live
-            # Places call per pin.
-            GooglePlaceService().set_cid_for_entity(pin.location, cid, fetch_if_missing=False)
+        elif not Location.objects.by_cid(cid).exists():
+            # fetch_if_missing=False: never block the import loop on a live Places call per pin.
+            # A pin found by its import key may sit elsewhere now; the cid belongs to the Location that already holds it.
+            try:
+                with transaction.atomic():
+                    GooglePlaceService().set_cid_for_entity(pin.location, cid, fetch_if_missing=False)
+            except IntegrityError:
+                # A GooglePlace holding this cid with no Location on it; the import goes on without the backfill.
+                logger.info("A GooglePlace already holds a cid; left it alone.")
 
     return pin, created
 

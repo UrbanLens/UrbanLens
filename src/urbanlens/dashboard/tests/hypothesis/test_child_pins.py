@@ -592,7 +592,7 @@ class DetailPinCoordinateDedupTests(TestCase):
         return Pin.objects.get(uuid=response.json()["uuid"])
 
     def test_nearby_detail_pins_keep_distinct_coordinates(self) -> None:
-        # ~20m apart - well within get_nearby_or_create's default 50m dedup radius.
+        # ~20m apart - Location lookups keep every point exact.
         first = self._create_detail_pin("First", 42.00010, -73.00010)
         second = self._create_detail_pin("Second", 42.00020, -73.00020)
         self.assertNotEqual(first.location_id, second.location_id)
