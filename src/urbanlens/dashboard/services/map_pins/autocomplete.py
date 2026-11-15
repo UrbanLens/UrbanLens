@@ -136,7 +136,7 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
     # primary key's because the single-statement form it replaces had none of its own, so which
     # five a match of more than five returned was whatever the plan happened to emit.
     wiki_ids = (
-        Wiki.objects.filter(location_id__in=visible_wiki_locations_cached(profile))
+        Wiki.objects.filter(location_id__in=visible_wiki_locations_cached(profile))  # same-place: wiki visibility is wiki_access's decision, not pin sameness
         .filter(
             Q(name__icontains=q) | Q(aliases__name__icontains=q) | Q(description__icontains=q) | tag_match_q(q, "location__place__external_tags"),
         )

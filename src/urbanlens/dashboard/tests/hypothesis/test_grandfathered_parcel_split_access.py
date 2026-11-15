@@ -112,6 +112,29 @@ class GrandfatheredParcelSplitAccessTests(TestCase):
         self._split()
         self.assertEqual(self._sees(self.user_a), {"m", "n", "o", "p"})
 
+    def test_holder_pinned_only_on_a_rehomed_building_is_grandfathered_on_every_successor(self) -> None:
+        building = make_place(
+            PlaceKind.BUILDING,
+            square(-74.002, 40.0, 0.0002),
+            parent=self.parcel,
+            relation=PlaceRelation.PART_OF,
+            name="Ward",
+        )
+        holder = baker.make(User).profile
+        pin_on(holder, building, lat=40.0001, lng=-74.0021)
+        self._split()
+        building.refresh_from_db()
+        self.assertNotEqual(
+            building.domain_root_id, self.parcel.domain_root_id, "the building must have re-homed to a successor"
+        )
+        for successor in (self.place_n, self.place_o, self.place_p):
+            self.assertTrue(
+                PlaceAccessGrant.objects.filter(
+                    profile=holder, place=successor, reason=GrantReason.GRANDFATHERED_SPLIT
+                ).exists(),
+                f"holder lost the grant on successor {successor.pk}",
+            )
+
     def test_user_a_keeps_the_whole_family_after_unpinning_everything(self) -> None:
         self._split()
         self.assertEqual(self._sees(self.user_a), {"m", "n", "o", "p"})

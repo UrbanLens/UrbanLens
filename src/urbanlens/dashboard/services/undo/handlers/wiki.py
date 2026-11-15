@@ -109,7 +109,7 @@ class WikiUndoHandler(UndoHandler):
             # A location holds at most one wiki. Wikis are also created lazily
             # (Wiki.objects.get_or_create_for_location), so the location acquiring a
             # replacement without any deliberate user action is routine rather than rare.
-            if Wiki.objects.filter(location_id=entry["location_id"]).exists():
+            if Wiki.objects.filter(location_id=entry["location_id"]).exists():  # same-place: a wiki is anchored to one exact Location
                 raise UndoExpiredError("This location has a community page again, so the deleted one can't be restored alongside it.")
             created_by_id = entry.get("created_by_id")
             if created_by_id is not None and not Profile.objects.filter(pk=created_by_id).exists():

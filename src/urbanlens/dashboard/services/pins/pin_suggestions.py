@@ -778,7 +778,9 @@ def accept_pin_suggestion(
         pin = matched_pin
     else:
         location = resolve_location_for_point(suggestion.latitude, suggestion.longitude, fetch_if_missing=fetch_if_missing)
-        pin = Pin.objects.root_pins().filter(profile=profile, location=location).select_related("location").first()
+        pin = (
+            Pin.objects.root_pins().filter(profile=profile, location=location).select_related("location").first()
+        )  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
         if pin is None:
             pin = Pin.objects.create(profile=profile, location=location)
         chosen_name = (name or "").strip() or suggestion.suggested_name

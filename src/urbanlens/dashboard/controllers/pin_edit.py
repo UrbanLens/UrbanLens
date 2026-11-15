@@ -424,7 +424,9 @@ class PinDetachChildView(LoginRequiredMixin, View):
         pin = result
         if pin.parent_pin_id is None:
             return HttpResponse("This pin is already a top-level pin.", status=400)
-        conflict = Pin.objects.root_pins().filter(profile=pin.profile, location_id=pin.location_id).exclude(pk=pin.pk).exists()
+        conflict = (
+            Pin.objects.root_pins().filter(profile=pin.profile, location_id=pin.location_id).exclude(pk=pin.pk).exists()
+        )  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
         if conflict:
             return HttpResponse("You already have a top-level pin at this exact location. Move this child pin slightly before detaching it.", status=400)
         logger.info("User %s detached child pin %s from parent %s", request.user.id, pin.id, pin.parent_pin_id)
@@ -530,7 +532,9 @@ class PinRelinkView(LoginRequiredMixin, View):
         # A profile can only ever have one root pin per location (db_pin_unique_location_per_profile) - if one
         # already exists at the location we are about to point at, reassigning `pin.location` would collide with
         # it.
-        existing = Pin.objects.root_pins().filter(profile=pin.profile, location=location).exclude(pk=pin.pk).first()
+        existing = (
+            Pin.objects.root_pins().filter(profile=pin.profile, location=location).exclude(pk=pin.pk).first()
+        )  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
         if existing is not None:
             if not pin.would_create_cycle(existing):
                 pin.parent_pin = existing

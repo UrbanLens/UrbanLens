@@ -12,6 +12,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
+from urbanlens.dashboard.models.place.lifecycle import PlaceLineageEdge
 from urbanlens.dashboard.models.place.model import (
     GrantReason,
     Place,
@@ -21,12 +22,13 @@ from urbanlens.dashboard.models.place.model import (
     PlaceStatus,
 )
 from urbanlens.dashboard.services.locations.boundaries import ResolvedBoundaries
-from urbanlens.dashboard.services.places import provisioning
+from urbanlens.dashboard.services.places import geometry_versions, provisioning, resolution
 from urbanlens.dashboard.services.places.lineage_events import (
     LineageEvent,
     LineageEventKind,
     handle_lineage_event,
     holders_of,
+    retract_erroneous_event,
 )
 from urbanlens.dashboard.services.places.splits import looks_like_a_split, process_split
 
@@ -121,13 +123,18 @@ class MildShrinkTests(_OldParcelCase):
 
     def test_another_providers_overlapping_neighbour_is_no_split_grant_or_reparent(self) -> None:
         neighbour = self.remainder_parcel(0.55, 1.0)
-        Place.objects.filter(pk=neighbour.pk).update(provider="other")
+        geometry_versions.record_version(neighbour, _strip(0.55, 1.0), provider="other")
         self.assertFalse(looks_like_a_split(self.old, _strip(0, 0.6)))
         with mock.patch(_CHAIN):
             self.assertIsNone(provisioning.detect_subdivision(self.pin.location, _strip(0, 0.6)))
         neighbour.refresh_from_db()
         self.assertIsNone(neighbour.parent_id)
         self.assertFalse(PlaceAccessGrant.objects.exists())
+
+    def test_a_remainder_another_provider_drew_does_not_count(self) -> None:
+        remainder = self.remainder_parcel()
+        geometry_versions.record_version(remainder, _strip(0.6, 1.0), provider="other")
+        self.assertFalse(looks_like_a_split(self.old, _strip(0, 0.6)))
 
     def test_a_neighbour_overlapping_the_new_outline_is_not_the_remainder(self) -> None:
         self.remainder_parcel(0.4, 1.0)
@@ -176,10 +183,10 @@ class MildShrinkTests(_OldParcelCase):
         other = pin_on(self.holder, self.old, lat=SOUTH + SIZE / 2, lng=WEST + SIZE * 0.9)
         self.assertTrue(other.location.place_id)
         with mock.patch(_CHAIN) as chain:
-            provisioning.detect_subdivision(self.pin.location, _strip(0, 0.6))
+            self.assertEqual(provisioning.detect_subdivision(self.pin.location, _strip(0, 0.6)), self.old)
         chain.assert_not_called()
 
-    def test_a_shrink_under_34_percent_counts_without_a_remainder_parcel(self) -> None:
+    def test_a_shrink_under_34_percent_looks_like_a_split_but_one_successor_leaves_it_current(self) -> None:
         self.assertTrue(looks_like_a_split(self.old, _strip(0, 0.2)))
         with mock.patch(_CHAIN):
             # Nothing else to probe, so there is only one successor: it stays current.
@@ -303,7 +310,7 @@ class OneSourceTests(_OldParcelCase):
     def setUp(self) -> None:
         super().setUp()
         self.other = pin_on(self.holder, self.old, lat=SOUTH + SIZE / 2, lng=WEST + SIZE * 0.9)
-        self.assertEqual(self.old.provider, "")
+        self.assertEqual(geometry_versions.outline_source(self.old), "")
 
     def _assert_no_split(self, superseded: Place | None) -> None:
         self.assertIsNone(superseded)
@@ -323,9 +330,9 @@ class OneSourceTests(_OldParcelCase):
         self.assertEqual(superseded, self.old)
         self.assertEqual(self.old.children.count(), 2)
 
-    def test_a_refresh_from_another_provider_than_the_parcels_own_is_not_a_shrink(self) -> None:
-        Place.objects.filter(pk=self.old.pk).update(provider="recorded")
-        self.old.refresh_from_db()
+    def test_a_refresh_from_another_provider_than_the_one_that_drew_the_parcel_is_not_a_shrink(self) -> None:
+        geometry_versions.record_version(self.old, _strip(0, 1), provider="recorded")
+        self.assertEqual(geometry_versions.outline_source(self.old), "recorded")
         self.pin.location.refresh_from_db()
         with mock.patch(_CHAIN) as chain:
             self._assert_no_split(provisioning.detect_subdivision(self.pin.location, _strip(0, 0.3), source="other"))
@@ -424,11 +431,11 @@ class RefreshedOutlineTests(_OldParcelCase):
         self.assertFalse(PlaceAccessGrant.objects.exists())
 
 
-class ProcessSplitTests(_OldParcelCase):
+class SuccessorRuleTests(_OldParcelCase):
     """Every successor passes through process_split, so it holds them to the successor rules whoever called it."""
 
-    def _assert_nothing_split(self, superseded: Place | None) -> None:
-        self.assertIsNone(superseded)
+    def _assert_nothing_split(self, result: Place) -> None:
+        self.assertEqual(result.status, PlaceStatus.CURRENT)
         self.old.refresh_from_db()
         self.assertEqual(self.old.status, PlaceStatus.CURRENT)
         self.assertFalse(self.old.children.exists())
@@ -444,7 +451,9 @@ class ProcessSplitTests(_OldParcelCase):
         self._assert_nothing_split(process_split(self.old, [_strip(0, 0.6), _strip(0, 0.6)]))
 
     def test_an_outline_offered_twice_becomes_one_child(self) -> None:
-        self.assertEqual(process_split(self.old, [_strip(0, 0.6), _strip(0, 0.6), _strip(0.6, 1.0)]), self.old)
+        self.assertEqual(
+            process_split(self.old, [_strip(0, 0.6), _strip(0, 0.6), _strip(0.6, 1.0)]).status, PlaceStatus.SUPERSEDED
+        )
         self.old.refresh_from_db()
         self.assertEqual(self.old.status, PlaceStatus.SUPERSEDED)
         self.assertEqual(self.old.children.count(), 2)
@@ -470,10 +479,27 @@ class ProcessSplitTests(_OldParcelCase):
         self.assertTrue(stored.geometry.equals(original))
 
     def test_pieces_of_the_old_parcel_split_it(self) -> None:
-        self.assertEqual(process_split(self.old, [_strip(0, 0.6), _strip(0.6, 1.0)]), self.old)
+        self.assertEqual(process_split(self.old, [_strip(0, 0.6), _strip(0.6, 1.0)]).status, PlaceStatus.SUPERSEDED)
         self.old.refresh_from_db()
         self.assertEqual(self.old.status, PlaceStatus.SUPERSEDED)
         self.assertEqual(self.old.children.count(), 2)
+
+    def test_an_outline_landing_on_the_old_parcel_itself_splits_nothing(self) -> None:
+        real = provisioning.upsert_place
+        landed: list[Place] = []
+
+        def onto_the_old_parcel_first(*args, **kwargs):
+            if not landed:
+                landed.append(self.old)
+                return self.old
+            return real(*args, **kwargs)
+
+        places_before = Place.objects.count()
+        with mock.patch.object(provisioning, "upsert_place", side_effect=onto_the_old_parcel_first):
+            self._assert_nothing_split(process_split(self.old, [_strip(0, 0.6), _strip(0.6, 1.0)]))
+        self.assertEqual(landed, [self.old])
+        self.assertIsNone(self.old.parent_id)
+        self.assertEqual(Place.objects.count(), places_before)
 
     def _unsafe_parcel(self, start: float, end: float) -> Place:
         theirs = make_place(PlaceKind.PARCEL, _strip(start, end), name="Theirs")
@@ -486,14 +512,16 @@ class ProcessSplitTests(_OldParcelCase):
 
     def test_a_small_left_out_outline_does_not_stop_the_split(self) -> None:
         theirs = self._unsafe_parcel(0, 0.1)
-        self.assertEqual(process_split(self.old, [_strip(0, 0.1), _strip(0.1, 0.6), _strip(0.6, 1.0)]), self.old)
+        self.assertEqual(
+            process_split(self.old, [_strip(0, 0.1), _strip(0.1, 0.6), _strip(0.6, 1.0)]).status, PlaceStatus.SUPERSEDED
+        )
         self.assertEqual(self.old.children.count(), 2)
         theirs.refresh_from_db()
         self.assertIsNone(theirs.parent_id)
 
     def test_pieces_found_only_in_part_still_split_a_heavy_shrink(self) -> None:
         # Probes are capped, so a heavy shrink is allowed to find only some of the pieces.
-        self.assertEqual(process_split(self.old, [_strip(0, 0.2), _strip(0.2, 0.5)]), self.old)
+        self.assertEqual(process_split(self.old, [_strip(0, 0.2), _strip(0.2, 0.5)]).status, PlaceStatus.SUPERSEDED)
         self.assertEqual(self.old.children.count(), 2)
 
 
@@ -551,3 +579,42 @@ class LineageHandlerTests(_OldParcelCase):
         self.pin.delete()
         handle_lineage_event(event)
         self.assertEqual(PlaceAccessGrant.objects.count(), before)
+
+
+class ProcessSplitTests(_OldParcelCase):
+    def test_a_successor_matching_a_parcel_with_strangers_pins_is_left_alone(self) -> None:
+        neighbour = self.remainder_parcel()
+        pin_on(baker.make(User).profile, neighbour, lat=SOUTH + SIZE / 2, lng=WEST + SIZE * 0.8)
+        process_split(self.old, [_strip(0, 0.6), _strip(0.6, 1.0)])
+        self.old.refresh_from_db()
+        neighbour.refresh_from_db()
+        self.assertEqual(self.old.status, PlaceStatus.CURRENT)
+        self.assertIsNone(neighbour.parent_id)
+        self.assertFalse(PlaceAccessGrant.objects.filter(profile=self.holder, place=neighbour).exists())
+
+    def test_two_outlines_resolving_to_one_place_are_not_a_split(self) -> None:
+        piece = _strip(0, 0.6)
+        process_split(self.old, [piece, piece])
+        self.old.refresh_from_db()
+        self.assertEqual(self.old.status, PlaceStatus.CURRENT)
+        self.assertFalse(Place.objects.filter(parent=self.old).exists())
+        self.assertFalse(PlaceLineageEdge.objects.filter(predecessor=self.old).exists())
+
+    def test_retracting_a_split_detaches_its_successors_and_the_old_parcel_resolves_again(self) -> None:
+        process_split(self.old, [_strip(0, 0.4), _strip(0.4, 0.8)])
+        self.old.refresh_from_db()
+        self.assertTrue(self.old.is_aggregate)
+        successors = list(self.old.children.all())
+        self.assertEqual(len(successors), 2)
+        uncovered = Location.objects.create(latitude=round(SOUTH + SIZE / 2, 6), longitude=round(WEST + SIZE * 0.9, 6))
+        self.assertNotEqual(resolution.resolve_location_place(uncovered), self.old)
+
+        retract_erroneous_event(list(PlaceLineageEdge.objects.filter(predecessor=self.old)), "test")
+
+        self.old.refresh_from_db()
+        self.assertEqual(self.old.status, PlaceStatus.CURRENT)
+        self.assertFalse(self.old.is_aggregate)
+        self.assertTrue(Place.objects.resolvable().filter(pk=self.old.pk).exists())
+        self.assertFalse(Place.objects.filter(pk__in=[s.pk for s in successors], parent=self.old).exists())
+        uncovered.refresh_from_db()
+        self.assertEqual(uncovered.place_id, self.old.pk)

@@ -89,7 +89,7 @@ def ensure_wiki_for_location(location_id: int) -> int | None:
 
     wiki, created = Wiki.objects.get_or_create_for_location(location)
     # Enrichment sends the coordinate to outside providers, so it waits for an owner who allows that.
-    consented = Pin.objects.filter(location=location, profile__external_apis_enabled=True).exists()
+    consented = Pin.objects.filter(location=location, profile__external_apis_enabled=True).exists()  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
     if consented and (created or not boundary_generation_ran(location)):
         enqueue_follow_on(enrich_wiki_location, enrich_wiki_locations, wiki.pk, queue=follow_on_queue())
     if created:
@@ -152,7 +152,7 @@ def ensure_building_wikis(location_id: int) -> list[int]:
     from urbanlens.dashboard.models.wiki.model import Wiki
     from urbanlens.dashboard.services.wiki.building_wikis import locations_awaiting_building_wikis
 
-    campus_wiki = Wiki.objects.filter(location_id=location_id, place__isnull=False).select_related("place", "location").first()
+    campus_wiki = Wiki.objects.filter(location_id=location_id, place__isnull=False).select_related("place", "location").first()  # same-place: a wiki is anchored to one exact Location
     if campus_wiki is None:
         return []
     awaiting = locations_awaiting_building_wikis(campus_wiki)
@@ -1027,7 +1027,9 @@ def _seed_new_pin_from_cached_wikipedia(location: Location, pin_id: int) -> None
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.wiki.wiki_seed import seed_pin_from_cached_wikipedia
 
-    if (pin := Pin.objects.select_related("profile", "location").filter(pk=pin_id, location=location).first()) is not None:
+    if (
+        pin := Pin.objects.select_related("profile", "location").filter(pk=pin_id, location=location).first()
+    ) is not None:  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
         seed_pin_from_cached_wikipedia(pin)
 
 

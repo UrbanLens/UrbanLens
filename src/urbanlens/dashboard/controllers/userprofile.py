@@ -156,6 +156,7 @@ class ViewProfileView(LoginRequiredMixin, View):
             return
 
         from urbanlens.dashboard.services.pins import common_pins
+        from urbanlens.dashboard.services.pins.same_place import same_place_q
 
         # Asked before anything is computed, not after. Both scans below walk whole accounts, and the setting
         # they gate on defaults to friends-only, so the ordinary visitor was paying for an answer the page
@@ -167,13 +168,10 @@ class ViewProfileView(LoginRequiredMixin, View):
         if common_pins_permitted:
             common_ids = common_pins.common_pin_location_ids([my_profile, profile])
 
-            # Locations both profiles have visited. `PinQuerySet.visited()` owns the predicate
-            # ("has a last_visited timestamp or carries the profile's Visited status label") and
-            # its docstring asks callers to build on it rather than re-derive the Q, which this
-            # did - one of four inline copies that had to stay in step by hand.
-            their_visited = Pin.objects.filter(profile=profile, location__isnull=False).visited().values("location_id")
+            # Places both profiles have visited, listed by the viewer's own pins' Locations only.
+            their_visited = Pin.objects.filter(profile=profile).visited()
             shared_visited_ids = set(
-                Pin.objects.filter(profile=my_profile, location_id__in=their_visited).visited().values_list("location_id", flat=True).distinct(),
+                Pin.objects.filter(profile=my_profile, location__isnull=False).visited().filter(same_place_q(their_visited)).values_list("location_id", flat=True).distinct(),
             )
         context["common_pin_count"] = len(common_ids) if common_pins_permitted else None
         context["can_view_common_pins"] = bool(common_ids) and common_pins_permitted
@@ -294,7 +292,7 @@ class CommonPinsView(LoginRequiredMixin, View):
         # name, notes, icon) must never leak through this page, per the feature's own privacy requirement.
         # A root pin and a child can share a Location; list one pin per Location, the root first.
         by_location: dict[int, Pin] = {}
-        for pin in Pin.objects.filter(profile=viewer, location_id__in=common_ids).select_related("location", "location__wiki").preferring_root():
+        for pin in Pin.objects.filter(profile=viewer, location_id__in=common_ids).select_related("location", "location__wiki").preferring_root():  # same-place: the viewer's own pins, by ids from common_pin_location_ids
             by_location.setdefault(pin.location_id, pin)
         my_pins = sorted(by_location.values(), key=lambda pin: (pin.name is None, pin.name or ""))
 
