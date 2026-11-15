@@ -8,7 +8,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
-from urbanlens.dashboard.models.place.model import PlaceKind
+from urbanlens.dashboard.models.place.model import PlaceEvidence, PlaceKind
 from urbanlens.dashboard.services.places.provisioning import ensure_building_places
 
 from .place_helpers import make_place
@@ -139,9 +139,14 @@ class BuildingPlaceNestingTests(TestCase):
         for place in created.values():
             self.assertEqual(place.parent_id, self.parcel.pk)
 
-    def test_no_parcel_creates_nothing(self) -> None:
-        """A building place with no parcel has no domain to join."""
-        self.assertEqual(ensure_building_places(None, [{"ref": "a", "geometry": _square(0.2, 0.2, 0.1)}]), {})
+    def test_no_parcel_creates_top_level_footprint_places(self) -> None:
+        """Off every stored parcel: one standing on a stored parcel nests under it (test_evidence_ladder)."""
+        created = ensure_building_places(
+            None, [{"ref": "a", "geometry": _square(3.2, 3.2, 0.1), "sources": [{"source": "overture"}]}]
+        )
+        self.assertEqual(len(created), 1)
+        self.assertIsNone(created[0].parent_id)
+        self.assertEqual(created[0].evidence, PlaceEvidence.FOOTPRINT)
 
 
 class DistinctRecordsStayDistinctTests(TestCase):

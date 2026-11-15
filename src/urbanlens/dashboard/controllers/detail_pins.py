@@ -31,7 +31,7 @@ from urbanlens.dashboard.services.pins.pin_creation import resolve_child_pin_loc
 from urbanlens.dashboard.services.undo.handlers.pin import MODEL_LABEL as PIN_MODEL_LABEL
 from urbanlens.dashboard.services.undo.handlers.wiki import MODEL_LABEL as WIKI_MODEL_LABEL, with_wiki_descendants
 from urbanlens.dashboard.services.undo.service import stash_for_undo
-from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki, visible_location_or_404
+from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki, visible_location_or_404, without_shared_placeless
 
 logger = logging.getLogger(__name__)
 
@@ -220,11 +220,15 @@ class DetailPinEditView(LoginRequiredMixin, View):
             detail_pin.pin_type, detail_pin.pin_type_is_user_provided = _requested_pin_type(body)
             reclassify = not detail_pin.pin_type_is_user_provided
 
+        before_subject_id = detail_pin.subject_place_id
         old_lat, old_lng = float(detail_pin.effective_latitude), float(detail_pin.effective_longitude)
-        if new_location is not None:
+        # The subject follows only a real change of Location: re-submitting the current point must not reset a
+        # subject that has since diverged from the Location's place (a merge gap-fill, a building repoint).
+        if new_location is not None and new_location.pk != detail_pin.location_id:
             detail_pin.location = new_location
+            detail_pin.subject_place_id = new_location.place_id
 
-        snapshot.save_changes()
+        snapshot.save_changes(together=("location", "subject_place"))
         if moved:
             from urbanlens.dashboard.services.undo.mutations import stash_pin_move
 
@@ -234,6 +238,8 @@ class DetailPinEditView(LoginRequiredMixin, View):
                 before_lng=old_lng,
                 after_lat=float(detail_pin.effective_latitude),
                 after_lng=float(detail_pin.effective_longitude),
+                before_subject_id=before_subject_id,
+                after_subject_id=detail_pin.subject_place_id,
             )
         # A moved auto-typed marker may have landed on (or left) a building, so
         # its classification is re-derived from wherever it now sits.
@@ -318,7 +324,7 @@ class LocationDetailPinJsonView(LoginRequiredMixin, View):
 
         include_children = request.GET.get("children") == "1"
         child_qs = wiki.descendants().select_related("location", "parent_wiki") if include_children else wiki.child_wikis.select_related("location")
-        child_wikis = visible_rows(child_qs, wiki, profile).order_by("pin_type", "name")
+        child_wikis = visible_rows(without_shared_placeless(child_qs), wiki, profile).order_by("pin_type", "name")
         payload = []
         for cw in child_wikis:
             entry = cw.to_detail_json()
@@ -342,7 +348,7 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
         # Same filter as the JSON endpoint above: the viewer's projection of the wiki decides which
         # detail pins they are shown.
-        child_wikis = visible_rows(wiki.child_wikis.select_related("location"), wiki, profile).order_by("pin_type", "name")
+        child_wikis = visible_rows(without_shared_placeless(wiki.child_wikis.select_related("location")), wiki, profile).order_by("pin_type", "name")
         return render(
             request,
             "dashboard/partials/pins/location_detail_pins_panel.html",
