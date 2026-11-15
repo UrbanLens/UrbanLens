@@ -530,6 +530,20 @@ class CeleryOnlyTests(SharedPlaceTestCase):
         queued.assert_called_once()
         self.assertFalse(SharedPlaceMember.objects.exists())
 
+    def test_moving_a_mature_pin_to_another_point_queues_its_evaluation(self) -> None:
+        from django.core.cache import cache
+
+        moved = _pin(self.bob, 10)
+        cache.delete(f"ul:shared-place:eval:{moved.pk}")
+        moved.location = baker.make(Location, latitude=round(LAT + 500 * M_LAT, 6), longitude=LON)
+        with (
+            patch("urbanlens.dashboard.tasks.evaluate_shared_places_for_pin.apply_async") as queued,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            moved.save()
+        queued.assert_called_once()
+        self.assertEqual(queued.call_args.kwargs["args"], (moved.pk,))
+
     def test_saves_inside_the_debounce_window_collapse_to_one_evaluation(self) -> None:
         from django.core.cache import cache
 
