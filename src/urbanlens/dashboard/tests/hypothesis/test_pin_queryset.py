@@ -176,7 +176,6 @@ class PinManagerGetNearbyOrCreateProximityTests(TestCase):
             40.0,
             -74.0,
             self.profile,
-            threshold_meters=100,
             defaults={"location": loc},
         )
 
@@ -230,7 +229,7 @@ class PinManagerGetNearbyOrCreateChildPinTests(TestCase):
     def test_finds_existing_child_pin_when_no_root_pin_exists(self) -> None:
         parent = baker.make(Pin, profile=self.profile)
         child = baker.make(Pin, profile=self.profile, location=self.loc, parent_pin=parent)
-        pin, created = Pin.objects.get_nearby_or_create(40.0, -74.0, self.profile, threshold_meters=100)
+        pin, created = Pin.objects.get_nearby_or_create(40.0, -74.0, self.profile)
         self.assertFalse(created)
         self.assertEqual(pin.pk, child.pk)
 
@@ -238,6 +237,6 @@ class PinManagerGetNearbyOrCreateChildPinTests(TestCase):
         root = baker.make(Pin, profile=self.profile, location=self.loc)
         other_parent = baker.make(Pin, profile=self.profile)
         baker.make(Pin, profile=self.profile, location=self.loc, parent_pin=other_parent)
-        pin, created = Pin.objects.get_nearby_or_create(40.0, -74.0, self.profile, threshold_meters=100)
+        pin, created = Pin.objects.get_nearby_or_create(40.0, -74.0, self.profile)
         self.assertFalse(created)
         self.assertEqual(pin.pk, root.pk)

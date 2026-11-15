@@ -51,6 +51,8 @@ _RESTORABLE_FIELDS = (
     "plywood",
     "locked",
     "parenting_is_manual",
+    "import_source",
+    "import_key",
 )
 
 
@@ -209,6 +211,10 @@ class PinUndoHandler(UndoHandler):
                 # Boundary provenance is only meaningful beside the parent it names.
                 nested_by = parent_pk if parent_pk is not None and entry.get("nested_by_boundary_pin_old_pk") == parent_old_pk else None
                 # Records saved before the field existed were of pins the migration marked manual.
+                fields = {"parenting_is_manual": True, **entry["fields"]}
+                # An import identity claimed since the deletion stays with its new holder; this pin comes back unkeyed.
+                if fields.get("import_key") and Pin.objects.filter(profile_id=entry["profile_id"], import_source=fields.get("import_source"), import_key=fields["import_key"]).exists():
+                    fields["import_source"] = fields["import_key"] = None
                 pin = Pin.objects.create(
                     location_id=entry["location_id"],
                     profile_id=entry["profile_id"],
@@ -216,7 +222,7 @@ class PinUndoHandler(UndoHandler):
                     subject_place_id=subject_ids.get(entry.get("subject_place_id") or 0),
                     parent_pin_id=parent_pk,
                     nested_by_boundary_pin_id=nested_by,
-                    **{"parenting_is_manual": True, **entry["fields"]},
+                    **fields,
                 )
                 queue_held_upload(pin, "custom_icon")
                 old_to_new[entry["old_pk"]] = pin

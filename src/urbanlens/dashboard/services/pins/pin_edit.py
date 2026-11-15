@@ -241,6 +241,10 @@ def move_pin_to_coordinates(pin: Pin, latitude: float, longitude: float) -> None
         pin.subject_place_id = location.place_id
     pin.location = location
     pin.save(update_fields=["location", "subject_place", "updated"])
+    if location.place_id is not None and pin.parent_pin_id is None:
+        from urbanlens.dashboard.services.pins.property_nesting import request_property_nesting
+
+        request_property_nesting(location.pk)
     from urbanlens.dashboard.services.undo.mutations import stash_pin_move
 
     stash_pin_move(pin, before_lat=before_lat, before_lng=before_lng, after_lat=latitude, after_lng=longitude, before_subject_id=before_subject_id, after_subject_id=pin.subject_place_id)
@@ -266,6 +270,7 @@ def reparent_pin(pin: Pin, new_parent: Pin | None) -> None:
         if conflict:
             raise ReparentLocationConflictError(f"Pin {pin.pk} (location {pin.location_id}) already shares that location with another top-level pin of profile {pin.profile_id}; refusing detach.")
         pin.parent_pin = None
+        pin.parenting_is_manual = True
     else:
         if pin.would_create_cycle(new_parent):
             raise CircularParentChainError(f"Reparenting pin {pin.pk} under pin {new_parent.pk} would create a cycle.")

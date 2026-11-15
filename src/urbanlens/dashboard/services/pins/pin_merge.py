@@ -749,6 +749,8 @@ PIN_FIELD_POLICY: dict[str, str] = {
     "parent_pin": _IDENTITY,
     "nested_by_boundary_pin": _IDENTITY,
     "parenting_is_manual": _IDENTITY,
+    "import_source": _IDENTITY,
+    "import_key": _IDENTITY,
     "last_visited": _DERIVED,
     "source_share": _LINEAGE,
     "inferred_source_share": _LINEAGE,
