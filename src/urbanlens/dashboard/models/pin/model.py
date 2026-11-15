@@ -118,7 +118,7 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
     import_key = CharField(max_length=255, null=True, blank=True)
 
     #: Exempt from automatic nesting: the user chose this pin's place in the hierarchy (promote, detach, keep children, swap with parent).
-    #: See services.pins.property_nesting. Rows that predate the field default to True.
+    #: See services.pins.property_nesting and services.pins.boundary_nesting, neither of which touches a manual pin. Rows that predate the field default to True.
     parenting_is_manual = BooleanField(default=False, db_default=False)
 
     # User's custom label. None = show location.display_name instead (see effective_name).
@@ -224,9 +224,6 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
         blank=True,
         related_name="detail_pins",
     )
-    # Exempt from automatic nesting: the user parented, promoted or detached this pin, or it predates boundary
-    # nesting (the migration marks existing rows). Boundary nesting never touches it (services.pins.boundary_nesting).
-    parenting_is_manual = BooleanField(default=False, db_default=False)
     # The user's pin whose drawn boundary nested this pin. Set only by boundary_nesting, cleared by any other
     # change of parent; it is how a boundary edit tells its own nesting from a hierarchy the user built.
     nested_by_boundary_pin = ForeignKey(
