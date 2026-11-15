@@ -269,7 +269,8 @@ class BackfillMigrationTests(_Base):
         editor = type("Editor", (), {"connection": connection})()
         migration.key_takeout_pins(None, editor)
         migration.key_takeout_pins(None, editor)
-        keys = sorted(
-            filter(None, Pin.objects.filter(pk__in=[first.pk, second.pk]).values_list("import_key", flat=True))
-        )
-        self.assertEqual(keys, ["cid:777"])
+        first.refresh_from_db()
+        second.refresh_from_db()
+        # Neither Location is pre-cutoff, so the lower pk keeps the key and the sibling stays unkeyed.
+        self.assertEqual(first.import_key, "cid:777")
+        self.assertIsNone(second.import_key)

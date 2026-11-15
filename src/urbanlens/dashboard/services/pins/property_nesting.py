@@ -248,9 +248,15 @@ def _notify_owners(nested: Sequence[NestedPin]) -> None:
 
 
 def request_property_nesting_many(location_ids: Iterable[int]) -> None:
-    """:func:`request_property_nesting` for several Locations at once."""
-    for location_id in location_ids:
-        request_property_nesting(location_id)
+    """:func:`request_property_nesting` for several Locations at once, in one pass rather than one per Location."""
+    ids = set(location_ids)
+    if not ids:
+        return
+    pending = _deferred_locations.get()
+    if pending is not None:
+        pending.update(ids)
+        return
+    transaction.on_commit(lambda: _run_quietly(location_ids=ids))
 
 
 MAX_NAMES_IN_SUMMARY = 25

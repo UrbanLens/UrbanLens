@@ -23,6 +23,7 @@ from urbanlens.dashboard.services.pins.property_nesting import (
     deferring_property_nesting,
     nest_duplicate_roots,
     request_property_nesting,
+    request_property_nesting_many,
 )
 from urbanlens.dashboard.services.places.resolution import resolve_location_place
 
@@ -137,6 +138,22 @@ class PropertyNestingTests(TestCase):
         self.assertEqual(len(nested), 199)
         self.assertEqual(Pin.objects.filter(profile=self.profile, parent_pin__isnull=True).count(), 1)
         self.assertLess(len(queries), 40)
+
+    def test_requesting_many_locations_outside_a_deferring_block_runs_one_pass(self) -> None:
+        for index in range(5):
+            self._root(self.profile, index, age=10 - index)
+        self.parcel = make_place(PlaceKind.PARCEL, _square(_X, _Y, _SIZE), name="parcel")
+        location_ids = list(Location.objects.filter(place__isnull=True).values_list("pk", flat=True))
+        Location.objects.filter(pk__in=location_ids).update(place=self.parcel)
+        with (
+            mock.patch(
+                "urbanlens.dashboard.services.pins.property_nesting.nest_duplicate_roots", wraps=nest_duplicate_roots
+            ) as passes,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            request_property_nesting_many(location_ids)
+        self.assertEqual(passes.call_count, 1)
+        self.assertEqual(Pin.objects.filter(profile=self.profile, parent_pin__isnull=True).count(), 1)
 
     def test_interactive_create_still_errors_with_the_building_hint(self) -> None:
         self.profile.external_apis_enabled = False
