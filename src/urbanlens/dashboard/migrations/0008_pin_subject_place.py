@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("dashboard", "0005_place_lifecycle_backfill"),
+        ("dashboard", "0007_shared_placeless_places"),
     ]
 
     operations = [
