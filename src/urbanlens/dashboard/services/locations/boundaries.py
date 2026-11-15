@@ -65,6 +65,11 @@ class ResolvedBoundaries:
     computing: list[str] = field(default_factory=list)
 
     @property
+    def property_source(self) -> str:
+        """The ``service_key`` of the provider that drew ``property_polygon``, or "" when it has none."""
+        return next((service_key for service_key, polygon in self.property_candidates if polygon is self.property_polygon), "")
+
+    @property
     def backs_off(self) -> bool:
         """Whether any provider deferred for a reason other than computing its answer, so a retry should back off."""
         return bool(set(self.deferred) - set(self.computing))
