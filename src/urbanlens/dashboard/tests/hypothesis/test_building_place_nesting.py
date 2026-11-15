@@ -8,7 +8,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
-from urbanlens.dashboard.models.place.model import PlaceKind
+from urbanlens.dashboard.models.place.model import PlaceEvidence, PlaceKind
 from urbanlens.dashboard.services.places.provisioning import ensure_building_places
 
 from .place_helpers import make_place
@@ -146,7 +146,7 @@ class BuildingPlaceNestingTests(TestCase):
         )
         self.assertEqual(len(created), 1)
         self.assertIsNone(created[0].parent_id)
-        self.assertEqual(created[0].evidence, "footprint")
+        self.assertEqual(created[0].evidence, PlaceEvidence.FOOTPRINT)
 
 
 class DistinctRecordsStayDistinctTests(TestCase):

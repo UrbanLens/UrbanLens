@@ -399,14 +399,13 @@ class FootprintsOnAStoredParcelTests(TestCase):
 
     def test_a_deferred_answer_nests_an_outline_that_stands_on_a_stored_parcel(self) -> None:
         parcel = make_place(PlaceKind.PARCEL, _box(30, lat=LAT + 40 * M_LAT))
-        make_place(PlaceKind.BUILDING, _box(3))  # makes the pin already resolve
+        existing = make_place(PlaceKind.BUILDING, _box(3))  # makes the pin already resolve
         outline = _box(5, lat=LAT + 20 * M_LAT)  # on the parcel, which does not reach the pin
         _provision(
             _pin(), building_polygon=outline, building_candidates=[("overture", outline)], deferred=["county_gis"]
         )
-        self.assertEqual(
-            Place.objects.get(kind=PlaceKind.BUILDING, evidence=PlaceEvidence.FOOTPRINT).parent_id, parcel.pk
-        )
+        kept = Place.objects.filter(kind=PlaceKind.BUILDING).exclude(pk=existing.pk).get()
+        self.assertEqual((kept.evidence, kept.parent_id), (PlaceEvidence.FOOTPRINT, parcel.pk))
 
 
 class FootprintResolutionTests(TestCase):
