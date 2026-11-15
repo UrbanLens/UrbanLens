@@ -377,7 +377,7 @@ class Location(abstract.PublicDashboardModel):
 
         # Loaded rather than assigned this instance: assigning would replace the wiki a caller already holds
         # through ``self.wiki`` with this one.
-        wiki = Wiki.objects.filter(location_id=self.pk).select_related("location", "parent_wiki__location").first()
+        wiki = Wiki.objects.filter(location_id=self.pk).select_related("location", "parent_wiki__location").first()  # same-place: a wiki is anchored to one exact Location
         if wiki is None:
             return
         wiki.sync_slug_with_provider_name()

@@ -4,7 +4,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [("dashboard", "0004_backfill_pin_import_keys")]
+    dependencies = [("dashboard", "0011_backfill_pin_import_keys")]
 
     operations = [
         migrations.AddField(model_name="pin", name="parenting_is_manual", field=models.BooleanField(default=True)),

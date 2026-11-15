@@ -30,6 +30,7 @@ from asgiref.sync import async_to_sync
 from celery import shared_task
 from celery.exceptions import SoftTimeLimitExceeded
 from channels.layers import get_channel_layer
+from django.db import OperationalError as DatabaseOperationalError
 from django.utils import timezone
 
 from urbanlens.dashboard.services.core.capacity import ALBUM_PHOTOS, CapacityExceededError, ensure_room
@@ -88,7 +89,7 @@ def ensure_wiki_for_location(location_id: int) -> int | None:
 
     wiki, created = Wiki.objects.get_or_create_for_location(location)
     # Enrichment sends the coordinate to outside providers, so it waits for an owner who allows that.
-    consented = Pin.objects.filter(location=location, profile__external_apis_enabled=True).exists()
+    consented = Pin.objects.filter(location=location, profile__external_apis_enabled=True).exists()  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
     if consented and (created or not boundary_generation_ran(location)):
         enqueue_follow_on(enrich_wiki_location, enrich_wiki_locations, wiki.pk, queue=follow_on_queue())
     if created:
@@ -151,7 +152,7 @@ def ensure_building_wikis(location_id: int) -> list[int]:
     from urbanlens.dashboard.models.wiki.model import Wiki
     from urbanlens.dashboard.services.wiki.building_wikis import locations_awaiting_building_wikis
 
-    campus_wiki = Wiki.objects.filter(location_id=location_id, place__isnull=False).select_related("place", "location").first()
+    campus_wiki = Wiki.objects.filter(location_id=location_id, place__isnull=False).select_related("place", "location").first()  # same-place: a wiki is anchored to one exact Location
     if campus_wiki is None:
         return []
     awaiting = locations_awaiting_building_wikis(campus_wiki)
@@ -1026,7 +1027,9 @@ def _seed_new_pin_from_cached_wikipedia(location: Location, pin_id: int) -> None
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.wiki.wiki_seed import seed_pin_from_cached_wikipedia
 
-    if (pin := Pin.objects.select_related("profile", "location").filter(pk=pin_id, location=location).first()) is not None:
+    if (
+        pin := Pin.objects.select_related("profile", "location").filter(pk=pin_id, location=location).first()
+    ) is not None:  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
         seed_pin_from_cached_wikipedia(pin)
 
 
@@ -4851,6 +4854,67 @@ def sweep_achievements_range(start_pk: int, end_pk: int) -> int:
     return evaluate_profiles_in_range(start_pk, end_pk)
 
 
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+def refresh_trust_signals(chunk_size: int = 500) -> int:
+    """
+    Fan the nightly ``ProfileTrustSignals`` rebuild out as bounded profile-range subtasks.
+
+    Args:
+        chunk_size: Maximum profiles per subtask.
+
+    Returns:
+        How many range subtasks were enqueued.
+    """
+    from urbanlens.dashboard.models.profile import Profile
+    from urbanlens.dashboard.services.core.celery import dispatch_pk_ranges
+
+    return dispatch_pk_ranges(Profile.objects.all(), refresh_trust_signals_range, chunk_size=chunk_size)
+
+
+@shared_task(bind=True, autoretry_for=(OSError, DatabaseOperationalError), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+def refresh_trust_signals_range(self, start_pk: int, end_pk: int) -> int:
+    """
+    Rebuild the signals row of every profile with ``start_pk <= pk <= end_pk``.
+
+    Idempotent: rows are replaced, never accumulated. A profile with no activity in 90 days whose row is
+    younger than ``UL_TRUST_DORMANT_REFRESH_DAYS`` is skipped.
+
+    Returns:
+        How many profiles were rebuilt.
+    """
+    from datetime import timedelta
+
+    from django.conf import settings
+    from django.utils import timezone
+
+    from urbanlens.dashboard.models.achievements.model import ProfileActivityDay
+    from urbanlens.dashboard.models.profile import Profile
+    from urbanlens.dashboard.models.trust_signals import ProfileTrustSignals
+    from urbanlens.dashboard.services.trust import compute_signals
+    from urbanlens.dashboard.services.trust.signals import ACTIVITY_WINDOW_DAYS, MEANINGFUL_ACTIVITY_KINDS
+
+    dormant_cutoff = timezone.now() - timedelta(days=settings.UL_TRUST_DORMANT_REFRESH_DAYS)
+    skip = set(ProfileTrustSignals.objects.filter(profile_id__gte=start_pk, profile_id__lte=end_pk, active_weeks_90=0, computed_at__gte=dormant_cutoff).values_list("profile_id", flat=True))
+    # A dormant row may be stale because the profile became active again since it was computed.
+    skip.difference_update(ProfileActivityDay.objects.filter(profile_id__in=skip, kind__in=MEANINGFUL_ACTIVITY_KINDS, day__gte=timezone.localdate() - timedelta(days=ACTIVITY_WINDOW_DAYS)).values_list("profile_id", flat=True))
+    rebuilt = 0
+    for profile in Profile.objects.filter(pk__gte=start_pk, pk__lte=end_pk).exclude(pk__in=skip).iterator(chunk_size=200):
+        try:
+            compute_signals(profile)
+        except (OSError, DatabaseOperationalError):
+            # Transient: retry the whole range (rebuilds are idempotent) rather than skip the profile until tomorrow.
+            # On the final attempt, isolate the profile so a persistent timeout can't block the rest of the range.
+            if self.request.retries < (self.max_retries or 0):
+                raise
+            logger.exception("Trust signals refresh failed for profile %s after retries", profile.pk)
+            continue
+        except Exception:
+            logger.exception("Trust signals refresh failed for profile %s", profile.pk)
+            continue
+        rebuilt += 1
+    return rebuilt
+
+
 @shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def cache_media_item_into_album(album_id: int, profile_id: int, source: str, url: str, page_url: str = "", caption: str = "") -> int | None:
     """
@@ -5236,3 +5300,89 @@ def announce_wiki_change_task(wiki_id: int, actor_id: int, change: str, fields: 
     if wiki is None or actor is None:
         return 0
     return notify_wiki_change(wiki, actor, change, fields)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+def evaluate_shared_places_for_pin(pin_id: int) -> bool:
+    """
+    Run the shared-place trust checks and tier evaluation for one pin (ADR35 section 2).
+
+    The only place those checks run: never in a request. Enqueued debounced on pin create/move (see ``services.places.shared_place_triggers``).
+
+    Args:
+        pin_id: The pin that was created or moved.
+
+    Returns:
+        Whether the pin's profile joined or formed a shared place.
+    """
+    from urbanlens.dashboard.services.places.shared_places import evaluate_pin
+
+    return evaluate_pin(pin_id) is not None
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+def revalidate_shared_place_memberships(profile_id: int) -> int:
+    """
+    Drop a profile's shared-place memberships it no longer holds a nearby pin for.
+
+    Args:
+        profile_id: The profile whose pin was deleted.
+
+    Returns:
+        How many memberships were dropped.
+    """
+    from urbanlens.dashboard.models.profile import Profile
+    from urbanlens.dashboard.services.places.shared_places import revalidate_memberships
+
+    profile = Profile.objects.filter(pk=profile_id).first()
+    return revalidate_memberships(profile) if profile is not None else 0
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+def evaluate_shared_places_sweep(chunk_size: int = 500) -> int:
+    """
+    Nightly sweep: re-evaluate recent pins, so pins that matured since their last evaluation, bulk imports and trust changes are picked up.
+
+    Args:
+        chunk_size: Maximum pins per subtask.
+
+    Returns:
+        How many range subtasks were enqueued.
+    """
+    from django.conf import settings
+
+    from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.core.celery import dispatch_pk_ranges
+
+    since = timezone.now() - timedelta(days=settings.UL_SHARED_PLACE_SWEEP_DAYS)
+    return dispatch_pk_ranges(Pin.objects.filter(created__gte=since, location__isnull=False, profile__community_enabled=True), evaluate_shared_places_range, chunk_size=chunk_size)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+def evaluate_shared_places_range(start_pk: int, end_pk: int) -> int:
+    """
+    Evaluate every pin with ``start_pk <= pk <= end_pk`` and revalidate the memberships of their owners.
+
+    Args:
+        start_pk: First pin primary key.
+        end_pk: Last pin primary key.
+
+    Returns:
+        How many pins joined or formed a shared place.
+    """
+    from django.conf import settings
+
+    from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.places.shared_places import evaluate_pin, revalidate_memberships
+
+    since = timezone.now() - timedelta(days=settings.UL_SHARED_PLACE_SWEEP_DAYS)
+    pins = Pin.objects.filter(pk__gte=start_pk, pk__lte=end_pk, created__gte=since, location__isnull=False, profile__community_enabled=True).select_related("profile")
+    revalidated: set[int] = set()
+    joined = 0
+    for pin in pins.order_by("pk"):
+        if pin.profile_id not in revalidated:
+            revalidated.add(pin.profile_id)
+            revalidate_memberships(pin.profile)
+        if evaluate_pin(pin.pk, revalidate=False) is not None:
+            joined += 1
+    return joined

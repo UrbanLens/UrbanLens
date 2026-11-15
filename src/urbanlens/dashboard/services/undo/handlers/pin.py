@@ -8,6 +8,7 @@ from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.place.model import Place
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.media.held_upload import queue_held_upload
@@ -81,6 +82,7 @@ class PinUndoHandler(UndoHandler):
             "location_id": pin.location_id,
             "profile_id": pin.profile_id,
             "wiki_id": pin.wiki_id,
+            "subject_place_id": pin.subject_place_id,
             "parent_pin_old_pk": pin.parent_pin_id,
             "label_ids": list(pin.labels.values_list("id", flat=True)),
             # Image.pin is SET_NULL, so deleting a pin detaches its photos rather than destroying
@@ -152,7 +154,9 @@ class PinUndoHandler(UndoHandler):
         live_labels = set(Label.objects.filter(pk__in=label_ids).values_list("pk", flat=True)) if label_ids else set()
         live_parents = {(pk, profile_id) for pk, profile_id in Pin.objects.filter(pk__in={pk for pk, _ in outside_parents}).values_list("pk", "profile_id")} if outside_parents else set()
         # Root pins already standing where this batch would restore one.
-        occupied_roots = {(location_id, profile_id) for location_id, profile_id in Pin.objects.root_pins().filter(location_id__in=location_ids, profile_id__in=profile_ids).values_list("location_id", "profile_id")} if payload else set()
+        occupied_roots = (
+            {(location_id, profile_id) for location_id, profile_id in Pin.objects.root_pins().filter(location_id__in=location_ids, profile_id__in=profile_ids).values_list("location_id", "profile_id")} if payload else set()
+        )  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
 
         for entry in payload:
             if entry["profile_id"] not in live_profiles:
@@ -190,6 +194,9 @@ class PinUndoHandler(UndoHandler):
         # afterwards, and would be a root pin in the meantime. Repeated passes rather
         # than a sort, so an arbitrarily deep hierarchy in one batch still resolves.
         pending = list(payload)
+        # A subject place deleted meanwhile (the FK is SET_NULL) restores as none; save() then re-derives it from the location.
+        wanted_subjects = {entry.get("subject_place_id") for entry in payload} - {None}
+        subject_ids = {pk: pk for pk in Place.objects.filter(pk__in=wanted_subjects).values_list("pk", flat=True)}
         while pending:
             progressed = False
             deferred: list[dict[str, Any]] = []
@@ -210,6 +217,7 @@ class PinUndoHandler(UndoHandler):
                     location_id=entry["location_id"],
                     profile_id=entry["profile_id"],
                     wiki_id=entry["wiki_id"],
+                    subject_place_id=subject_ids.get(entry.get("subject_place_id") or 0),
                     parent_pin_id=parent_pk,
                     **fields,
                 )

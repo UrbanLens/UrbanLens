@@ -234,7 +234,7 @@ class BackfillMigrationTests(_Base):
 
         from django.db import connection
 
-        migration = importlib.import_module("urbanlens.dashboard.migrations.0004_backfill_pin_import_keys")
+        migration = importlib.import_module("urbanlens.dashboard.migrations.0011_backfill_pin_import_keys")
         place = baker.make("dashboard.GooglePlace", latitude="20.000000", longitude="20.000000", cid=555)
         old = baker.make(Location, latitude="20.0", longitude="20.0", google_place=place)
         Location.objects.filter(pk=old.pk).update(created="2020-01-01T00:00:00Z")
@@ -254,7 +254,7 @@ class BackfillMigrationTests(_Base):
 
         from django.db import connection
 
-        migration = importlib.import_module("urbanlens.dashboard.migrations.0004_backfill_pin_import_keys")
+        migration = importlib.import_module("urbanlens.dashboard.migrations.0011_backfill_pin_import_keys")
         place = baker.make("dashboard.GooglePlace", latitude="21.000000", longitude="21.000000", cid=777)
         first = baker.make(
             Pin,

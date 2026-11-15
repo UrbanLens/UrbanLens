@@ -1005,7 +1005,9 @@ def _import_pins(
                 if pin is None:
                     # Re-importing into a profile that never held the archive's uuids (they were taken by the
                     # exporter's own pins) must not stack a second copy of the same detail pin.
-                    pin = Pin.objects.filter(profile=profile, parent_pin=parent_pin, location=location, name=defaults["name"]).first()
+                    pin = Pin.objects.filter(
+                        profile=profile, parent_pin=parent_pin, location=location, name=defaults["name"]
+                    ).first()  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
                 created = pin is None
                 if pin is None:
                     if archive_key:

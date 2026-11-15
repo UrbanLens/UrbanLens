@@ -399,7 +399,7 @@ class PinCoverPhotoView(LoginRequiredMixin, View):
         # only among photos this viewer may see, since every pin upload stamps Image.location and two users
         # pinning the same place therefore share a location id.
         image = get_object_or_404(Image.objects.filter(pk=safe_int_or_none(image_id)).visible_to(profile))
-        if image.pin_id != pin.pk and image.location_id != pin.location_id:
+        if image.pin_id != pin.pk and image.location_id != pin.location_id:  # same-place: structural parent/child or row-sync rule on the exact Location
             raise Http404
         pin.cover_photo = image
         pin.save(update_fields=["cover_photo", "updated"])

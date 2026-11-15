@@ -151,8 +151,12 @@ def bulk_merge_under(target: Pin, sources: Sequence[Pin]) -> BulkMergeResult:
     with transaction.atomic(), deferring_child_boundary_refits():
         # The tree lock makes the conflict check and the writes one step against the nesting pass and other movers.
         lock_profile_pin_tree(target.profile_id)
+        # The nesting pass may have moved the target while this waited for the lock, so decide from the current row.
+        target.refresh_from_db(fields=["parent_pin", "parenting_is_manual", "location"])
         promote = target.parent_pin_id is not None
-        if promote and Pin.objects.root_pins().filter(profile_id=target.profile_id, location_id=target.location_id).exclude(pk=target.pk).exists():
+        if (
+            promote and Pin.objects.root_pins().filter(profile_id=target.profile_id, location_id=target.location_id).exclude(pk=target.pk).exists()
+        ):  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
             raise MergeTargetConflictError
         # The user chose this target, so the nesting pass must leave it where it is, whether or not it was a child.
         if promote or not target.parenting_is_manual:

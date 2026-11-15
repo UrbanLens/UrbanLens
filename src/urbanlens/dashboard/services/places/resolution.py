@@ -11,7 +11,7 @@ from django.contrib.gis.db.models.functions import Area
 from django.utils import timezone
 
 from urbanlens.dashboard.models.location.model import Location
-from urbanlens.dashboard.models.place.model import Place
+from urbanlens.dashboard.models.place.model import SYNTHETIC_EVIDENCE, Place
 from urbanlens.dashboard.services.pins.property_nesting import deferring_property_nesting, request_property_nesting
 from urbanlens.dashboard.services.places.lineage import enclosing_parcel
 
@@ -32,6 +32,9 @@ def resolve_location_place(location: Location, *, save: bool = True) -> Place | 
 
     Returns:
         The most specific current place containing the coordinate, or None when it is on no known parcel or building."""
+    if location.place_id is not None and location.place is not None and location.place.evidence in SYNTHETIC_EVIDENCE:
+        # A shared place's hub is pinned to it for good (see shared_places._create_place).
+        return location.place
     place = Place.objects.resolve_for_point(location.latitude, location.longitude)
     if save and location.place_id != (place.pk if place else None):
         previous_parcel = enclosing_parcel(Place.objects.filter(pk=location.place_id).select_related("parent").first()) if location.place_id else None
@@ -40,6 +43,11 @@ def resolve_location_place(location: Location, *, save: bool = True) -> Place | 
         # function calls no provider.
         stamped = timezone.now()
         Location.objects.filter(pk=location.pk).update(place=place, place_resolved_at=stamped)
+        # Pins imported before this point had nothing to be about; they are about what it resolved to.
+        if place is not None:
+            from urbanlens.dashboard.services.pins.primary_wiki import adopt_subject_for_location
+
+            adopt_subject_for_location(location.pk, place.pk)
         # Stepping onto one of the parcel's own buildings leaves the parcel - and what was fetched for it - unchanged.
         if previous_parcel is None or previous_parcel != enclosing_parcel(place):
             _drop_place_scoped_caches(location)
@@ -109,7 +117,13 @@ def attach_location(location: Location, place: Place | None) -> None:
     Args:
         location: The Location to update.
         place: The resolved place, or None to clear."""
+    if location.place_id is not None and location.place is not None and location.place.evidence in SYNTHETIC_EVIDENCE:
+        return
     Location.objects.filter(pk=location.pk).update(place=place, place_resolved_at=timezone.now())
+    if place is not None:
+        from urbanlens.dashboard.services.pins.primary_wiki import adopt_subject_for_location
+
+        adopt_subject_for_location(location.pk, place.pk)
     location.place = place
     location.place_resolved_at = timezone.now()
     if place is not None:

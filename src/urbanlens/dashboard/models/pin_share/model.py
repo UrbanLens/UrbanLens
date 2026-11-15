@@ -198,10 +198,8 @@ class PinShare(abstract.DashboardModel):
         """
         if self.status != PinShareStatus.ACCEPTED:
             return None
-        # ``.all()`` rather than ``.first()``: a share card is rendered per message, and .first()
-        # appends ORDER BY + LIMIT so it always queries, even when the caller prefetched. .all()
-        # reads the prefetch cache when there is one and costs the same single query when there
-        # isn't - same reasoning as ``PinList.pin_count`` and ``Pin.rating``.
+        # ``.all()`` rather than ``.first()``: a share card renders per message, and .first() always
+        # queries even when prefetched. Same reasoning as ``PinList.pin_count``.
         created = next(iter(self.pins_created.all()), None)
         if created is not None:
             return created
@@ -210,7 +208,7 @@ class PinShare(abstract.DashboardModel):
             return None
         from urbanlens.dashboard.models.pin.model import Pin
 
-        query = Pin.objects.root_pins().filter(profile=self.to_profile, location_id=location_id)
+        query = Pin.objects.root_pins().filter(profile=self.to_profile, location_id=location_id)  # same-place: per-Location share row, not a sameness decision
         if self.pin_id is not None:
             query = query.exclude(pk=self.pin_id)
         return query.first()

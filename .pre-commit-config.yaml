@@ -164,6 +164,13 @@ repos:
         # would not connect to the read it protects.
         always_run: true
         stages: [manual]
+      - id: same-place
+        name: pins are the same place only by services.pins.same_place
+        entry: python3 bin/check_same_place.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [manual]
       - id: canonical-creates
         name: Location and Label rows are created only through their get-or-create helpers
         entry: python3 bin/check_canonical_creates.py

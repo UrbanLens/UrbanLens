@@ -24,12 +24,19 @@ from urbanlens.dashboard.services.undo.base import _HANDLERS, get_handler
 #: it cannot collide with something created since the delete.
 _EXPECTED_TO_DIFFER = frozenset({"id", "pk", "created", "updated", "uuid", "slug"})
 
-#: Per-model fields a restore changes on purpose, each with the reason.
+#: Per-model fields a restore changes on purpose, each with the reason. A pin the undo restores as a root
+#: counts as placed by the user, so the nesting pass leaves it alone; a restored child must keep its own flag.
 _MODEL_EXPECTED_TO_DIFFER: dict[str, dict[str, str]] = {
-    "pin": {
-        "parenting_is_manual": "a pin the undo restores as a root counts as placed by the user, so the nesting pass leaves it alone"
-    },
+    "pin": {"parenting_is_manual": "restored roots only"},
 }
+
+
+def _expected_to_differ(model_label: str, field_name: str, restored: object) -> bool:
+    if field_name in _EXPECTED_TO_DIFFER:
+        return True
+    if field_name not in _MODEL_EXPECTED_TO_DIFFER.get(model_label, {}):
+        return False
+    return getattr(restored, "parent_pin_id", None) is None
 
 
 class UndoRoundTripTests(TestCase):
@@ -100,7 +107,7 @@ class UndoRoundTripTests(TestCase):
             self.assertTrue(restored, f"{model_label}: restore() returned nothing")
 
             for field in model._meta.local_fields:
-                if field.name in _EXPECTED_TO_DIFFER or field.name in _MODEL_EXPECTED_TO_DIFFER.get(model_label, {}):
+                if _expected_to_differ(model_label, field.name, restored[0]):
                     continue
                 checked += 1
                 old_value = before.get(field.name)
