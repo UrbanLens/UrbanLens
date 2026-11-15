@@ -307,7 +307,8 @@ def create_pin_for_profile(
         if new_parent is not None or location.place is None:
             return
         property_id = location.place.domain_root_id or location.place_id
-        existing = Pin.objects.root_pins().filter(Q(location__place__domain_root_id=property_id) | Q(location__place_id=property_id), profile=profile).order_by("created", "pk").first()  # same-place: the property is a known place id, not a comparison between two pins
+        # same-place: the property is a known place id, not a comparison between two pins
+        existing = Pin.objects.root_pins().filter(Q(location__place__domain_root_id=property_id) | Q(location__place_id=property_id), profile=profile).order_by("created", "pk").first()
         if existing is not None:
             error = DuplicatePropertyError("Duplicate root pin on this property.")
             error.existing_pin_uuid = str(existing.uuid)
