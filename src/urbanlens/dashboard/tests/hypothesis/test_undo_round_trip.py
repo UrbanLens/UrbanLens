@@ -106,6 +106,8 @@ class UndoRoundTripTests(TestCase):
             restored = handler.restore(payload)
             self.assertTrue(restored, f"{model_label}: restore() returned nothing")
 
+            if model_label == "pin" and restored[0].parent_pin_id is None and not restored[0].parenting_is_manual:
+                losses.append("pin.parenting_is_manual: a restored root must be marked as placed by the user")
             for field in model._meta.local_fields:
                 if _expected_to_differ(model_label, field.name, restored[0]):
                     continue
