@@ -169,7 +169,7 @@ def create_pin_and_log_visit(
         raise ValueError("create_pin_and_log_visit requires coordinates (from the image or overrides)")
 
     location = resolve_location_for_point(lat, lng)
-    pin = Pin.objects.root_pins().filter(profile=profile, location=location).select_related("location").first()
+    pin = Pin.objects.root_pins().filter(profile=profile, location=location).select_related("location").first()  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
     if pin is None:
         pin = Pin.objects.create(profile=profile, location=location)
     if name and name.strip() and pin.name is None:

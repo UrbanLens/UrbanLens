@@ -35,7 +35,7 @@ class ApproximatePinCountTests(SimpleTestCase):
 
     @given(count=st.integers(min_value=0, max_value=MIN_VISIBLE_PIN_COUNT - 1))
     def test_low_counts_show_no_number(self, count):
-        result = approximate_pin_count(wiki_id=1, exact_count=count)
+        result = approximate_pin_count(wiki_id=1, exact_count=count, scope="place")
         self.assertTrue(result["is_low"])
         self.assertIsNone(result["value"])
 
@@ -45,27 +45,27 @@ class ApproximatePinCountTests(SimpleTestCase):
     )
     def test_fuzz_stays_within_two_and_at_least_threshold(self, count, wiki_id):
         cache.clear()
-        result = approximate_pin_count(wiki_id=wiki_id, exact_count=count)
+        result = approximate_pin_count(wiki_id=wiki_id, exact_count=count, scope="place")
         self.assertFalse(result["is_low"])
         value = result["value"]
         self.assertGreaterEqual(value, MIN_VISIBLE_PIN_COUNT)
         self.assertLessEqual(abs(value - count), 2)
 
     def test_value_is_cached_per_wiki(self):
-        first = approximate_pin_count(wiki_id=42, exact_count=10)["value"]
+        first = approximate_pin_count(wiki_id=42, exact_count=10, scope="place")["value"]
         for _ in range(25):
-            self.assertEqual(approximate_pin_count(wiki_id=42, exact_count=10)["value"], first)
+            self.assertEqual(approximate_pin_count(wiki_id=42, exact_count=10, scope="place")["value"], first)
 
     def test_different_wikis_cached_independently(self):
-        approximate_pin_count(wiki_id=1, exact_count=10)
+        approximate_pin_count(wiki_id=1, exact_count=10, scope="place")
         # A different wiki must not read wiki 1's cached value's key.
-        result = approximate_pin_count(wiki_id=2, exact_count=100)
+        result = approximate_pin_count(wiki_id=2, exact_count=100, scope="place")
         self.assertLessEqual(abs(result["value"] - 100), 2)
 
     def test_cached_value_survives_exact_count_drift(self):
         """Refreshing after one more user pins must not reveal the change that day."""
-        first = approximate_pin_count(wiki_id=7, exact_count=10)["value"]
-        after_new_pin = approximate_pin_count(wiki_id=7, exact_count=11)["value"]
+        first = approximate_pin_count(wiki_id=7, exact_count=10, scope="place")["value"]
+        after_new_pin = approximate_pin_count(wiki_id=7, exact_count=11, scope="place")["value"]
         self.assertEqual(after_new_pin, first)
 
 

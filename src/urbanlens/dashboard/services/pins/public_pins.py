@@ -320,8 +320,10 @@ def sync_public_pin_suggestions() -> int:
     for candidate in passed:
         location = candidate.location
         wiki = location.wiki
-        already_suggested = set(PinSuggestion.objects.filter(location=location).values_list("profile_id", flat=True))
-        has_pin = set(Pin.objects.root_pins().filter(location=location).values_list("profile_id", flat=True))
+        already_suggested = set(
+            PinSuggestion.objects.filter(location=location).values_list("profile_id", flat=True)
+        )  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
+        has_pin = set(Pin.objects.root_pins().filter(location=location).values_list("profile_id", flat=True))  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
         recipients = Profile.objects.filter(community_enabled=True, pin_suggestions_enabled=True, suggest_public_pins=True).exclude(id__in=already_suggested | has_pin).values_list("id", flat=True)
         new_rows = [
             PinSuggestion(
@@ -351,14 +353,14 @@ def public_vote_context(location: Location, profile: Profile | None) -> dict | N
     Args:
         location: The place being rendered.
         profile: The viewing profile."""
-    candidate = PublicPinCandidate.objects.filter(location=location).first()
+    candidate = PublicPinCandidate.objects.filter(location=location).first()  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
     if candidate is None:
         return None
     if candidate.status == PublicPinCandidateStatus.PASSED:
         return {"is_public": True}
     if not candidate.is_open or profile is None:
         return None
-    if not Pin.objects.root_pins().filter(location=location, profile=profile).exists():
+    if not Pin.objects.root_pins().filter(location=location, profile=profile).exists():  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
         return None
     vote = PublicPinVote.objects.filter(candidate=candidate, profile=profile).first()
     return {"is_public": False, "my_vote": None if vote is None else vote.make_public}
@@ -377,10 +379,10 @@ def cast_public_vote(location: Location, profile: Profile, choice: str, config: 
         VoteNotOpenError: There is no public-pin candidate for this location, or its vote isn't currently open.
         VoterNotPinnedError: ``profile`` doesn't hold a root pin at this location.
         UnrecognizedVoteChoiceError: ``choice`` isn't one of ``"public"``, ``"private"``, or ``"withdraw"``."""
-    candidate = PublicPinCandidate.objects.filter(location=location).first()
+    candidate = PublicPinCandidate.objects.filter(location=location).first()  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
     if candidate is None or not candidate.is_open:
         raise VoteNotOpenError(f"No open public-pin candidate for location {location.pk} (status={candidate.status if candidate else 'none'}).")
-    if not Pin.objects.root_pins().filter(location=location, profile=profile).exists():
+    if not Pin.objects.root_pins().filter(location=location, profile=profile).exists():  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
         raise VoterNotPinnedError(f"Profile {profile.pk} holds no root pin at location {location.pk}; vote refused.")
 
     if choice == "withdraw":

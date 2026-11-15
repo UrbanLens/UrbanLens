@@ -186,7 +186,7 @@ def place_visible_to(place: Place | None, profile: Profile) -> bool:
 
 def _visible_given_pins(location: Location, pins, profile: Profile | None, *, extra_point=None) -> bool:
     """Whether the location's wiki is visible to the owner of pins."""
-    if pins.filter(location=location).exists():
+    if pins.filter(location=location).exists():  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
         return True
 
     # Previewed move onto this location's coordinates keeps the exact-match grant
@@ -310,7 +310,7 @@ def wikis_hidden_by_pin_move(pin: Pin, latitude: float, longitude: float) -> lis
     new_point = Point(float(longitude), float(latitude), srid=4326)
     profile = pin.profile
 
-    candidates = list(Wiki.objects.filter(location_id__in=visible_wiki_locations(profile)).select_related("location", "location__place"))
+    candidates = list(Wiki.objects.filter(location_id__in=visible_wiki_locations(profile)).select_related("location", "location__place"))  # same-place: wiki visibility is wiki_access's decision, not pin sameness
     if not candidates:
         return []
 
@@ -366,7 +366,9 @@ def visible_locations_filter(profile: Profile) -> Q:
     """
     from urbanlens.dashboard.models.pin.model import Pin
 
-    return Q(Exists(Pin.objects.filter(profile=profile, location=OuterRef("pk")))) | Q(place__domain_root_id__in=accessible_domain_ids(profile))
+    return Q(Exists(Pin.objects.filter(profile=profile, location=OuterRef("pk")))) | Q(
+        place__domain_root_id__in=accessible_domain_ids(profile)
+    )  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
 
 
 def visible_location_or_404(profile: Profile, location_slug: str, *, related: tuple[str, ...] = ()) -> Location:

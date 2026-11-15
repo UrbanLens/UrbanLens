@@ -41,7 +41,7 @@ class CommentQuerySet(abstract.FrontendDashboardQuerySet["Comment"]):
         scope = Q(profile=profile)
         if pin_ids := Pin.objects.filter(profile=profile).match_ids():
             scope |= Q(pin__pk__anyof=pin_ids)
-        if wiki_ids := Wiki.objects.filter(location_id__in=visible_wiki_locations_cached(profile)).match_ids():
+        if wiki_ids := Wiki.objects.filter(location_id__in=visible_wiki_locations_cached(profile)).match_ids():  # same-place: wiki visibility is wiki_access's decision, not pin sameness
             scope |= Q(wiki__pk__anyof=wiki_ids)
         return self.filter(scope)
 

@@ -204,7 +204,7 @@ def claim_parcel_for_location_wiki(location: Location) -> bool:
         return False
     try:
         with transaction.atomic():
-            return bool(Wiki.objects.filter(location=location, place__isnull=True, parent_wiki__isnull=True).update(place=parcel))
+            return bool(Wiki.objects.filter(location=location, place__isnull=True, parent_wiki__isnull=True).update(place=parcel))  # same-place: a wiki is anchored to one exact Location
     except IntegrityError:
         # Another wiki took the parcel meanwhile.
         return False

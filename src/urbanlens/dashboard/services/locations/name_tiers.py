@@ -170,7 +170,7 @@ def naming_scope(location: Location | None) -> NamingScope:
         return NamingScope.PARCEL
     from urbanlens.dashboard.models.wiki.model import Wiki
 
-    own = Wiki.objects.filter(location=location).select_related("place__parent").first()
+    own = Wiki.objects.filter(location=location).select_related("place__parent").first()  # same-place: a wiki is anchored to one exact Location
     if own is not None and wiki_scope(own) == NamingScope.BUILDING:
         return NamingScope.BUILDING
     pins = location.pins.all()

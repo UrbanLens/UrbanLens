@@ -308,7 +308,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                         # A profile can only ever have one root pin per location - if this candidate already has
                         # one, "Use this" can't relink the new pin there (it would collide); the client offers
                         # to merge instead.
-                        existing_pin = Pin.objects.root_pins().filter(profile=request.user.profile, location=loc).exclude(pk=pin.pk).first()
+                        existing_pin = (
+                            Pin.objects.root_pins().filter(profile=request.user.profile, location=loc).exclude(pk=pin.pk).first()
+                        )  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
                         if existing_pin is not None:
                             entry["existing_pin_url"] = reverse("pin.details", kwargs={"pin_slug": existing_pin.slug or str(existing_pin.uuid)})
                             entry["existing_pin_name"] = existing_pin.effective_name
@@ -843,7 +845,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             if location.pk != pin.location_id:
                 pin.location = location
                 pin.subject_place_id = location.place_id
-            if pin.parent_pin_id is None and Pin.objects.root_pins().filter(profile=pin.profile, location=pin.location).exclude(pk=pin.pk).exists():
+            if (
+                pin.parent_pin_id is None and Pin.objects.root_pins().filter(profile=pin.profile, location=pin.location).exclude(pk=pin.pk).exists()
+            ):  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
                 return JsonResponse({"error": _ALREADY_PINNED_THERE}, status=400)
             touched += ["location", "subject_place"]
         if icon is not None:
@@ -869,7 +873,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 pin.save(update_fields=[*touched, "updated"])
         except IntegrityError:
             # Another request placed a pin there since the check above.
-            if "location" in touched and Pin.objects.root_pins().filter(profile=pin.profile, location=pin.location).exclude(pk=pin.pk).exists():
+            if (
+                "location" in touched and Pin.objects.root_pins().filter(profile=pin.profile, location=pin.location).exclude(pk=pin.pk).exists()
+            ):  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
                 return JsonResponse({"error": _ALREADY_PINNED_THERE}, status=400)
             raise
         if custom_icon:
