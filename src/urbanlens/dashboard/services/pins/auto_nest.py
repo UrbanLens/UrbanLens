@@ -39,7 +39,7 @@ def eligible(pin: Pin) -> bool:
     Returns:
         True for a root pin whose owner has the feature on, that was never told "no" via the restructure offer,
         is not user-typed as a single structure, and - unless an earlier sweep built it - has no children yet
-        (a hierarchy the owner arranged by hand is theirs)."""
+        (a hierarchy the owner arranged by hand is theirs; pins a drawn boundary nested are not that)."""
     from urbanlens.dashboard.models.pin.model import PinType
 
     if pin.parent_pin_id is not None or pin.restructure_offer_dismissed:
@@ -48,7 +48,7 @@ def eligible(pin: Pin) -> bool:
         return False
     if pin.pin_type_is_user_provided and pin.pin_type in (PinType.BUILDING, PinType.ENTRANCE):
         return False
-    return pin.buildings_auto_nested_at is not None or not pin.detail_pins.exists()
+    return pin.buildings_auto_nested_at is not None or not pin.detail_pins.filter(nested_by_boundary_pin__isnull=True).exists()
 
 
 def swept_buildings(pin: Pin) -> list[SweptBuilding]:

@@ -162,7 +162,8 @@ def bulk_merge_under(target: Pin, sources: Sequence[Pin]) -> BulkMergeResult:
         if promote or not target.parenting_is_manual:
             target.parent_pin = None
             target.parenting_is_manual = True
-            target.save(update_fields=["parent_pin", "parenting_is_manual", "updated"])
+            target.nested_by_boundary_pin = None
+            target.save(update_fields=["parent_pin", "parenting_is_manual", "nested_by_boundary_pin", "updated"])
         for source in candidates:
             try:
                 reparent_pin(source, target)

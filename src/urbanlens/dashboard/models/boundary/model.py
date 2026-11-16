@@ -12,6 +12,9 @@ from django.db.models.constraints import UniqueConstraint
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.boundary.queryset import DEFAULT_RADIUS_METERS, BoundaryManager, circle_for_coordinates
 
+if TYPE_CHECKING:
+    from django.contrib.gis.geos import GEOSGeometry
+
 logger = logging.getLogger(__name__)
 
 
@@ -115,6 +118,9 @@ class Boundary(abstract.DashboardModel):
         profile_id: int | None
         location_id: int | None
         place_id: int | None
+        # Set by the pre-save hook that detects a redraw (models.boundary.signals).
+        previous_drawn_polygon: GEOSGeometry | None
+        drawn_polygon_changed: bool
 
     @property
     def is_source_candidate(self) -> bool:

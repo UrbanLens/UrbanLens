@@ -113,7 +113,6 @@
   "src/urbanlens/dashboard/services/trips/trip_comments.py": 1,
   "src/urbanlens/dashboard/services/trivia/ratings.py": 1,
   "src/urbanlens/dashboard/services/undo/base.py": 1,
-  "src/urbanlens/dashboard/services/undo/handlers/pin.py": 1,
   "src/urbanlens/dashboard/services/undo/handlers/wiki.py": 1,
   "src/urbanlens/dashboard/services/visits/visits.py": 1,
   "src/urbanlens/dashboard/services/wiki/articles.py": 1,

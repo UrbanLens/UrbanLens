@@ -113,7 +113,7 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
     )
 
     #: Exempt from automatic nesting: the user chose this pin's place in the hierarchy (promote, detach, keep children, swap with parent).
-    #: See services.pins.property_nesting. Rows that predate the field default to True.
+    #: See services.pins.property_nesting and services.pins.boundary_nesting, neither of which touches a manual pin. Rows that predate the field default to True.
     parenting_is_manual = BooleanField(default=False, db_default=False)
 
     # User's custom label. None = show location.display_name instead (see effective_name).
@@ -219,6 +219,15 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
         blank=True,
         related_name="detail_pins",
     )
+    # The user's pin whose drawn boundary nested this pin. Set only by boundary_nesting, cleared by any other
+    # change of parent; it is how a boundary edit tells its own nesting from a hierarchy the user built.
+    nested_by_boundary_pin = ForeignKey(
+        "self",
+        on_delete=SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
     # The accepted PinShare this pin was created from, when the owner added it
     # by accepting a friend's share. Links reshares of this pin back into the
     # original share chain (see PinShare.parent_share).
@@ -256,6 +265,7 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
         profile_id: int
         location_id: int | None
         parent_pin_id: int | None
+        nested_by_boundary_pin_id: int | None
         source_share_id: int | None
         inferred_source_share_id: int | None
         cover_photo_id: int | None
@@ -441,7 +451,7 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
         promoted = 0
         skipped = 0
         with transaction.atomic(), deferring_child_boundary_refits():
-            for child in Pin.objects.filter(parent_pin=self):
+            for child in Pin.objects.filter(parent_pin=self).order_by("pk"):
                 if new_parent_id is None and child.location_id == self.location_id:  # same-place: structural parent/child or row-sync rule on the exact Location
                     skipped += 1
                     continue
@@ -454,7 +464,9 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
                     child.parent_pin_id = other_root.pk if other_root is not None else None
                 if child.parent_pin_id is None:
                     child.parenting_is_manual = True
-                child.save(update_fields=["parent_pin", "parenting_is_manual", "updated"])
+                # The user moved it, even one a boundary had nested, so no later boundary edit takes it back.
+                child.nested_by_boundary_pin = None
+                child.save(update_fields=["parent_pin", "parenting_is_manual", "nested_by_boundary_pin", "updated"])
                 promoted += 1
         return promoted, skipped
 
@@ -484,7 +496,9 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
 
         from urbanlens.dashboard.services.geo.child_pin_boundaries import request_child_boundary_refit
 
-        self.parenting_is_manual = True
+        for pin in (self, old_parent):
+            pin.parenting_is_manual = True
+            pin.nested_by_boundary_pin = None
         conflict_message = "Can't complete the swap - you already have a top-level pin at this pin's own location."
         try:
             with transaction.atomic():
@@ -500,9 +514,9 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
                     Pin.objects.filter(pk=old_parent.pk).update(parent_pin_id=self.pk)
                 else:
                     self.parent_pin_id = grandparent_id
-                self.save(update_fields=["parent_pin", "parenting_is_manual", "updated"])
+                self.save(update_fields=["parent_pin", "parenting_is_manual", "nested_by_boundary_pin", "updated"])
                 old_parent.parent_pin = self
-                old_parent.save(update_fields=["parent_pin", "updated"])
+                old_parent.save(update_fields=["parent_pin", "parenting_is_manual", "nested_by_boundary_pin", "updated"])
                 # The raw update above bypassed the pre_save receiver that tracks the old parent.
                 request_child_boundary_refit(self.pk)
                 request_child_boundary_refit(old_parent.pk)

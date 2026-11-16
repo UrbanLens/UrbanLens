@@ -48,6 +48,7 @@ class DashboardConfig(AppConfig):
         from urbanlens.dashboard.models.achievements.signals import connect as connect_achievement_signals
         import urbanlens.dashboard.models.aliases.signals
         import urbanlens.dashboard.models.api_rate_limit.signals
+        import urbanlens.dashboard.models.boundary.signals
         import urbanlens.dashboard.models.cache.signals
         import urbanlens.dashboard.models.calendar_sync.signals
         import urbanlens.dashboard.models.comments.signals
