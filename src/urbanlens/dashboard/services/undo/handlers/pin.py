@@ -210,8 +210,10 @@ class PinUndoHandler(UndoHandler):
                 parent_pk = old_to_new[parent_old_pk].pk if parent_old_pk in old_to_new else parent_old_pk
                 # Boundary provenance is only meaningful beside the parent it names.
                 nested_by = parent_pk if parent_pk is not None and entry.get("nested_by_boundary_pin_old_pk") == parent_old_pk else None
-                # Records saved before the field existed were of pins the migration marked manual.
-                fields = {"parenting_is_manual": True, **entry["fields"]}
+                # A pin the undo puts back as a root was placed there by the user, so neither nesting pass moves it.
+                # A child keeps its own flag; stashes from before the field existed count as manual, as the migration does.
+                manual = True if parent_pk is None else entry["fields"].get("parenting_is_manual", True)
+                fields = {**entry["fields"], "parenting_is_manual": manual}
                 # An import identity claimed since the deletion stays with its new holder; this pin comes back unkeyed.
                 if fields.get("import_key") and Pin.objects.filter(profile_id=entry["profile_id"], import_source=fields.get("import_source"), import_key=fields["import_key"]).exists():
                     fields["import_source"] = fields["import_key"] = None

@@ -13,6 +13,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.boundary.model import Boundary
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.pins.pin_edit import delete_pin, reparent_pin
+from urbanlens.dashboard.services.undo.service import restore_undo_action, stash_for_undo
 from urbanlens.dashboard.services.wiki.wiki_access import location_visible_to, visible_wiki_location_ids
 
 _LAT, _LNG = 40.0, -74.0
@@ -258,3 +259,34 @@ class BoundaryNestingTests(TestCase):
             passes[0]()
         self.assertLessEqual(len(queries), 200 * 12 + 5)
         self.assertEqual(Pin.objects.filter(pk__in=[pin.pk for pin in pins], parent_pin=self.owner).count(), 200)
+
+    def test_undoing_a_deleted_nested_pin_puts_it_back_under_the_boundary(self) -> None:
+        nested = _pin(self.profile, 0.001)
+        with self.captureOnCommitCallbacks(execute=True):
+            _draw(self.owner, 0.01)
+        nested.refresh_from_db()
+        undo_action = stash_for_undo("pin", [nested], self.profile)
+        assert undo_action is not None
+        nested.delete()
+        with self.captureOnCommitCallbacks(execute=True):
+            restored = restore_undo_action(undo_action)[0]
+        restored.refresh_from_db()
+        self.assertEqual(restored.parent_pin_id, self.owner.pk)
+        self.assertEqual(restored.nested_by_boundary_pin_id, self.owner.pk)
+        self.assertFalse(restored.parenting_is_manual)
+
+    def test_undoing_a_nested_pin_whose_boundary_owner_is_gone_restores_a_manual_root(self) -> None:
+        nested = _pin(self.profile, 0.001)
+        with self.captureOnCommitCallbacks(execute=True):
+            _draw(self.owner, 0.01)
+        nested.refresh_from_db()
+        undo_action = stash_for_undo("pin", [nested], self.profile)
+        assert undo_action is not None
+        nested.delete()
+        self.owner.delete()
+        with self.captureOnCommitCallbacks(execute=True):
+            restored = restore_undo_action(undo_action)[0]
+        restored.refresh_from_db()
+        self.assertIsNone(restored.parent_pin_id)
+        self.assertIsNone(restored.nested_by_boundary_pin_id)
+        self.assertTrue(restored.parenting_is_manual)
