@@ -9,6 +9,7 @@ import re
 from urbanlens.dashboard.models.location.queryset import quantize_coordinate
 
 _WHITESPACE = re.compile(r"\s+")
+_MAX_KEY_LENGTH = 255
 
 
 def takeout_import_key(*, cid: int | str | Decimal | None, place_id: str | None, name: str | None, latitude: float | Decimal, longitude: float | Decimal) -> str:
@@ -30,7 +31,9 @@ def takeout_import_key(*, cid: int | str | Decimal | None, place_id: str | None,
             # A malformed cid is no identity; fall back to the place id or the name-and-point digest.
             pass
     if place_id:
-        return f"place:{place_id}"
+        key = f"place:{place_id}"
+        # The key column is 255 characters; a longer id (it comes from the posted row) is stood in for by its digest.
+        return key if len(key) <= _MAX_KEY_LENGTH else "placehash:" + hashlib.sha256(place_id.encode()).hexdigest()
     normalised = _WHITESPACE.sub(" ", (name or "").casefold()).strip()
     point = f"{quantize_coordinate(latitude, 'latitude')},{quantize_coordinate(longitude, 'longitude')}"
     return "ll:" + hashlib.sha256(f"{normalised}|{point}".encode()).hexdigest()

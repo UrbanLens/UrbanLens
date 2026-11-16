@@ -11,6 +11,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
+from urbanlens.dashboard.models.pin.import_key import PinImportKey
 from urbanlens.dashboard.models.pin.model import Pin, PinImportSource
 from urbanlens.dashboard.services.apis.locations.google.maps import _create_pin_from_confirmed
 from urbanlens.dashboard.services.import_export import export as export_service, import_data
@@ -19,6 +20,10 @@ from urbanlens.dashboard.services.wiki.wiki_access import location_visible_to
 
 # About 10 m north of 40.000000 at this latitude.
 NEAR_LAT = 40.00009
+
+
+def keys(pin: Pin) -> set[tuple[str, str]]:
+    return set(PinImportKey.objects.filter(pin=pin).values_list("source", "key"))
 
 
 class _Base(TestCase):
@@ -57,7 +62,7 @@ class TakeoutImportTests(_Base):
         self.assertFalse(created_again)
         self.assertEqual(first.pk, second.pk)
         self.assertEqual(Pin.objects.filter(profile=self.importer).count(), 1)
-        self.assertEqual(first.import_source, PinImportSource.GOOGLE_TAKEOUT)
+        self.assertEqual(keys(first), {(PinImportSource.GOOGLE_TAKEOUT, "cid:1234567890123")})
 
     def test_reimport_after_the_user_moved_the_pin_creates_no_duplicate(self) -> None:
         pin, _ = self._import()
@@ -88,9 +93,32 @@ class TakeoutImportTests(_Base):
         pin, created = self._import(cid=None, lat=42.0, lng=-72.0)
         self.assertFalse(created)
         self.assertEqual(pin.pk, existing.pk)
-        existing.refresh_from_db()
-        self.assertEqual(existing.import_source, PinImportSource.GOOGLE_TAKEOUT)
-        self.assertIsNotNone(existing.import_key)
+        self.assertEqual({source for source, _key in keys(existing)}, {PinImportSource.GOOGLE_TAKEOUT})
+
+    def test_a_pin_keyed_by_an_archive_also_takes_the_takeout_key_when_found_by_location(self) -> None:
+        """One file's identity must not stop another's: a moved pin is then found by either file."""
+        existing = baker.make(
+            Pin, profile=self.importer, location=baker.make(Location, latitude="42.0", longitude="-72.0")
+        )
+        PinImportKey.attach(existing, PinImportSource.JSON_ARCHIVE, "archive-uuid")
+        pin, created = self._import(lat=42.0, lng=-72.0)
+        self.assertFalse(created)
+        self.assertEqual(
+            keys(existing),
+            {(PinImportSource.JSON_ARCHIVE, "archive-uuid"), (PinImportSource.GOOGLE_TAKEOUT, "cid:1234567890123")},
+        )
+        existing.location = baker.make(Location, latitude="41.5", longitude="-73.5")
+        existing.save()
+        again, created_again = self._import(lat=42.0, lng=-72.0)
+        self.assertFalse(created_again)
+        self.assertEqual(again.pk, existing.pk)
+
+    def test_two_rows_at_one_point_both_name_the_pin(self) -> None:
+        first, _ = self._import(cid=None, name="Old Mill", lat=42.0, lng=-72.0)
+        second, created = self._import(cid=None, name="Mill annex", lat=42.0, lng=-72.0)
+        self.assertFalse(created)
+        self.assertEqual(second.pk, first.pk)
+        self.assertEqual(len(keys(first)), 2)
 
     def test_key_precedence(self) -> None:
         self.assertEqual(takeout_import_key(cid=12, place_id="p", name="n", latitude=1, longitude=2), "cid:12")
@@ -130,8 +158,7 @@ class NestedPinKeyTests(_Base):
         found, created = self._import(cid=None, lat=42.0, lng=-72.0)
         self.assertFalse(created)
         self.assertEqual(found.pk, child.pk)
-        child.refresh_from_db()
-        self.assertIsNone(child.import_key)
+        self.assertEqual(keys(child), set())
 
     def test_an_orphan_google_place_holding_the_cid_does_not_crash_the_import(self) -> None:
         baker.make("dashboard.GooglePlace", latitude="10.000000", longitude="10.000000", cid=1234567890123)
@@ -168,7 +195,7 @@ class JsonArchiveImportTests(_Base):
             self._import_archive(temp_dir)
             self.assertEqual(Pin.objects.filter(profile=self.importer).count(), 1)
             imported = Pin.objects.get(profile=self.importer)
-            self.assertEqual(imported.import_source, PinImportSource.JSON_ARCHIVE)
+            self.assertEqual({source for source, _key in keys(imported)}, {PinImportSource.JSON_ARCHIVE})
             imported.location = baker.make(Location, latitude="41.5", longitude="-73.5")
             imported.save()
             self._import_archive(temp_dir)
@@ -202,18 +229,6 @@ class JsonArchiveImportTests(_Base):
             self.assertEqual(Pin.objects.filter(profile=self.importer).count(), 3)
             self.assertEqual(Pin.objects.get(profile=self.importer, name="Boiler room").parent_pin_id, top.pk)
 
-    def test_reimporting_after_a_detail_pin_moved_creates_no_duplicate_child(self) -> None:
-        """The archive's uuids are the exporter's, so the copy is found again by its archive key, not its point."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            self._export_with_child(temp_dir)
-            self._import_archive(temp_dir)
-            child = Pin.objects.get(profile=self.importer, name="Boiler room")
-            self.assertEqual(child.import_source, PinImportSource.JSON_ARCHIVE)
-            child.location = baker.make(Location, latitude="40.0009", longitude="-74.0009")
-            child.save()
-            self._import_archive(temp_dir)
-        self.assertEqual(Pin.objects.filter(profile=self.importer, name="Boiler room").count(), 1)
-
     def test_a_repeated_uuid_in_one_archive_is_reported(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             export_service._export_pins(self.owner, temp_dir)
@@ -242,35 +257,37 @@ class BackfillMigrationTests(_Base):
         old_pin = baker.make(Pin, profile=self.importer, location=old)
         new_pin = baker.make(Pin, profile=self.importer, location=new)
         migration.key_takeout_pins(None, type("Editor", (), {"connection": connection})())
-        old_pin.refresh_from_db()
-        new_pin.refresh_from_db()
-        self.assertEqual(new_pin.import_key, "cid:555")
-        self.assertEqual(new_pin.import_source, PinImportSource.GOOGLE_TAKEOUT)
-        self.assertIsNone(old_pin.import_key)
+        self.assertEqual(keys(new_pin), {(PinImportSource.GOOGLE_TAKEOUT, "cid:555")})
+        self.assertEqual(keys(old_pin), set())
 
-    def test_a_rerun_after_an_interrupted_backfill_leaves_the_sibling_unkeyed(self) -> None:
-        """A rerun selects only unkeyed roots, so it must not hand a committed key to the pin's sibling on the same cid."""
+    def test_backfill_adds_the_cid_key_to_a_pin_an_archive_import_already_keyed(self) -> None:
         import importlib
 
         from django.db import connection
 
         migration = importlib.import_module("urbanlens.dashboard.migrations.0011_backfill_pin_import_keys")
         place = baker.make("dashboard.GooglePlace", latitude="21.000000", longitude="21.000000", cid=777)
-        first = baker.make(
+        pin = baker.make(
             Pin,
             profile=self.importer,
             location=baker.make(Location, latitude="21.0", longitude="21.0", google_place=place),
         )
-        second = baker.make(
-            Pin,
-            profile=self.importer,
-            location=baker.make(Location, latitude="21.5", longitude="21.5", google_place=place),
+        PinImportKey.attach(pin, PinImportSource.JSON_ARCHIVE, "archive-uuid")
+        migration.key_takeout_pins(None, type("Editor", (), {"connection": connection})())
+        migration.key_takeout_pins(None, type("Editor", (), {"connection": connection})())
+        self.assertEqual(
+            keys(pin), {(PinImportSource.JSON_ARCHIVE, "archive-uuid"), (PinImportSource.GOOGLE_TAKEOUT, "cid:777")}
         )
-        editor = type("Editor", (), {"connection": connection})()
-        migration.key_takeout_pins(None, editor)
-        migration.key_takeout_pins(None, editor)
-        first.refresh_from_db()
-        second.refresh_from_db()
-        # Neither Location is pre-cutoff, so the lower pk keeps the key and the sibling stays unkeyed.
-        self.assertEqual(first.import_key, "cid:777")
-        self.assertIsNone(second.import_key)
+
+
+class LongPlaceIdKeyTests(_Base):
+    def test_a_place_id_too_long_for_the_key_column_is_digested(self) -> None:
+        from urbanlens.dashboard.services.pins.import_keys import takeout_import_key
+
+        kwargs = {"cid": None, "name": "x", "latitude": 1.0, "longitude": 1.0}
+        long_id = "p" * 400
+        key = takeout_import_key(place_id=long_id, **kwargs)
+        self.assertLessEqual(len(key), 255)
+        self.assertEqual(key, takeout_import_key(place_id=long_id, **kwargs))
+        self.assertNotEqual(key, takeout_import_key(place_id=long_id + "q", **kwargs))
+        self.assertEqual(takeout_import_key(place_id="abc", **kwargs), "place:abc")

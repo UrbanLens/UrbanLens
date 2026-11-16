@@ -37,6 +37,7 @@ from urbanlens.dashboard.models.links.model import PinLink
 from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
 from urbanlens.dashboard.models.markup.meta import MarkupType
 from urbanlens.dashboard.models.markup.model import CustomLayer, MarkupMap, PinMarkup
+from urbanlens.dashboard.models.pin.import_key import PinImportKey
 from urbanlens.dashboard.models.pin.note import PinNote
 from urbanlens.dashboard.models.pin_import_failures.model import PinImportFailure
 from urbanlens.dashboard.models.pin_list.model import PinListItem
@@ -729,8 +730,6 @@ PIN_FIELD_POLICY: dict[str, str] = {
     "location": _IDENTITY,
     "parent_pin": _IDENTITY,
     "parenting_is_manual": _IDENTITY,
-    "import_source": _IDENTITY,
-    "import_key": _IDENTITY,
     "last_visited": _DERIVED,
     "source_share": _LINEAGE,
     "inferred_source_share": _LINEAGE,
@@ -987,6 +986,18 @@ def _write_merge_note(survivor: Pin, record: _MergeRecord, labels: dict[int, str
         PinNote.objects.create(pin=survivor, text=text)
 
 
+def _merge_import_keys(survivor: Pin, loser: Pin) -> None:
+    """
+    Move every import identity the loser held onto the survivor, and add the loser's own uuid as an archive identity.
+    A re-import of any file that named the loser then finds the merged pin instead of recreating the loser at its old point.
+    Nothing collides: an identity is unique per profile and both pins share one, so the loser's rows are not the survivor's."""
+    from urbanlens.dashboard.models.pin.model import PinImportSource
+
+    PinImportKey.objects.filter(pin=loser).update(pin=survivor)
+    # A JSON archive names each pin by its uuid; the uuid leaves with the loser, so it stays on as a key.
+    PinImportKey.attach(survivor, PinImportSource.JSON_ARCHIVE, str(loser.uuid))
+
+
 def merge_pins(survivor: Pin, loser: Pin, profile: Profile, resolutions: dict[str, int] | None = None) -> Pin:
     """
     Merge loser into survivor: reassign every relation, resolve every conflict, delete loser.
@@ -1035,6 +1046,7 @@ def merge_pins(survivor: Pin, loser: Pin, profile: Profile, resolutions: dict[st
         _merge_boundaries(survivor, loser, resolutions, profile, record, labels)
         _merge_article(survivor, loser, resolutions, profile, record, labels)
         _merge_lineage(survivor, loser)
+        _merge_import_keys(survivor, loser)
         survivor.labels.add(*loser.labels.all())
 
         _merge_albums(survivor, loser)

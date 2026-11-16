@@ -88,7 +88,7 @@ from urbanlens.dashboard.models.location import Location, LocationSlugHistory
 from urbanlens.dashboard.models.map_overlay import MapImageOverlay
 from urbanlens.dashboard.models.markup import MapLayerMode, MarkupMap, MarkupMapShare, MarkupType, PinMarkup
 from urbanlens.dashboard.models.notifications import NotificationLog, NotificationPreference
-from urbanlens.dashboard.models.pin import Pin, PinNote
+from urbanlens.dashboard.models.pin import Pin, PinImportKey, PinNote
 from urbanlens.dashboard.models.pin_import_failures import PinImportFailure, PinImportFailureReason, PinImportFailureStatus
 from urbanlens.dashboard.models.pin_list import PinList, PinListItem, SmartListSyncRequest
 from urbanlens.dashboard.models.pin_merge_suggestions import PinMergeSuggestion, PinMergeSuggestionOrigin, PinMergeSuggestionStatus
