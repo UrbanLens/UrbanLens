@@ -452,19 +452,19 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
         skipped = 0
         with transaction.atomic(), deferring_child_boundary_refits():
             for child in Pin.objects.filter(parent_pin=self).order_by("pk"):
-                # A child the owner's boundary nested goes back to the top level and stays open to nesting.
-                target_id = None if child.nested_by_boundary_pin_id else new_parent_id
-                if target_id is None and child.location_id == self.location_id:  # same-place: structural parent/child or row-sync rule on the exact Location
+                if new_parent_id is None and child.location_id == self.location_id:  # same-place: structural parent/child or row-sync rule on the exact Location
                     skipped += 1
                     continue
-                if target_id is not None:
-                    child.parent_pin_id = target_id
+                if new_parent_id is not None:
+                    child.parent_pin_id = new_parent_id
                 else:
                     other_root = (
                         Pin.objects.root_pins().filter(profile_id=self.profile_id, location_id=child.location_id).exclude(pk=child.pk).first()
                     )  # same-place: exact Location row: one-root-per-Location dedup or a lookup of the caller's own pin (db_pin_unique_location_per_profile)
                     child.parent_pin_id = other_root.pk if other_root is not None else None
-                child.parenting_is_manual = child.parenting_is_manual or child.nested_by_boundary_pin_id is None
+                if child.parent_pin_id is None:
+                    child.parenting_is_manual = True
+                # The user moved it, even one a boundary had nested, so no later boundary edit takes it back.
                 child.nested_by_boundary_pin = None
                 child.save(update_fields=["parent_pin", "parenting_is_manual", "nested_by_boundary_pin", "updated"])
                 promoted += 1

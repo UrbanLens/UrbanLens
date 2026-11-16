@@ -209,6 +209,40 @@ class BoundaryNestingTests(TestCase):
         self.assertTrue(child.parenting_is_manual)
         self.assertTrue(Pin.objects.filter(pk=by_hand.pk).exists())
 
+    def test_children_the_user_promotes_stay_out_of_later_boundary_edits(self) -> None:
+        nested = _pin(self.profile, 0.001)
+        with self.captureOnCommitCallbacks(execute=True):
+            _draw(self.owner, 0.01)
+        nested.refresh_from_db()
+        self.assertEqual(nested.parent_pin_id, self.owner.pk)
+        with self.captureOnCommitCallbacks(execute=True):
+            self.owner.promote_children()
+        with self.captureOnCommitCallbacks(execute=True):
+            _draw(self.owner, 0.02)
+        self._settle(nested)
+        self.assertIsNone(nested.parent_pin_id)
+        self.assertIsNone(nested.nested_by_boundary_pin_id)
+        self.assertTrue(nested.parenting_is_manual)
+
+    def test_a_child_moved_up_under_another_pin_keeps_its_flag(self) -> None:
+        for dlng, promote in (
+            (0.0, lambda middle: middle.promote_children()),
+            (0.1, lambda middle: delete_pin(middle, children_mode="keep")),
+        ):
+            with self.subTest(dlng=dlng):
+                top = _pin(self.profile, 0.3, dlng)
+                middle = _pin(self.profile, 0.31, dlng)
+                child = _pin(self.profile, 0.32, dlng)
+                # Nested by something other than the user (as property nesting does), so open to nesting.
+                Pin.objects.filter(pk=middle.pk).update(parent_pin=top)
+                Pin.objects.filter(pk=child.pk).update(parent_pin=middle)
+                middle.refresh_from_db()
+                with self.captureOnCommitCallbacks(execute=True):
+                    promote(middle)
+                child.refresh_from_db()
+                self.assertEqual(child.parent_pin_id, top.pk)
+                self.assertFalse(child.parenting_is_manual)
+
     def test_a_moved_nested_pin_leaves_when_it_moves_out(self) -> None:
         inside = _pin(self.profile, 0.001)
         with self.captureOnCommitCallbacks(execute=True):

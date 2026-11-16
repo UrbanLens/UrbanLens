@@ -284,7 +284,7 @@ def _promote_children(instance: Pin) -> list[int]:
     """
     Re-parent *instance*'s direct children ahead of its deletion.
     A child whose Location already has another top-level pin nests under that pin instead (top-level pins are unique per Location+profile).
-    Children the pin's boundary nested return to the top level and stay open to nesting; the others are the user's to arrange and become exempt from it.
+    Children the pin's boundary nested return to the top level and stay open to nesting; any other child that ends up top-level counts as placed by the user.
 
     Args:
         instance: The pin about to be deleted.
@@ -296,7 +296,7 @@ def _promote_children(instance: Pin) -> list[int]:
     for child in Pin.objects.filter(parent_pin=instance).order_by("pk"):
         boundary_nested = child.nested_by_boundary_pin_id is not None
         new_parent_id = None if boundary_nested else instance.parent_pin_id
-        child.parenting_is_manual = child.parenting_is_manual or not boundary_nested
+        as_root_manual = child.parenting_is_manual or not boundary_nested
         child.nested_by_boundary_pin = None
         if new_parent_id is not None:
             child.parent_pin_id = new_parent_id
@@ -310,10 +310,11 @@ def _promote_children(instance: Pin) -> list[int]:
             child.save(update_fields=update_fields)
         elif child.location_id == instance.location_id:  # same-place: structural parent/child or row-sync rule on the exact Location
             # Bypass save() so no side effects run for this transient state.
-            Pin.objects.filter(pk=child.pk).update(parent_pin_id=child.pk, parenting_is_manual=child.parenting_is_manual, nested_by_boundary_pin=None)
+            Pin.objects.filter(pk=child.pk).update(parent_pin_id=child.pk, parenting_is_manual=as_root_manual, nested_by_boundary_pin=None)
             deferred_ids.append(child.pk)
         else:
             child.parent_pin = None
+            child.parenting_is_manual = as_root_manual
             child.save(update_fields=update_fields)
     return deferred_ids
 
