@@ -319,7 +319,7 @@ dev = [
     "model-bakery>=1.23.5,<1.25.0",
     "mutmut>=3.7,<3.9",
     "mypy>=2.1,<2.4",
-    "myst-parser~=5.1.0",
+    "myst-parser>=5.1,<5.3",
     "pre-commit~=4.6.0",
     # Server-side interop tests for the direct-message E2EE blob formats -
     # verifies the documented Argon2id/secretbox/sealed-box layouts round-trip
