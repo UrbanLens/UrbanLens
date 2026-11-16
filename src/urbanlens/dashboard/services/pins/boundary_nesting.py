@@ -61,6 +61,8 @@ def _settle(pin_id: int) -> bool:
     pin = PinModel.objects.select_related("location").filter(pk=pin_id).first()
     if pin is None or pin.parenting_is_manual or (pin.parent_pin_id is not None and pin.nested_by_boundary_pin_id is None):
         return False
+    if pin.location_id is None:  # no Location means no point to test; skip it rather than fail the whole pass
+        return False
     owner_ids = _containing_owners(pin.profile_id, pin.pk, pin.location.point)
     row_ids = sorted({pin.pk, *owner_ids})
     locked = {row.pk: row for row in PinModel.objects.select_for_update(of=("self",)).select_related("location").filter(pk__in=row_ids, profile_id=pin.profile_id).order_by("pk")}
