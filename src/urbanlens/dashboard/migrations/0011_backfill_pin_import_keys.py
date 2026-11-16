@@ -1,4 +1,4 @@
-"""Key existing pins whose Location carries a Google cid as Takeout pins, outside the transaction that added the columns."""
+"""Key existing pins whose Location carries a Google cid as Takeout pins, outside the transaction that added the table."""
 
 from django.db import migrations, transaction
 
@@ -9,30 +9,23 @@ PROFILE_CHUNK = 500
 LEGACY_CUTOFF = "2026-07-25T00:00:00+00:00"
 
 BACKFILL = """
-UPDATE dashboard_user_pins AS pin
-SET import_source = 'google_takeout', import_key = picked.key
-FROM (
-    SELECT DISTINCT ON (p.profile_id, gp.cid) p.id, 'cid:' || gp.cid::text AS key
-    FROM dashboard_user_pins p
-    JOIN dashboard_locations l ON l.id = p.location_id
-    JOIN dashboard_google_places gp ON gp.id = l.google_place_id
-    WHERE p.profile_id >= %s AND p.profile_id < %s
-      AND p.parent_pin_id IS NULL AND p.import_key IS NULL AND gp.cid IS NOT NULL
-      -- A rerun after an interrupted run must not hand a committed chunk's key to that pin's sibling.
-      AND NOT EXISTS (
-          SELECT 1 FROM dashboard_user_pins k
-          WHERE k.profile_id = p.profile_id AND k.import_source = 'google_takeout' AND k.import_key = 'cid:' || gp.cid::text
-      )
-    ORDER BY p.profile_id, gp.cid, (l.created >= %s) DESC, p.id
-) AS picked
-WHERE pin.id = picked.id
+INSERT INTO dashboard_pin_import_keys (pin_id, profile_id, source, key, created, updated)
+SELECT DISTINCT ON (p.profile_id, gp.cid) p.id, p.profile_id, 'google_takeout', 'cid:' || gp.cid::text, now(), now()
+FROM dashboard_user_pins p
+JOIN dashboard_locations l ON l.id = p.location_id
+JOIN dashboard_google_places gp ON gp.id = l.google_place_id
+WHERE p.profile_id >= %s AND p.profile_id < %s
+  AND p.parent_pin_id IS NULL AND gp.cid IS NOT NULL
+ORDER BY p.profile_id, gp.cid, (l.created >= %s) DESC, p.id
+ON CONFLICT (profile_id, source, key) DO NOTHING
 """
 
 
 def key_takeout_pins(apps, schema_editor):
     """
     Key root pins by the cid on their Location, once per cid per profile.
-    A profile with two pins on same-cid Locations keeps the key on the one whose Location is not pre-cutoff (a possible mis-geocode), else the lower pk. Pins nested under another pin are skipped.
+    A profile with two pins on same-cid Locations keeps the key on the one whose Location is not pre-cutoff (a possible mis-geocode), else the lower pk.
+    Pins nested under another pin are skipped, and a cid key the profile already holds (an import that ran first) is left where it is.
     """
     connection = schema_editor.connection
     with connection.cursor() as cursor:
