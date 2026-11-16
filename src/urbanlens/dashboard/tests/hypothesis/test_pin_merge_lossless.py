@@ -27,7 +27,8 @@ from urbanlens.dashboard.models.floorplans.model import Floorplan
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.markup.meta import MarkupType
 from urbanlens.dashboard.models.markup.model import PinMarkup
-from urbanlens.dashboard.models.pin.model import Pin, PinType
+from urbanlens.dashboard.models.pin.import_key import PinImportKey
+from urbanlens.dashboard.models.pin.model import Pin, PinImportSource, PinType
 from urbanlens.dashboard.models.pin.note import PinNote
 from urbanlens.dashboard.models.pin_share.meta import PinShareStatus
 from urbanlens.dashboard.models.pin_share.model import PinShare
@@ -259,6 +260,50 @@ class PinColumnsAreKeptTests(_MergeTestCase):
         merge_pins(self.survivor, self.loser, self.profile)
 
         self.assertTrue(self.survivor.restructure_offer_dismissed)
+
+    def _keys(self, pin: Pin) -> set[tuple[str, str]]:
+        return set(PinImportKey.objects.filter(pin=pin).values_list("source", "key"))
+
+    def test_the_survivor_takes_every_import_key_the_loser_held(self) -> None:
+        """Re-importing the loser's file looks it up by key; without the key it would recreate the merged-away pin."""
+        PinImportKey.attach(self.loser, PinImportSource.GOOGLE_TAKEOUT, "cid:42")
+        PinImportKey.attach(self.loser, PinImportSource.GOOGLE_TAKEOUT, "place:p")
+        loser_uuid = str(self.loser.uuid)
+
+        merge_pins(self.survivor, self.loser, self.profile)
+
+        self.assertEqual(
+            self._keys(self.survivor),
+            {("google_takeout", "cid:42"), ("google_takeout", "place:p"), ("json_archive", loser_uuid)},
+        )
+
+    def test_a_keyed_survivor_keeps_its_own_import_key_and_gains_the_losers(self) -> None:
+        PinImportKey.attach(self.survivor, PinImportSource.JSON_ARCHIVE, "a")
+        PinImportKey.attach(self.loser, PinImportSource.GOOGLE_TAKEOUT, "cid:42")
+        loser_uuid = str(self.loser.uuid)
+
+        merge_pins(self.survivor, self.loser, self.profile)
+
+        self.assertEqual(
+            self._keys(self.survivor),
+            {("json_archive", "a"), ("google_takeout", "cid:42"), ("json_archive", loser_uuid)},
+        )
+
+    def test_a_survivor_keyed_by_an_earlier_merge_still_takes_a_later_losers_key(self) -> None:
+        """Two keyless pins merge, then the survivor absorbs a Takeout pin: both files must still find it."""
+        first_uuid = str(self.loser.uuid)
+        merge_pins(self.survivor, self.loser, self.profile)
+        takeout_pin = baker.make_recipe("dashboard.pin", profile=self.profile, name="Takeout row")
+        PinImportKey.attach(takeout_pin, PinImportSource.GOOGLE_TAKEOUT, "cid:42")
+
+        merge_pins(self.survivor, takeout_pin, self.profile)
+
+        self.assertTrue({("json_archive", first_uuid), ("google_takeout", "cid:42")} <= self._keys(self.survivor))
+        found, created = Pin.objects.get_nearby_or_create(
+            1.0, 1.0, self.profile, import_source=PinImportSource.GOOGLE_TAKEOUT, import_key="cid:42"
+        )
+        self.assertFalse(created)
+        self.assertEqual(found.pk, self.survivor.pk)
 
 
 class AutomaticVisitOnTheSameDayTests(_MergeTestCase):

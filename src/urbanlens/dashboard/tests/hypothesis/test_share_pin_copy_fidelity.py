@@ -198,8 +198,6 @@ class SharedPinCopyCoversEveryFieldTests(TestCase):
         "subject_place": "derived from the recipient's own location when the new pin is first saved",
         "wiki": "a cache of an explicit link; the new pin resolves its own",
         "inferred_source_share": "provenance is recorded via source_share on the new pin",
-        "import_key": "identifies the sender's import row; the recipient's copy was not imported",
-        "import_source": "identifies the sender's import row; the recipient's copy was not imported",
         "parenting_is_manual": "records how the sender placed the pin in their own tree; the copy has its own",
         "cover_photo": "set afterwards by _carry_cover_photo, pointing at the recipient's copy",
         # The owner's side of the line. A share carries what is true about the

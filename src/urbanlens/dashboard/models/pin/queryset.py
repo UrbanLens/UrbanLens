@@ -464,7 +464,7 @@ class PinManager(_PinManagerBase["Pin"]):
             profile (Profile): The profile associated with the pin.
             defaults (dict, optional): Defaults to use for object creation.
             import_source (str, optional): The importer, for a re-import to recognise its own pins.
-            import_key (str, optional): The pin's content-derived identity within ``import_source``. The profile's pin with the same (source, key) wins first, even where the user has since moved it or nested it under another pin; a root pin found at the Location without a key is stamped with it.
+            import_key (str, optional): The pin's content-derived identity within ``import_source``. The profile's pin holding the same (source, key) wins first, even where the user has since moved it or nested it under another pin; a root pin found at the Location gains it alongside any it already holds.
 
         Returns:
             (Pin, bool): Tuple of (Pin instance, created boolean)
@@ -504,11 +504,9 @@ class PinManager(_PinManagerBase["Pin"]):
 
         keyed = bool(import_source and import_key)
         if keyed:
-            known = self.filter(profile=profile, import_source=import_source, import_key=import_key).first()
+            known = self._holding_import_key(profile, import_source, import_key)
             if known is not None:
                 return known, False
-            defaults["import_source"] = import_source
-            defaults["import_key"] = import_key
 
         # Pins reference a shared Location; resolve one when not given.
         location = defaults.pop("location", None)
@@ -524,12 +522,17 @@ class PinManager(_PinManagerBase["Pin"]):
             return self._stamped_with_import_key(existing_pin, import_source, import_key), False
 
         try:
+            # A savepoint, so a collision does not poison an enclosing transaction; the key goes in with the pin or neither does.
             with transaction.atomic():
                 pin = self.create(location=location, profile=profile, **defaults)
+                if keyed:
+                    from urbanlens.dashboard.models.pin.import_key import PinImportKey
+
+                    PinImportKey.objects.create(pin=pin, profile=profile, source=import_source, key=import_key)
         except IntegrityError:
             # Concurrent insert won the race; return that row.
             if keyed:
-                raced = self.filter(profile=profile, import_source=import_source, import_key=import_key).first()
+                raced = self._holding_import_key(profile, import_source, import_key)
                 if raced is not None:
                     return raced, False
             existing_pin = self.filter(location=location, profile=profile).preferring_root().first()
@@ -539,14 +542,16 @@ class PinManager(_PinManagerBase["Pin"]):
 
         return pin, True
 
+    def _holding_import_key(self, profile, import_source, import_key):
+        """The profile's pin an importer named (source, key), wherever it now sits, or None."""
+        return self.filter(profile=profile, import_keys__source=import_source, import_keys__key=import_key).first()
+
     def _stamped_with_import_key(self, pin, import_source, import_key):
-        """Give a root pin found by Location the import identity it lacked (a nested pin is never touched), so the next re-import finds it even after it moves."""
-        if import_source and import_key and not pin.import_key and pin.parent_pin_id is None:
-            pin.import_source, pin.import_key = import_source, import_key
-            try:
-                with transaction.atomic():
-                    pin.save(update_fields=["import_source", "import_key"])
-            except IntegrityError:
-                # Another of this profile's pins already holds that identity; leave this one unkeyed.
-                pin.import_source = pin.import_key = None
+        """
+        Add the import identity to a root pin found by Location (a nested pin is never touched), so the next re-import finds it even after it moves.
+        Whatever identities the pin already holds stay: another file, or another row of this one, names the same pin its own way."""
+        if import_source and import_key and pin.parent_pin_id is None:
+            from urbanlens.dashboard.models.pin.import_key import PinImportKey
+
+            PinImportKey.attach(pin, import_source, import_key)
         return pin

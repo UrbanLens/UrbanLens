@@ -15,8 +15,8 @@ REVIEWED: dict[str, str] = {
     "0001_initial.py": "seed_rows - a new install's starting rows; reversing 0001 drops the tables they are in.",
     "0002_describe_seeded_labels.py": "describe_seeded_labels - fills empty label descriptions with plain text the "
     "previous code already reads and edits; there is nothing to undo, and clearing them could erase a user's edit.",
-    "0011_backfill_pin_import_keys.py": "key_takeout_pins - fills import_key/import_source on pins that already exist; the "
-    "previous code ignores both columns, and the columns are dropped when 0010 reverses.",
+    "0011_backfill_pin_import_keys.py": "key_takeout_pins - fills dashboard_pin_import_keys, a table the previous code "
+    "never reads; leaving its rows after a reverse is harmless, and 0010's reverse drops the table anyway.",
     "0009_backfill_pin_subject_place.py": "backfill - fills the new subject_place column, which the previous code never "
     "reads; reversing 0008 drops the column, so there is nothing to undo.",
 }
