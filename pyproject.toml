@@ -297,7 +297,7 @@ convention = "google"
 dev = [
     "bandit>=1.8.6,<1.10.0",
     "codespell>=2.4.3",
-    "coverage>=7.14.1,<7.17.0",
+    "coverage>=7.14.1,<7.18.0",
     # Coverage of the lines a branch actually changed, rather than a whole-tree
     # percentage that moves too slowly to mean anything on any one commit.
     "diff-cover~=10.5.1",
