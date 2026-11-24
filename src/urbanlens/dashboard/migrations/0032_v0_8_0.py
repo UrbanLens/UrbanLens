@@ -206,12 +206,12 @@ def _0039_drop(apps, schema_editor):
 
 
 def _0058_trust_verified_signups(apps, schema_editor):
-    """Treat the current primary of every account that verified its signup address as verified.
+    """Leave legacy signup verifications untrusted.
 
-    Nothing recorded which address was verified, so an address changed since signup is trusted too.
+    The legacy EmailVerification row records that some signup address was proved, but not which
+    address. Existing accounts could change their primary email without proving the new mailbox, so
+    copying the current primary would let stale signup proofs claim unrelated addresses.
     """
-    Profile = apps.get_model("dashboard", "Profile")
-    Profile.objects.filter(user__email_verification__verified_at__isnull=False).update(verified_primary_email=F("primary_email_normalized"))
 
 
 def _0062_backfill_username_keys(apps, schema_editor):
