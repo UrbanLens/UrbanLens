@@ -41,7 +41,7 @@ REVIEWED: dict[str, str] = {
     ),
     "0032_v0_8_0.py": (
         "The v0.8.0 squash. Backfills of columns this file adds and a reverse drops, so there is nothing to restore: "
-        "_0049_backfill_friendinvitation_email_normalized, _0052__backfill, _0058_trust_verified_signups, "
+        "_0049_backfill_friendinvitation_email_normalized, _0052__backfill, "
         "_0062_backfill_username_keys, _0065_backfill, _0117_date_existing_blocks. "
         "Merges and dedupes ahead of a unique constraint, lossy but leaving ordinary rows the old code reads: "
         "_0054_merge_reciprocal_rows (keeps the lowest pk, as FriendshipQuerySet.between does), _0073_dedupe, and "
@@ -50,8 +50,9 @@ REVIEWED: dict[str, str] = {
         "_0092__clear_out_of_span nulls activity times outside 1900-2199, an unscheduled activity to the old code. "
         "_0098_repair_links prefixes https:// on scheme-less links, deletes links it can't read as http(s) with a "
         "top-level domain, and truncates over-long custom-field text. _0116_mark_linked relabels downloaded-URL "
-        "images from upload to linked_url, a plain string the old code stores and shows. The two CREATE EXTENSION "
-        "statements leave an extension nothing else depends on."
+        "images from upload to linked_url, a plain string the old code stores and shows. _0058_trust_verified_signups "
+        "intentionally leaves legacy signup email proofs absent because the verified address was not recorded. The two "
+        "CREATE EXTENSION statements leave an extension nothing else depends on."
     ),
     "0033_v0_8_0_indexes.py": (
         "_0096_refuse_to_drop_url_only_overlays deletes nothing; it only clears a tile template an overlay with an "
